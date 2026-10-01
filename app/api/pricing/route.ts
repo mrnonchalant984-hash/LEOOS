@@ -1,0 +1,1 @@
+import {NextResponse} from 'next/server';import {getPlanPrice} from '@/lib/pricing';export async function GET(){const prices:Record<string,number|null>={};for(const p of ['standard','pro','unlimited'])for(const b of ['monthly','quarterly','yearly'])prices[`${p}_${b}`]=getPlanPrice(p as any,b as any);return NextResponse.json({prices});}

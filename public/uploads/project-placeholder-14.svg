@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000">
+<defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#0a0a0a"/><stop offset="1" stop-color="#D4AF37"/></linearGradient></defs>
+<rect width="1600" height="1000" fill="#f4f4f1"/><rect x="70" y="70" width="1460" height="860" rx="42" fill="url(#g)"/>
+<circle cx="1330" cy="250" r="180" fill="#fff" opacity=".08"/><circle cx="1370" cy="300" r="110" fill="#D4AF37" opacity=".35"/>
+<text x="150" y="260" fill="#fff" font-family="Arial,sans-serif" font-size="34" letter-spacing="8">LEONARD UDOH</text>
+<text x="150" y="430" fill="#fff" font-family="Arial,sans-serif" font-size="88" font-weight="700">PROJECT 14</text>
+<text x="150" y="510" fill="#fff" opacity=".65" font-family="Arial,sans-serif" font-size="30">Screenshot placeholder — replace in /public/uploads</text>
+<rect x="150" y="600" width="300" height="8" fill="#D4AF37"/>
+</svg>

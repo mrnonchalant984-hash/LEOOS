@@ -1,0 +1,1 @@
+import {AuthForm} from '@/components/AuthForm'; export const metadata={title:'LEO Account'}; export default function AuthPage(){return <main className="mx-auto max-w-6xl px-4 py-20"><AuthForm/></main>}

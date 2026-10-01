@@ -1,0 +1,26 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { AUTH_COOKIE } from '@/lib/auth';
+export const runtime = 'nodejs';
+
+export async function POST(req: NextRequest) {
+  try {
+    const { email, password } = await req.json();
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return NextResponse.json({ error: 'Supabase authentication is not configured.' }, { status: 503 });
+    const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error || !data.session) throw error || new Error('Login failed');
+    const res = NextResponse.json({
+      ok: true,
+      user: { id: data.user.id, email: data.user.email },
+      session: { access_token: data.session.access_token, refresh_token: data.session.refresh_token },
+    });
+    res.cookies.set('leo_access_token', data.session.access_token, AUTH_COOKIE);
+    res.cookies.set('leo_refresh_token', data.session.refresh_token, AUTH_COOKIE);
+    return res;
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || 'Login failed' }, { status: 401 });
+  }
+}

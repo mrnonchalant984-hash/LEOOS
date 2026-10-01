@@ -1,0 +1,9 @@
+@import 'tailwindcss'; :root{--gold:#FF8A00;--yellow:#FFC300} html{scroll-behavior:smooth}body{font-family:Inter,Arial,sans-serif;background:#080808;color:#fff}.gold{color:var(--gold)}button,a{transition:transform .2s ease,box-shadow .2s ease}button:hover,.cta:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(255,138,0,.18)}
+
+
+/* Interactive depth layer: real 3D tilt, perspective and light response for cards. */
+[data-3d-card]{position:relative;transform-style:preserve-3d;perspective:1200px;transition:transform .45s cubic-bezier(.2,.8,.2,1),box-shadow .45s ease,border-color .45s ease;will-change:transform;overflow:hidden;}
+[data-3d-card]::before{content:"";position:absolute;inset:-1px;pointer-events:none;background:radial-gradient(circle at var(--mx,50%) var(--my,20%),rgba(255,255,255,.16),transparent 28%);opacity:0;transition:opacity .35s ease;z-index:5;}
+[data-3d-card]:hover{transform:perspective(1200px) rotateX(3deg) rotateY(-3deg) translateY(-7px) translateZ(12px);box-shadow:0 25px 70px rgba(0,0,0,.38),0 0 35px rgba(96,165,250,.08);border-color:rgba(255,255,255,.2);}
+[data-3d-card]:hover::before{opacity:1;}
+@media (prefers-reduced-motion: reduce){[data-3d-card]{transition:none}[data-3d-card]:hover{transform:translateY(-2px)}}

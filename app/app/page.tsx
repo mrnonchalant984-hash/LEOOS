@@ -1,0 +1,1 @@
+import {LEOWidget} from '@/components/LEOWidget';export const metadata={title:'LEO AI — General AI Assistant'};export default function AppPage(){return <main className='min-h-[calc(100vh-73px)] px-3 py-3'><LEOWidget full/></main>}

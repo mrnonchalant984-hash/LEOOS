@@ -1,0 +1,5 @@
+import type { Metadata } from "next";
+import ProjectFilter from "@/components/ProjectFilter";
+import { projects } from "@/data/site";
+export const metadata: Metadata = { title: "Projects - Leonard Udoh", description: "Explore Leonard Udoh's live projects and prototypes." };
+export default function Projects(){return <main><section className="section-grid border-b border-black/10"><div className="mx-auto max-w-7xl px-5 py-20 lg:px-8 lg:py-28"><p className="text-sm font-bold uppercase tracking-[.18em] text-[#D4AF37]">Portfolio</p><h1 className="mt-3 font-[var(--font-poppins)] text-5xl font-bold tracking-tight sm:text-6xl">My Projects</h1><p className="mt-5 max-w-2xl text-lg leading-8 text-black/60">Here are Leonard&apos;s projects. Live project links appear when their real deployed URLs are configured; entries without a real URL are clearly marked as awaiting URL.</p></div></section><section className="mx-auto max-w-7xl px-5 py-16 lg:px-8"><ProjectFilter projects={projects}/></section></main>}
