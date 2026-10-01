@@ -31,6 +31,5 @@ export const siteData = {
     {name:'AI Mockup',price:'₦50,000',description:'Turn a business idea into a polished visual website direction before development.',href:'/app',details:'You get a visual concept, page direction, section ideas, content direction, and a clearer blueprint for the final website.'},
     {name:'Full Website',price:'Starting at ₦350,000',description:'A polished, responsive business website built around your goals and customers.',href:'/contact',details:'The number of pages depends on the website: a simple business site may need 3–5 pages, while larger projects can include 6–15+ pages. Final scope is agreed before development.'},
     {name:'Code Review',price:'₦20,000',description:'A practical review of your codebase with prioritized problems, explanations, and fixes.',href:'/app',details:'Leo can inspect structure, bugs, responsiveness, performance, security risks, accessibility, SEO, and code quality, then give practical fixes.'}
-  ],
-  testimonials: [{name:'Sarah Okafor',company:'BellaMart',comment:'Leonard built us a site that doubled our sales in 30 days',status:'approved'}]
+  ]
 };

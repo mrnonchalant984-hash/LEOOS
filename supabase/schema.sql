@@ -81,9 +81,11 @@ create table if not exists testimonials (
   name text not null,
   company text not null,
   comment text not null,
-  status text not null default 'pending',
+  status text not null default 'published',
   created_at timestamptz not null default now()
 );
+alter table testimonials alter column status set default 'published';
+update testimonials set status='published' where status='approved';
 alter table contacts enable row level security;
 alter table leads enable row level security;
 alter table testimonials enable row level security;
@@ -92,9 +94,15 @@ create policy contacts_public_insert on contacts for insert with check (true);
 drop policy if exists leads_public_insert on leads;
 create policy leads_public_insert on leads for insert with check (true);
 drop policy if exists testimonials_public_insert on testimonials;
-create policy testimonials_public_insert on testimonials for insert with check (true);
+create policy testimonials_public_insert on testimonials for insert with check (
+  status='published'
+  and char_length(btrim(name)) between 2 and 80
+  and char_length(btrim(company)) between 1 and 100
+  and char_length(btrim(comment)) between 10 and 1200
+);
 drop policy if exists testimonials_public_approved_read on testimonials;
-create policy testimonials_public_approved_read on testimonials for select using (status='approved' or public.is_owner(auth.uid()));
+drop policy if exists testimonials_public_published_read on testimonials;
+create policy testimonials_public_published_read on testimonials for select using (status='published' or public.is_owner(auth.uid()));
 
 -- LEO OS client website builder / hosting / onboarding extensions (additive)
 create table if not exists website_projects (
