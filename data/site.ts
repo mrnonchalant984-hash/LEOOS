@@ -21,7 +21,7 @@ export const projects = big12Projects
 export const profileImage = '/profile.png'
 
 export const siteData = {
-  owner: 'Leonard Udoh', title: 'Web Developer', description: 'I build modern, responsive websites and AI-powered digital experiences for people and businesses.', tagline: 'I build websites that help businesses attract customers and grow online.', price: 'Starting at ₦350,000', location: 'Remote — Worldwide', whatsapp: 'https://wa.me/2349115936466', whatsappLabel: 'Message LeonardX on WhatsApp', email: 'leonardudoh5@gmail.com', phone: '+2349115936466', phoneDisplay: '+234 911 593 6466', brand: '#FFD700', cv: '/documents/Leonard-Udoh-CV.pdf',
+  owner: 'Leonard Udoh', title: 'Web Developer', description: 'Premium, custom business websites designed and built by Leonard Udoh, accelerated by his proprietary LEO development engine.', tagline: 'Premium custom websites, strategically designed and built by Leonard Udoh with LEO, his proprietary AI-powered development engine.', price: 'Starting at ₦350,000', location: 'Remote — Worldwide', whatsapp: 'https://wa.me/2349115936466', whatsappLabel: 'Message LeonardX on WhatsApp', email: 'leonardudoh5@gmail.com', phone: '+2349115936466', phoneDisplay: '+234 911 593 6466', brand: '#FFD700', cv: '/documents/Leonard-Udoh-CV.pdf',
   liveProjects: [
     {name:'Qveli',description:'A social media platform for creators.',url:process.env.NEXT_PUBLIC_LIVE_QVELI_URL||'',image:'/qveli-logo.svg'},
     {name:'LeonardX',description:'A freelancing platform connecting clients with freelancers.',url:process.env.NEXT_PUBLIC_LIVE_LEONARDX_URL||'',image:'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1600&q=85'}
