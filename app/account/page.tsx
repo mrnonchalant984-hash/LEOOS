@@ -7,9 +7,12 @@ export default function AccountPage() {
   const [email, setEmail] = useState('');
   const [sub, setSub] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
   useEffect(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) { setLoading(false); return; }
+    const supabase = createBrowserClient(url, key);
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { setLoading(false); return; }
       setEmail(data.user.email || '');
@@ -20,6 +23,10 @@ export default function AccountPage() {
   }, []);
 
   async function logout() {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return;
+    const supabase = createBrowserClient(url, key);
     await supabase.auth.signOut();
     await fetch('/api/auth/logout', { method: 'POST' });
     window.location.assign('/');
