@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
         type: 'realtime',
         model,
         instructions: `${LEO_SYSTEM_PROMPT}\n\nYou are live Leo in the LEO OS voice interface. Speak naturally, briefly, and clearly. Keep responses useful, professional, and conversational.`,
-        modalities: ['audio'],
+        output_modalities: ['audio'],
         audio: {
           input: {
             format: { type: 'audio/pcm', rate: 24000 },
