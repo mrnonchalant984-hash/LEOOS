@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LEO OS icon">
+  <defs>
+    <linearGradient id="leoGold" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#F9E39E"/>
+      <stop offset="100%" stop-color="#D4AF37"/>
+    </linearGradient>
+    <linearGradient id="leoAmber" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#F97316"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#0B0B0F"/>
+  <rect x="14" y="12" width="9" height="40" rx="3" fill="url(#leoGold)"/>
+  <rect x="14" y="43" width="26" height="9" rx="3" fill="url(#leoGold)"/>
+  <circle cx="44" cy="22" r="12" fill="none" stroke="url(#leoAmber)" stroke-width="5"/>
+  <circle cx="44" cy="22" r="3.8" fill="#F7D87A"/>
+</svg>
