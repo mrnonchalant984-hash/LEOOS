@@ -15,13 +15,13 @@ function aggregate(rows: any[]) {
   return {totalTokens,totalCredits,inputTokens,outputTokens,requests:rows.length,estimatedCostUsd,byFeature};
 }
 export async function GET(req:NextRequest){
-  const ctx=await requireOwner(req);if(!ctx)return NextResponse.json({error:'Owner access required'},{status:403});if(!ctx.profile.twofa_verified)return NextResponse.json({error:'2FA setup required',setup:true},{status:403});
+  const ctx=await requireOwner(req,{allowUntrustedForSetup:true});if(!ctx)return NextResponse.json({error:'Owner access required'},{status:403});if(!ctx.profile.twofa_verified)return NextResponse.json({error:'2FA setup required',setup:true},{status:403});
   const db=adminSupabase();
   const trusted=req.cookies.get(COOKIE)?.value;
-  if(!trusted){return NextResponse.json({error:'New or unrecognized device. Enter your authenticator code.',reauth:true},{status:403});}
-  const {data:device}=await db.from('admin_trusted_devices').select('id,expires_at').eq('user_id',ctx.user.id).eq('token_hash',hash(trusted)).maybeSingle();
-  if(!device || new Date(device.expires_at)<=new Date()) return NextResponse.json({error:'Trusted device expired or is not recognized.',reauth:true},{status:403});
-  await db.from('admin_trusted_devices').update({last_used_at:new Date().toISOString()}).eq('id',device.id); const now=new Date();
+  const trustedDevice=trusted?await db.from('admin_trusted_devices').select('id,expires_at,user_agent_hash').eq('user_id',ctx.user.id).eq('token_hash',hash(trusted)).maybeSingle():{data:null};
+  const userAgentHash=crypto.createHash('sha256').update(req.headers.get('user-agent')||'unknown').digest('hex');
+  if(!trustedDevice.data || new Date(trustedDevice.data.expires_at)<=new Date() || (trustedDevice.data.user_agent_hash&&trustedDevice.data.user_agent_hash!==userAgentHash)) return NextResponse.json({error:'New or unrecognized device. Enter your authenticator code.',reauth:true},{status:403});
+  await db.from('admin_trusted_devices').update({last_used_at:new Date().toISOString()}).eq('id',trustedDevice.data.id); const now=new Date();
   const startDay=new Date(now);startDay.setHours(0,0,0,0); const startWeek=new Date(now);startWeek.setDate(startWeek.getDate()-6);startWeek.setHours(0,0,0,0); const startMonth=new Date(now.getFullYear(),now.getMonth(),1);
   const [users,payments,subs,projects,usage,recentUsage,hosting]=await Promise.all([
     db.from('profiles').select('id,email,full_name,role,created_at'),db.from('payments').select('*').order('created_at',{ascending:false}).limit(100),db.from('subscriptions').select('*').order('created_at',{ascending:false}),db.from('projects').select('*').order('created_at',{ascending:false}).limit(20),db.from('ai_usage').select('total_tokens,prompt_tokens,completion_tokens,credits_used,feature,created_at,user_id,model,website_project_id').order('created_at',{ascending:false}),db.from('ai_usage').select('total_tokens,prompt_tokens,completion_tokens,credits_used,feature,created_at,user_id,model,website_project_id').order('created_at',{ascending:false}).limit(30),db.from('hosting_subscriptions').select('id,status,ends_at,client_email,website_project_id').order('ends_at',{ascending:true})

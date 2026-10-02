@@ -2,6 +2,11 @@ import { createClient } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 
+async function sha256(value: string) {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export const AUTH_COOKIE = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
@@ -46,11 +51,33 @@ export async function getProfile(req: NextRequest) {
   return data ? { user, profile: data } : null;
 }
 
-export function requireOwner(req: NextRequest) {
-  return getProfile(req).then(ctx => {
-    if (!ctx || ctx.profile.role !== 'owner' || ctx.profile.email?.toLowerCase() !== (process.env.OWNER_EMAIL || 'leonardudoh5@gmail.com').toLowerCase()) return null;
-    return ctx;
-  });
+export async function isTrustedAdminDevice(req: NextRequest, userId: string, db = adminSupabase()) {
+  const token = req.cookies.get('leo_admin_device')?.value;
+  if (!token) return false;
+  try {
+    const [tokenHash, userAgentHash] = await Promise.all([
+      sha256(token),
+      sha256(req.headers.get('user-agent') || 'unknown'),
+    ]);
+    const { data: device } = await db.from('admin_trusted_devices')
+      .select('id,expires_at,user_agent_hash')
+      .eq('user_id', userId)
+      .eq('token_hash', tokenHash)
+      .maybeSingle();
+    if (!device || new Date(device.expires_at) <= new Date()) return false;
+    if (device.user_agent_hash && device.user_agent_hash !== userAgentHash) return false;
+    await db.from('admin_trusted_devices').update({ last_used_at: new Date().toISOString() }).eq('id', device.id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function requireOwner(req: NextRequest, options: { allowUntrustedForSetup?: boolean } = {}) {
+  const ctx = await getProfile(req);
+  if (!ctx || ctx.profile.role !== 'owner' || ctx.profile.email?.toLowerCase() !== (process.env.OWNER_EMAIL || 'leonardudoh5@gmail.com').toLowerCase()) return null;
+  if (ctx.profile.twofa_verified && !options.allowUntrustedForSetup && !await isTrustedAdminDevice(req, ctx.user.id)) return null;
+  return ctx;
 }
 
 export async function getUserAccess() {

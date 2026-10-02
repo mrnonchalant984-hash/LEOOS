@@ -10,6 +10,56 @@ create table if not exists projects (id uuid primary key default gen_random_uuid
 create table if not exists admin_logs (id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade, action text not null, ip_address text, device text, created_at timestamptz default now());
 create table if not exists chats_v2 (id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade, title text default 'New chat', messages jsonb not null default '[]'::jsonb, created_at timestamptz default now(), updated_at timestamptz default now());
 create table if not exists notifications (id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade, title text not null, body text not null, read boolean default false, created_at timestamptz default now());
+create table if not exists announcements (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  version text,
+  summary text,
+  description text not null,
+  feature_list jsonb not null default '[]'::jsonb,
+  image_url text,
+  cta text,
+  cta_url text,
+  status text not null default 'draft',
+  release_date timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table if not exists announcement_reads (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  announcement_id uuid not null references announcements(id) on delete cascade,
+  seen_at timestamptz not null default now(),
+  unique(user_id, announcement_id)
+);
+create table if not exists upgrade_jobs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  requested_by text not null,
+  request text not null,
+  repository text,
+  branch text default 'main',
+  status text not null default 'pending',
+  files_changed integer default 0,
+  files_added integer default 0,
+  files_removed integer default 0,
+  validation_result jsonb not null default '{}'::jsonb,
+  build_result jsonb not null default '{}'::jsonb,
+  deployment_result jsonb not null default '{}'::jsonb,
+  commit_sha text,
+  deployment_url text,
+  error_message text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz
+);
+create table if not exists upgrade_changes (
+  id uuid primary key default gen_random_uuid(),
+  upgrade_job_id uuid not null references upgrade_jobs(id) on delete cascade,
+  path text not null,
+  action text not null default 'modified',
+  created_at timestamptz not null default now()
+);
 
 create or replace function public.is_owner(uid uuid) returns boolean language sql security definer set search_path=public stable as $$ select exists(select 1 from public.profiles where id=uid and role='owner' and lower(email)=lower('leonardudoh5@gmail.com')); $$;
 
@@ -34,8 +84,16 @@ update profiles set role='user' where lower(email)<>lower('leonardudoh5@gmail.co
 create index if not exists idx_subscriptions_user_status on subscriptions(user_id,status); create index if not exists idx_payments_user_status on payments(user_id,status); create index if not exists idx_credits_user_feature on credits(user_id,feature); create index if not exists idx_feature_access_user on feature_access(user_id); create index if not exists idx_projects_user on projects(user_id); create index if not exists idx_admin_logs_user on admin_logs(user_id); create index if not exists idx_chats_v2_user_updated on chats_v2(user_id,updated_at desc);
 
 alter table profiles enable row level security; alter table subscriptions enable row level security; alter table payments enable row level security; alter table credits enable row level security; alter table feature_access enable row level security; alter table projects enable row level security; alter table admin_logs enable row level security; alter table chats_v2 enable row level security; alter table notifications enable row level security;
+alter table announcements enable row level security;
+alter table announcement_reads enable row level security;
+alter table upgrade_jobs enable row level security;
+alter table upgrade_changes enable row level security;
+alter table website_projects enable row level security;
+revoke select on public.profiles from anon, authenticated;
 drop policy if exists profiles_self_or_owner on profiles;
-create policy profiles_self_or_owner on profiles for select using(auth.uid()=id or public.is_owner(auth.uid()));
+drop policy if exists profiles_self_safe_read on profiles;
+revoke all on function public.is_owner(uuid) from public, anon, authenticated;
+grant execute on function public.is_owner(uuid) to authenticated;
 drop policy if exists subscriptions_self_or_owner on subscriptions;
 create policy subscriptions_self_or_owner on subscriptions for select using(auth.uid()=user_id or public.is_owner(auth.uid()));
 drop policy if exists payments_self_or_owner on payments;
@@ -48,10 +106,28 @@ drop policy if exists projects_self_or_owner on projects;
 create policy projects_self_or_owner on projects for select using(auth.uid()=user_id or public.is_owner(auth.uid()));
 drop policy if exists projects_self_insert on projects;
 create policy projects_self_insert on projects for insert with check(auth.uid()=user_id);
+drop policy if exists projects_self_select on projects;
+create policy projects_self_select on projects for select using(auth.uid()=user_id);
 drop policy if exists chats_v2_self on chats_v2;
 create policy chats_v2_self on chats_v2 for all using(auth.uid()=user_id) with check(auth.uid()=user_id);
 drop policy if exists notifications_self on notifications;
 create policy notifications_self on notifications for select using(auth.uid()=user_id);
+drop policy if exists notifications_self_update on notifications;
+create policy notifications_self_update on notifications for update using(auth.uid()=user_id) with check(auth.uid()=user_id);
+drop policy if exists announcements_owner on announcements;
+create policy announcements_owner on announcements for all using(public.is_owner(auth.uid())) with check(public.is_owner(auth.uid()));
+drop policy if exists announcements_public_read on announcements;
+create policy announcements_public_read on announcements for select using(status='published');
+drop policy if exists announcement_reads_self on announcement_reads;
+create policy announcement_reads_self on announcement_reads for all using(auth.uid()=user_id or public.is_owner(auth.uid())) with check(auth.uid()=user_id or public.is_owner(auth.uid()));
+drop policy if exists upgrade_jobs_owner on upgrade_jobs;
+create policy upgrade_jobs_owner on upgrade_jobs for all using(public.is_owner(auth.uid()) or auth.uid()=user_id) with check(public.is_owner(auth.uid()) or auth.uid()=user_id);
+drop policy if exists upgrade_changes_owner on upgrade_changes;
+create policy upgrade_changes_owner on upgrade_changes for all using(exists(select 1 from upgrade_jobs j where j.id=upgrade_job_id and (j.user_id=auth.uid() or public.is_owner(auth.uid())))) with check(exists(select 1 from upgrade_jobs j where j.id=upgrade_job_id and (j.user_id=auth.uid() or public.is_owner(auth.uid()))));
+drop policy if exists website_projects_self_or_owner on website_projects;
+create policy website_projects_self_or_owner on website_projects for select using(auth.uid()=owner_user_id or public.is_owner(auth.uid()));
+drop policy if exists website_projects_self_insert on website_projects;
+create policy website_projects_self_insert on website_projects for insert with check(auth.uid()=owner_user_id);
 drop policy if exists admin_logs_owner on admin_logs;
 create policy admin_logs_owner on admin_logs for select using(public.is_owner(auth.uid()));
 
@@ -102,7 +178,7 @@ create policy testimonials_public_insert on testimonials for insert with check (
 );
 drop policy if exists testimonials_public_approved_read on testimonials;
 drop policy if exists testimonials_public_published_read on testimonials;
-create policy testimonials_public_published_read on testimonials for select using (status='published' or public.is_owner(auth.uid()));
+create policy testimonials_public_published_read on testimonials for select using (status='published');
 
 -- LEO OS client website builder / hosting / onboarding extensions (additive)
 create table if not exists website_projects (
