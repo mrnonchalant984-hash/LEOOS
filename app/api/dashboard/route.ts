@@ -26,11 +26,22 @@ export async function GET(req: NextRequest) {
   const firstError = [subscriptionResult, creditResult, chatsResult, chatsCountResult, memoriesResult, projectsResult, projectsCountResult, websitesResult, websitesCountResult, notificationsResult, notificationsCountResult].find(result => result.error);
   if (firstError?.error) return NextResponse.json({ error: 'Dashboard data could not be loaded.' }, { status: 500 });
 
+  const candidates = [
+    ctx.profile?.full_name,
+    ctx.user.user_metadata?.full_name,
+    ctx.user.user_metadata?.name,
+    ctx.user.email?.split('@')[0],
+    'there',
+  ];
+  const displayName = candidates
+    .map(value => typeof value === 'string' ? value.trim() : '')
+    .find(value => Boolean(value) && !/^user$/i.test(value)) || 'there';
+
   const isOwner = ctx.profile.role === 'owner' && ctx.profile.email?.toLowerCase() === (process.env.OWNER_EMAIL || 'leonardudoh5@gmail.com').toLowerCase();
   const credits = (creditResult.data || []).reduce((sum, row) => sum + Number(row.credits_remaining || 0), 0);
 
   return NextResponse.json({
-    user: { name: ctx.profile.full_name || ctx.user.user_metadata?.full_name || ctx.user.email?.split('@')[0] || 'there', email: ctx.user.email },
+    user: { name: displayName, email: ctx.user.email },
     plan: isOwner ? 'OWNER' : subscriptionResult.data?.plan?.toUpperCase() || 'FREE',
     status: isOwner ? 'owner' : subscriptionResult.data?.status || 'free',
     billingPeriod: subscriptionResult.data?.billing_period || null,

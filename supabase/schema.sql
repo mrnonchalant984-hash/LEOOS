@@ -97,7 +97,15 @@ from auth.users
 where lower(email)=lower('leonardudoh5@gmail.com')
 on conflict (id) do update set email=excluded.email,full_name=coalesce(nullif(excluded.full_name,''), profiles.full_name, split_part(excluded.email,'@',1)),role='owner';
 update profiles set role='user' where lower(email)<>lower('leonardudoh5@gmail.com') and role='owner';
-update profiles set full_name = coalesce(nullif(full_name,''), split_part(email,'@',1), 'there') where full_name is null or lower(full_name)='user';
+update profiles
+set full_name = coalesce(
+  nullif(trim(full_name), ''),
+  nullif(split_part(email,'@',1), ''),
+  'there'
+)
+where lower(coalesce(trim(full_name), '')) = 'user'
+   or full_name is null
+   or trim(full_name) = '';
 create index if not exists idx_subscriptions_user_status on subscriptions(user_id,status); create index if not exists idx_payments_user_status on payments(user_id,status); create index if not exists idx_credits_user_feature on credits(user_id,feature); create index if not exists idx_feature_access_user on feature_access(user_id); create index if not exists idx_projects_user on projects(user_id); create index if not exists idx_admin_logs_user on admin_logs(user_id); create index if not exists idx_chats_v2_user_updated on chats_v2(user_id,updated_at desc);
 
 alter table profiles enable row level security; alter table subscriptions enable row level security; alter table payments enable row level security; alter table credits enable row level security; alter table feature_access enable row level security; alter table projects enable row level security; alter table admin_logs enable row level security; alter table chats_v2 enable row level security; alter table notifications enable row level security;
