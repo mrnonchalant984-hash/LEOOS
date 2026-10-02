@@ -4,6 +4,8 @@ import { getProfile } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
+const validVoices = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin', 'cedar'] as const;
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await getProfile(req);
@@ -12,7 +14,9 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const selectedVoice = typeof body.voice === 'string' ? body.voice : 'marin';
+    const selectedVoice = typeof body.voice === 'string' && validVoices.includes(body.voice as (typeof validVoices)[number])
+      ? body.voice as (typeof validVoices)[number]
+      : 'marin';
     const model = typeof body.model === 'string' ? body.model : 'gpt-realtime';
 
     const response = await getOpenAI().realtime.clientSecrets.create({
@@ -24,7 +28,7 @@ export async function POST(req: NextRequest) {
         modalities: ['audio'],
         audio: {
           input: {
-            format: 'pcm16',
+            format: { type: 'audio/pcm', rate: 24000 },
             turn_detection: {
               type: 'server_vad',
               create_response: true,
@@ -35,7 +39,7 @@ export async function POST(req: NextRequest) {
             },
           },
           output: {
-            format: 'pcm16',
+            format: { type: 'audio/pcm', rate: 24000 },
             voice: selectedVoice,
           },
         },
