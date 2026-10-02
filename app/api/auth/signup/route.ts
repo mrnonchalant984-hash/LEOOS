@@ -3,6 +3,16 @@ import { createClient } from '@supabase/supabase-js';
 import { AUTH_COOKIE } from '@/lib/auth';
 export const runtime = 'nodejs';
 
+function getAppBaseUrl() {
+  const configured = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_VERCEL_URL || process.env.VERCEL_URL;
+  if (configured) {
+    const normalized = configured.trim().replace(/\/$/, '');
+    return /^https?:\/\//i.test(normalized) ? normalized : `https://${normalized}`;
+  }
+  if (process.env.NODE_ENV === 'production') return 'https://leoos-omega.vercel.app';
+  return 'http://localhost:3000';
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { email, password } = await req.json();
@@ -11,7 +21,12 @@ export async function POST(req: NextRequest) {
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || !key) return NextResponse.json({ error: 'Supabase authentication is not configured.' }, { status: 503 });
     const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { data, error } = await sb.auth.signUp({ email, password });
+    const emailRedirectTo = `${getAppBaseUrl()}/auth`;
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo },
+    });
     if (error) throw error;
     if (!data.session || !data.user) return NextResponse.json({ ok: true, needsConfirmation: true, message: 'Account created. Check your email to confirm your account, then log in.' });
     const res = NextResponse.json({
