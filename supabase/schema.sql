@@ -73,14 +73,31 @@ alter table profiles add column if not exists twofa_secret text; alter table pro
 alter table subscriptions add column if not exists current_period_start timestamptz; alter table subscriptions add column if not exists current_period_end timestamptz; alter table subscriptions add column if not exists paystack_subscription_code text; alter table subscriptions add column if not exists updated_at timestamptz default now();
 alter table payments add column if not exists amount numeric; alter table payments add column if not exists currency text default 'NGN'; alter table payments add column if not exists paystack_reference text; alter table payments add column if not exists paid_at timestamptz;
 
-create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path=public as $$ begin insert into public.profiles(id,email,full_name,role) values(new.id,new.email,coalesce(new.raw_user_meta_data->>'full_name','user'),case when lower(new.email)=lower('leonardudoh5@gmail.com') then 'owner' else 'user' end) on conflict(id) do update set email=excluded.email, role=case when lower(excluded.email)=lower('leonardudoh5@gmail.com') then 'owner' else profiles.role end; return new; end; $$;
+create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path=public as $$
+declare
+  safe_name text;
+begin
+  safe_name := coalesce(nullif(new.raw_user_meta_data->>'full_name',''), split_part(new.email,'@',1));
+  if safe_name is null or safe_name = '' then
+    safe_name := 'there';
+  end if;
+
+  insert into public.profiles(id,email,full_name,role)
+  values(new.id,new.email,safe_name,case when lower(new.email)=lower('leonardudoh5@gmail.com') then 'owner' else 'user' end)
+  on conflict(id) do update set
+    email=excluded.email,
+    full_name=coalesce(nullif(excluded.full_name,''), profiles.full_name, split_part(excluded.email,'@',1)),
+    role=case when lower(excluded.email)=lower('leonardudoh5@gmail.com') then 'owner' else profiles.role end;
+  return new;
+end; $$;
 drop trigger if exists on_auth_user_created on auth.users; create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
 insert into public.profiles (id,email,full_name,role)
-select id,email,coalesce(raw_user_meta_data->>'full_name','Leonard'),'owner'
+select id,email,coalesce(nullif(raw_user_meta_data->>'full_name',''), split_part(email,'@',1)),'owner'
 from auth.users
 where lower(email)=lower('leonardudoh5@gmail.com')
-on conflict (id) do update set email=excluded.email,role='owner';
+on conflict (id) do update set email=excluded.email,full_name=coalesce(nullif(excluded.full_name,''), profiles.full_name, split_part(excluded.email,'@',1)),role='owner';
 update profiles set role='user' where lower(email)<>lower('leonardudoh5@gmail.com') and role='owner';
+update profiles set full_name = coalesce(nullif(full_name,''), split_part(email,'@',1), 'there') where full_name is null or lower(full_name)='user';
 create index if not exists idx_subscriptions_user_status on subscriptions(user_id,status); create index if not exists idx_payments_user_status on payments(user_id,status); create index if not exists idx_credits_user_feature on credits(user_id,feature); create index if not exists idx_feature_access_user on feature_access(user_id); create index if not exists idx_projects_user on projects(user_id); create index if not exists idx_admin_logs_user on admin_logs(user_id); create index if not exists idx_chats_v2_user_updated on chats_v2(user_id,updated_at desc);
 
 alter table profiles enable row level security; alter table subscriptions enable row level security; alter table payments enable row level security; alter table credits enable row level security; alter table feature_access enable row level security; alter table projects enable row level security; alter table admin_logs enable row level security; alter table chats_v2 enable row level security; alter table notifications enable row level security;

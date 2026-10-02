@@ -59,6 +59,10 @@ export default function Dashboard() {
     return <main className="mx-auto max-w-7xl px-4 py-12"><p className="text-zinc-400">Loading your workspace…</p></main>;
   }
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const displayName = String(data.user.name || 'there').trim() || 'there';
+
   const metrics = [
     ['Conversations', data.counts.conversations, MessageSquare, '/app'],
     ['Saved memories', data.counts.memories, BookOpen, '/app'],
@@ -71,7 +75,7 @@ export default function Dashboard() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm font-bold text-yellow-300">YOUR LEO WORKSPACE</p>
-          <h1 className="mt-2 text-3xl font-black sm:text-4xl">Good evening, {data.user.name} 👋</h1>
+          <h1 className="mt-2 text-3xl font-black sm:text-4xl">{greeting}, {displayName} 👋</h1>
           <p className="mt-2 text-zinc-400">Your recent work, personal projects, and account activity at a glance.</p>
         </div>
         <div className="flex flex-wrap gap-3">

@@ -15,17 +15,22 @@ function getAppBaseUrl() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json();
+    const body = await req.json();
+    const { email, password, full_name } = body ?? {};
     if (!email || !password || password.length < 8) return NextResponse.json({ error: 'Email and a password of at least 8 characters are required.' }, { status: 400 });
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || !key) return NextResponse.json({ error: 'Supabase authentication is not configured.' }, { status: 503 });
     const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    const cleanName = typeof full_name === 'string' ? full_name.trim() : '';
     const emailRedirectTo = `${getAppBaseUrl()}/auth`;
     const { data, error } = await sb.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo },
+      options: {
+        emailRedirectTo,
+        data: cleanName ? { full_name: cleanName } : {},
+      },
     });
     if (error) throw error;
     if (!data.session || !data.user) return NextResponse.json({ ok: true, needsConfirmation: true, message: 'Account created. Check your email to confirm your account, then log in.' });
