@@ -3,23 +3,27 @@ import { supabase } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
 
-// Sends the contact message to Leonard through Resend's server-side HTTP API.
+// Sends the contact message through Web3Forms without exposing its access key to the browser.
 async function sendEmail(data: { name: string; email: string; phone: string; message: string }) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const destination = process.env.CONTACT_EMAIL || process.env.OWNER_EMAIL || 'leonardudoh5@gmail.com';
-  if (!apiKey) return { sent: false, reason: 'missing_key' as const };
-  const from = process.env.CONTACT_FROM_EMAIL || 'LEO Portfolio <onboarding@resend.dev>';
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+  const accessKey = process.env.WEB3FORMS_ACCESS_KEY;
+  if (!accessKey) return { sent: false, reason: 'missing_key' as const };
+  const response = await fetch('https://api.web3forms.com/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
-      from, to: [destination], reply_to: data.email,
-      subject: `🔔 New portfolio lead from ${data.name}`,
-      text: `Hey Boss Leonard 👑\n\nYou just received a new portfolio contact.\n\nName: ${data.name}\nEmail: ${data.email}\nPhone: ${data.phone}\n\nMessage:\n${data.message}`,
+      access_key: accessKey,
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      message: data.message,
+      subject: `New portfolio lead from ${data.name}`,
+      from_name: 'LEO OS Contact Form',
+      replyto: data.email,
     }),
   });
-  if (response.ok) return { sent: true as const };
-  const result = await response.json().catch(() => null) as { message?: string; name?: string } | null;
-  return { sent: false as const, status: response.status, detail: result?.message || result?.name || 'No additional details returned.' };
+  const result = await response.json().catch(() => null) as { success?: boolean; message?: string } | null;
+  if (response.ok && result?.success) return { sent: true as const };
+  return { sent: false as const, status: response.status, detail: result?.message || 'Web3Forms did not accept the submission.' };
 }
 
 export async function POST(request: NextRequest) {
@@ -41,9 +45,9 @@ export async function POST(request: NextRequest) {
     const emailResult = await sendEmail({ name, email, phone, message });
     if (!emailResult.sent) {
       if (emailResult.reason === 'missing_key') {
-        return NextResponse.json({ error: 'Message saved, but email delivery is unavailable: RESEND_API_KEY is missing.' }, { status: 503 });
+        return NextResponse.json({ error: 'Message saved, but contact delivery is not configured: WEB3FORMS_ACCESS_KEY is missing.' }, { status: 503 });
       }
-      return NextResponse.json({ error: `Message saved, but Resend rejected the email (HTTP ${emailResult.status}): ${emailResult.detail}. Check that the API key is active and the sender domain is verified in Resend.` }, { status: 502 });
+      return NextResponse.json({ error: `Message saved, but Web3Forms rejected the submission (HTTP ${emailResult.status}): ${emailResult.detail}` }, { status: 502 });
     }
 
     return NextResponse.json({ ok: true, emailSent: true });

@@ -29,7 +29,7 @@ function browserInstructions(agent:AgentDefinition){
 async function createSession(){
   const client=getOpenAI() as any;
   const api=sessions(client);
-  return api.create({
+  const session=await api.create({
     agent:{
       model:OPENAI_AGENTS_MODEL,
       instructions:'',
@@ -37,10 +37,11 @@ async function createSession(){
     },
     environment:{type:'openai_hosted',desktop:{enabled:true},network:{access:'enabled'}},
   });
+  return {api,session};
 }
 
-async function sendMessage(session:any,text:string){
-  await session.events.create({events:[{type:'agent.session.input.message',input:[{role:'user',content:[{type:'input_text',text}]}]}]});
+async function sendMessage(api:any,sessionId:string,text:string){
+  await api.events.create(sessionId,{events:[{type:'agent.session.input.message',input:[{role:'user',content:[{type:'input_text',text}]}]}]});
 }
 
 function approvalSnapshot(current:any){
@@ -64,18 +65,18 @@ async function persist(runId:string|undefined,patch:any){
 }
 
 export async function runHostedBrowserAgent(agent:AgentDefinition,task:string,context:string,meta:{runId?:string;userId?:string}){
-  const session=await createSession();
+  const {api,session}=await createSession();
   await persist(meta.runId,{execution:'openai_hosted_browser',browser_session_id:session.id,browser_status:'running'});
   if(meta.userId){ const db=adminSupabase(); await db.from('agent_browser_sessions').insert({user_id:meta.userId,run_id:meta.runId||null,session_id:session.id,status:'running',metadata:{agent_id:agent.id,task:task.slice(0,8000)}}); }
-  const stream=await session.events.stream(session.id);
+  const stream=await api.events.stream(session.id);
   const handled=new Set<string>();
   let lastText='';
   try{
-    await sendMessage(session,`${browserInstructions(agent)}\\n\\nTask:\\n${task}\\n\\nContext:\\n${context.slice(0,12000)}`);
+    await sendMessage(api,session.id,`${browserInstructions(agent)}\\n\\nTask:\\n${task}\\n\\nContext:\\n${context.slice(0,12000)}`);
     for await(const event of stream as any){
       if(event.type==='agent.session.turn.output_text.done') lastText=event.text||lastText;
       if(event.type==='agent.session.requires_action'){
-        const current=await session.retrieve(session.id);
+        const current=await api.retrieve(session.id);
         const pending=approvalSnapshot(current);
         for(const approval of pending){
           if(handled.has(approval.request_id)) continue;
@@ -83,7 +84,7 @@ export async function runHostedBrowserAgent(agent:AgentDefinition,task:string,co
           if(approval.type==='browser_origin_access'){
             // Origin access is not the same as purchase/financial approval. The owner already approved
             // execution of this owner-only agent; allow the browser to continue to the requested origin.
-            await session.events.create({events:[{type:'agent.session.input.computer_use_approval_request_result',request_id:approval.request_id,response:{type:'browser_origin_access',decision:'approve'}}]});
+            await api.events.create(session.id,{events:[{type:'agent.session.input.computer_use_approval_request_result',request_id:approval.request_id,response:{type:'browser_origin_access',decision:'approve'}}]});
           }else{
             await persist(meta.runId,{browser_status:'waiting_owner_input',browser_approvals:pending});
             return JSON.stringify({status:'waiting_owner_input',session_id:session.id,approvals:pending,message:'Leo needs owner input before continuing the browser session.'});
@@ -113,7 +114,6 @@ export async function getHostedBrowserSession(sessionId:string){
 export async function respondToHostedBrowserApproval(sessionId:string,approval:any){
   const client=getOpenAI() as any;
   const api=sessions(client);
-  const session=api;
   const type=approval?.type;
   let response:any;
   if(type==='browser_origin_access') response={type:'browser_origin_access',decision:approval.decision==='deny'?'deny':approval.decision==='cancel'?'cancel':'approve'};
@@ -121,7 +121,7 @@ export async function respondToHostedBrowserApproval(sessionId:string,approval:a
     if(approval.action==='cancel') response={type:'browser_authentication',action:'cancel'};
     else response={type:'browser_authentication',action:'submit',selected_option:approval.selected_option,fields:approval.fields||[]};
   } else throw new Error(`Unsupported browser approval type: ${type}`);
-  return session.events.create({events:[{type:'agent.session.input.computer_use_approval_request_result',request_id:approval.request_id,response}]});
+  return api.events.create(sessionId,{events:[{type:'agent.session.input.computer_use_approval_request_result',request_id:approval.request_id,response}]});
 }
 
 export async function continueHostedBrowserSession(sessionId:string,runId?:string){
