@@ -365,3 +365,34 @@ create index if not exists idx_admin_trusted_devices_user on admin_trusted_devic
 alter table admin_trusted_devices enable row level security;
 drop policy if exists admin_trusted_devices_owner on admin_trusted_devices;
 create policy admin_trusted_devices_owner on admin_trusted_devices for all using(public.is_owner(auth.uid())) with check(public.is_owner(auth.uid()));
+
+-- Multi-agent orchestration (additive)
+create table if not exists agent_definitions (id text primary key, name text not null, category text not null, description text not null, enabled boolean not null default true, owner_only boolean not null default false, allowed_tools jsonb not null default '[]'::jsonb, permissions jsonb not null default '[]'::jsonb, approval_required boolean not null default false, model text, config jsonb not null default '{}'::jsonb, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+create table if not exists agent_tool_permissions (id uuid primary key default gen_random_uuid(), agent_id text not null references agent_definitions(id) on delete cascade, tool_id text not null, permission text not null, enabled boolean not null default true, created_at timestamptz not null default now(), unique(agent_id,tool_id));
+create table if not exists agent_runs (id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade, agent_id text not null, task text not null, status text not null default 'queued', result text, error text, metadata jsonb not null default '{}'::jsonb, started_at timestamptz, completed_at timestamptz, created_at timestamptz not null default now());
+create table if not exists agent_run_steps (id uuid primary key default gen_random_uuid(), run_id uuid not null references agent_runs(id) on delete cascade, step_index integer not null, agent_id text not null, status text not null default 'queued', input jsonb not null default '{}'::jsonb, output jsonb, error text, started_at timestamptz, completed_at timestamptz, created_at timestamptz not null default now());
+create table if not exists agent_approvals (id uuid primary key default gen_random_uuid(), run_id uuid references agent_runs(id) on delete cascade, user_id uuid not null references profiles(id) on delete cascade, action text not null, status text not null default 'pending', metadata jsonb not null default '{}'::jsonb, approved_at timestamptz, created_at timestamptz not null default now());
+create index if not exists idx_agent_runs_user on agent_runs(user_id,created_at desc); create index if not exists idx_agent_runs_agent on agent_runs(agent_id,created_at desc); create index if not exists idx_agent_steps_run on agent_run_steps(run_id,step_index); create index if not exists idx_agent_approvals_user on agent_approvals(user_id,status,created_at desc);
+alter table agent_definitions enable row level security; alter table agent_tool_permissions enable row level security; alter table agent_runs enable row level security; alter table agent_run_steps enable row level security; alter table agent_approvals enable row level security;
+drop policy if exists agent_definitions_owner on agent_definitions; create policy agent_definitions_owner on agent_definitions for all using(public.is_owner(auth.uid())) with check(public.is_owner(auth.uid()));
+drop policy if exists agent_tools_owner on agent_tool_permissions; create policy agent_tools_owner on agent_tool_permissions for all using(public.is_owner(auth.uid())) with check(public.is_owner(auth.uid()));
+drop policy if exists agent_runs_self on agent_runs; create policy agent_runs_self on agent_runs for select using(auth.uid()=user_id or public.is_owner(auth.uid()));
+drop policy if exists agent_steps_self on agent_run_steps; create policy agent_steps_self on agent_run_steps for select using(exists(select 1 from agent_runs r where r.id=run_id and (r.user_id=auth.uid() or public.is_owner(auth.uid()))));
+drop policy if exists agent_approvals_self on agent_approvals; create policy agent_approvals_self on agent_approvals for select using(auth.uid()=user_id or public.is_owner(auth.uid()));
+
+-- Owner-only hosted browser session tracking for Leo's computer-use runtime.
+create table if not exists agent_browser_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  run_id uuid references agent_runs(id) on delete cascade,
+  provider text not null default 'openai_hosted',
+  session_id text not null unique,
+  status text not null default 'running',
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table agent_browser_sessions enable row level security;
+drop policy if exists agent_browser_sessions_owner on agent_browser_sessions;
+create policy agent_browser_sessions_owner on agent_browser_sessions for all using(auth.uid()=user_id or public.is_owner(auth.uid())) with check(auth.uid()=user_id or public.is_owner(auth.uid()));
+create index if not exists idx_agent_browser_sessions_user on agent_browser_sessions(user_id,created_at desc);

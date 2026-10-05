@@ -89,3 +89,20 @@ The 12 project URL variables are listed in `.env.example`.
 
 ## Verification note
 A complete production `npm run build` was not run in this environment because the dependency registry was unavailable and `node_modules` is intentionally not included in the ZIP. The source was statically audited and several broken integrations were corrected, but deployment should still run `npm ci && npm run build` in an environment with registry access before production release.
+
+## Provider setup
+OpenAI, GitHub, Vercel, Supabase, Paystack, Resend and optional browser/computer/3D provider credentials are represented by server-side environment variables. The app never puts provider secrets in NEXT_PUBLIC variables. A provider must have a real credential/endpoint configured before its corresponding owner-only agent can execute external actions.
+
+## Owner Video Agent
+
+LEO OS includes an owner-only Video Agent powered by Runway Dev. GPT-6 Astra remains the reasoning/orchestration layer; Runway performs the actual video generation. The agent requires explicit owner approval because generation consumes provider credits. Generated videos are copied into the existing private `leo-files` Supabase Storage bucket when possible because Runway result URLs are temporary.
+
+Required server environment variables:
+
+```env
+RUNWAYML_API_SECRET=
+RUNWAY_VIDEO_MODEL=gen4.5
+RUNWAY_VIDEO_TIMEOUT_MS=540000
+```
+
+The Video Agent is not available to normal users.

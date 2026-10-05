@@ -4,7 +4,7 @@ import { AUTH_COOKIE } from '@/lib/auth';
 export const runtime = 'nodejs';
 
 function getAppBaseUrl() {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_VERCEL_URL || process.env.VERCEL_URL;
+  const configured = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_VERCEL_URL || process.env.VERCEL_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL;
   if (configured) {
     const normalized = configured.trim().replace(/\/$/, '');
     return /^https?:\/\//i.test(normalized) ? normalized : `https://${normalized}`;

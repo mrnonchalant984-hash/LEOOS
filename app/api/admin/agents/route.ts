@@ -1,0 +1,2 @@
+import {NextRequest,NextResponse} from 'next/server';import {adminSupabase,requireOwner} from '@/lib/auth';
+export async function GET(req:NextRequest){const ctx=await requireOwner(req);if(!ctx)return NextResponse.json({error:'Forbidden'},{status:403});const db=adminSupabase();const {data:runs}=await db.from('agent_runs').select('id,agent_id,task,status,created_at,completed_at,error').order('created_at',{ascending:false}).limit(100);return NextResponse.json({runs:runs||[]});}
