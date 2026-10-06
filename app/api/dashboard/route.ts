@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     db.from('leo_memories').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('active', true),
     db.from('projects').select('id,project_name,type,status,progress,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(5),
     db.from('projects').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-    db.from('website_projects').select('id,business_name,website_type,status,live_url,updated_at').eq('owner_user_id', userId).order('updated_at', { ascending: false }).limit(5),
+    db.from('website_projects').select('id,business_name,website_type,status,live_url,updated_at,requirements').eq('owner_user_id', userId).order('updated_at', { ascending: false }).limit(5),
     db.from('website_projects').select('id', { count: 'exact', head: true }).eq('owner_user_id', userId),
     db.from('notifications').select('id,title,body,created_at,read').eq('user_id', userId).order('created_at', { ascending: false }).limit(5),
     db.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('read', false),
