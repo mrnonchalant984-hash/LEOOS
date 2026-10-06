@@ -17,11 +17,32 @@ export default function ContactPage() {
     const payload = Object.fromEntries(form.entries());
 
     try {
-      const response = await fetch('/api/contact', {
+      const accessKey = process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY;
+      if (!accessKey) throw new Error('Contact delivery is not configured. Add NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY to Vercel and redeploy.');
+
+      const saveResponse = await fetch('/api/contact', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Message could not be sent.');
+      const saveResult = await saveResponse.json();
+      if (!saveResponse.ok) throw new Error(saveResult.error || 'Message could not be saved.');
+
+      const response = await fetch('https://api.web3forms.com/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          ...payload,
+          access_key: accessKey,
+          subject: `New portfolio contact from ${payload.name}`,
+          from_name: 'LEO OS Contact Form',
+          replyto: payload.email,
+          botcheck: '',
+        }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) {
+        const detail = result?.body?.message || result?.message || result?.error || 'Web3Forms did not accept the submission.';
+        throw new Error(`Message saved, but Web3Forms could not deliver it: ${detail}`);
+      }
       setStatus({ type: 'success', text: 'Message sent. Leonard has been notified by email.' });
       event.currentTarget.reset();
     } catch (error) {
