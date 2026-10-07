@@ -6,6 +6,208 @@ create table if not exists subscriptions (id uuid primary key default gen_random
 create table if not exists payments (id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade, amount numeric, currency text default 'NGN', plan text, billing_period text, paystack_reference text unique, reference text unique, status text default 'pending', paid_at timestamptz, verified_at timestamptz, amount_kobo bigint, created_at timestamptz default now());
 create table if not exists credits (id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade, feature text not null, credits_remaining integer not null default 0, credits_used integer not null default 0, last_reset timestamptz default now(), unique(user_id,feature));
 create table if not exists feature_access (id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade, feature_name text not null, has_access boolean not null default false, granted_by text, expires_at timestamptz, unique(user_id,feature_name));
+
+create table if not exists api_keys (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  name text not null check (char_length(btrim(name)) between 1 and 80),
+  key_prefix text not null,
+  key_hash text not null unique,
+  scopes text[] not null default array['projects:read']::text[],
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  last_used_at timestamptz,
+  created_at timestamptz not null default now(),
+  constraint api_keys_scopes_valid check (
+    cardinality(scopes) > 0 and
+    scopes <@ array['projects:read','projects:write','usage:read']::text[]
+  )
+);
+create index if not exists idx_api_keys_user_created on api_keys(user_id,created_at desc);
+
+create table if not exists api_rate_buckets (
+  api_key_id uuid primary key references api_keys(id) on delete cascade,
+  window_started_at timestamptz not null default now(),
+  request_count integer not null default 0 check (request_count >= 0),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists api_requests (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null unique,
+  api_key_id uuid references api_keys(id) on delete set null,
+  user_id uuid not null references profiles(id) on delete cascade,
+  endpoint text not null,
+  method text not null,
+  status_code integer not null,
+  latency_ms integer not null default 0 check (latency_ms >= 0),
+  error_code text,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_api_requests_user_created on api_requests(user_id,created_at desc);
+create index if not exists idx_api_requests_key_created on api_requests(api_key_id,created_at desc);
+
+create or replace function public.consume_api_rate_limit(
+  p_api_key_id uuid,
+  p_limit integer,
+  p_window_seconds integer default 60
+) returns table(allowed boolean, remaining integer, reset_at timestamptz)
+language plpgsql security definer set search_path = public as $$
+declare
+  bucket api_rate_buckets%rowtype;
+  current_time timestamptz := now();
+begin
+  if p_limit < 1 or p_window_seconds < 1 then raise exception 'Invalid rate-limit configuration'; end if;
+  insert into api_rate_buckets(api_key_id,window_started_at,request_count)
+    values(p_api_key_id,current_time,0) on conflict(api_key_id) do nothing;
+  select * into bucket from api_rate_buckets where api_key_id=p_api_key_id for update;
+  if bucket.window_started_at + make_interval(secs => p_window_seconds) <= current_time then
+    update api_rate_buckets set window_started_at=current_time,request_count=1,updated_at=current_time
+      where api_key_id=p_api_key_id;
+    return query select true,p_limit-1,current_time+make_interval(secs => p_window_seconds);
+    return;
+  end if;
+  if bucket.request_count >= p_limit then
+    return query select false,0,bucket.window_started_at+make_interval(secs => p_window_seconds);
+    return;
+  end if;
+  update api_rate_buckets set request_count=request_count+1,updated_at=current_time
+    where api_key_id=p_api_key_id;
+  return query select true,p_limit-bucket.request_count-1,bucket.window_started_at+make_interval(secs => p_window_seconds);
+end;
+$$;
+revoke all on function public.consume_api_rate_limit(uuid,integer,integer) from public, anon, authenticated;
+grant execute on function public.consume_api_rate_limit(uuid,integer,integer) to service_role;
+
+alter table api_keys enable row level security;
+alter table api_rate_buckets enable row level security;
+alter table api_requests enable row level security;
+drop policy if exists api_keys_self_read on api_keys;
+create policy api_keys_self_read on api_keys for select using(auth.uid()=user_id);
+drop policy if exists api_requests_self_read on api_requests;
+create policy api_requests_self_read on api_requests for select using(auth.uid()=user_id);
+
+create or replace function public.consume_user_credit(
+  p_user_id uuid,
+  p_feature text,
+  p_cost integer,
+  p_entitled boolean,
+  p_free_monthly_allowance integer default 0
+) returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  credit_row credits%rowtype;
+  remaining integer;
+begin
+  if p_cost < 1 then raise exception 'Credit cost must be positive'; end if;
+  if not p_entitled and p_free_monthly_allowance < 1 then
+    raise exception 'This feature is not included in the current plan';
+  end if;
+  perform 1 from profiles where id = p_user_id for update;
+  if not found then raise exception 'Account not found'; end if;
+
+  select * into credit_row from credits where user_id = p_user_id and feature = p_feature for update;
+  if not found then
+    if p_free_monthly_allowance < 1 then raise exception 'No credits left'; end if;
+    insert into credits(user_id,feature,credits_remaining,credits_used,last_reset)
+      values(p_user_id,p_feature,p_free_monthly_allowance,0,now()) returning * into credit_row;
+  elsif p_free_monthly_allowance > 0 and (
+    credit_row.last_reset < date_trunc('month',now())
+    or (not p_entitled and credit_row.credits_remaining > p_free_monthly_allowance)
+  ) then
+    update credits set credits_remaining=p_free_monthly_allowance,credits_used=0,last_reset=now()
+      where id=credit_row.id returning * into credit_row;
+  end if;
+
+  if credit_row.credits_remaining < p_cost then raise exception 'No credits left'; end if;
+  update credits set credits_remaining=credits_remaining-p_cost,credits_used=credits_used+p_cost
+    where id=credit_row.id returning credits_remaining into remaining;
+  return remaining;
+end;
+$$;
+revoke all on function public.consume_user_credit(uuid,text,integer,boolean,integer) from public, anon, authenticated;
+grant execute on function public.consume_user_credit(uuid,text,integer,boolean,integer) to service_role;
+
+create or replace function public.apply_verified_subscription_payment(p_reference text, p_paid_at timestamptz)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  payment_row payments%rowtype;
+  period_months integer;
+  plan_credits integer;
+  period_start timestamptz;
+  period_end timestamptz;
+  feature text;
+begin
+  select * into payment_row from payments where reference = p_reference for update;
+  if not found then raise exception 'Payment reference is not registered'; end if;
+  if payment_row.status = 'success' then return false; end if;
+  if payment_row.status <> 'pending' then raise exception 'Payment is not pending'; end if;
+  if payment_row.amount_kobo is null or payment_row.amount_kobo <= 0 then
+    raise exception 'Registered payment amount is invalid';
+  end if;
+
+  period_months := case payment_row.billing_period
+    when 'monthly' then 1
+    when 'quarterly' then 3
+    when 'yearly' then 12
+    else null
+  end;
+  if period_months is null then raise exception 'Invalid billing period'; end if;
+
+  plan_credits := case payment_row.plan
+    when 'standard' then 30
+    when 'pro' then 100
+    when 'unlimited' then 500
+    else null
+  end;
+  if plan_credits is null then raise exception 'Invalid subscription plan'; end if;
+
+  perform 1 from profiles where id = payment_row.user_id for update;
+  select coalesce(
+    max(case
+      when coalesce(ends_at, current_period_end) > p_paid_at
+        then coalesce(ends_at, current_period_end)
+      else p_paid_at
+    end),
+    p_paid_at
+  ) into period_start
+  from subscriptions
+  where user_id = payment_row.user_id and status = 'active';
+  period_end := period_start + make_interval(months => period_months);
+  update payments set status = 'success', paid_at = p_paid_at,
+    verified_at = now(), paystack_reference = p_reference
+    where id = payment_row.id;
+  update subscriptions set status = 'expired'
+    where user_id = payment_row.user_id and status = 'active';
+  insert into subscriptions (user_id, plan, billing_period, status,
+    current_period_start, current_period_end, starts_at, ends_at, payment_reference)
+    values (payment_row.user_id, payment_row.plan, payment_row.billing_period,
+      'active', period_start, period_end, period_start, period_end, p_reference);
+
+  foreach feature in array array['image_generation', 'code_generation', 'background_removal', 'website_deployment'] loop
+    insert into credits (user_id, feature, credits_remaining, credits_used, last_reset)
+      values (payment_row.user_id, feature, plan_credits, 0, p_paid_at)
+      on conflict (user_id, feature) do update set
+        credits_remaining = excluded.credits_remaining,
+        credits_used = 0,
+        last_reset = excluded.last_reset;
+    insert into feature_access (user_id, feature_name, has_access, granted_by, expires_at)
+      values (payment_row.user_id, feature, true, 'subscription', period_end)
+      on conflict (user_id, feature_name) do update set
+        has_access = true,
+        granted_by = 'subscription',
+        expires_at = excluded.expires_at;
+  end loop;
+  return true;
+end;
+$$;
+revoke all on function public.apply_verified_subscription_payment(text, timestamptz) from public, anon, authenticated;
+grant execute on function public.apply_verified_subscription_payment(text, timestamptz) to service_role;
+
 create table if not exists projects (id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade, project_name text not null, type text, file_url text, files jsonb default '{}'::jsonb, status text default 'draft', progress integer default 0, created_at timestamptz default now());
 create table if not exists admin_logs (id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade, action text not null, ip_address text, device text, created_at timestamptz default now());
 create table if not exists chats_v2 (id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade, title text default 'New chat', messages jsonb not null default '[]'::jsonb, created_at timestamptz default now(), updated_at timestamptz default now());
@@ -239,6 +441,96 @@ create index if not exists idx_website_projects_status on website_projects(statu
 alter table website_projects add column if not exists live_deployment_id text;
 alter table website_projects add column if not exists suspended_deployment_id text;
 alter table website_projects add column if not exists hosting_enforcement_status text default 'active';
+alter table website_projects add column if not exists project_type text not null default 'website';
+alter table website_projects add column if not exists build_provider text;
+alter table website_projects add column if not exists build_status text not null default 'draft';
+alter table website_projects add column if not exists build_step text;
+alter table website_projects add column if not exists last_build_at timestamptz;
+create index if not exists idx_website_projects_project_type on website_projects(owner_user_id,project_type,created_at desc);
+
+create table if not exists project_builds (
+  id uuid primary key default gen_random_uuid(),
+  website_project_id uuid not null references website_projects(id) on delete cascade,
+  owner_user_id uuid not null references profiles(id) on delete cascade,
+  project_type text not null,
+  provider text not null,
+  status text not null default 'building' check (status in ('building','testing','deploying','live','build_failed','deploy_failed')),
+  step text not null default 'queued',
+  logs jsonb not null default '[]'::jsonb,
+  error text,
+  deployment_id text,
+  deployment_url text,
+  created_at timestamptz not null default now(),
+  started_at timestamptz not null default now(),
+  completed_at timestamptz
+);
+create index if not exists idx_project_builds_owner_created on project_builds(owner_user_id,created_at desc);
+create index if not exists idx_project_builds_project_created on project_builds(website_project_id,created_at desc);
+
+create or replace function public.create_customer_project(
+  p_owner_user_id uuid,
+  p_project_type text,
+  p_website_type text,
+  p_business_name text,
+  p_chatbot_enabled boolean,
+  p_payment_mode text,
+  p_requirements jsonb,
+  p_project_limit integer
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  project_id uuid;
+  project_count integer;
+begin
+  if p_project_type not in ('website','web_app','saas') then
+    raise exception 'Project type is not supported by a configured builder';
+  end if;
+  perform 1 from profiles where id = p_owner_user_id for update;
+  if not found then raise exception 'Project owner profile was not found'; end if;
+  select count(*) into project_count from website_projects where owner_user_id = p_owner_user_id;
+  if project_count >= p_project_limit then raise exception 'Project limit reached'; end if;
+  insert into website_projects(owner_user_id,project_type,website_type,business_name,chatbot_enabled,payment_mode,requirements)
+    values(p_owner_user_id,p_project_type,p_website_type,p_business_name,p_chatbot_enabled,p_payment_mode,coalesce(p_requirements,'{}'::jsonb))
+    returning id into project_id;
+  return project_id;
+end;
+$$;
+revoke all on function public.create_customer_project(uuid,text,text,text,boolean,text,jsonb,integer) from public, anon, authenticated;
+grant execute on function public.create_customer_project(uuid,text,text,text,boolean,text,jsonb,integer) to service_role;
+
+create or replace function public.start_customer_project_build(
+  p_project_id uuid,
+  p_owner_user_id uuid,
+  p_provider text,
+  p_monthly_limit integer
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  project_type_value text;
+  build_count integer;
+  build_id uuid;
+begin
+  perform 1 from profiles where id = p_owner_user_id for update;
+  select project_type into project_type_value from website_projects
+    where id = p_project_id and owner_user_id = p_owner_user_id for update;
+  if not found then raise exception 'Project not found'; end if;
+  select count(*) into build_count from project_builds
+    where owner_user_id = p_owner_user_id and created_at >= date_trunc('month', now());
+  if build_count >= p_monthly_limit then raise exception 'Monthly build limit reached'; end if;
+  insert into project_builds(website_project_id,owner_user_id,project_type,provider,status,step)
+    values(p_project_id,p_owner_user_id,project_type_value,p_provider,'building','Generating source')
+    returning id into build_id;
+  update website_projects set build_provider=p_provider,build_status='building',build_step='Generating source',last_build_at=now(),updated_at=now()
+    where id=p_project_id and owner_user_id=p_owner_user_id;
+  return build_id;
+end;
+$$;
+revoke all on function public.start_customer_project_build(uuid,uuid,text,integer) from public, anon, authenticated;
+grant execute on function public.start_customer_project_build(uuid,uuid,text,integer) to service_role;
+
+alter table project_builds enable row level security;
+drop policy if exists project_builds_owner_read on project_builds;
+create policy project_builds_owner_read on project_builds for select using(auth.uid()=owner_user_id or public.is_owner(auth.uid()));
 
 create table if not exists hosting_subscriptions (
   id uuid primary key default gen_random_uuid(),
@@ -255,6 +547,33 @@ create table if not exists hosting_subscriptions (
   updated_at timestamptz not null default now()
 );
 create index if not exists idx_hosting_due on hosting_subscriptions(status,ends_at);
+
+create or replace function public.start_project_hosting_trial(
+  p_project_id uuid,
+  p_owner_user_id uuid,
+  p_client_email text,
+  p_trial_days integer default 90
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  hosting_id uuid;
+  trial_start timestamptz := now();
+begin
+  perform 1 from website_projects where id = p_project_id and owner_user_id = p_owner_user_id for update;
+  if not found then raise exception 'Project not found'; end if;
+  select id into hosting_id from hosting_subscriptions
+    where website_project_id = p_project_id order by created_at limit 1;
+  if hosting_id is not null then return hosting_id; end if;
+  insert into hosting_subscriptions(website_project_id,client_email,plan,status,starts_at,ends_at,next_renewal_at)
+    values(p_project_id,coalesce(nullif(trim(p_client_email),''),'unknown'), 'free_trial','trial',trial_start,
+      trial_start + make_interval(days => greatest(1,least(p_trial_days,90))),
+      trial_start + make_interval(days => greatest(1,least(p_trial_days,90))))
+    returning id into hosting_id;
+  return hosting_id;
+end;
+$$;
+revoke all on function public.start_project_hosting_trial(uuid,uuid,text,integer) from public, anon, authenticated;
+grant execute on function public.start_project_hosting_trial(uuid,uuid,text,integer) to service_role;
 
 create table if not exists deployment_events (
   id uuid primary key default gen_random_uuid(),

@@ -27,7 +27,8 @@ export function AuthForm() {
         const { error } = await supabase.auth.setSession(result.session);
         if (error) throw error;
         setStatus(mode === 'login' ? 'Signed in. Your session will be remembered on this device.' : 'Account created and signed in.');
-        window.location.assign('/dashboard');
+        const next = new URLSearchParams(window.location.search).get('next');
+        window.location.assign(next?.startsWith('/') && !next.startsWith('//') && !next.includes('\\') ? next : '/dashboard');
       } else {
         setStatus(result.message || 'Account created. Check your email to confirm it, then log in.');
       }

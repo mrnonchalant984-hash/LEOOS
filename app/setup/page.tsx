@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/GlassCard";
 import { WEBSITE_TYPES, TYPE_QUESTIONS, DB_NEEDED } from "@/lib/website-types";
 import { LEO_TEMPLATES } from "@/data/website-templates";
+import { createBrowserClient } from "@supabase/ssr";
+import type { ProjectType } from "@/lib/pricing";
 const icons = [
   "🏢",
   "💼",
@@ -28,6 +30,10 @@ const icons = [
 export default function Setup() {
   const [loc, setLoc] = useState<any>();
   const [type, setType] = useState("");
+  const [projectType, setProjectType] = useState<ProjectType>("website");
+  const [allowedProjectTypes, setAllowedProjectTypes] = useState<ProjectType[]>(["website"]);
+  const [planProjectTypes, setPlanProjectTypes] = useState<ProjectType[]>(["website"]);
+  const [providers, setProviders] = useState<Record<string, { status: string; message?: string }>>({});
   const [selectedTemplate, setSelectedTemplate] = useState<(typeof LEO_TEMPLATES)[number] | null>(null);
   const [answers, setAnswers] = useState<string[]>([]);
   const [chatbot, setChatbot] = useState<boolean | null>(null);
@@ -35,12 +41,50 @@ export default function Setup() {
     "automatic_paystack" | "manual_email" | null
   >(null);
   const [business, setBusiness] = useState("");
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
-    const templateId = new URLSearchParams(window.location.search).get("template");
+    let active = true;
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
+      if (!data.session) {
+        const next = `${window.location.pathname}${window.location.search}`;
+        window.location.assign(`/auth?next=${encodeURIComponent(next)}`);
+        return;
+      }
+      const response = await fetch("/api/setup/projects", {
+        headers: { Authorization: `Bearer ${data.session.access_token}` },
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const result = await response.json();
+        if (active) {
+          setAllowedProjectTypes(result.capabilities?.projectTypes || ["website"]);
+          setPlanProjectTypes(result.capabilities?.planProjectTypes || ["website"]);
+          setProviders(result.capabilities?.providers || {});
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedProjectType = params.get("project_type");
+    if (["website", "web_app", "saas", "mobile_app", "game"].includes(requestedProjectType || "")) {
+      setProjectType(requestedProjectType as ProjectType);
+    }
+    const templateId = params.get("template");
     const template = LEO_TEMPLATES.find((item) => item.id === templateId);
     if (!template) return;
     setSelectedTemplate(template);
     setType(template.type);
+    if (template.type === "saas") setProjectType("saas");
     setBusiness(template.name);
   }, []);
   useEffect(() => {
@@ -62,6 +106,14 @@ export default function Setup() {
     );
   }, [type]);
   const questions = TYPE_QUESTIONS[type] || TYPE_QUESTIONS.company;
+  const projectTypeLabel: Record<ProjectType, string> = {
+    website: "website",
+    web_app: "web app",
+    saas: "SaaS",
+    mobile_app: "mobile app",
+    game: "game",
+  };
+  const projectTypeAvailable = allowedProjectTypes.includes(projectType);
   return (
     <main className="mx-auto max-w-6xl px-4 py-12">
       <GlassCard className="p-6">
@@ -69,13 +121,53 @@ export default function Setup() {
           Auto-detected: {loc?.countryName || "detecting…"} •{" "}
           {loc?.timezone || "…"} • {loc?.currency || "…"} {loc?.symbol || ""}
         </p>
-        <h1 className="mt-3 text-4xl font-black">Let’s build your website</h1>
+        <h1 className="mt-3 text-4xl font-black">Let’s build your {projectTypeLabel[projectType]}</h1>
         <p className="mt-2 text-zinc-400">
           Leo uses your location automatically. It will never ask you to type
           your country just to set currency/timezone.
         </p>
       </GlassCard>
-      {!type ? (
+      <section className="mt-6">
+        <p className="mb-3 text-sm font-semibold">Project type</p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          {([
+            ["website", "Website"],
+            ["web_app", "Web app"],
+            ["saas", "SaaS"],
+            ["mobile_app", "Mobile app"],
+            ["game", "Game"],
+          ] as const).map(([value, label]) => {
+            const provider = providers[value];
+            const available = allowedProjectTypes.includes(value);
+            const inPlan = planProjectTypes.includes(value);
+            const reason = provider?.status === "not_integrated"
+              ? provider.message
+              : provider?.status === "not_configured"
+                ? provider.message
+                : !inPlan ? "Upgrade plan" : undefined;
+            return (
+              <button
+                key={value}
+                type="button"
+                disabled={!available}
+                onClick={() => setProjectType(value)}
+                className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold ${projectType === value ? "border-orange-400 bg-orange-500/10" : "border-white/10 bg-white/[.03]"} disabled:cursor-not-allowed disabled:opacity-40`}
+              >
+                <span>{label}</span>
+                {!available && reason && <span className="mt-1 block text-xs font-normal text-zinc-500">{reason}</span>}
+              </button>
+            );
+          })}
+        </div>
+        {!allowedProjectTypes.includes(projectType) && <a href="/pricing" className="mt-2 inline-block text-sm text-[var(--gold)]">View plans</a>}
+      </section>
+      {!projectTypeAvailable ? (
+        <section className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-5">
+          <h2 className="font-semibold">This builder is unavailable</h2>
+          <p className="mt-2 text-sm text-zinc-400">{providers[projectType]?.message || "This project type is not available on the current plan."}</p>
+          {!planProjectTypes.includes(projectType) && <a href="/pricing" className="mt-3 inline-block text-sm font-semibold text-[var(--gold)]">View plans</a>}
+        </section>
+      ) : !type ? (
         <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
           {WEBSITE_TYPES.map(([id, label], i) => (
             <button
@@ -202,33 +294,50 @@ export default function Setup() {
               </li>
             </ul>
             <button
-              disabled={!business || chatbot === null}
+              disabled={!business || chatbot === null || saving}
               onClick={async () => {
-                const r = await fetch("/api/setup/projects", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    website_type: type,
-                    business_name: business,
-                    chatbot_enabled: chatbot,
-                    payment_mode: payment || "manual_email",
-                    requirements: Object.fromEntries(
-                      [
-                        ...questions.map((q, i) => [q, answers[i] || ""]),
-                        ...(selectedTemplate
-                          ? [["template_id", selectedTemplate.id], ["template_name", selectedTemplate.name]]
-                          : []),
-                      ],
-                    ),
-                  }),
-                });
-                const j = await r.json();
-                if (j.project) window.location.assign("/dashboard");
-                else alert(j.error || "Could not save project");
+                if (saving) return;
+                setSaving(true);
+                try {
+                  const supabase = createBrowserClient(
+                    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                  );
+                  const session = (await supabase.auth.getSession()).data.session;
+                  if (!session) throw new Error("Please sign in to save this project.");
+                  const r = await fetch("/api/setup/projects", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${session.access_token}`,
+                    },
+                    body: JSON.stringify({
+                      website_type: type,
+                                            project_type: projectType,
+                      business_name: business,
+                      chatbot_enabled: chatbot,
+                      payment_mode: payment || "manual_email",
+                      requirements: Object.fromEntries(
+                        [
+                          ...questions.map((q, i) => [q, answers[i] || ""]),
+                          ...(selectedTemplate
+                            ? [["template_id", selectedTemplate.id], ["template_name", selectedTemplate.name]]
+                            : []),
+                        ],
+                      ),
+                    }),
+                  });
+                  const j = await r.json();
+                  if (!r.ok || !j.project) throw new Error(j.error || "Could not save project.");
+                  window.location.assign(`/dashboard/websites/${j.project.id}`);
+                } catch (error) {
+                  alert(error instanceof Error ? error.message : "Could not save project.");
+                  setSaving(false);
+                }
               }}
               className="mt-6 w-full rounded-full bg-orange-500 p-3 font-bold disabled:opacity-40"
             >
-              Save & continue
+              {saving ? "Saving project…" : "Save & continue"}
             </button>
           </GlassCard>
         </div>

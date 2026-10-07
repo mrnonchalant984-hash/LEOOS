@@ -1,6 +1,16 @@
-'use client';
-import {Suspense,useState} from 'react';import {useSearchParams} from 'next/navigation';
-export default function WebsitePayment(){return <Suspense fallback={<main className='min-h-screen bg-zinc-950 px-5 py-16 text-white'/>}><WebsitePaymentForm/></Suspense>}
-function WebsitePaymentForm(){const p=useSearchParams();const projectId=p.get('project_id')||'';const [loading,setLoading]=useState(false);const [error,setError]=useState('');
-async function pay(){setLoading(true);setError('');try{const r=await fetch('/api/payment/website/initialize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project_id:projectId,callback_url:`${location.origin}/payment/callback?type=website_service`})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Payment could not be initialized.');if(d.authorization_url)location.href=d.authorization_url;else if(d.alreadyPaid)location.href='/dashboard'}catch(e){setError(e instanceof Error?e.message:'Payment failed.');setLoading(false)}}
-return <main className='min-h-screen bg-zinc-950 px-5 py-16 text-white'><section className='mx-auto max-w-xl rounded-3xl border border-zinc-800 bg-zinc-900 p-8'><p className='text-sm font-bold text-yellow-300'>PAID LIVE WEBSITE</p><h1 className='mt-2 text-3xl font-black'>Verify website-service payment</h1><p className='mt-3 text-zinc-400'>The current full-website service amount is ₦350,000. Payment is verified by the server before live deployment can proceed.</p>{error&&<p className='mt-5 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm text-red-300'>{error}</p>}<button disabled={!projectId||loading} onClick={pay} className='mt-7 w-full rounded-xl bg-yellow-400 px-5 py-3 font-bold text-black disabled:opacity-50'>{loading?'Opening secure payment…':'Pay securely with Paystack'}</button></section></main>}
+import Link from "next/link";
+
+export default function WebsitePayment() {
+  return (
+    <main className="min-h-screen bg-zinc-950 px-5 py-16 text-white">
+      <section className="mx-auto max-w-xl rounded-3xl border border-zinc-800 bg-zinc-900 p-8">
+        <p className="text-sm font-bold text-yellow-300">LEO OS PROJECT BUILDER</p>
+        <h1 className="mt-2 text-3xl font-black">Build with your plan</h1>
+        <p className="mt-3 text-zinc-400">
+          Websites, web apps, and SaaS projects use your LEO OS plan. Hosting is a separate service after the included 90-day trial.
+        </p>
+        <Link href="/pricing" className="mt-7 inline-flex rounded-xl bg-yellow-400 px-5 py-3 font-bold text-black">View plans</Link>
+      </section>
+    </main>
+  );
+}

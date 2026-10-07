@@ -1,4 +1,93 @@
-import {adminSupabase} from './auth';
-export const CREDIT_COST:Record<string,number>={image_generation:1,code_generation:1,background_removal:1,website_deployment:3};
-export async function accountAccess(userId:string,feature:string){const db=adminSupabase();const {data:profile}=await db.from('profiles').select('role,email').eq('id',userId).single();if(profile?.role==='owner'&&profile.email?.toLowerCase()===(process.env.OWNER_EMAIL||'leonardudoh5@gmail.com').toLowerCase())return {allowed:true,owner:true,credits:null};const {data:sub}=await db.from('subscriptions').select('plan,current_period_end,ends_at,status').eq('user_id',userId).eq('status','active').order('created_at',{ascending:false}).limit(1).maybeSingle();const end=sub?.current_period_end||sub?.ends_at;if(end&&new Date(end)<new Date())return {allowed:false,owner:false,credits:0};const cost=CREDIT_COST[feature]||1;const {data:credit}=await db.from('credits').select('credits_remaining').eq('user_id',userId).eq('feature',feature).maybeSingle();return {allowed:!!sub&&((credit?.credits_remaining||0)>=cost),owner:false,credits:credit?.credits_remaining||0,plan:sub?.plan||null};}
-export async function consumeCredit(userId:string,feature:string){const db=adminSupabase();const a=await accountAccess(userId,feature);if(a.owner){await db.from('ai_usage').insert({user_id:userId,feature,model:null,prompt_tokens:0,completion_tokens:0,total_tokens:0,credits_used:0,metadata:{source:'owner_usage'}});return a;}if(!a.allowed)throw new Error('No credits left or an active plan is required.');const cost=CREDIT_COST[feature]||1;const {data:c,error}=await db.from('credits').select('id,credits_remaining,credits_used').eq('user_id',userId).eq('feature',feature).single();if(error||!c||c.credits_remaining<cost)throw new Error('No credits left or an active plan is required.');const {error:updateError}=await db.from('credits').update({credits_remaining:c.credits_remaining-cost,credits_used:c.credits_used+cost}).eq('id',c.id).eq('credits_remaining',c.credits_remaining);if(updateError)throw updateError;await db.from('ai_usage').insert({user_id:userId,feature,model:null,prompt_tokens:0,completion_tokens:0,total_tokens:0,credits_used:cost,metadata:{source:'credit_consumption'}});return {remaining:c.credits_remaining-cost};}
+import { adminSupabase } from "./auth";
+import { getEffectiveUserPlan, planAllows } from "./plan-access";
+export const CREDIT_COST: Record<string, number> = {
+  image_generation: 1,
+  code_generation: 1,
+  background_removal: 1,
+  website_deployment: 3,
+};
+export async function accountAccess(userId: string, feature: string) {
+  const db = adminSupabase();
+  const { data: profile } = await db
+    .from("profiles")
+    .select("role,email")
+    .eq("id", userId)
+    .single();
+  if (
+    profile?.role === "owner" &&
+    profile.email?.toLowerCase() ===
+      (process.env.OWNER_EMAIL || "leonardudoh5@gmail.com").toLowerCase()
+  )
+    return { allowed: true, owner: true, credits: null };
+  const plan = await getEffectiveUserPlan(userId);
+  const planFeature = feature.replaceAll("_", "-");
+  const entitled = planAllows(plan, planFeature);
+  const monthlyAllowance =
+    feature === "image_generation" ? plan.limits.monthlyImageCredits : 0;
+  const cost = CREDIT_COST[feature] || 1;
+  const { data: credit } = await db
+    .from("credits")
+    .select("credits_remaining,last_reset")
+    .eq("user_id", userId)
+    .eq("feature", feature)
+    .maybeSingle();
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const creditRefreshDue = monthlyAllowance > 0 && (!credit || new Date(credit.last_reset) < monthStart);
+  const storedCredits = credit?.credits_remaining || 0;
+  const credits = monthlyAllowance > 0
+    ? creditRefreshDue ? monthlyAllowance : Math.min(storedCredits, monthlyAllowance)
+    : storedCredits;
+  return {
+    allowed: (entitled || monthlyAllowance > 0) && credits >= cost,
+    owner: false,
+    credits,
+    plan: plan.key,
+    entitled: entitled || monthlyAllowance > 0,
+    monthlyAllowance,
+  };
+}
+export async function consumeCredit(userId: string, feature: string) {
+  const db = adminSupabase();
+  const a = await accountAccess(userId, feature);
+  if (a.owner) {
+    await db
+      .from("ai_usage")
+      .insert({
+        user_id: userId,
+        feature,
+        model: null,
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+        credits_used: 0,
+        metadata: { source: "owner_usage" },
+      });
+    return a;
+  }
+  if (!a.allowed)
+    throw new Error("No credits left or an active plan is required.");
+  const cost = CREDIT_COST[feature] || 1;
+  const { data: remaining, error } = await db.rpc("consume_user_credit", {
+    p_user_id: userId,
+    p_feature: feature,
+    p_cost: cost,
+    p_entitled: a.entitled,
+    p_free_monthly_allowance: a.monthlyAllowance,
+  });
+  if (error) throw new Error(error.message || "No credits left or an active plan is required.");
+  await db
+    .from("ai_usage")
+    .insert({
+      user_id: userId,
+      feature,
+      model: null,
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+      credits_used: cost,
+      metadata: { source: "credit_consumption" },
+    });
+  return { remaining };
+}

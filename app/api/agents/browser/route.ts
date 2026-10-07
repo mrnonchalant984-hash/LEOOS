@@ -1,14 +1,12 @@
 import {NextRequest,NextResponse} from 'next/server';
-import {getProfile,adminSupabase} from '@/lib/auth';
+import {requireOwner,adminSupabase} from '@/lib/auth';
 import {getAgent} from '@/lib/agents/manager';
 import {getHostedBrowserSession,respondToHostedBrowserApproval,continueHostedBrowserSession,deleteHostedBrowserSession} from '@/lib/agents/openai-browser';
 
 export const runtime='nodejs';
 
 async function ownerContext(req:NextRequest){
-  const ctx=await getProfile(req);
-  if(!ctx || ctx.profile.role!=='owner') return null;
-  return ctx;
+  return requireOwner(req);
 }
 
 async function ownedRun(userId:string,runId:string){

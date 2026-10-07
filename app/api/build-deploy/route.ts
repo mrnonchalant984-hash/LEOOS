@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProfile, adminSupabase } from '@/lib/auth';
 import { getOpenAI } from '@/lib/openai';
+import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
+import type { ProjectType } from '@/lib/pricing';
+import { getBuilderAvailability } from '@/lib/builders/providers';
 
 export const runtime = 'nodejs';
 
@@ -15,11 +18,16 @@ function validateGeneratedSite(site: GeneratedSite, chatbot: boolean) {
   return required.filter(p => !paths.has(p));
 }
 
-async function waitForVercelDeployment(id: string, timeoutMs = 180000) {
+  async function waitForVercelDeployment(id: string, timeoutMs = 180000, onState?: (state: string) => Promise<void>) {
   const started = Date.now();
+    let previousState = '';
   while (Date.now() - started < timeoutMs) {
     const d = await vercel(`/v13/deployments/${encodeURIComponent(id)}`);
     const state = String(d.readyState || d.status || '');
+      if (state && state !== previousState) {
+        previousState = state;
+        await onState?.(state);
+      }
     if (state === 'READY') return d;
     if (['ERROR','CANCELED','CANCELLED'].includes(state)) throw new Error(`Vercel deployment ${state.toLowerCase()}.`);
     await new Promise(r => setTimeout(r, 5000));
@@ -56,23 +64,94 @@ async function vercel(path: string, opts: RequestInit = {}) {
   return r.json();
 }
 
+type BuildContext = { id: string; projectId: string; userId: string };
+type BuildStatus = 'building' | 'testing' | 'deploying' | 'live' | 'build_failed' | 'deploy_failed';
+
+async function recordBuildState(
+  context: BuildContext,
+  status: BuildStatus,
+  step: string,
+  details: { message?: string; error?: string; deploymentId?: string | null; deploymentUrl?: string | null } = {},
+) {
+  const db = adminSupabase();
+  const now = new Date().toISOString();
+  const { data: current, error: readError } = await db.from('project_builds')
+    .select('logs')
+    .eq('id', context.id)
+    .eq('owner_user_id', context.userId)
+    .maybeSingle();
+  if (readError) throw readError;
+  const logs = Array.isArray(current?.logs) ? current.logs : [];
+  const completed = ['live', 'build_failed', 'deploy_failed'].includes(status);
+  const { error: buildError } = await db.from('project_builds').update({
+    status,
+    step,
+    logs: [...logs, { at: now, status, step, message: details.message || step }].slice(-100),
+    error: details.error || null,
+    deployment_id: details.deploymentId,
+    deployment_url: details.deploymentUrl,
+    completed_at: completed ? now : null,
+  }).eq('id', context.id).eq('owner_user_id', context.userId);
+  if (buildError) throw buildError;
+  const { error: projectError } = await db.from('website_projects').update({
+    status: status === 'live' ? 'deployed' : status,
+    build_status: status,
+    build_step: step,
+    ...(status === 'live' ? { live_url: details.deploymentUrl, live_deployment_id: details.deploymentId } : {}),
+    updated_at: now,
+  }).eq('id', context.projectId).eq('owner_user_id', context.userId);
+  if (projectError) throw projectError;
+}
+
 export async function POST(req: NextRequest) {
+  let deploymentUrl: string | null = null;
+  let buildContext: (BuildContext & { stage: 'building' | 'testing' | 'deploying' | 'live' }) | null = null;
   try {
     const ctx = await getProfile(req);
     if (!ctx) return NextResponse.json({ error: 'Login required' }, { status: 401 });
-    if (!process.env.GITHUB_TOKEN || !process.env.VERCEL_TOKEN) {
-      return NextResponse.json({ error: 'Deployment is not configured. Add GITHUB_TOKEN and VERCEL_TOKEN on the server.' }, { status: 503 });
-    }
-
     const body = await req.json();
-    const prompt = String(body.prompt || '');
-    if (!prompt) return NextResponse.json({ error: 'Website request is required' }, { status: 400 });
+    const userPrompt = String(body.prompt || '').trim();
+    const customerProjectId = String(body.project_id || '');
+    if (!customerProjectId) return NextResponse.json({ error: 'A saved project is required before building.' }, { status: 400 });
+    if (!userPrompt) return NextResponse.json({ error: 'Website request is required' }, { status: 400 });
+    const db = adminSupabase();
+    const { data: ownedProject, error: projectError } = await db.from('website_projects')
+      .select('id,project_type,website_type,business_name')
+      .eq('id', customerProjectId)
+      .eq('owner_user_id', ctx.user.id)
+      .maybeSingle();
+    if (projectError) return NextResponse.json({ error: 'Project ownership could not be verified.' }, { status: 500 });
+    if (!ownedProject) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
+
+    const owner = ctx.profile.role === 'owner' && ctx.profile.email?.toLowerCase() === (process.env.OWNER_EMAIL || 'leonardudoh5@gmail.com').toLowerCase();
+    const plan = await getEffectiveUserPlan(ctx.user.id, owner);
+    const projectType = String(ownedProject.project_type || 'website') as ProjectType;
+    const requiredFeature = projectType === 'saas' ? 'saas-builder' : projectType === 'web_app' ? 'web-app-builder' : 'website-builder';
+    if (!plan.projectTypes.includes(projectType) || !planAllows(plan, requiredFeature)) {
+      return NextResponse.json({ error: 'This project type is not included in your current plan.', upgrade_url: '/pricing' }, { status: 403 });
+    }
+    const provider = getBuilderAvailability(projectType);
+    if (provider.status !== 'ready') return NextResponse.json({ error: provider.message || 'Build provider is not configured.', provider: provider.id, requiredEnvironment: provider.requiredEnvironment }, { status: 503 });
+    const { data: startedBuild, error: startError } = await db.rpc('start_customer_project_build', {
+      p_project_id: customerProjectId,
+      p_owner_user_id: ctx.user.id,
+      p_provider: provider.id,
+      p_monthly_limit: plan.limits.monthlyBuilds,
+    });
+    if (startError) {
+      const limited = startError.message?.includes('Monthly build limit reached');
+      return NextResponse.json({ error: startError.message || 'Build could not be started.', upgrade_url: limited ? '/pricing' : undefined }, { status: limited ? 429 : 500 });
+    }
+    buildContext = { id: String(startedBuild), projectId: customerProjectId, userId: ctx.user.id, stage: 'building' };
+    const prompt = `Build a production-ready ${projectType.replaceAll('_', ' ')} named ${ownedProject.business_name || 'Customer Project'}.\n\n${userPrompt}`;
 
     const ai = getOpenAI();
     const baseSystem = 'Generate a coherent production-oriented Next.js App Router website. Return ONLY JSON: {"files":[{"path":"...","content":"..."}],"missingRequirements":["..."]}. Do not invent client facts. Use clearly marked placeholders only where the client has not supplied required assets, and list every missing asset in missingRequirements. The output MUST include package.json, app/layout.tsx, app/page.tsx, app/admin/page.tsx, app/sitemap.ts, app/robots.ts, secure server-side environment handling, a client-friendly admin area relevant to the selected website type, SEO metadata, and real error states. If chatbot is enabled, include app/api/chat/route.ts using only the client-owned AI credential. Never put secrets in NEXT_PUBLIC_* or source files.';
     let generated = await ai.chat.completions.create({ model:'gpt-4o-mini', messages:[{role:'system',content:baseSystem},{role:'user',content:prompt}], max_tokens:16000 });
     let content = generated.choices[0]?.message?.content || '';
     let json = JSON.parse(content.replace(/^```json\s*|```$/g, '')) as GeneratedSite;
+    buildContext.stage = 'testing';
+    await recordBuildState(buildContext, 'testing', 'Checking generated project files');
     let missing = validateGeneratedSite(json, Boolean(body.chatbot_enabled));
     if (missing.length) {
       generated = await ai.chat.completions.create({ model:'gpt-4o-mini', messages:[{role:'system',content:baseSystem},{role:'user',content:`Your previous output was incomplete. These required files were missing: ${missing.join(', ')}. Return a corrected complete JSON project. Original request:\n${prompt}`}], max_tokens:18000 });
@@ -81,7 +160,15 @@ export async function POST(req: NextRequest) {
       missing = validateGeneratedSite(json, Boolean(body.chatbot_enabled));
     }
     if (missing.length) return NextResponse.json({error:`Generated project is incomplete. Missing required files: ${missing.join(', ')}`},{status:422});
+    if (missing.length) {
+      const error = `Generated project is incomplete. Missing required files: ${missing.join(', ')}`;
+      await recordBuildState(buildContext, 'build_failed', 'Required-file validation failed', { error, message: error });
+      buildContext = null;
+      return NextResponse.json({ error }, { status: 422 });
+    }
 
+    buildContext.stage = 'building';
+    await recordBuildState(buildContext, 'building', 'Creating isolated customer repository');
     const me = await gh('/user');
     const repoName = `${process.env.VERCEL_PROJECT_PREFIX || 'leo-site'}-${Date.now()}`;
     const repo = await gh('/user/repos', {
@@ -137,6 +224,8 @@ export async function POST(req: NextRequest) {
       await vercel(`/v10/projects/${encodeURIComponent(projectId)}/domains`, { method:'POST', body:JSON.stringify({domain:String(body.custom_domain)}) });
     }
 
+    buildContext.stage = 'deploying';
+    await recordBuildState(buildContext, 'deploying', 'Submitting production deployment to Vercel');
     const files = (json.files || []).map((f) => ({ file: f.path, data: f.content }));
     const deploy = await vercel('/v13/deployments', {
       method: 'POST',
@@ -145,13 +234,21 @@ export async function POST(req: NextRequest) {
 
     const deploymentId = String(deploy.id || deploy.uid || '');
     if (!deploymentId) throw new Error('Vercel did not return a deployment ID.');
-    const readyDeployment = await waitForVercelDeployment(deploymentId);
+    const readyDeployment = await waitForVercelDeployment(deploymentId, 180000, (state) =>
+      recordBuildState(buildContext!, 'deploying', `Vercel build state: ${state}`),
+    );
+    const liveUrl = readyDeployment.url || deploy.url ? `https://${readyDeployment.url || deploy.url}` : null;
+    deploymentUrl = liveUrl;
+    buildContext.stage = 'live';
+    await recordBuildState(buildContext, 'live', 'Vercel confirmed deployment READY', {
+      deploymentId,
+      deploymentUrl: liveUrl,
+      message: 'Vercel confirmed the project deployment is ready.',
+    });
 
-    const db = adminSupabase();
-    if (body.project_id) {
+    let hostingTrialError: string | null = null;
+    if (customerProjectId) {
       const now = new Date();
-      const ends = new Date(now);
-      ends.setDate(ends.getDate() + Number(process.env.HOSTING_TRIAL_DAYS || 90));
       await db.from('website_projects').update({
         status: 'deployed',
         hosting_enforcement_status: 'active',
@@ -159,31 +256,29 @@ export async function POST(req: NextRequest) {
         vercel_project_id: projectId,
         live_deployment_id: deploymentId || null,
         suspended_deployment_id: null,
-        live_url: readyDeployment.url ? `https://${readyDeployment.url}` : (deploy.url ? `https://${deploy.url}` : null),
+        live_url: liveUrl,
         admin_url: (readyDeployment.url || deploy.url) ? `https://${readyDeployment.url || deploy.url}/admin` : null,
         client_name: body.client_name || null,
         client_email: body.client_email || null,
         client_whatsapp: body.client_whatsapp || null,
         custom_domain: body.custom_domain || null,
         updated_at: now.toISOString(),
-      }).eq('id', body.project_id).eq('owner_user_id', ctx.user.id);
+      }).eq('id', customerProjectId).eq('owner_user_id', ctx.user.id);
 
-      const { data: existingHosting } = await db.from('hosting_subscriptions').select('id').eq('website_project_id', body.project_id).maybeSingle();
-      if (!existingHosting) {
-        await db.from('hosting_subscriptions').insert({
-          website_project_id: body.project_id,
-          client_email: String(body.client_email || ctx.profile.email || ''),
-          plan: 'free_trial',
-          status: 'trial',
-          starts_at: now.toISOString(),
-          ends_at: ends.toISOString(),
-          next_renewal_at: ends.toISOString(),
-        });
+      const { error: trialError } = await db.rpc('start_project_hosting_trial', {
+        p_project_id: customerProjectId,
+        p_owner_user_id: ctx.user.id,
+        p_client_email: String(body.client_email || ctx.profile.email || ''),
+        p_trial_days: Number(process.env.HOSTING_TRIAL_DAYS || 90),
+      });
+      if (trialError) {
+        hostingTrialError = trialError.message;
+        console.error('Deployment is live but hosting trial setup failed:', trialError.message);
       }
     }
 
     const { error: deploymentEventError } = await db.from('deployment_events').insert({
-      website_project_id: body.project_id || null,
+      website_project_id: customerProjectId,
       event_type: 'deploy',
       status: 'success',
       message: 'Deployment submitted to Vercel',
@@ -198,7 +293,6 @@ export async function POST(req: NextRequest) {
     });
     if (deploymentEventError) console.error('Could not record deployment event:', deploymentEventError.message);
 
-    const liveUrl = (readyDeployment.url || deploy.url) ? `https://${readyDeployment.url || deploy.url}` : null;
     const websiteTier = String(body.website_tier || body.plan || (body.is_free === true ? 'Free Tier' : 'Paid Website'));
     const clientName = String(body.client_name || 'Client');
     const clientEmail = String(body.client_email || '').trim();
@@ -245,9 +339,21 @@ export async function POST(req: NextRequest) {
       liveUrl,
       adminUrl: (readyDeployment.url || deploy.url) ? `https://${readyDeployment.url || deploy.url}/admin` : null,
       missingRequirements: json.missingRequirements || [],
+      hostingTrialError,
       reviewUrl: wallOfLoveUrl,
     });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Build/deploy failed' }, { status: 500 });
+    const message = e instanceof Error ? e.message : 'Build/deploy failed';
+    if (buildContext?.stage === 'live') {
+      return NextResponse.json({ status: 'deployed', liveUrl: deploymentUrl, warning: `Vercel confirmed this deployment is live, but project tracking failed: ${message}` });
+    }
+    if (buildContext) {
+      const status = buildContext.stage === 'deploying' ? 'deploy_failed' : 'build_failed';
+      await recordBuildState(buildContext, status, status === 'deploy_failed' ? 'Deployment failed' : 'Build failed', {
+        error: message,
+        message,
+      }).catch((recordError) => console.error('Could not persist project build failure:', recordError));
+    }
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

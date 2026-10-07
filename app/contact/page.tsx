@@ -13,7 +13,8 @@ export default function ContactPage() {
     event.preventDefault();
     setLoading(true);
     setStatus(null);
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const payload = Object.fromEntries(form.entries());
 
     try {
@@ -44,7 +45,7 @@ export default function ContactPage() {
         throw new Error(`Message saved, but Web3Forms could not deliver it: ${detail}`);
       }
       setStatus({ type: 'success', text: 'Message sent. Leonard has been notified by email.' });
-      event.currentTarget.reset();
+      formElement.reset();
     } catch (error) {
       setStatus({ type: 'error', text: error instanceof Error ? error.message : 'Message could not be sent.' });
     } finally {

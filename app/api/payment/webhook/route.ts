@@ -1,5 +1,131 @@
-import {NextRequest,NextResponse} from 'next/server';import crypto from 'node:crypto';import {adminSupabase} from '@/lib/auth';
-import {promoteVercelDeployment} from '@/lib/vercel-hosting';
-export const runtime='nodejs';
-const creditsByPlan:Record<string,number>={standard:30,pro:100,unlimited:500};
-export async function POST(req:NextRequest){try{const body=await req.text();const sig=req.headers.get('x-paystack-signature')||'';const secret=process.env.PAYSTACK_SECRET_KEY;if(!secret)return NextResponse.json({error:'Not configured'},{status:503});const hash=crypto.createHmac('sha512',secret).update(body).digest('hex');if(sig.length!==hash.length||!crypto.timingSafeEqual(Buffer.from(hash),Buffer.from(sig)))return NextResponse.json({error:'Invalid signature'},{status:401});const event=JSON.parse(body);const tx=event.data||{};const meta=tx.metadata||{};const db=adminSupabase();if(event.event==='charge.success'&&meta.type==='hosting_renewal'&&meta.hosting_id&&tx.reference){const {data:h}=await db.from('hosting_subscriptions').select('ends_at,website_project_id,paystack_reference,status').eq('id',meta.hosting_id).maybeSingle(); if(h && h.paystack_reference===tx.reference && h.status==='active') return NextResponse.json({received:true,idempotent:true});const {data:site}=h?await db.from('website_projects').select('vercel_project_id,live_deployment_id,suspended_deployment_id').eq('id',h.website_project_id).maybeSingle():{data:null};if(h){const base=new Date(h.ends_at)>new Date()?new Date(h.ends_at):new Date();base.setMonth(base.getMonth()+3);await db.from('hosting_subscriptions').update({status:'active',ends_at:base.toISOString(),next_renewal_at:base.toISOString(),paystack_reference:tx.reference,updated_at:new Date().toISOString()}).eq('id',meta.hosting_id);let restored=false;let restoreError='';if(site?.vercel_project_id&&site?.live_deployment_id&&process.env.LEO_HOSTING_ENFORCEMENT!=='false'){try{await promoteVercelDeployment(String(site.vercel_project_id),String(site.live_deployment_id));restored=true;await db.from('website_projects').update({status:'deployed',hosting_enforcement_status:'active',suspended_deployment_id:null,updated_at:new Date().toISOString()}).eq('id',h.website_project_id);}catch(e){restoreError=e instanceof Error?e.message:'Vercel restoration failed';}}await db.from('deployment_events').insert({website_project_id:h.website_project_id,event_type:'hosting_renewed',status:restored||!site?.live_deployment_id?'success':'error',message:restored?'Hosting renewal verified and the previous production deployment was restored automatically.':restoreError||'Hosting renewal verified by Paystack.',metadata:{reference:tx.reference,restored,previousDeploymentId:site?.live_deployment_id||null}});}return NextResponse.json({received:true});}if(event.event==='charge.success'&&meta.user_id&&tx.reference){const {data:existingPayment}=await db.from('payments').select('status').eq('reference',tx.reference).maybeSingle();if(existingPayment?.status==='success')return NextResponse.json({received:true,idempotent:true});const plan=String(meta.plan||'standard');const period=String(meta.billing_period||'monthly');const months=period==='yearly'?12:period==='quarterly'?3:1;const start=new Date();const end=new Date(start);end.setMonth(end.getMonth()+months);await db.from('payments').upsert({user_id:meta.user_id,reference:tx.reference,paystack_reference:tx.reference,plan,billing_period:period,amount_kobo:Number(tx.amount||0),amount:Number(tx.amount||0)/100,currency:'NGN',status:'success',paid_at:start.toISOString(),verified_at:start.toISOString()},{onConflict:'reference'});await db.from('subscriptions').insert({user_id:meta.user_id,plan,billing_period:period,status:'active',current_period_start:start.toISOString(),current_period_end:end.toISOString(),starts_at:start.toISOString(),ends_at:end.toISOString(),payment_reference:tx.reference});for(const feature of ['image_generation','code_generation','background_removal','website_deployment']){const amount=(creditsByPlan[plan]||30)*(feature==='website_deployment'?1:1);await db.from('credits').upsert({user_id:meta.user_id,feature,credits_remaining:amount,credits_used:0,last_reset:start.toISOString()},{onConflict:'user_id,feature'});}await db.from('feature_access').upsert(['image_generation','code_generation','background_removal','website_deployment'].map(feature=>({user_id:meta.user_id,feature_name:feature,has_access:true,granted_by:'subscription',expires_at:end.toISOString()})),{onConflict:'user_id,feature_name'});}else if(event.event==='subscription.disable'&&tx.customer?.customer_code){/* Subscription cancellation is provider-specific; keep verified records unchanged until mapped to a local subscription. */}return NextResponse.json({received:true});}catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Webhook processing failed'},{status:500})}}
+import { NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
+import { adminSupabase } from "@/lib/auth";
+import { promoteVercelDeployment } from "@/lib/vercel-hosting";
+import { verifyAndApplyPaystack } from "@/lib/payments";
+export const runtime = "nodejs";
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.text();
+    const sig = req.headers.get("x-paystack-signature") || "";
+    const secret = process.env.PAYSTACK_SECRET_KEY;
+    if (!secret)
+      return NextResponse.json({ error: "Not configured" }, { status: 503 });
+    const hash = crypto.createHmac("sha512", secret).update(body).digest("hex");
+    if (
+      sig.length !== hash.length ||
+      !crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(sig))
+    )
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    const event = JSON.parse(body);
+    const tx = event.data || {};
+    const meta = tx.metadata || {};
+    const db = adminSupabase();
+    if (
+      event.event === "charge.success" &&
+      meta.type === "hosting_renewal" &&
+      meta.hosting_id &&
+      tx.reference
+    ) {
+      const { data: h } = await db
+        .from("hosting_subscriptions")
+        .select("ends_at,website_project_id,paystack_reference,status")
+        .eq("id", meta.hosting_id)
+        .maybeSingle();
+      if (h && h.paystack_reference === tx.reference && h.status === "active")
+        return NextResponse.json({ received: true, idempotent: true });
+      const { data: site } = h
+        ? await db
+            .from("website_projects")
+            .select(
+              "vercel_project_id,live_deployment_id,suspended_deployment_id",
+            )
+            .eq("id", h.website_project_id)
+            .maybeSingle()
+        : { data: null };
+      if (h) {
+        const base =
+          new Date(h.ends_at) > new Date() ? new Date(h.ends_at) : new Date();
+        base.setMonth(base.getMonth() + 3);
+        await db
+          .from("hosting_subscriptions")
+          .update({
+            status: "active",
+            ends_at: base.toISOString(),
+            next_renewal_at: base.toISOString(),
+            paystack_reference: tx.reference,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", meta.hosting_id);
+        let restored = false;
+        let restoreError = "";
+        if (
+          site?.vercel_project_id &&
+          site?.live_deployment_id &&
+          process.env.LEO_HOSTING_ENFORCEMENT !== "false"
+        ) {
+          try {
+            await promoteVercelDeployment(
+              String(site.vercel_project_id),
+              String(site.live_deployment_id),
+            );
+            restored = true;
+            await db
+              .from("website_projects")
+              .update({
+                status: "deployed",
+                hosting_enforcement_status: "active",
+                suspended_deployment_id: null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", h.website_project_id);
+          } catch (e) {
+            restoreError =
+              e instanceof Error ? e.message : "Vercel restoration failed";
+          }
+        }
+        await db
+          .from("deployment_events")
+          .insert({
+            website_project_id: h.website_project_id,
+            event_type: "hosting_renewed",
+            status: restored || !site?.live_deployment_id ? "success" : "error",
+            message: restored
+              ? "Hosting renewal verified and the previous production deployment was restored automatically."
+              : restoreError || "Hosting renewal verified by Paystack.",
+            metadata: {
+              reference: tx.reference,
+              restored,
+              previousDeploymentId: site?.live_deployment_id || null,
+            },
+          });
+      }
+      return NextResponse.json({ received: true });
+    }
+    if (event.event === "charge.success" && meta.user_id && tx.reference) {
+      const payment = await verifyAndApplyPaystack(String(tx.reference));
+      return NextResponse.json({
+        received: true,
+        idempotent: payment.alreadyApplied,
+      });
+    } else if (event.event === "charge.failed" && tx.reference) {
+      const { error } = await db
+        .from("payments")
+        .update({ status: "failed", verified_at: new Date().toISOString() })
+        .eq("reference", String(tx.reference))
+        .eq("status", "pending");
+      if (error) throw error;
+    } else if (
+      event.event === "subscription.disable" &&
+      tx.customer?.customer_code
+    ) {
+      /* Subscription cancellation is provider-specific; keep verified records unchanged until mapped to a local subscription. */
+    }
+    return NextResponse.json({ received: true });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Webhook processing failed" },
+      { status: 500 },
+    );
+  }
+}

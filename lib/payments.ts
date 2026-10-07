@@ -1,44 +1,57 @@
-import { getAdminSupabase } from '@/lib/auth';
-import { planConfig, type PlanKey, type BillingPeriod } from '@/lib/pricing';
-
-const creditsByPlan: Record<string, number> = { standard: 30, pro: 100, unlimited: 500 };
+import { getAdminSupabase } from "@/lib/auth";
 
 export async function verifyAndApplyPaystack(reference: string) {
   const secret = process.env.PAYSTACK_SECRET_KEY;
-  if (!secret) throw new Error('PAYSTACK_SECRET_KEY is not configured');
+  if (!secret) throw new Error("PAYSTACK_SECRET_KEY is not configured");
 
   const admin = getAdminSupabase();
-  const check = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
-    headers: { Authorization: `Bearer ${secret}` },
-  });
+  const check = await fetch(
+    `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+    {
+      headers: { Authorization: `Bearer ${secret}` },
+    },
+  );
   const result = await check.json();
-  if (!check.ok || result.data?.status !== 'success') throw new Error(result.message || 'Payment could not be verified');
+  if (!check.ok || result.data?.status !== "success") {
+    if (["failed", "abandoned"].includes(result.data?.status)) {
+      const { error: updateError } = await admin
+        .from("payments")
+        .update({ status: "failed", verified_at: new Date().toISOString() })
+        .eq("reference", reference)
+        .eq("status", "pending");
+      if (updateError) throw updateError;
+    }
+    throw new Error(result.message || "Payment could not be verified");
+  }
 
   const tx = result.data;
-  const { data: payment, error } = await admin.from('payments').select('*').eq('reference', reference).maybeSingle();
+  if (String(tx.reference) !== reference)
+    throw new Error("Verified payment reference does not match");
+  const { data: payment, error } = await admin
+    .from("payments")
+    .select("*")
+    .eq("reference", reference)
+    .maybeSingle();
   if (error) throw error;
-  if (!payment) throw new Error('Payment reference is not registered');
-  if (payment.amount_kobo !== Number(tx.amount)) throw new Error('Verified amount does not match the registered purchase');
-  if (payment.status === 'success') return { userId: payment.user_id, reference, alreadyApplied: true };
+  if (!payment) throw new Error("Payment reference is not registered");
+  if (payment.amount_kobo !== Number(tx.amount))
+    throw new Error("Verified amount does not match the registered purchase");
+  if (tx.metadata?.user_id && String(tx.metadata.user_id) !== payment.user_id)
+    throw new Error("Verified payment owner does not match the registered purchase");
+  if (tx.metadata?.plan && String(tx.metadata.plan) !== payment.plan)
+    throw new Error("Verified plan does not match the registered purchase");
+  if (
+    tx.metadata?.billing_period &&
+    String(tx.metadata.billing_period) !== payment.billing_period
+  )
+    throw new Error("Verified billing period does not match the registered purchase");
 
-  await admin.from('payments').update({ status: 'success', paid_at: new Date().toISOString(), verified_at: new Date().toISOString(), paystack_reference: reference }).eq('id', payment.id);
+  const paidAt = tx.paid_at ? new Date(tx.paid_at).toISOString() : new Date().toISOString();
+  const { data: applied, error: applyError } = await admin.rpc(
+    "apply_verified_subscription_payment",
+    { p_reference: reference, p_paid_at: paidAt },
+  );
+  if (applyError) throw applyError;
 
-  const plan = payment.plan as PlanKey;
-  const billingPeriod = payment.billing_period as BillingPeriod;
-  if (!planConfig[plan] || !['monthly', 'quarterly', 'yearly'].includes(billingPeriod)) throw new Error('Invalid plan or billing period');
-
-  const start = new Date();
-  const end = new Date(start);
-  end.setMonth(end.getMonth() + (billingPeriod === 'yearly' ? 12 : billingPeriod === 'quarterly' ? 3 : 1));
-
-  await admin.from('subscriptions').update({ status: 'expired' }).eq('user_id', payment.user_id).eq('status', 'active');
-  await admin.from('subscriptions').insert({ user_id: payment.user_id, plan, billing_period: billingPeriod, status: 'active', current_period_start: start.toISOString(), current_period_end: end.toISOString(), starts_at: start.toISOString(), ends_at: end.toISOString(), payment_reference: reference });
-
-  const credits = creditsByPlan[plan] || 30;
-  for (const feature of ['image_generation', 'code_generation', 'background_removal', 'website_deployment']) {
-    await admin.from('credits').upsert({ user_id: payment.user_id, feature, credits_remaining: credits, credits_used: 0, last_reset: start.toISOString() }, { onConflict: 'user_id,feature' });
-  }
-  await admin.from('feature_access').upsert(['image_generation', 'code_generation', 'background_removal', 'website_deployment'].map(feature => ({ user_id: payment.user_id, feature_name: feature, has_access: true, granted_by: 'subscription', expires_at: end.toISOString() })), { onConflict: 'user_id,feature_name' });
-
-  return { userId: payment.user_id, reference, alreadyApplied: false };
+  return { userId: payment.user_id, reference, alreadyApplied: applied === false };
 }

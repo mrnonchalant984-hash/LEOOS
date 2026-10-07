@@ -21,7 +21,7 @@ export const projects = big12Projects
 export const profileImage = '/profile.png'
 
 export const siteData = {
-  owner: 'Leonard Udoh', title: 'Web Developer', description: 'Premium, custom business websites designed and built by Leonard Udoh, accelerated by his proprietary LEO development engine.', tagline: 'Premium custom websites, strategically designed and built by Leonard Udoh with LEO, his proprietary AI-powered development engine.', price: 'Starting at ₦350,000', location: 'Remote — Worldwide', whatsapp: 'https://wa.me/2349115936466', whatsappLabel: 'Message LeonardX on WhatsApp', email: 'leonardudoh5@gmail.com', phone: '+2349115936466', phoneDisplay: '+234 911 593 6466', brand: '#FFD700', cv: '/documents/Leonard-Udoh-CV.pdf',
+  owner: 'Leonard Udoh', title: 'Web Developer', description: 'Build websites, web apps, and SaaS projects with the LEO OS development platform.', tagline: 'Plan-authorized AI development for websites, web apps, and SaaS projects, with separate hosting after the included trial.', price: 'Included with LEO OS plans', location: 'Remote — Worldwide', whatsapp: 'https://wa.me/2349115936466', whatsappLabel: 'Message LeonardX on WhatsApp', email: 'leonardudoh5@gmail.com', phone: '+2349115936466', phoneDisplay: '+234 911 593 6466', brand: '#FFD700', cv: '/documents/Leonard-Udoh-CV.pdf',
   liveProjects: [
     {name:'Qveli',description:'A social media platform for creators.',url:process.env.NEXT_PUBLIC_LIVE_QVELI_URL||'',image:'/qveli-logo.svg'},
     {name:'LeonardX',description:'A freelancing platform connecting clients with freelancers.',url:process.env.NEXT_PUBLIC_LIVE_LEONARDX_URL||'',image:'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1600&q=85'}
@@ -29,7 +29,7 @@ export const siteData = {
   demoProjects: big12Projects,
   services: [
     {name:'AI Mockup',price:'₦50,000',description:'Turn a business idea into a polished visual website direction before development.',href:'/app',details:'You get a visual concept, page direction, section ideas, content direction, and a clearer blueprint for the final website.'},
-    {name:'Full Website',price:'Starting at ₦350,000',description:'A polished, responsive business website built around your goals and customers.',href:'/contact',details:'The number of pages depends on the website: a simple business site may need 3–5 pages, while larger projects can include 6–15+ pages. Final scope is agreed before development.'},
+    {name:'LEO OS Builder',price:'Included with plan',description:'Build websites, web apps, and SaaS projects within your plan limits.',href:'/pricing',details:'Your plan controls project types, project capacity, and monthly build limits. Each successful deployment includes a 90-day hosting trial; hosting is separate after the trial.'},
     {name:'Code Review',price:'₦20,000',description:'A practical review of your codebase with prioritized problems, explanations, and fixes.',href:'/app',details:'Leo can inspect structure, bugs, responsiveness, performance, security risks, accessibility, SEO, and code quality, then give practical fixes.'}
   ]
 };

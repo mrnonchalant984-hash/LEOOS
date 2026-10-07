@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const db = adminSupabase();
   const userId = ctx.user.id;
   const [subscriptionResult, creditResult, chatsResult, chatsCountResult, memoriesResult, projectsResult, projectsCountResult, websitesResult, websitesCountResult, notificationsResult, notificationsCountResult, usageResult] = await Promise.all([
-    db.from('subscriptions').select('plan,billing_period,status,ends_at,created_at').eq('user_id', userId).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    db.from('subscriptions').select('plan,billing_period,status,ends_at,current_period_end,created_at').eq('user_id', userId).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle(),
     db.from('credits').select('credits_remaining,credits_used,feature').eq('user_id', userId),
     db.from('chats_v2').select('id,title,updated_at').eq('user_id', userId).order('updated_at', { ascending: false }).limit(5),
     db.from('chats_v2').select('id', { count: 'exact', head: true }).eq('user_id', userId),
@@ -28,7 +28,10 @@ export async function GET(req: NextRequest) {
   const displayName = [ctx.profile?.full_name, ctx.user.user_metadata?.full_name, ctx.user.user_metadata?.name, ctx.user.email?.split('@')[0], 'there']
     .map(v => typeof v === 'string' ? v.trim() : '').find(v => Boolean(v) && !/^user$/i.test(v)) || 'there';
   const isOwner = ctx.profile.role === 'owner' && ctx.profile.email?.toLowerCase() === (process.env.OWNER_EMAIL || 'leonardudoh5@gmail.com').toLowerCase();
-  const credits = (creditResult.data || []).reduce((sum, row) => sum + Number(row.credits_remaining || 0), 0);
+  const subscription = subscriptionResult.data;
+  const endsAt = subscription?.ends_at || subscription?.current_period_end || null;
+  const hasPaidAccess = Boolean(subscription && (!endsAt || new Date(endsAt) > new Date()));
+  const credits = hasPaidAccess ? (creditResult.data || []).reduce((sum, row) => sum + Number(row.credits_remaining || 0), 0) : 0;
   const usage = usageResult.data || [];
   const usageByDay = new Map<string, number>();
   for (const row of usage) {
@@ -51,10 +54,10 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     user: { name: displayName, email: ctx.user.email },
     owner: isOwner,
-    plan: isOwner ? 'OWNER' : subscriptionResult.data?.plan?.toUpperCase() || 'FREE',
-    status: isOwner ? 'owner' : subscriptionResult.data?.status || 'free',
-    billingPeriod: subscriptionResult.data?.billing_period || null,
-    endsAt: subscriptionResult.data?.ends_at || null,
+    plan: isOwner ? 'OWNER' : hasPaidAccess ? subscription?.plan?.toUpperCase() || 'FREE' : 'FREE',
+    status: isOwner ? 'owner' : hasPaidAccess ? subscription?.status || 'active' : subscription ? 'expired' : 'free',
+    billingPeriod: subscription?.billing_period || null,
+    endsAt,
     credits: isOwner ? 'Unlimited' : credits,
     counts: { conversations: chatsCountResult.count || 0, memories: memoriesResult.count || 0, projects: projectsCountResult.count || 0, websites: websitesCountResult.count || 0, unreadNotifications: notificationsCountResult.count || 0 },
     conversations: chatsResult.data || [], projects: projectsResult.data || [], websites: websitesResult.data || [],

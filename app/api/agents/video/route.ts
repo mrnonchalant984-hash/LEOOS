@@ -1,11 +1,11 @@
 import {NextRequest,NextResponse} from 'next/server';
-import {getProfile,adminSupabase} from '@/lib/auth';
+import {requireOwner,adminSupabase} from '@/lib/auth';
 import {getRunwayVideo} from '@/lib/agents/runway-video';
 export const runtime='nodejs';
 export async function POST(req:NextRequest){
   try{
-    const ctx=await getProfile(req);
-    if(!ctx||ctx.profile.role!=='owner') return NextResponse.json({error:'Owner-only endpoint'},{status:403});
+    const ctx=await requireOwner(req);
+    if(!ctx) return NextResponse.json({error:'Owner-only endpoint'},{status:403});
     const body=await req.json();
     const taskId=typeof body.task_id==='string'?body.task_id:'';
     const runId=typeof body.run_id==='string'?body.run_id:'';

@@ -43,6 +43,11 @@ export function adminSupabase() {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
+export function isPlatformOwner(profile: { role?: string | null; email?: string | null } | null | undefined) {
+  const ownerEmail = (process.env.OWNER_EMAIL || 'leonardudoh5@gmail.com').toLowerCase();
+  return profile?.role === 'owner' && profile.email?.toLowerCase() === ownerEmail;
+}
+
 export async function getProfile(req: NextRequest) {
   const user = await getUserFromRequest(req);
   if (!user) return null;
@@ -75,7 +80,7 @@ export async function isTrustedAdminDevice(req: NextRequest, userId: string, db 
 
 export async function requireOwner(req: NextRequest, options: { allowUntrustedForSetup?: boolean } = {}) {
   const ctx = await getProfile(req);
-  if (!ctx || ctx.profile.role !== 'owner' || ctx.profile.email?.toLowerCase() !== (process.env.OWNER_EMAIL || 'leonardudoh5@gmail.com').toLowerCase()) return null;
+  if (!ctx || !isPlatformOwner(ctx.profile)) return null;
   if (ctx.profile.twofa_verified && !options.allowUntrustedForSetup && !await isTrustedAdminDevice(req, ctx.user.id)) return null;
   return ctx;
 }
@@ -95,5 +100,8 @@ export async function getUserAccess() {
     db.from('subscriptions').select('*').eq('user_id', userData.user.id).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle(),
     db.from('feature_access').select('*').eq('user_id', userData.user.id).eq('has_access', true)
   ]);
-  return { user: userData.user, profile, subscription: subscription || null, features: features || [] };
+  const subscriptionEnd = subscription?.ends_at || subscription?.current_period_end;
+  const activeSubscription = subscription && (!subscriptionEnd || new Date(subscriptionEnd) > new Date()) ? subscription : null;
+  const activeFeatures = (features || []).filter(feature => !feature.expires_at || new Date(feature.expires_at) > new Date());
+  return { user: userData.user, profile, subscription: activeSubscription, features: activeFeatures };
 }
