@@ -39,7 +39,7 @@ export function AuthForm() {
     }
   }
 
-  return <form onSubmit={submit} className="mx-auto max-w-md rounded-3xl border border-zinc-800 bg-zinc-950 p-6 sm:p-8">
+  return <form onSubmit={submit} className="auth-surface mx-auto max-w-md rounded-3xl border border-zinc-800 bg-zinc-950 p-6 sm:p-8">
     <h1 className="text-3xl font-black">{mode === 'login' ? 'Log in to LEO' : 'Create your LEO account'}</h1>
     <p className="mt-2 text-sm text-zinc-500">You can browse the website and use public pages without an account. Account creation is only needed when you choose to use account features.</p>
     <div className="mt-6 grid gap-4">
@@ -48,9 +48,9 @@ export function AuthForm() {
       )}
       <input value={email} onChange={e => setEmail(e.target.value)} type="email" required autoComplete="email" placeholder="Email" className="rounded-xl border border-zinc-800 bg-black px-4 py-3"/>
       <input value={password} onChange={e => setPassword(e.target.value)} type="password" required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="Password (8+ characters)" className="rounded-xl border border-zinc-800 bg-black px-4 py-3"/>
-      <button disabled={busy} className="rounded-xl bg-yellow-400 px-4 py-3 font-bold text-black disabled:opacity-50">{busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Sign up'}</button>
+      <button disabled={busy} className="rounded-xl bg-[var(--gold)] px-4 py-3 font-bold text-black shadow-[0_12px_30px_rgba(212,175,55,.16)] disabled:opacity-50">{busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Sign up'}</button>
     </div>
     {status && <p className="mt-4 text-sm text-zinc-400">{status}</p>}
-    <button type="button" onClick={() => setMode(mode === 'login' ? 'signup' : 'login')} className="mt-5 text-sm text-yellow-300">{mode === 'login' ? 'Need an account? Sign up' : 'Already have an account? Log in'}</button>
+    <button type="button" onClick={() => setMode(mode === 'login' ? 'signup' : 'login')} className="mt-5 text-sm text-[var(--gold-bright)]">{mode === 'login' ? 'Need an account? Sign up' : 'Already have an account? Log in'}</button>
   </form>
 }

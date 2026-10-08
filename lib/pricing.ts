@@ -8,31 +8,31 @@ export type PlanDefinition = {
   description: string;
   features: string[];
   projectTypes: ProjectType[];
-  limits: { maxProjects: number; monthlyBuilds: number; monthlyImageCredits: number; apiRequestsPerMinute: number };
+  limits: { maxProjects: number; monthlyBuilds: number; monthlyImageCredits: number };
 };
 
 export const planConfig: Record<PaidPlanKey, PlanDefinition> = {
   standard: {
     key: 'standard', name: 'STANDARD', description: 'Websites, web apps, and SaaS projects with standard build capacity.',
     features: ['chat', 'file-review', 'image-generation', 'code-review', 'website-builder', 'web-app-builder', 'saas-builder'],
-    projectTypes: ['website', 'web_app', 'saas'], limits: { maxProjects: 3, monthlyBuilds: 10, monthlyImageCredits: 30, apiRequestsPerMinute: 120 },
+    projectTypes: ['website', 'web_app', 'saas'], limits: { maxProjects: 3, monthlyBuilds: 10, monthlyImageCredits: 30 },
   },
   pro: {
     key: 'pro', name: 'PRO', description: 'Advanced web product development with higher project and build capacity.',
     features: ['chat', 'file-review', 'image-generation', 'code-review', 'website-builder', 'web-app-builder', 'saas-builder', 'voice'],
-    projectTypes: ['website', 'web_app', 'saas'], limits: { maxProjects: 10, monthlyBuilds: 30, monthlyImageCredits: 100, apiRequestsPerMinute: 300 },
+    projectTypes: ['website', 'web_app', 'saas'], limits: { maxProjects: 10, monthlyBuilds: 30, monthlyImageCredits: 100 },
   },
   unlimited: {
     key: 'unlimited', name: 'UNLIMITED', description: 'The highest supported development capacity with fair-use limits.',
     features: ['chat', 'file-review', 'image-generation', 'code-review', 'website-builder', 'web-app-builder', 'saas-builder', 'voice'],
-    projectTypes: ['website', 'web_app', 'saas'], limits: { maxProjects: 25, monthlyBuilds: 100, monthlyImageCredits: 500, apiRequestsPerMinute: 600 },
+    projectTypes: ['website', 'web_app', 'saas'], limits: { maxProjects: 25, monthlyBuilds: 100, monthlyImageCredits: 500 },
   },
 };
 
 export const freePlan: PlanDefinition = {
   key: 'free', name: 'FREE', description: 'Leo chat and one limited website project.',
   features: ['chat', 'image-generation', 'website-builder'], projectTypes: ['website'],
-  limits: { maxProjects: 1, monthlyBuilds: 1, monthlyImageCredits: 1, apiRequestsPerMinute: 30 },
+  limits: { maxProjects: 1, monthlyBuilds: 1, monthlyImageCredits: 1 },
 };
 
 export function getPlan(key: string): PlanDefinition {

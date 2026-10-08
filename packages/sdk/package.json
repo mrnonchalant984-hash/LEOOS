@@ -1,0 +1,12 @@
+{
+  "name":"@leo-os/sdk",
+  "version":"2.0.0",
+  "private":false,
+  "description":"Official TypeScript SDK for the LEO OS API v2.",
+  "type":"module",
+  "main":"./dist/index.js",
+  "types":"./dist/index.d.ts",
+  "exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js"}},
+  "scripts":{"build":"tsc -p tsconfig.json"},
+  "devDependencies":{"typescript":"^5.5.4"}
+}

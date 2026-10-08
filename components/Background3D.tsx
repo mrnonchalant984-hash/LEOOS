@@ -24,11 +24,11 @@ function EnergyCore() {
       <Float speed={1.15} rotationIntensity={0.35} floatIntensity={0.8}>
         <mesh ref={core}>
           <icosahedronGeometry args={[1.35, 2]} />
-          <meshStandardMaterial color="#8b5cf6" emissive="#4c1d95" emissiveIntensity={1.4} roughness={0.2} metalness={0.8} transparent opacity={0.72} />
+          <meshStandardMaterial color="#d4af37" emissive="#7b5e18" emissiveIntensity={1.4} roughness={0.2} metalness={0.8} transparent opacity={0.72} />
         </mesh>
         <mesh scale={1.12}>
           <icosahedronGeometry args={[1.35, 1]} />
-          <meshBasicMaterial color="#60a5fa" wireframe transparent opacity={0.32} />
+          <meshBasicMaterial color="#d4af37" wireframe transparent opacity={0.32} />
         </mesh>
       </Float>
 
@@ -38,7 +38,7 @@ function EnergyCore() {
           args={[radius, index === 1 ? 0.018 : 0.012, 24, 160]}
           rotation={[index * 0.48, index * 0.35, index * 0.2]}
         >
-          <meshBasicMaterial color={index === 1 ? "#fbbf24" : "#38bdf8"} transparent opacity={0.2 - index * 0.035} />
+          <meshBasicMaterial color={index === 1 ? "#f0d37a" : "#d4af37"} transparent opacity={0.2 - index * 0.035} />
         </Torus>
       ))}
     </group>
@@ -64,12 +64,12 @@ function FloatingGeometry() {
     <>
       <Float speed={0.75} rotationIntensity={0.7} floatIntensity={1.2}>
         <Icosahedron ref={left} args={[1.1, 1]} position={[-5.2, 2.4, -3]}>
-          <meshStandardMaterial color="#22d3ee" wireframe transparent opacity={0.2} />
+          <meshStandardMaterial color="#d4af37" wireframe transparent opacity={0.2} />
         </Icosahedron>
       </Float>
       <Float speed={0.65} rotationIntensity={0.8} floatIntensity={1.35}>
         <Icosahedron ref={right} args={[1.35, 1]} position={[5.2, -2.3, -4]}>
-          <meshStandardMaterial color="#a78bfa" wireframe transparent opacity={0.2} />
+          <meshStandardMaterial color="#d4af37" wireframe transparent opacity={0.2} />
         </Icosahedron>
       </Float>
     </>
@@ -88,11 +88,11 @@ function Scene() {
   return (
     <group ref={group}>
       <ambientLight intensity={0.28} />
-      <pointLight position={[0, 0, 2]} intensity={12} distance={18} color="#60a5fa" />
-      <pointLight position={[-6, 4, -2]} intensity={8} distance={14} color="#a78bfa" />
-      <pointLight position={[6, -4, -3]} intensity={7} distance={14} color="#fbbf24" />
+      <pointLight position={[0, 0, 2]} intensity={12} distance={18} color="#d4af37" />
+      <pointLight position={[-6, 4, -2]} intensity={8} distance={14} color="#d4af37" />
+      <pointLight position={[6, -4, -3]} intensity={7} distance={14} color="#f0d37a" />
       <Stars radius={55} depth={35} count={900} factor={2.1} saturation={0} fade speed={0.35} />
-      <Sparkles count={80} scale={[16, 10, 12]} size={1.4} speed={0.18} opacity={0.38} color="#93c5fd" />
+      <Sparkles count={80} scale={[16, 10, 12]} size={1.4} speed={0.18} opacity={0.38} color="#f0d37a" />
       <EnergyCore />
       <FloatingGeometry />
     </group>

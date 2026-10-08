@@ -7,86 +7,6 @@ create table if not exists payments (id uuid primary key default gen_random_uuid
 create table if not exists credits (id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade, feature text not null, credits_remaining integer not null default 0, credits_used integer not null default 0, last_reset timestamptz default now(), unique(user_id,feature));
 create table if not exists feature_access (id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade, feature_name text not null, has_access boolean not null default false, granted_by text, expires_at timestamptz, unique(user_id,feature_name));
 
-create table if not exists api_keys (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references profiles(id) on delete cascade,
-  name text not null check (char_length(btrim(name)) between 1 and 80),
-  key_prefix text not null,
-  key_hash text not null unique,
-  scopes text[] not null default array['projects:read']::text[],
-  expires_at timestamptz,
-  revoked_at timestamptz,
-  last_used_at timestamptz,
-  created_at timestamptz not null default now(),
-  constraint api_keys_scopes_valid check (
-    cardinality(scopes) > 0 and
-    scopes <@ array['projects:read','projects:write','usage:read']::text[]
-  )
-);
-create index if not exists idx_api_keys_user_created on api_keys(user_id,created_at desc);
-
-create table if not exists api_rate_buckets (
-  api_key_id uuid primary key references api_keys(id) on delete cascade,
-  window_started_at timestamptz not null default now(),
-  request_count integer not null default 0 check (request_count >= 0),
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists api_requests (
-  id uuid primary key default gen_random_uuid(),
-  request_id uuid not null unique,
-  api_key_id uuid references api_keys(id) on delete set null,
-  user_id uuid not null references profiles(id) on delete cascade,
-  endpoint text not null,
-  method text not null,
-  status_code integer not null,
-  latency_ms integer not null default 0 check (latency_ms >= 0),
-  error_code text,
-  created_at timestamptz not null default now()
-);
-create index if not exists idx_api_requests_user_created on api_requests(user_id,created_at desc);
-create index if not exists idx_api_requests_key_created on api_requests(api_key_id,created_at desc);
-
-create or replace function public.consume_api_rate_limit(
-  p_api_key_id uuid,
-  p_limit integer,
-  p_window_seconds integer default 60
-) returns table(allowed boolean, remaining integer, reset_at timestamptz)
-language plpgsql security definer set search_path = public as $$
-declare
-  bucket api_rate_buckets%rowtype;
-  current_time timestamptz := now();
-begin
-  if p_limit < 1 or p_window_seconds < 1 then raise exception 'Invalid rate-limit configuration'; end if;
-  insert into api_rate_buckets(api_key_id,window_started_at,request_count)
-    values(p_api_key_id,current_time,0) on conflict(api_key_id) do nothing;
-  select * into bucket from api_rate_buckets where api_key_id=p_api_key_id for update;
-  if bucket.window_started_at + make_interval(secs => p_window_seconds) <= current_time then
-    update api_rate_buckets set window_started_at=current_time,request_count=1,updated_at=current_time
-      where api_key_id=p_api_key_id;
-    return query select true,p_limit-1,current_time+make_interval(secs => p_window_seconds);
-    return;
-  end if;
-  if bucket.request_count >= p_limit then
-    return query select false,0,bucket.window_started_at+make_interval(secs => p_window_seconds);
-    return;
-  end if;
-  update api_rate_buckets set request_count=request_count+1,updated_at=current_time
-    where api_key_id=p_api_key_id;
-  return query select true,p_limit-bucket.request_count-1,bucket.window_started_at+make_interval(secs => p_window_seconds);
-end;
-$$;
-revoke all on function public.consume_api_rate_limit(uuid,integer,integer) from public, anon, authenticated;
-grant execute on function public.consume_api_rate_limit(uuid,integer,integer) to service_role;
-
-alter table api_keys enable row level security;
-alter table api_rate_buckets enable row level security;
-alter table api_requests enable row level security;
-drop policy if exists api_keys_self_read on api_keys;
-create policy api_keys_self_read on api_keys for select using(auth.uid()=user_id);
-drop policy if exists api_requests_self_read on api_requests;
-create policy api_requests_self_read on api_requests for select using(auth.uid()=user_id);
-
 create or replace function public.consume_user_credit(
   p_user_id uuid,
   p_feature text,
@@ -715,3 +635,268 @@ alter table agent_browser_sessions enable row level security;
 drop policy if exists agent_browser_sessions_owner on agent_browser_sessions;
 create policy agent_browser_sessions_owner on agent_browser_sessions for all using(auth.uid()=user_id or public.is_owner(auth.uid())) with check(auth.uid()=user_id or public.is_owner(auth.uid()));
 create index if not exists idx_agent_browser_sessions_user on agent_browser_sessions(user_id,created_at desc);
+
+-- LEO OS platform control-plane extensions (additive; run after existing schema)
+create table if not exists api_keys (
+  id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade,
+  name text not null, prefix text not null, key_hash text not null unique, scopes jsonb not null default '["read"]'::jsonb,
+  revoked boolean not null default false, expires_at timestamptz, last_used_at timestamptz, created_at timestamptz not null default now()
+);
+create index if not exists idx_api_keys_user on api_keys(user_id,created_at desc);
+alter table api_keys enable row level security;
+drop policy if exists api_keys_self on api_keys;
+create policy api_keys_self on api_keys for all using(auth.uid()=user_id or public.is_owner(auth.uid())) with check(auth.uid()=user_id or public.is_owner(auth.uid()));
+
+create table if not exists system_events (
+  id uuid primary key default gen_random_uuid(), user_id uuid references profiles(id) on delete set null,
+  organization_id uuid, project_id uuid, kind text not null, title text not null, severity text not null default 'INFO',
+  request_id text, metadata jsonb not null default '{}'::jsonb, created_at timestamptz not null default now()
+);
+create index if not exists idx_system_events_user on system_events(user_id,created_at desc);
+create index if not exists idx_system_events_kind on system_events(kind,created_at desc);
+alter table system_events enable row level security;
+drop policy if exists system_events_self on system_events;
+create policy system_events_self on system_events for select using(auth.uid()=user_id or public.is_owner(auth.uid()));
+
+create table if not exists error_events (
+  id uuid primary key default gen_random_uuid(), user_id uuid references profiles(id) on delete set null,
+  request_id text, environment text not null default 'production', route text, severity text not null default 'ERROR',
+  error_type text, message text not null, metadata jsonb not null default '{}'::jsonb, created_at timestamptz not null default now()
+);
+create index if not exists idx_error_events_user on error_events(user_id,created_at desc);
+alter table error_events enable row level security;
+drop policy if exists error_events_owner on error_events;
+create policy error_events_owner on error_events for select using(public.is_owner(auth.uid()) or auth.uid()=user_id);
+
+create table if not exists background_tasks (
+  id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade,
+  kind text not null, status text not null default 'queued', progress integer not null default 0,
+  payload jsonb not null default '{}'::jsonb, result jsonb, error text, request_id text,
+  started_at timestamptz, completed_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+);
+create index if not exists idx_background_tasks_user on background_tasks(user_id,created_at desc);
+alter table background_tasks enable row level security;
+drop policy if exists background_tasks_self on background_tasks;
+create policy background_tasks_self on background_tasks for select using(auth.uid()=user_id or public.is_owner(auth.uid()));
+
+create table if not exists webhooks (
+  id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade,
+  name text not null, endpoint_url text not null, secret_hash text not null, events jsonb not null default '[]'::jsonb,
+  active boolean not null default true, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+);
+create table if not exists webhook_deliveries (
+  id uuid primary key default gen_random_uuid(), webhook_id uuid not null references webhooks(id) on delete cascade,
+  event_type text not null, status text not null default 'queued', attempt integer not null default 0, response_code integer,
+  response_body text, delivered_at timestamptz, created_at timestamptz not null default now()
+);
+create index if not exists idx_webhooks_user on webhooks(user_id,created_at desc);
+create index if not exists idx_webhook_deliveries_webhook on webhook_deliveries(webhook_id,created_at desc);
+alter table webhooks enable row level security;
+alter table webhook_deliveries enable row level security;
+drop policy if exists webhooks_self on webhooks;
+create policy webhooks_self on webhooks for all using(auth.uid()=user_id or public.is_owner(auth.uid())) with check(auth.uid()=user_id or public.is_owner(auth.uid()));
+drop policy if exists webhook_deliveries_self on webhook_deliveries;
+create policy webhook_deliveries_self on webhook_deliveries for select using(exists(select 1 from webhooks w where w.id=webhook_id and (w.user_id=auth.uid() or public.is_owner(auth.uid()))));
+
+create table if not exists organizations (
+  id uuid primary key default gen_random_uuid(), name text not null, slug text not null unique,
+  owner_user_id uuid not null references profiles(id) on delete cascade, created_at timestamptz not null default now()
+);
+create table if not exists organization_members (
+  id uuid primary key default gen_random_uuid(), organization_id uuid not null references organizations(id) on delete cascade,
+  user_id uuid not null references profiles(id) on delete cascade, role text not null default 'VIEWER', created_at timestamptz not null default now(),
+  unique(organization_id,user_id)
+);
+create index if not exists idx_org_members_user on organization_members(user_id,created_at desc);
+alter table organizations enable row level security;
+alter table organization_members enable row level security;
+drop policy if exists organizations_member on organizations;
+create policy organizations_member on organizations for select using(owner_user_id=auth.uid() or exists(select 1 from organization_members m where m.organization_id=id and m.user_id=auth.uid()) or public.is_owner(auth.uid()));
+drop policy if exists organization_members_member on organization_members;
+create policy organization_members_member on organization_members for select using(user_id=auth.uid() or exists(select 1 from organizations o where o.id=organization_id and o.owner_user_id=auth.uid()) or public.is_owner(auth.uid()));
+
+-- LEO OS API v2 additive control-plane migration
+create table if not exists api_request_logs (
+  id uuid primary key default gen_random_uuid(), key_id uuid references api_keys(id) on delete set null,
+  user_id uuid references profiles(id) on delete set null, request_id text not null,
+  method text not null, route text not null, status_code integer, latency_ms integer,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_api_request_logs_user on api_request_logs(user_id,created_at desc);
+create index if not exists idx_api_request_logs_key on api_request_logs(key_id,created_at desc);
+alter table api_request_logs enable row level security;
+drop policy if exists api_request_logs_self on api_request_logs;
+create policy api_request_logs_self on api_request_logs for select using(auth.uid()=user_id or public.is_owner(auth.uid()));
+
+alter table api_keys add column if not exists description text;
+alter table api_keys add column if not exists environment text not null default 'production';
+alter table webhooks add column if not exists updated_at timestamptz not null default now();
+
+-- ============================================================
+-- LEONARD X / LEO OS V2 PLATFORM + PRODUCTION HARDENING
+-- Canonical additive schema: run this file against the existing
+-- LEO OS Supabase PostgreSQL database. Safe to re-run.
+-- ============================================================
+
+-- LEO OS platform control-plane extensions (additive; run after existing schema)
+create table if not exists api_keys (
+  id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade,
+  name text not null, prefix text not null, key_hash text not null unique, scopes jsonb not null default '["read"]'::jsonb,
+  revoked boolean not null default false, expires_at timestamptz, last_used_at timestamptz, created_at timestamptz not null default now()
+);
+create index if not exists idx_api_keys_user on api_keys(user_id,created_at desc);
+alter table api_keys enable row level security;
+drop policy if exists api_keys_self on api_keys;
+create policy api_keys_self on api_keys for all using(auth.uid()=user_id or public.is_owner(auth.uid())) with check(auth.uid()=user_id or public.is_owner(auth.uid()));
+
+create table if not exists system_events (
+  id uuid primary key default gen_random_uuid(), user_id uuid references profiles(id) on delete set null,
+  organization_id uuid, project_id uuid, kind text not null, title text not null, severity text not null default 'INFO',
+  request_id text, metadata jsonb not null default '{}'::jsonb, created_at timestamptz not null default now()
+);
+create index if not exists idx_system_events_user on system_events(user_id,created_at desc);
+create index if not exists idx_system_events_kind on system_events(kind,created_at desc);
+alter table system_events enable row level security;
+drop policy if exists system_events_self on system_events;
+create policy system_events_self on system_events for select using(auth.uid()=user_id or public.is_owner(auth.uid()));
+
+create table if not exists error_events (
+  id uuid primary key default gen_random_uuid(), user_id uuid references profiles(id) on delete set null,
+  request_id text, environment text not null default 'production', route text, severity text not null default 'ERROR',
+  error_type text, message text not null, metadata jsonb not null default '{}'::jsonb, created_at timestamptz not null default now()
+);
+create index if not exists idx_error_events_user on error_events(user_id,created_at desc);
+alter table error_events enable row level security;
+drop policy if exists error_events_owner on error_events;
+create policy error_events_owner on error_events for select using(public.is_owner(auth.uid()) or auth.uid()=user_id);
+
+create table if not exists background_tasks (
+  id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade,
+  kind text not null, status text not null default 'queued', progress integer not null default 0,
+  payload jsonb not null default '{}'::jsonb, result jsonb, error text, request_id text,
+  started_at timestamptz, completed_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+);
+create index if not exists idx_background_tasks_user on background_tasks(user_id,created_at desc);
+alter table background_tasks enable row level security;
+drop policy if exists background_tasks_self on background_tasks;
+create policy background_tasks_self on background_tasks for select using(auth.uid()=user_id or public.is_owner(auth.uid()));
+
+create table if not exists webhooks (
+  id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade,
+  name text not null, endpoint_url text not null, secret_hash text not null, events jsonb not null default '[]'::jsonb,
+  active boolean not null default true, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+);
+create table if not exists webhook_deliveries (
+  id uuid primary key default gen_random_uuid(), webhook_id uuid not null references webhooks(id) on delete cascade,
+  event_type text not null, status text not null default 'queued', attempt integer not null default 0, response_code integer,
+  response_body text, delivered_at timestamptz, created_at timestamptz not null default now()
+);
+create index if not exists idx_webhooks_user on webhooks(user_id,created_at desc);
+create index if not exists idx_webhook_deliveries_webhook on webhook_deliveries(webhook_id,created_at desc);
+alter table webhooks enable row level security;
+alter table webhook_deliveries enable row level security;
+drop policy if exists webhooks_self on webhooks;
+create policy webhooks_self on webhooks for all using(auth.uid()=user_id or public.is_owner(auth.uid())) with check(auth.uid()=user_id or public.is_owner(auth.uid()));
+drop policy if exists webhook_deliveries_self on webhook_deliveries;
+create policy webhook_deliveries_self on webhook_deliveries for select using(exists(select 1 from webhooks w where w.id=webhook_id and (w.user_id=auth.uid() or public.is_owner(auth.uid()))));
+
+create table if not exists organizations (
+  id uuid primary key default gen_random_uuid(), name text not null, slug text not null unique,
+  owner_user_id uuid not null references profiles(id) on delete cascade, created_at timestamptz not null default now()
+);
+create table if not exists organization_members (
+  id uuid primary key default gen_random_uuid(), organization_id uuid not null references organizations(id) on delete cascade,
+  user_id uuid not null references profiles(id) on delete cascade, role text not null default 'VIEWER', created_at timestamptz not null default now(),
+  unique(organization_id,user_id)
+);
+create index if not exists idx_org_members_user on organization_members(user_id,created_at desc);
+alter table organizations enable row level security;
+alter table organization_members enable row level security;
+drop policy if exists organizations_member on organizations;
+create policy organizations_member on organizations for select using(owner_user_id=auth.uid() or exists(select 1 from organization_members m where m.organization_id=id and m.user_id=auth.uid()) or public.is_owner(auth.uid()));
+drop policy if exists organization_members_member on organization_members;
+create policy organization_members_member on organization_members for select using(user_id=auth.uid() or exists(select 1 from organizations o where o.id=organization_id and o.owner_user_id=auth.uid()) or public.is_owner(auth.uid()));
+
+-- LEO OS V2 production hardening migration.
+-- Run after supabase/leo-os-v2-platform.sql. Safe to re-run.
+
+alter table public.api_keys add column if not exists description text;
+alter table public.api_keys add column if not exists environment text not null default 'production';
+create index if not exists idx_api_keys_hash on public.api_keys(key_hash);
+
+alter table public.webhooks add column if not exists secret_encrypted text;
+alter table public.webhooks add column if not exists updated_at timestamptz not null default now();
+
+create table if not exists public.api_rate_limits (
+  key_id uuid primary key references public.api_keys(id) on delete cascade,
+  window_started_at timestamptz not null default now(),
+  request_count integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+alter table public.api_rate_limits enable row level security;
+drop policy if exists api_rate_limits_self on public.api_rate_limits;
+create policy api_rate_limits_self on public.api_rate_limits for select using(exists(select 1 from public.api_keys k where k.id=key_id and (k.user_id=auth.uid() or public.is_owner(auth.uid()))));
+
+create or replace function public.consume_api_rate_limit(p_key_id uuid, p_limit integer default 120, p_window_seconds integer default 60)
+returns boolean language plpgsql security definer set search_path=public as $$
+declare r public.api_rate_limits; now_ts timestamptz := clock_timestamp();
+begin
+  select * into r from public.api_rate_limits where key_id=p_key_id for update;
+  if not found then
+    insert into public.api_rate_limits(key_id,window_started_at,request_count,updated_at) values(p_key_id,now_ts,1,now_ts) on conflict(key_id) do nothing;
+    return true;
+  end if;
+  if extract(epoch from (now_ts-r.window_started_at)) >= p_window_seconds then
+    update public.api_rate_limits set window_started_at=now_ts,request_count=1,updated_at=now_ts where key_id=p_key_id;
+    return true;
+  end if;
+  if r.request_count >= p_limit then return false; end if;
+  update public.api_rate_limits set request_count=request_count+1,updated_at=now_ts where key_id=p_key_id;
+  return true;
+end; $$;
+revoke all on function public.consume_api_rate_limit(uuid,integer,integer) from public;
+grant execute on function public.consume_api_rate_limit(uuid,integer,integer) to service_role;
+
+create table if not exists public.webhook_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade,
+  event_type text not null,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_webhook_events_user_created on public.webhook_events(user_id,created_at desc);
+alter table public.webhook_events enable row level security;
+drop policy if exists webhook_events_self on public.webhook_events;
+create policy webhook_events_self on public.webhook_events for select using(auth.uid()=user_id or public.is_owner(auth.uid()));
+
+alter table public.webhook_deliveries add column if not exists next_attempt_at timestamptz;
+alter table public.webhook_deliveries add column if not exists last_error text;
+create index if not exists idx_webhook_deliveries_queue on public.webhook_deliveries(status,next_attempt_at,created_at);
+
+create table if not exists public.security_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete set null,
+  event_type text not null,
+  severity text not null default 'INFO',
+  ip_address text,
+  user_agent text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_security_events_user_created on public.security_events(user_id,created_at desc);
+alter table public.security_events enable row level security;
+drop policy if exists security_events_self on public.security_events;
+create policy security_events_self on public.security_events for select using(auth.uid()=user_id or public.is_owner(auth.uid()));
+
+-- Prevent direct client-side exposure of API key hashes/secrets through PostgREST.
+revoke all on public.api_keys from anon;
+revoke all on public.api_keys from authenticated;
+revoke all on public.webhooks from anon;
+revoke all on public.webhooks from authenticated;
+revoke all on public.api_rate_limits from anon;
+revoke all on public.webhook_events from anon;
+revoke all on public.security_events from anon;
+
+create or replace function public.set_updated_at() returns trigger language plpgsql as $$ begin new.updated_at=now(); return new; end; $$;
+drop trigger if exists trg_webhooks_updated_at on public.webhooks;
+create trigger trg_webhooks_updated_at before update on public.webhooks for each row execute function public.set_updated_at();

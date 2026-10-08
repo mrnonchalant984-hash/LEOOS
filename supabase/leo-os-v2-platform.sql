@@ -1,0 +1,2 @@
+-- DEPRECATED: Use supabase/schema.sql as the single canonical LEO OS database schema.
+-- This file is retained only for historical reference. Do not run separately.

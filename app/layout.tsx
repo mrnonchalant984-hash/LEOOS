@@ -2,8 +2,8 @@ import type {Metadata} from 'next'; import './globals.css'; import {Analytics} f
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://leoos-omega.vercel.app'),
-  title: 'LEO OS — AI Website Builder',
-  description: 'Build websites, generate code, create images and content with Leo AI for creators and businesses worldwide.',
+  title: 'Leonard X — AI Software Creation Platform',
+  description: 'Leonard X is an AI-powered software creation and management platform for building, testing, deploying and improving software.',
   icons: {
     icon: [
       { url: '/favicon.ico', rel: 'icon' },
@@ -14,8 +14,8 @@ export const metadata: Metadata = {
     apple: [{ url: '/apple-icon.png', type: 'image/png', sizes: '180x180' }],
   },
   openGraph: {
-    title: 'LEO OS — AI Website Builder',
-    description: 'AI tools for creators, freelancers and businesses worldwide.',
+    title: 'Leonard X — AI Software Creation Platform',
+    description: 'AI-powered software creation, agent execution, deployment and developer tooling.',
     url: 'https://leoos-omega.vercel.app',
   },
 };
