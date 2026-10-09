@@ -18,6 +18,8 @@ test('scope checks fail closed', () => {
   assert.equal(hasScope(['projects:read'], 'projects:read'), true);
   assert.equal(hasScope([], 'projects:read'), false);
   assert.equal(hasScope(null, 'projects:read'), false);
+  assert.equal(hasScope(['write'], 'read'), true);
+  assert.equal(hasScope(['read'], 'write'), false);
 });
 test('revoked and expired keys are not active', () => {
   assert.equal(keyState({ revoked_at: '2026-01-01T00:00:00Z' }), 'revoked');

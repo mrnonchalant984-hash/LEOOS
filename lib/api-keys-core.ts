@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-export const API_SCOPES = ['projects:read'] as const;
+export const API_SCOPES = ['read', 'write', 'projects:read', 'projects:write'] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
 export const KEY_PREFIX = 'leo_live_';
 
@@ -19,7 +19,11 @@ export function parseScopes(input: unknown): ApiScope[] {
 }
 
 export function hasScope(granted: string[] | null | undefined, needed: ApiScope): boolean {
-  return Array.isArray(granted) && granted.includes(needed);
+  if (!Array.isArray(granted)) return false;
+  if (granted.includes('*') || granted.includes(needed)) return true;
+  if (needed === 'read') return granted.includes('write') || granted.includes('projects:read') || granted.includes('projects:write');
+  if (needed === 'projects:read') return granted.includes('read') || granted.includes('write') || granted.includes('projects:write');
+  return false;
 }
 
 export function keyState(k: { revoked_at?: string | null; expires_at?: string | null }, now = new Date()) {

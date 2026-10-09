@@ -9,12 +9,12 @@ When published: `npm install @leo-os/sdk`.
 
 ## Quick start
 
-Create a key at `/developers` (scope `projects:read`), then:
+Create a key at `/developers` with the `read` scope, then:
 
 ```ts
 import { LeoClient, LeoApiError, LeoRateLimitError } from '@leo-os/sdk';
 
-const leo = new LeoClient({ apiKey: process.env.LEO_API_KEY! });
+const leo = new LeoClient({ apiKey: process.env.LEO_API_KEY!, baseUrl: 'https://your-leonardx-domain.example' });
 
 try {
   const { data, request_id } = await leo.projects.list();
@@ -42,4 +42,4 @@ Requests older than 5 minutes are rejected by default (`toleranceSeconds`).
 
 ## What is covered today
 
-Only what the API supports: `projects.list()` and webhook signature verification. More modules will be added as API endpoints are built.
+The SDK currently supports authenticated project listing and creation plus webhook signature verification. It is not published to npm; build the package locally before consuming it.

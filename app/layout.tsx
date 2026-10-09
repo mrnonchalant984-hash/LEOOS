@@ -1,4 +1,4 @@
-import type {Metadata} from 'next'; import './globals.css'; import {Analytics} from '@vercel/analytics/next'; import {Header} from '@/components/Header'; import {Footer} from '@/components/Footer'; import {Providers} from './providers'; import Background3D from '@/components/Background3D'; import {GlobalLEOWidget} from '@/components/GlobalLEOWidget';
+import type {Metadata} from 'next'; import './globals.css'; import './premium-theme.css'; import {Analytics} from '@vercel/analytics/next'; import {Header} from '@/components/Header'; import {Footer} from '@/components/Footer'; import {Providers} from './providers'; import VisualBackground from '@/components/VisualBackground'; import {GlobalLEOWidget} from '@/components/GlobalLEOWidget';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://leoos-omega.vercel.app'),
@@ -20,4 +20,4 @@ export const metadata: Metadata = {
   },
 };
 
-export default function Layout({children}:{children:React.ReactNode}){return <html lang='en'><body className='min-h-screen bg-black text-white'><Background3D/><Providers><Header/>{children}<GlobalLEOWidget/><Footer/></Providers><Analytics/></body></html>}
+export default function Layout({children}:{children:React.ReactNode}){return <html lang='en' data-scroll-behavior='smooth'><body className='min-h-screen bg-black text-white'><VisualBackground/><Providers><Header/>{children}<GlobalLEOWidget/><Footer/></Providers><Analytics/></body></html>}

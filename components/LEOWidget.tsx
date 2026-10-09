@@ -729,10 +729,14 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       {inputs}
       {!open && (
         <button
+          type="button"
           onClick={() => setOpen(true)}
           className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--gold)] text-black shadow-2xl"
+          aria-label="Open Leo AI chat"
+          aria-haspopup="dialog"
+          aria-expanded={false}
         >
-          <Bot />
+          <Bot aria-hidden="true" />
         </button>
       )}
       {open && (

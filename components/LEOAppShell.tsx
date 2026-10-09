@@ -10,6 +10,7 @@ import {
   ScrollText, UserRound, Wallet, Layers3, TerminalSquare, LockKeyhole, Settings,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { resolveVisualIdentity } from '@/components/visual-identity';
 
 type NavItem = readonly [string, string, typeof LayoutDashboard];
 const groups: { label: string; items: NavItem[] }[] = [
@@ -89,7 +90,7 @@ export function LEOAppShell({ children, title = 'LeonardX', subtitle = 'Your sof
   }, [openPalette]);
   const navigate = (href: string) => { setPaletteOpen(false); setOpen(false); router.push(href); };
 
-  return <div className={`leo-app-shell ${collapsed ? 'leo-app-shell-collapsed' : ''}`}>
+  return <div className={`leo-app-shell ${collapsed ? 'leo-app-shell-collapsed' : ''}`} data-visual-identity={resolveVisualIdentity(pathname)}>
     <aside className={`leo-sidebar ${open ? 'leo-sidebar-open' : ''} ${collapsed ? 'leo-sidebar-collapsed' : ''}`}>
       <div className="leo-brand-row">
         <Link href="/" className="leo-brand" aria-label="LeonardX home" onClick={() => setOpen(false)}>
