@@ -1,1 +1,8 @@
-import {AuthForm} from '@/components/AuthForm'; export const metadata={title:'LEO Account'}; export default function AuthPage(){return <main className="mx-auto max-w-6xl px-4 py-20"><AuthForm/></main>}
+import { AuthForm } from '@/components/AuthForm';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Sign in or create an account | LeonardX', description: 'Securely access your LeonardX software workspace.' };
+
+export default function AuthPage() {
+  return <main className="auth-page-main"><AuthForm /></main>;
+}

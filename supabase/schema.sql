@@ -26,7 +26,7 @@ begin
   perform 1 from profiles where id = p_user_id for update;
   if not found then raise exception 'Account not found'; end if;
 
-  select * into credit_row from credits where user_id = p_user_id and feature = p_feature for update;
+  select c.* into credit_row from credits as c where c.user_id = p_user_id and c.feature = p_feature for update;
   if not found then
     if p_free_monthly_allowance < 1 then raise exception 'No credits left'; end if;
     insert into credits(user_id,feature,credits_remaining,credits_used,last_reset)
@@ -60,7 +60,7 @@ declare
   plan_credits integer;
   period_start timestamptz;
   period_end timestamptz;
-  feature text;
+  feature_key text;
 begin
   select * into payment_row from payments where reference = p_reference for update;
   if not found then raise exception 'Payment reference is not registered'; end if;
@@ -108,15 +108,15 @@ begin
     values (payment_row.user_id, payment_row.plan, payment_row.billing_period,
       'active', period_start, period_end, period_start, period_end, p_reference);
 
-  foreach feature in array array['image_generation', 'code_generation', 'background_removal', 'website_deployment'] loop
+  foreach feature_key in array array['image_generation', 'code_generation', 'background_removal', 'website_deployment'] loop
     insert into credits (user_id, feature, credits_remaining, credits_used, last_reset)
-      values (payment_row.user_id, feature, plan_credits, 0, p_paid_at)
+      values (payment_row.user_id, feature_key, plan_credits, 0, p_paid_at)
       on conflict (user_id, feature) do update set
         credits_remaining = excluded.credits_remaining,
         credits_used = 0,
         last_reset = excluded.last_reset;
     insert into feature_access (user_id, feature_name, has_access, granted_by, expires_at)
-      values (payment_row.user_id, feature, true, 'subscription', period_end)
+      values (payment_row.user_id, feature_key, true, 'subscription', period_end)
       on conflict (user_id, feature_name) do update set
         has_access = true,
         granted_by = 'subscription',

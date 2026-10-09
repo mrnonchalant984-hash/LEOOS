@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowDown, ArrowRight, Bot, Boxes, Check, Code2, GitBranch, Globe2, Play, ShieldCheck, Sparkles, Terminal } from 'lucide-react';
 import { Reveal } from '@/components/Reveal';
@@ -25,8 +26,8 @@ export default function Home(){
     <LandingExperience/>
     <div className="landing-hero-content">
       <div className="landing-eyebrow"><span/> LEONARD X <span className="slash">/</span> AI SOFTWARE CREATION</div>
-      <h1>Build what you <em>imagine.</em></h1>
-      <p className="landing-lead">Software creation should not begin with a blank repository. Start with the idea. Leonard X brings Leo, project workspaces, specialized agents and the systems around your product into one intelligent environment.</p>
+      <h1>Turn bold ideas into <em>working software.</em></h1>
+      <p className="landing-lead">Start with a thought, a brief, or a problem. Leonard X gives you the workspace, AI agents, and delivery tools to shape it into something real.</p>
       <div className="landing-actions"><Link href="/app" className="landing-primary">Start building <ArrowRight size={16}/></Link><Link href="/leo-ai" className="landing-secondary"><Bot size={16}/> Meet Leo</Link></div>
       <div className="landing-proof"><span>IDEA</span><i>→</i><span>LEO</span><i>→</i><span>BUILD</span><i>→</i><span>TEST</span><i>→</i><span>DEPLOY</span></div>
     </div>
@@ -47,7 +48,7 @@ export default function Home(){
 
   <section className="landing-belief section-space"><Reveal><div className="belief-wrap"><p className="landing-kicker">THE PRINCIPLE</p><h2>AI should make software creation feel more accessible without making the engineering less real.</h2><p>That means showing useful execution state instead of pretending to expose private reasoning. It means server-side permissions instead of trust placed in a button. It means real deployment results instead of optimistic messages. And it means building a platform that can grow with the person using it.</p><div className="belief-points"><span><ShieldCheck/> Real permissions</span><span><Code2/> Real project state</span><span><GitBranch/> Real deployment paths</span></div></div></Reveal></section>
 
-  <section className="landing-founder section-space"><Reveal><div className="founder-grid"><div><p className="landing-kicker">BUILT BY LEONARD</p><h2>Leonard X is founder-led — and still being built.</h2></div><div className="editorial-copy"><p>LEO OS is an ambitious platform, but it is not presented as something it has not become. No invented customer numbers. No manufactured testimonials. No fake teams. No imaginary integrations.</p><p>The product is being built in public, one real system at a time — with the goal of giving builders a place where an idea can become software and then continue evolving.</p><Link href="/about" className="text-action">Learn about Leonard X <ArrowRight size={15}/></Link></div></div></Reveal></section>
+  <section className="landing-founder section-space"><Reveal><div className="founder-grid"><div className="founder-visual"><Image src="/profile.png" alt="Leonard Udoh working at his development desk" fill sizes="(max-width: 900px) 100vw, 34vw" className="founder-photo"/><div className="founder-caption"><strong>Leonard Udoh</strong><span>Founder · Developer</span></div></div><div><p className="landing-kicker">BUILT BY LEONARD</p><h2>Leonard X is founder-led — and still being built.</h2></div><div className="editorial-copy"><p>LEO OS is an ambitious platform, but it is not presented as something it has not become. No invented customer numbers. No manufactured testimonials. No fake teams. No imaginary integrations.</p><p>The product is being built in public, one real system at a time — with the goal of giving builders a place where an idea can become software and then continue evolving.</p><Link href="/about" className="text-action">Learn about Leonard X <ArrowRight size={15}/></Link></div></div></Reveal></section>
 
   <section className="landing-final"><div className="final-glow"/><Reveal><p className="landing-kicker">YOUR NEXT PRODUCT</p><h2>Start with the idea.</h2><p>Give Leo the problem, the vision or the product you have been thinking about. Then build from there.</p><div className="landing-actions"><Link href="/app" className="landing-primary">Start building <ArrowRight size={16}/></Link><Link href="/pricing" className="landing-secondary">View plans</Link></div></Reveal></section>
  </main>;

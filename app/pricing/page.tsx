@@ -58,9 +58,9 @@ export default function Pricing() {
     }
   }
   return (
-    <main className="mx-auto max-w-6xl px-4 py-16">
-      <div className="max-w-3xl">
-        <p className="text-sm font-bold text-yellow-300">LEO PLANS</p>
+    <main className="pricing-page mx-auto max-w-6xl px-4 py-16">
+      <div className="pricing-intro max-w-3xl">
+        <p className="text-sm font-bold text-yellow-300">LEO PLANS <span>· SIMPLE, TRANSPARENT, PREPAID</span></p>
         <h1 className="mt-3 text-4xl font-black sm:text-6xl">
           Simple plans that grow with you.
         </h1>
@@ -74,24 +74,24 @@ export default function Pricing() {
           Mobile builds are unavailable until Expo/EAS is integrated. Game builds are unavailable until a Godot build provider is integrated.
         </p>
       </div>
-      <div className="mt-8 inline-flex rounded-xl border border-zinc-800 bg-zinc-950 p-1">
+      <div className="pricing-toggle mt-8 inline-flex rounded-xl border border-zinc-800 bg-zinc-950 p-1" aria-label="Billing period">
         {(["monthly", "quarterly", "yearly"] as const).map((p) => (
           <button
             key={p}
             onClick={() => setPeriod(p)}
-            className={`rounded-lg px-4 py-2 text-sm ${period === p ? "bg-yellow-400 text-black font-bold" : ""}`}
+            className={`rounded-lg px-4 py-2 text-sm ${period === p ? "active" : ""}`}
           >
             {p}
           </button>
         ))}
       </div>
-      <div className="mt-8 grid gap-5 md:grid-cols-3">
+      <div className="pricing-grid mt-8 grid gap-5 md:grid-cols-3">
         {plans.map((p) => (
           <div
             key={p.key}
-            className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6"
+            className={`pricing-card rounded-3xl border border-zinc-800 bg-zinc-950 p-6 ${p.key === "standard" ? "featured" : ""}`}
           >
-            <h2 className="text-xl font-black">{p.name}</h2>
+            <div className="pricing-card-top"><span>{p.key === "standard" ? "MOST POPULAR" : p.key === "free" ? "START HERE" : "FOR TEAMS"}</span></div><h2 className="text-xl font-black">{p.name}</h2>
             <div className="mt-3 text-3xl font-black text-yellow-300">
               {p.key === "free"
                 ? "₦0"

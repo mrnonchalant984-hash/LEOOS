@@ -15,12 +15,25 @@ export function WebhooksPanel() {
   const [open, setOpen] = useState('');
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
 
-  const load = useCallback(async () => {
+  const fetchEndpoints = useCallback(async () => {
     const res = await fetch('/api/developers/webhooks', { cache: 'no-store' });
-    if (!res.ok) { setError((await res.json().catch(() => ({}))).error || 'Could not load webhooks.'); setEndpoints([]); return; }
-    setEndpoints((await res.json()).endpoints || []);
+    if (!res.ok) return { error: (await res.json().catch(() => ({}))).error || 'Could not load webhooks.', endpoints: [] as Endpoint[] };
+    return { error: '', endpoints: (await res.json()).endpoints || [] };
   }, []);
-  useEffect(() => { load(); }, [load]);
+  const load = useCallback(async () => {
+    const result = await fetchEndpoints();
+    setError(result.error);
+    setEndpoints(result.endpoints);
+  }, [fetchEndpoints]);
+  useEffect(() => {
+    let active = true;
+    void fetchEndpoints().then(result => {
+      if (!active) return;
+      setError(result.error);
+      setEndpoints(result.endpoints);
+    });
+    return () => { active = false; };
+  }, [fetchEndpoints]);
 
   async function loadDeliveries(id: string) {
     const res = await fetch(`/api/developers/webhooks/deliveries?endpoint_id=${encodeURIComponent(id)}`, { cache: 'no-store' });
