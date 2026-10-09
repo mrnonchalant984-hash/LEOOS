@@ -60,3 +60,4 @@ If the install completes but verification fails, address the reported errors bef
 - Continue applying the shared dark design language to remaining public informational pages and workspace data views.
 - Keep unavailable integrations and empty datasets explicitly labelled according to their actual backend state.
 - Paystack is configured as the current payment provider; Stripe is not presented as connected. Vercel, OpenAI, GitHub, email, and other integrations still depend on their existing environment configuration.
+- Vercel Hobby compatibility: scheduled hosting checks remain daily at 09:00 UTC and webhook retries now use the supported `/api/cron/webhooks` route daily at 10:00 UTC. Minute-level retries require a Vercel Pro plan.

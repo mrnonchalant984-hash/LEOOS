@@ -5,8 +5,8 @@
       "schedule": "0 9 * * *"
     },
     {
-      "path": "/api/internal/webhooks/worker",
-      "schedule": "* * * * *"
+      "path": "/api/cron/webhooks",
+      "schedule": "0 10 * * *"
     }
   ]
 }
