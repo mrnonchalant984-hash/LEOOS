@@ -37,13 +37,31 @@ export function nextAttemptDelaySec(attemptsMade: number): number | null {
 }
 
 export function isPrivateIp(ip: string): boolean {
-  const v = ip.toLowerCase();
-  const m4 = v.match(/^(?:::ffff:)?(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (m4) {
-    const [a, b] = [Number(m4[1]), Number(m4[2])];
-    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  const value = ip.toLowerCase().replace(/^\[|\]$/g, '').split('%')[0];
+  const mappedDotted = value.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  const mappedHex = value.match(/^::ffff:([\da-f]{1,4}):([\da-f]{1,4})$/);
+  if (mappedDotted) return isPrivateIp(mappedDotted[1]);
+  if (mappedHex) {
+    const high = Number.parseInt(mappedHex[1], 16);
+    const low = Number.parseInt(mappedHex[2], 16);
+    return isPrivateIp(`${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`);
   }
-  return v === '::' || v === '::1' || v.startsWith('fc') || v.startsWith('fd') || v.startsWith('fe80');
+
+  const ipv4 = value.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (ipv4) {
+    const [a, b, c] = ipv4.slice(1).map(Number);
+    return a === 0 || a === 10 || a === 127 || a >= 224
+      || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31)
+      || (a === 192 && (b === 168 || (b === 0 && c === 0) || (b === 0 && c === 2)))
+      || (a === 100 && b >= 64 && b <= 127)
+      || (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100)))
+      || (a === 203 && b === 0 && c === 113);
+  }
+
+  return value === '::' || value === '::1' || value.startsWith('::')
+    || /^f[cd]/.test(value) || /^fe[89ab]/.test(value) || value.startsWith('ff')
+    || value.startsWith('2001:db8:') || value.startsWith('fec');
 }
 
 export function validateEndpointUrl(raw: string): { ok: true; url: URL } | { ok: false; reason: string } {

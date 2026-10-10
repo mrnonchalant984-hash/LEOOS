@@ -1,17 +1,19 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {useRouter} from 'next/navigation';
 import {createBrowserClient} from '@supabase/ssr';
 import {GlassCard} from '@/components/GlassCard';
 import {BookOpen,FileUp,Globe,History,Search,Settings2,TestTube2,Archive,Save} from 'lucide-react';
 
 export default function TrainLeo(){
+ const router=useRouter();
  const [data,setData]=useState<any>({knowledge:[],versions:[],audit:[],instructions:[],modelConfig:[],toolConfig:[],memory:[],conflicts:[],jobs:[]});
  const [session,setSession]=useState<any>(null); const [q,setQ]=useState(''); const [tab,setTab]=useState('knowledge'); const [busy,setBusy]=useState(false);
  const [form,setForm]=useState({title:'',content:'',category:'general',tags:'',source_type:'manual',source_url:'',confidence:'0.8',reliability:'0.8'});
  const [test,setTest]=useState(''); const [answer,setAnswer]=useState<any>(null); const [url,setUrl]=useState('');
- async function auth(){const s=createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);const {data:{session}}=await s.auth.getSession();if(!session){location.href='/auth';return null}setSession(session);return session}
+ async function auth(){const s=createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);const {data:{session}}=await s.auth.getSession();if(!session){router.push('/auth');return null}setSession(session);return session}
  async function load(s=session){const ss=s||await auth();if(!ss)return;const r=await fetch(`/api/admin/leo/training/knowledge?q=${encodeURIComponent(q)}`,{headers:{Authorization:`Bearer ${ss.access_token}`}});const base=await r.json();if(r.ok){const headers={Authorization:`Bearer ${ss.access_token}`};const [m,c,jobs]=await Promise.all([fetch('/api/admin/leo/training/memory',{headers}).then(x=>x.json()),fetch('/api/admin/leo/training/conflicts',{headers}).then(x=>x.json()),fetch('/api/admin/leo/training/jobs',{headers}).then(x=>x.json())]);setData({...base,memory:m.memory||[],conflicts:c.conflicts||[],jobs:jobs.jobs||[]});}else if(base.error)alert(base.error)}
- useEffect(()=>{void load()},[]);
+ useEffect(()=>{const timer=window.setTimeout(()=>{void load()},0);return()=>window.clearTimeout(timer)},[]);
  async function post(path:string,body:any,init:any={}){if(!session)return;setBusy(true);try{const r=await fetch(path,{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`,...(init.headers||{})},body:init.body??JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||'Request failed');return j}finally{setBusy(false)}}
  async function add(){const j=await post('/api/admin/leo/training/knowledge',form);if(j?.knowledge){setForm({...form,title:'',content:'',tags:'',source_url:''});await load()}}
  async function archive(id:string){await post('/api/admin/leo/training/knowledge',{id,status:'archived'});await load()}

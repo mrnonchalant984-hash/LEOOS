@@ -4,6 +4,7 @@ import { getOpenAI } from '@/lib/openai';
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import type { ProjectType } from '@/lib/pricing';
 import { getBuilderAvailability } from '@/lib/builders/providers';
+import { enforceUserRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -109,6 +110,8 @@ export async function POST(req: NextRequest) {
   try {
     const ctx = await getProfile(req);
     if (!ctx) return NextResponse.json({ error: 'Login required' }, { status: 401 });
+    const limited = await enforceUserRateLimit(ctx.user.id, 'project-build-deploy', 3, 3600);
+    if (limited) return limited;
     const body = await req.json();
     const userPrompt = String(body.prompt || '').trim();
     const customerProjectId = String(body.project_id || '');

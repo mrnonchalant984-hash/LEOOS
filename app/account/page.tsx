@@ -2,35 +2,42 @@
 import { useEffect, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function AccountPage() {
+  const router = useRouter();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const [email, setEmail] = useState('');
   const [sub, setSub] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(url && key));
 
   useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) { setLoading(false); return; }
+    if (!url || !key) return;
+    let active = true;
     const supabase = createBrowserClient(url, key);
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) { setLoading(false); return; }
+    void (async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (!active) return;
+      if (error || !data.user) { setLoading(false); return; }
       setEmail(data.user.email || '');
-      const { data: s } = await supabase.from('subscriptions').select('*').eq('user_id', data.user.id).eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle();
-      const endsAt = s?.ends_at || s?.current_period_end;
-      setSub(s ? { ...s, expired: Boolean(endsAt && new Date(endsAt) <= new Date()) } : null);
+      const { data: subscription } = await supabase.from('subscriptions').select('*')
+        .eq('user_id', data.user.id).eq('status', 'active')
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (!active) return;
+      const endsAt = subscription?.ends_at || subscription?.current_period_end;
+      setSub(subscription ? { ...subscription, expired: Boolean(endsAt && new Date(endsAt) <= new Date()) } : null);
       setLoading(false);
-    });
-  }, []);
+    })().catch(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [key, url]);
 
   async function logout() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || !key) return;
     const supabase = createBrowserClient(url, key);
     await supabase.auth.signOut();
     await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.assign('/');
+    router.replace('/');
   }
 
   if (loading) return <main className="mx-auto max-w-5xl px-4 py-16"><p className="text-zinc-400">Loading your account…</p></main>;

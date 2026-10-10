@@ -9,8 +9,23 @@ import {
   Users, Webhook, X, Bell, CircleHelp, ChevronDown, Building2,
   ScrollText, UserRound, Wallet, Layers3, TerminalSquare, LockKeyhole, Settings,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { resolveVisualIdentity } from '@/components/visual-identity';
+
+const SIDEBAR_PREFERENCE_EVENT = 'leonardx-sidebar-preference';
+function subscribeSidebarPreference(onChange: () => void) {
+  window.addEventListener('storage', onChange);
+  window.addEventListener(SIDEBAR_PREFERENCE_EVENT, onChange);
+  return () => {
+    window.removeEventListener('storage', onChange);
+    window.removeEventListener(SIDEBAR_PREFERENCE_EVENT, onChange);
+  };
+}
+function getSidebarCollapsed() {
+  try { return window.localStorage.getItem('leonardx-sidebar-collapsed') === '1'; }
+  catch { return false; }
+}
+function getServerSidebarCollapsed() { return false; }
 
 type NavItem = readonly [string, string, typeof LayoutDashboard];
 const groups: { label: string; items: NavItem[] }[] = [
@@ -50,14 +65,13 @@ export function LEOAppShell({ children, title = 'LeonardX', subtitle = 'Your sof
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const collapsed = useSyncExternalStore(subscribeSidebarPreference, getSidebarCollapsed, getServerSidebarCollapsed);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [isOwner, setIsOwner] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
-    try { setCollapsed(window.localStorage.getItem('leonardx-sidebar-collapsed') === '1'); } catch { /* preference storage is optional */ }
     let alive = true;
     fetch('/api/auth/me', { cache: 'no-store' }).then(async r => r.ok ? r.json() : null).then(data => {
       if (!alive) return;
@@ -74,11 +88,12 @@ export function LEOAppShell({ children, title = 'LeonardX', subtitle = 'Your sof
   ].filter((item, index, all) => all.findIndex(other => other.href === item.href && other.label === item.label) === index), [isOwner]);
   const results = destinations.filter(item => `${item.label} ${item.href} ${item.group}`.toLowerCase().includes(query.toLowerCase())).slice(0, 12);
 
-  const toggleCollapsed = useCallback(() => setCollapsed(previous => {
-    const next = !previous;
-    try { window.localStorage.setItem('leonardx-sidebar-collapsed', next ? '1' : '0'); } catch { /* optional */ }
-    return next;
-  }), []);
+  const toggleCollapsed = useCallback(() => {
+    try {
+      window.localStorage.setItem('leonardx-sidebar-collapsed', collapsed ? '0' : '1');
+      window.dispatchEvent(new Event(SIDEBAR_PREFERENCE_EVENT));
+    } catch { /* preference storage is optional */ }
+  }, [collapsed]);
   const openPalette = useCallback(() => { setPaletteOpen(true); setQuery(''); }, []);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
