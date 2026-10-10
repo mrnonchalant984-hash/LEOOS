@@ -21,7 +21,6 @@ if (dsn) {
       stackFrameVariables: false,
       frameContextLines: 0,
     },
-    autoSessionTracking: false,
     tracesSampleRate: parseSampleRate(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE),
     maxBreadcrumbs: 20,
     beforeSend: sanitizeSentryEvent,
