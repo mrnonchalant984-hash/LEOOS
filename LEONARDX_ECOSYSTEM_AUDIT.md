@@ -1,96 +1,105 @@
 # LeonardX ecosystem audit
 
-Audit date: 2026-10-09
+Audit date: 2026-10-10
 
-Founder identity verified in the product copy: Leonard Udoh. This audit inspects the implementation in this repository; a route or table is not treated as proof that the associated capability is operational.
+Product: LeonardX / LEO OS
 
-## Premium UI/UX transformation
+Founder identity: Leonard Udoh — Developer and Team Owner
+Assistant: Leo
 
-The latest design pass applies the requested midnight/obsidian system with restrained violet and cyan accents across the shared application shell and global surfaces. The homepage 3D is still the existing React Three Fiber scene; it was recolored to the new identity, softened, given lower device pixel ratio, reduced-motion behavior and a static fallback. No new graphics dependency was added.
+## Scope and method
 
-- Updated design tokens, app navigation, cards, fields, tables, status states, homepage, pricing, and about-page surfaces in [premium-theme.css](./app/premium-theme.css), imported by [root layout](./app/layout.tsx).
-- Adjusted the responsive shared workspace rail and retained its existing route groups, command palette, and mobile drawer behavior in [LEOAppShell](./components/LEOAppShell.tsx) (the implementation is styled by the global tokens; shell behavior was not replaced).
-- Updated the existing homepage's workflow illustration to be explicit that it is a preview, removed simulated `RUNNING` and `TOOLS CONNECTED` labels, replaced fictional Leo API calls with the currently implemented SDK example, and changed connector copy to conditional/accurate setup language in [homepage](./app/page.tsx) and [LandingExperience](./components/LandingExperience.tsx).
-- Recolored the existing marketing 3D and shared atmospheric 3D with indigo/violet/cyan lighting and geometry, reduced particle count, lower DPR, WebGL fallback and reduced-motion support in [Background3D](./components/Background3D.tsx).
-- The global styles provide the visual layer to existing route pages; this pass did not individually re-author every route's information architecture or perform human visual QA at every specified viewport. Routes requiring provider state or user-specific data continue to use their real application states.
-- The referenced live site could not be retrieved by the available browser fetch, so this pass used the supplied design brief and the checked-in product implementation.
+Inspected the current worktree, package scripts and installed Next.js version (16.3.6), route files, API handlers, relevant Supabase schema/migrations, API-key and payment code, SDK/CLI, templates, organizations, plugins, agents, analytics, docs/playground, and Vercel configuration. This audit distinguishes a route or schema object from an end-to-end verified capability.
 
-Route discovery from `app/` found public marketing, auth, dashboard/workspace, account, projects, agents, developer docs/API, billing/payment, integrations, teams, admin, support, and system routes. The exact route capability audit is maintained in the 13-feature status matrix below; page styling is global/shared, not a claim that every page was individually browser-tested.
+The worktree already contained uncommitted changes before this audit, including the IDE/workspace routes, CLI coordination helpers, SDK orchestration contracts, and related tests. Those were treated as existing work and preserved. The untracked `public/leonardx-logo.svg` was also preserved and excluded from this audit’s scope.
 
-## Status summary
+## Executive summary
 
-| Capability | Status | Evidence |
-|---|---|---|
-| Developer API keys | PARTIAL | [api-keys route](./app/api/developers/api-keys/route.ts), [API auth](./lib/api-auth.ts), [key core](./lib/api-keys-core.ts), [API-key migration](./supabase/migrations/20261008_api_keys.sql). Keys are hashed, scoped, expirable and revocable. Production database verification and complete authenticated integration coverage remain outstanding. |
-| Official SDK | PARTIAL | [SDK source](./packages/sdk/src/index.ts), [SDK README](./packages/sdk/README.md). The source matches the documented `LeoClient` contract, has typed errors, safe bearer handling and signature verification. It is buildable but private/unpublished and has no release pipeline. |
-| Webhooks | PARTIAL | [webhook core](./lib/webhooks-core.ts), [delivery worker](./lib/webhooks.ts), [developer webhook routes](./app/api/developers/webhooks), [v2 webhook routes](./app/api/v2/webhooks), [webhook migration](./supabase/migrations/20261008121000_webhooks.sql). HMAC, SSRF checks, bounded retry, delivery records, ownership checks, manual retry and a delivery claim field now exist, but two webhook table/route models coexist and production schema application is pending. |
-| Rate limits | PARTIAL | [API auth](./lib/api-auth.ts) and [schema rate-limit function](./supabase/schema.sql). API-key requests use a Postgres-backed per-key window and return 429 metadata. User/organization/plan limits and protection for all expensive authenticated endpoints are not implemented. |
-| Billing and credits | PARTIAL | [pricing](./lib/pricing.ts), [plan access](./lib/plan-access.ts), [payment webhook](./app/api/payment/webhook/route.ts), [payment functions](./supabase/schema.sql). Paystack signature verification, server-side plan state, and transactional credit deduction exist. Full concurrency and end-to-end Paystack tests require a configured test account/database. |
-| Templates marketplace | PARTIAL | [template data](./data/website-templates.ts), [export route](./app/api/templates/export/route.ts), [templates page](./app/templates/page.tsx). Search/display/export are present, but there are no real marketplace ownership, licensing, creator, rating, purchase or fulfilment systems. |
-| Teams and workspaces | PARTIAL | [organizations page](./app/organizations/page.tsx), [organization APIs](./app/api/organizations), [team page](./app/team/page.tsx), [organization migration](./supabase/migrations/20261009170000_organization_membership_hardening.sql). Organization creation, membership and owner-only member mutation are now wired; invitations, project migration and complete organization checks across all APIs still require work. |
-| Plugin architecture | PARTIAL | [plugin registry](./lib/plugins.ts), [plugin API](./app/api/plugins/route.ts). Versioned, permissioned, owner-registered manifests are validated and metadata-only; installation lifecycle, persistence and third-party execution are intentionally not enabled. |
-| AI agent workflows | PARTIAL | [agent manager](./lib/agents/manager.ts), [agent routes](./app/api/agents), [agent schema](./supabase/schema.sql). Runs, approvals, cancellation and history are persisted. A durable queue/worker, scheduling, resume/retry contract and operational monitoring are not demonstrated. |
-| CLI | PARTIAL | [CLI package](./packages/cli), [CLI entrypoint](./packages/cli/src/index.mjs). Login, secure local credential storage, project listing and project creation are implemented. It is not published and has no release CI yet. |
-| Community | MISSING | [Wall of Love](./app/wall-of-love/page.tsx) is testimonial collection, not a community product. No discussion, moderation or external community integration was found. |
-| Analytics and audit logs | PARTIAL | [analytics page](./app/analytics/page.tsx), [audit page](./app/audit/page.tsx), [audit API](./app/api/audit/route.ts), [schema event tables](./supabase/schema.sql). Usage and security-oriented tables exist, but product analytics and immutable security audit trails are not consistently populated by all important actions. |
-| Documentation and API playground | PARTIAL | [docs](./app/docs/page.tsx), [API docs](./app/docs/api/page.tsx), [SDK docs](./app/docs/sdk/page.tsx), [playground route](./app/api/docs/playground/route.ts), [API contract](./LEO-OS-API-V2.md). Navigation, examples and an allowlisted authenticated proxy now exist; client UI, broader endpoint coverage and complete v1/v2 reconciliation remain. |
+- No source implementation changes were made during the read-only audit phase; this file records findings before repairs.
+- Current test baseline: `npm test` passed 28/28 tests.
+- Current lint baseline: `npm run lint` failed with 18 errors and 20 warnings, primarily existing React effect-state and navigation lint findings in application pages/components.
+- Typecheck and production build were started for baseline verification; final completion status will be recorded in the production-readiness report.
+- `supabase migration list` confirmed that the five checked-in migrations are already applied to the linked database. No migration was pending at audit time.
+- Read-only remote schema inspection confirmed both webhook generations coexist. The single `webhook_deliveries` table has fields for both models, increasing the risk of incompatible delivery processing.
+- Important risks: webhook event delivery is not wired consistently; an unsigned-by-API-key website-audit endpoint can fetch arbitrary URLs; hosting-renewal Paystack webhook handling does not call the transaction verification helper; API request logging is not connected to the v2 handlers; organization roles do not consistently authorize project access; and agent execution has no durable worker.
 
-## Changes made in this audit
+## Feature status matrix
 
-- Added a canonical API-key scope allowlist for `read`, `write`, `projects:read`, and `projects:write`.
-- Made scope authorization hierarchical and fail closed in [api-auth.ts](./lib/api-auth.ts).
-- Reworked [api-keys route](./app/api/developers/api-keys/route.ts) to use the shared generator and hashing logic, validate expiry, return only safe metadata, and add authenticated revocation.
-- Repaired the SDK contract in [packages/sdk/src/index.ts](./packages/sdk/src/index.ts): `LeoClient`, typed API errors, 429 handling, injected fetch support, real project endpoint calls, and webhook signature verification.
-- Updated [packages/sdk/README.md](./packages/sdk/README.md) to match the implementation and explicitly state that the package is not published.
-- Expanded the root test command in [package.json](./package.json) to execute all repository test files rather than only the plan-builder test.
-- Added [@leo-os/cli](./packages/cli) with login, logout, project list and project create commands.
-- Added a metadata-only trusted [plugin registry](./lib/plugins.ts) and owner-protected registration API.
-- Added real template search/detail data paths through [template API](./app/api/templates/route.ts) and [template detail](./app/templates/[id]/page.tsx).
-- Added owner-protected organization creation/member mutation APIs and an additive workspace migration.
-- Added an allowlisted authenticated [API playground proxy](./app/api/docs/playground/route.ts).
-- Added bounded manual webhook retry and a claimed-at delivery field to reduce duplicate workers.
+Status values follow the requested categories: **IMPLEMENTED AND VERIFIED**, **PARTIALLY IMPLEMENTED**, **PRESENT BUT UNVERIFIED**, **MISSING**, or **BLOCKED BY EXTERNAL CONFIGURATION**.
 
-No database migration was added or run during this audit. Existing database changes were not applied.
+| # | Capability | Status | Evidence and limits |
+|---|---|---|---|
+| 1 | Developer API and keys | **PARTIALLY IMPLEMENTED** | [API-key route](./app/api/developers/api-keys/route.ts), [API auth](./lib/api-auth.ts), [key core](./lib/api-keys-core.ts), and [API-key migration](./supabase/migrations/20261008_api_keys.sql). Cryptographic random keys are SHA-256 hashed; one-time secret display, scopes, expiry, revocation and server-side key ownership checks exist. The active v2 auth uses `revoked`; the older unused [legacy helper](./lib/api-keys.ts) expects `revoked_at` and uses a separate non-atomic limiter. `recordApiRequest` has no call sites, so actual response/status/latency logs are not consistently recorded. Scope, abuse, revocation-race, and production integration coverage is incomplete. |
+| 2 | JavaScript/TypeScript SDK | **PARTIALLY IMPLEMENTED** | [SDK source](./packages/sdk/src/index.ts), [SDK package](./packages/sdk/package.json), and [SDK tests](./tests/sdk.test.mjs). Project list/create/status, typed errors, bearer auth, retry-after parsing, and webhook signature verification are present. The package is not published, endpoint coverage is narrow, and no automated release/provenance workflow is configured. Local package build was verified in the preceding implementation work; publication is intentionally not performed. |
+| 3 | Webhooks | **PARTIALLY IMPLEMENTED** | [API v2 management](./app/api/v2/webhooks/route.ts), [worker](./app/api/internal/webhooks/worker/route.ts), [developer endpoint flow](./app/api/developers/webhooks/route.ts), [legacy delivery service](./lib/webhooks.ts), and [webhook migrations](./supabase/migrations/20261008121000_webhooks.sql). HMAC, timestamp checks, HTTPS validation, delivery rows, timeouts, retry metadata, protected cron secret, and owner-scoped controls exist in portions. The public event catalog for the legacy path contains only `webhook.test`; the v2 event insert/dispatch pipeline is not wired. The worker selects the newest event by type rather than an event ID linked to each queued delivery, risking wrong payloads. Legacy endpoint secrets are plaintext in `webhook_endpoints`; the v2 `webhooks` model encrypts secrets. Current remote database has both schemas on `webhook_deliveries`. Retries use a daily Vercel cron schedule, unsuitable for minute-scale backoff. |
+| 4 | Rate limiting | **PARTIALLY IMPLEMENTED** | [v2 auth](./lib/api-auth.ts) calls a Postgres-backed per-key limiter; table/function definitions are in [schema.sql](./supabase/schema.sql). The alternate [legacy auth](./lib/api-keys.ts) counts rows and inserts per request non-atomically. Policies are not configurable by user, organization, or plan; expensive browser-session AI/build routes do not share this limiter. Limiter headers are limited to `Retry-After`. Remote presence of the RPC is subject to a separate read-only schema check; it is not represented by a dedicated tracked migration. |
+| 5 | Billing and credits | **PARTIALLY IMPLEMENTED** | [Pricing configuration](./lib/pricing.ts), [Paystack transaction verification](./lib/payments.ts), [payment initializer](./app/api/payment/initialize/route.ts), [payment verifier](./app/api/payment/verify/route.ts), [Paystack webhook](./app/api/payment/webhook/route.ts), [credit RPC](./supabase/schema.sql), and [payment migration](./supabase/migrations/20261009150000_fix_payment_feature_ambiguity.sql). Standard, Pro, and Unlimited exist, and monthly/quarterly/yearly amounts are environment-configured. Subscription payment confirmation calls Paystack’s verification API and an idempotent row-locking RPC; credit consumption is row-locked in SQL. The initializer ignores the result of inserting its pending payment row. Hosting-renewal webhook side effects are applied from signed event metadata without calling the transaction verification flow or confirming the registered amount/reference. Full Paystack integration tests require provider credentials and test transactions. |
+| 6 | Templates marketplace | **PARTIALLY IMPLEMENTED** | [Template data](./data/website-templates.ts), [listing/search API](./app/api/templates/route.ts), [export API](./app/api/templates/export/route.ts), and [template pages](./app/templates). Real static template metadata, search/filter and detail pages exist. Export generates a generic two-page scaffold with explicit client-content/contact placeholders rather than applying the selected template to a saved cloud project. No paid marketplace, licensing, creator, rating, purchase, or fulfilment flow exists; these are not represented as implemented. |
+| 7 | Teams and organizations | **PARTIALLY IMPLEMENTED** | [Organization APIs](./app/api/organizations), [organization migration](./supabase/migrations/20261009170000_organization_membership_hardening.sql), [organization schema](./supabase/schema.sql), and [projects API](./app/api/v2/projects/route.ts). Organizations and direct existing-user membership with role fields exist. The migration creates invitation storage, but no invitation send/accept flow is implemented. Member APIs require organization ownership, but roles are not enforced as capabilities and project queries continue to filter by individual `user_id`; joining an organization does not establish complete shared project access. Organization creation uses separate writes for organization and owner membership. |
+| 8 | Plugin system | **PARTIALLY IMPLEMENTED** | [Manifest/registry](./lib/plugins.ts) and [plugin route](./app/api/plugins/route.ts). The server validates versioned metadata and permissions, owner-gates registration, and does not execute arbitrary code—appropriate safety boundaries. Registry state is an in-memory `Map`, with no persistence, installation lifecycle, compatibility enforcement beyond a literal API version, or isolated runner. It is a trusted metadata registry, not a production plugin platform. |
+| 9 | AI agent workflows | **PARTIALLY IMPLEMENTED** | [Agent execution](./app/api/agents/run/route.ts), [approval](./app/api/agents/approve/route.ts), [cancellation](./app/api/agents/cancel/route.ts), [run history](./app/api/agents/runs/route.ts), [registry](./lib/agents/registry.ts), and [manager](./lib/agents/manager.ts). Runs and approvals persist and consequential agents can require explicit approval. Most work executes synchronously in the HTTP request. No durable queue/worker, scheduling, general retry/resume, or running-task cancellation/lease system was verified. Existing `background_tasks` table alone does not establish an operational worker. |
+| 10 | CLI | **PARTIALLY IMPLEMENTED** | [CLI package](./packages/cli), [CLI entrypoint](./packages/cli/src/index.mjs), [coordination helpers](./packages/cli/src/orchestration.mjs), and [CLI tests](./tests/cli-orchestration.test.mjs). Login validates against the real API before local secure-permission config storage; project listing/creation, local workspace linking, path fences, Git worktrees, and a bounded metadata scratchpad exist. `deploy --brief`/`ship` are intentionally unavailable because no API-key build/deployment contract exists; status is metadata, not streaming telemetry. Package is not published. |
+| 11 | Community | **MISSING** | No first-party community, moderated forum, or external community integration was found. Forum-style entries in [template data](./data/website-templates.ts) are customer website templates, not a LeonardX community. The Wall of Love is a testimonial feature, not a community. |
+| 12 | Analytics and audit logs | **PARTIALLY IMPLEMENTED** | [Analytics page](./app/analytics/page.tsx), [developer usage route](./app/api/developers/usage/route.ts), [API request-log schema](./supabase/schema.sql), [observability API](./app/api/observability/route.ts), and [admin overview](./app/api/admin/overview/route.ts). Actual AI usage, payment, deployment and system-event tables exist. `recordApiRequest` has no usage call sites; legacy `api_usage` rows are inserted during authentication with status `200` before the actual handler outcome. The page/API named `audit` is an unauthenticated external-site heuristic checker, not an immutable security audit log; it fetches a user-supplied URL with redirect following and requires an SSRF fix. |
+| 13 | Documentation and API playground | **PARTIALLY IMPLEMENTED** | [API docs](./app/docs/api/page.tsx), [SDK docs](./app/docs/sdk/page.tsx), [developer docs](./app/developers/docs/page.tsx), and [playground proxy](./app/api/docs/playground/route.ts). The playground is allowlisted to real local API paths and sends the supplied key to those endpoints without exposing server environment variables. It covers only a few read/write operations, has no verified request-size/rate-limit controls, and does not provide a comprehensive typed contract for all API versions. |
 
-## Security findings and controls
+## Route inventory
 
-- API key secrets are generated with cryptographic randomness and stored as SHA-256 hashes; plaintext is returned only at creation time.
-- API-key listing excludes hashes and secrets; revocation is scoped to the authenticated owner.
-- API authentication checks expiration, revocation, scope, request IDs and Postgres-backed rate limits.
-- Webhook delivery signs the exact JSON body with a timestamped HMAC and validates public HTTPS destinations, DNS resolution and private-address rejection.
-- Paystack webhook code verifies the provider signature before applying payment-side effects, but end-to-end idempotency/transaction verification should be tested against the live schema before launch.
-- The repository still contains two webhook models (`webhooks` and `webhook_endpoints`). This is the highest priority architecture cleanup because it can cause management and delivery state to diverge.
-- The plugin registry is process-memory only until a persistence migration is reviewed; it does not execute plugin code.
+The App Router page inventory was discovered from the repository (dynamic segments are shown literally). Not every route was interactively browser-tested; the inventory is not a claim of full UX acceptance.
 
-## Verification performed
+### Pages
 
-| Check | Result |
+`/`, `/about`, `/account`, `/admin`, `/admin/agents`, `/admin/announcements`, `/admin/leo/training`, `/admin/upgrade-history`, `/agents`, `/analytics`, `/api-keys`, `/app`, `/audit`, `/auth`, `/blog`, `/blog/build-website-10-minutes-5000`, `/blog/freelancers-ai-10x`, `/blog/leo-vs-chatgpt`, `/blog/leo-vs-chatgpt-nigeria`, `/blog/nigerian-freelancers-ai-10x`, `/contact`, `/dashboard`, `/dashboard/websites/[id]`, `/deployments`, `/developers`, `/developers/docs`, `/docs`, `/docs/api`, `/docs/sdk`, `/ide/[workspaceId]`, `/integrations`, `/leo-ai`, `/notifications`, `/observability`, `/organizations`, `/payment/callback`, `/payment/hosting-renewal`, `/payment/manual`, `/payment/website`, `/portfolio`, `/pricing`, `/privacy`, `/projects`, `/projects/[slug]`, `/refund-policy`, `/resources`, `/setup`, `/setup/keys`, `/status`, `/support`, `/team`, `/templates`, `/templates/[id]`, `/terms`, `/tutorials`, `/wall-of-love`, `/webhooks`, and `/whats-new`.
+
+### API route handlers
+
+Admin: `/api/admin/2fa`, `/api/admin/agents`, `/api/admin/announcements`, `/api/admin/hosting`, `/api/admin/leo/training/{audit,config,conflicts,documents,jobs,knowledge,memory,rollback,test,web}`, `/api/admin/overview`, `/api/admin/upgrade-history`.
+
+Agents and observability: `/api/agents/{approve,browser,cancel,run,runs,video}`, `/api/observability`, `/api/audit`.
+
+Auth and core product: `/api/auth/{login,logout,me,signup}`, `/api/build-deploy`, `/api/chat`, `/api/contact`, `/api/dashboard`, `/api/file-review`, `/api/generate-image`, `/api/generate-visual`, `/api/lead`, `/api/memory`, `/api/notifications`, `/api/research`, `/api/speak`, `/api/voice`, `/api/whats-new`.
+
+Developer platform: `/api/developers/{api-keys,usage}`, `/api/developers/webhooks`, `/api/developers/webhooks/{deliveries,test}`, `/api/docs/playground`, `/api/plugins`, `/api/v1/projects`, `/api/v1/projects/[id]`, `/api/v1/usage`, `/api/v2/me`, `/api/v2/projects`, `/api/v2/projects/[id]`, `/api/v2/projects/[id]/status`, `/api/v2/usage`, `/api/v2/webhooks`, `/api/v2/webhooks/[id]`, `/api/v2/webhooks/[id]/test`.
+
+Other operations: `/api/cron/{hosting,webhooks}`, `/api/google/{analytics,search-console/submit}`, `/api/hosting/renew`, `/api/internal/webhooks/worker`, `/api/organizations`, `/api/organizations/[id]/members`, `/api/payment/{initialize,verify,webhook}`, `/api/payment/website/initialize`, `/api/projects/chatbot/{chats,knowledge}`, `/api/projects/seo`, `/api/pricing`, `/api/setup/{context,payment-option,projects}`, `/api/templates`, `/api/templates/export`, `/api/testimonials`, `/api/workspaces/[id]/files`.
+
+## Database and deployment evidence
+
+- Local migration files: `20261008_api_keys.sql`, `20261008121000_webhooks.sql`, `20261009150000_fix_payment_feature_ambiguity.sql`, `20261009170000_organization_membership_hardening.sql`, and `20261009180000_webhook_delivery_claim.sql`.
+- `supabase migration list` returned matching local and remote versions for all five files; there was no pending migration at audit time.
+- Read-only remote `information_schema` inspection found `api_keys.revoked` (not `revoked_at`), `api_rate_limits`, `webhooks`, `webhook_endpoints`, `webhook_events`, `organization_invitations`, and a hybrid `webhook_deliveries` table containing columns for both webhook implementations. No row data or secrets were queried.
+- `schema.sql` is a broad schema snapshot with duplicated control-plane definitions. Several operational functions/tables appear in it without a clearly matching dedicated migration, so the file should not be blindly replayed against production.
+- `vercel.json` schedules hosting enforcement and webhook retries once per day. This satisfies a daily Hobby schedule but does not provide timely execution of the configured webhook retry backoff.
+- No migration was applied during this audit.
+
+## Worktree and baseline checks
+
+Initial branch was `main`, aligned with `origin/main`, with pre-existing modifications/untracked work including `.gitignore`, CLI and SDK files, IDE/workspace files, and tests. These were not reverted. `public/leonardx-logo.svg` remains untracked and is not included in audit scope.
+
+| Command / inspection | Audit-time result |
 |---|---|
-| `npm test` | PASS — 21 tests passed after expanding the test script. |
-| Targeted editor diagnostics for changed theme/home/3D files | PASS — no diagnostics reported. |
-| Local development smoke check | PASS — Next.js dev server became ready and served `/` and `/docs` with HTTP 200; no browser-page screenshot was available from the integrated browser tool. |
-| `npm run lint` | FAIL — repository-wide lint reports 18 errors and 20 warnings in existing pages/components, mostly React effect-state patterns, navigation, and escaped text. No errors were reported in the changed theme/home/3D files by targeted diagnostics. |
-| `npm run typecheck` | INCOMPLETE — `next typegen` succeeded; `tsc --noEmit` then remained silent beyond the observation window and was stopped. |
-| `node packages/cli/src/index.mjs --help` | PASS — help output rendered. |
-| `npm --prefix packages/sdk run build` | PASS — TypeScript SDK package compiled. |
-| `git diff --check` | PASS. |
-| `npm run build` | INCOMPLETE — Next.js started production compilation but produced no completion or failure output during the observation window and was stopped; not claimed as passed. |
-| Production database migration | NOT RUN, as required. |
+| `npm test` | PASS — 28 tests, 28 passed, 0 failed. Node emitted typeless-module performance warnings for TypeScript files executed with `--experimental-strip-types`. |
+| `npm run lint` | FAIL — 18 errors, 20 warnings. Errors include React `set-state-in-effect` and `immutability` diagnostics in existing account/admin/setup/auth-shell/pricing files. |
+| `npm run typecheck` | Started; completion not yet confirmed at this audit snapshot. |
+| `npm run build` | Started concurrently with the typecheck baseline; completion not yet confirmed. These overlapping checks should be rerun sequentially for authoritative results. |
+| `supabase migration list` | PASS — all five local versions matched the linked database. |
+| Remote schema read-only query | PASS — schema columns inspected; both webhook generations and shared delivery table confirmed. |
 
-## External setup still required
+## Highest-priority repair order
 
-- Supabase production schema must be inspected and the two webhook models consolidated through a reviewed migration.
-- Paystack, Vercel, GitHub, OpenAI and email/provider credentials must be configured in the deployment environment for their respective integrations.
-- SDK publication requires an npm package decision, provenance/CI configuration, versioning, and a release process.
-- A CLI requires an API contract and credential-storage decision.
-- Durable agent scheduling requires a real worker/queue and a scheduler; Vercel Hobby cron limits are not sufficient for frequent execution.
+1. Prevent unsigned/unverified Paystack hosting-renewal side effects and fail payment initialization when the pending payment row was not persisted.
+2. Harden the public URL-audit fetch against SSRF (authentication, DNS/private-address checks, redirect validation, bounded response/time).
+3. Consolidate or explicitly retire the duplicate API-key and webhook implementations without deleting production data; preserve existing delivery records with an additive migration only if needed.
+4. Connect v2 API outcomes to request logs and make rate-limit behavior auditable; first verify the linked RPC definition and migration history.
+5. Define the actual org role/project-sharing contract before changing project authorization; implement invitation acceptance only with secure token handling and transaction-safe membership.
+6. Do not expose scheduled agents, plugin execution, CLI deploy/ship, or marketplace purchases as operational until the required worker, sandbox, API, or fulfilment integration exists.
 
-## Remaining defects and recommended order
+## Not established by this audit
 
-1. Consolidate webhook storage, add duplicate-event keys, apply the claimed-at migration, and add integration tests against Supabase.
-2. Enforce organization ownership in every project, credentials, webhook and API query, then add invitation acceptance.
-3. Add shared rate-limit policy by user, organization and plan to expensive AI/build routes.
-4. Add playground client UI and reconcile all v1/v2 SDK/documentation contracts.
-5. Add durable agent worker/scheduler behavior before exposing scheduled workflows.
-6. Add CLI/plugin release CI and persistence before calling those ecosystems complete.
-7. Re-run lint, typecheck and production build after the existing code-quality backlog is addressed.
+No claim is made that all 13 capabilities are production-complete, that every route has been browser-tested at all breakpoints, that Paystack/Vercel/OpenAI/GitHub operations succeeded live, or that any new database migration or package publication has occurred.
+
+## Follow-up repairs and final verification
+
+The initial audit above was completed before implementation. Targeted follow-up repairs are documented in [LEONARDX_PRODUCTION_READINESS_REPORT.md](./LEONARDX_PRODUCTION_READINESS_REPORT.md). In brief, they added a per-user database-backed rate-limit migration and helper, bounded/authenticated public-site auditing with DNS-pinned fetch and redirect validation, verified and idempotent Paystack hosting renewal handling, pending-payment persistence checks, and selected UI/runtime-state fixes.
+
+The two new migrations are additive but remain unapplied because `SUPABASE_DB_PASSWORD` is unavailable and the linked database dry run failed authentication. No database mutation occurred. Final source checks completed with `npm run verify`: typecheck passed, ESLint had zero errors and 12 warnings, 32 tests passed, and Next.js 16.3.6 production build generated all 149 routes. Browser/responsive and live provider checks were not completed. See the production-readiness report for remaining defects and external setup.

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 const plans = ["standard", "pro", "unlimited"] as const;
 const periods = ["monthly", "quarterly", "yearly"] as const;
 const names = { standard: "STANDARD", pro: "PRO", unlimited: "UNLIMITED" };
@@ -8,6 +9,7 @@ const services = [
   ["code-review", "Code Review", 2000000],
 ] as const;
 export function PricingPlans() {
+  const router = useRouter();
   const [period, setPeriod] = useState<(typeof periods)[number]>("monthly");
   const [prices, setPrices] = useState<Record<string, number | null>>({});
   const [user, setUser] = useState(false);
@@ -23,39 +25,47 @@ export function PricingPlans() {
   }, []);
   async function buy(plan: string) {
     if (!user) {
-      location.href = "/auth";
+      router.push("/auth");
       return;
     }
     setBusy(plan);
     setMsg("");
-    const r = await fetch("/api/payment/initialize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "plan", plan, billing_period: period }),
-    });
-    const d = await r.json();
-    setBusy("");
-    if (d.authorization_url) {
-      location.href = d.authorization_url;
-    } else setMsg(d.error || "Payment could not be started.");
+    try {
+      const r = await fetch("/api/payment/initialize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "plan", plan, billing_period: period }),
+      });
+      const d = await r.json();
+      if (d.authorization_url) window.location.assign(d.authorization_url);
+      else setMsg(d.error || "Payment could not be started.");
+    } catch {
+      setMsg("Payment could not be started. Check your connection and try again.");
+    } finally {
+      setBusy("");
+    }
   }
   async function buyService(item_key: string) {
     if (!user) {
-      location.href = "/auth";
+      router.push("/auth");
       return;
     }
     setBusy(item_key);
     setMsg("");
-    const r = await fetch("/api/payment/initialize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "service", item_key }),
-    });
-    const d = await r.json();
-    setBusy("");
-    if (d.authorization_url) {
-      location.href = d.authorization_url;
-    } else setMsg(d.error || "Payment could not be started.");
+    try {
+      const r = await fetch("/api/payment/initialize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "service", item_key }),
+      });
+      const d = await r.json();
+      if (d.authorization_url) window.location.assign(d.authorization_url);
+      else setMsg(d.error || "Payment could not be started.");
+    } catch {
+      setMsg("Payment could not be started. Check your connection and try again.");
+    } finally {
+      setBusy("");
+    }
   }
   return (
     <>

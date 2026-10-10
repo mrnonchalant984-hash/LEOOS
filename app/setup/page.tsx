@@ -1,10 +1,18 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { GlassCard } from "@/components/GlassCard";
 import { WEBSITE_TYPES, TYPE_QUESTIONS, DB_NEEDED } from "@/lib/website-types";
 import { LEO_TEMPLATES } from "@/data/website-templates";
 import { createBrowserClient } from "@supabase/ssr";
 import type { ProjectType } from "@/lib/pricing";
+const DEFAULT_QUESTIONS = [
+  "What is the business/project name?",
+  "Who is the audience?",
+  "What content/assets must be supplied?",
+  "Are payment, booking or accounts required?",
+  "What contact links should be used?",
+];
 const icons = [
   "🏢",
   "💼",
@@ -28,6 +36,7 @@ const icons = [
   "📄",
 ];
 export default function Setup() {
+  const router = useRouter();
   const [loc, setLoc] = useState<any>();
   const [type, setType] = useState("");
   const [projectType, setProjectType] = useState<ProjectType>("website");
@@ -42,6 +51,10 @@ export default function Setup() {
   >(null);
   const [business, setBusiness] = useState("");
   const [saving, setSaving] = useState(false);
+  const chooseType = (value: string) => {
+    setType(value);
+    setAnswers((TYPE_QUESTIONS[value] || DEFAULT_QUESTIONS).map(() => ""));
+  };
   useEffect(() => {
     let active = true;
     const supabase = createBrowserClient(
@@ -53,7 +66,7 @@ export default function Setup() {
       if (!active) return;
       if (!data.session) {
         const next = `${window.location.pathname}${window.location.search}`;
-        window.location.assign(`/auth?next=${encodeURIComponent(next)}`);
+        router.replace(`/auth?next=${encodeURIComponent(next)}`);
         return;
       }
       const response = await fetch("/api/setup/projects", {
@@ -72,39 +85,30 @@ export default function Setup() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [router]);
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const requestedProjectType = params.get("project_type");
-    if (["website", "web_app", "saas", "mobile_app", "game"].includes(requestedProjectType || "")) {
-      setProjectType(requestedProjectType as ProjectType);
-    }
-    const templateId = params.get("template");
-    const template = LEO_TEMPLATES.find((item) => item.id === templateId);
-    if (!template) return;
-    setSelectedTemplate(template);
-    setType(template.type);
-    if (template.type === "saas") setProjectType("saas");
-    setBusiness(template.name);
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      const requestedProjectType = params.get("project_type");
+      if (["website", "web_app", "saas", "mobile_app", "game"].includes(requestedProjectType || "")) {
+        setProjectType(requestedProjectType as ProjectType);
+      }
+      const templateId = params.get("template");
+      const template = LEO_TEMPLATES.find((item) => item.id === templateId);
+      if (!template) return;
+      setSelectedTemplate(template);
+      setType(template.type);
+      setAnswers((TYPE_QUESTIONS[template.type] || DEFAULT_QUESTIONS).map(() => ""));
+      if (template.type === "saas") setProjectType("saas");
+      setBusiness(template.name);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
   useEffect(() => {
     fetch("/api/setup/context")
       .then((r) => r.json())
       .then(setLoc);
   }, []);
-  useEffect(() => {
-    setAnswers(
-      (
-        TYPE_QUESTIONS[type] || [
-          "What is the business/project name?",
-          "Who is the audience?",
-          "What content/assets must be supplied?",
-          "Are payment, booking or accounts required?",
-          "What contact links should be used?",
-        ]
-      ).map(() => ""),
-    );
-  }, [type]);
   const questions = TYPE_QUESTIONS[type] || TYPE_QUESTIONS.company;
   const projectTypeLabel: Record<ProjectType, string> = {
     website: "website",
@@ -172,7 +176,7 @@ export default function Setup() {
           {WEBSITE_TYPES.map(([id, label], i) => (
             <button
               key={id}
-              onClick={() => setType(id)}
+                onClick={() => chooseType(id)}
               className="rounded-2xl border border-white/10 bg-white/[.04] p-5 text-left transition hover:-translate-y-1 hover:border-orange-400"
             >
               <div className="text-3xl">{icons[i]}</div>
@@ -190,7 +194,7 @@ export default function Setup() {
               <button
                 onClick={() => {
                   setSelectedTemplate(null);
-                  setType("");
+                  chooseType("");
                 }}
                 className="text-sm text-orange-300"
               >
@@ -329,7 +333,7 @@ export default function Setup() {
                   });
                   const j = await r.json();
                   if (!r.ok || !j.project) throw new Error(j.error || "Could not save project.");
-                  window.location.assign(`/dashboard/websites/${j.project.id}`);
+                  router.push(`/dashboard/websites/${j.project.id}`);
                 } catch (error) {
                   alert(error instanceof Error ? error.message : "Could not save project.");
                   setSaving(false);

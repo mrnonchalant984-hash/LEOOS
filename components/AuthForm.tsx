@@ -1,13 +1,31 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, UserRound } from 'lucide-react';
 
 type Mode = 'login' | 'signup' | 'forgot' | 'reset';
 
+function subscribeAuthLocation(onChange: () => void) {
+  window.addEventListener('popstate', onChange);
+  window.addEventListener('hashchange', onChange);
+  return () => {
+    window.removeEventListener('popstate', onChange);
+    window.removeEventListener('hashchange', onChange);
+  };
+}
+
+function getAuthLocationMode(): Mode {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('mode') === 'reset' || window.location.hash.includes('type=recovery') ? 'reset' : 'login';
+}
+
+function getServerAuthLocationMode(): Mode { return 'login'; }
+
 export function AuthForm() {
-  const [mode, setMode] = useState<Mode>('login');
+  const locationMode = useSyncExternalStore(subscribeAuthLocation, getAuthLocationMode, getServerAuthLocationMode);
+  const [modeOverride, setModeOverride] = useState<Mode | null>(null);
+  const mode = modeOverride ?? locationMode;
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,12 +35,7 @@ export function AuthForm() {
   const [statusError, setStatusError] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('mode') === 'reset' || window.location.hash.includes('type=recovery')) setMode('reset');
-  }, []);
-
-  function changeMode(next: Mode) { setMode(next); setStatus(''); setStatusError(false); }
+  function changeMode(next: Mode) { setModeOverride(next); setStatus(''); setStatusError(false); }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -43,7 +56,7 @@ export function AuthForm() {
         const { error } = await supabase.auth.updateUser({ password });
         if (error) throw error;
         setStatus('Your password has been updated. You can now sign in with the new password.');
-        setMode('login');
+        setModeOverride('login');
         setPassword(''); setConfirmPassword('');
         return;
       }
