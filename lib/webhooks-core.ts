@@ -4,7 +4,12 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 export const WEBHOOK_EVENTS = ['webhook.test'] as const;
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 export const MAX_ATTEMPTS = 6; // first try + 5 retries
+export const DELIVERY_CLAIM_LEASE_MS = 5 * 60 * 1000;
 const RETRY_DELAYS_SEC = [60, 300, 1800, 7200, 21600];
+
+export function staleDeliveryClaimCutoff(nowMs = Date.now()) {
+  return new Date(nowMs - DELIVERY_CLAIM_LEASE_MS).toISOString();
+}
 
 export function generateWebhookSecret() { return 'whsec_' + randomBytes(32).toString('base64url'); }
 

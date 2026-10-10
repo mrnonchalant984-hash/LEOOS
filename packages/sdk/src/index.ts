@@ -25,8 +25,8 @@ export class LeoClient {
       if (params?.status) query.set('status', params.status);
       return this.request<ApiResponse<Project[]>>(`/api/v1/projects${query.size ? `?${query}` : ''}`);
     },
-    create: (input: { project_name: string; type?: string }) => this.request<ApiResponse<Project>>('/api/v2/projects', { method: 'POST', body: JSON.stringify(input) }),
-    status: (id: string) => this.request<ApiResponse<ProjectStatus>>(`/api/v2/projects/${encodeURIComponent(id)}/status`),
+    create: (input: { project_name: string; type?: string }) => this.request<ApiResponse<Project>>('/api/v1/projects', { method: 'POST', body: JSON.stringify(input) }),
+    status: (id: string) => this.request<ApiResponse<ProjectStatus>>(`/api/v1/projects/${encodeURIComponent(id)}/status`),
   };
   private readonly options: Options;
   constructor(options: Options) {

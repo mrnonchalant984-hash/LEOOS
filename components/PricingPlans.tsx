@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-const plans = ["standard", "pro", "unlimited"] as const;
+import { formatNairaKobo } from "@/lib/pricing";
+const plans = ["standard", "pro", "business"] as const;
 const periods = ["monthly", "quarterly", "yearly"] as const;
-const names = { standard: "STANDARD", pro: "PRO", unlimited: "UNLIMITED" };
+const names = { standard: "STANDARD", pro: "PRO", business: "BUSINESS" };
 const services = [
   ["ai-mockup", "AI Mockup", 5000000],
   ["code-review", "Code Review", 2000000],
@@ -98,9 +99,10 @@ export function PricingPlans() {
               </p>
               <div className="mt-6 text-3xl font-black text-yellow-300">
                 {price
-                  ? `₦${(price / 100).toLocaleString()}`
-                  : "Price not configured"}
+                  ? formatNairaKobo(price)
+                  : "Price unavailable"}
               </div>
+              <p className="mt-1 text-xs text-zinc-500">{period === "monthly" ? "per month · billed monthly" : `total billed ${period}`}</p>
               <button
                 disabled={!price || !!busy}
                 onClick={() => buy(plan)}

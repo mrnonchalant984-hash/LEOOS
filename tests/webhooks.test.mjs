@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { signatureHeader, verifySignature, nextAttemptDelaySec, validateEndpointUrl, isPrivateIp, parseEvents, generateWebhookSecret, MAX_ATTEMPTS } from '../lib/webhooks-core.ts';
+import { signatureHeader, verifySignature, nextAttemptDelaySec, validateEndpointUrl, isPrivateIp, parseEvents, generateWebhookSecret, MAX_ATTEMPTS, DELIVERY_CLAIM_LEASE_MS, staleDeliveryClaimCutoff } from '../lib/webhooks-core.ts';
 
 const secret = generateWebhookSecret();
 const body = JSON.stringify({ type: 'webhook.test' });
@@ -21,6 +21,11 @@ test('retry backoff grows and stops after MAX_ATTEMPTS', () => {
   assert.equal(nextAttemptDelaySec(2), 300);
   assert.equal(nextAttemptDelaySec(MAX_ATTEMPTS - 1) > nextAttemptDelaySec(1), true);
   assert.equal(nextAttemptDelaySec(MAX_ATTEMPTS), null);
+});
+test('stuck delivery claims become eligible for recovery after a bounded lease', () => {
+  const now = Date.parse('2026-10-10T12:00:00.000Z');
+  assert.equal(DELIVERY_CLAIM_LEASE_MS, 5 * 60 * 1000);
+  assert.equal(staleDeliveryClaimCutoff(now), '2026-10-10T11:55:00.000Z');
 });
 test('endpoint URL validation blocks unsafe targets', () => {
   const bad = ['http://example.com/x', 'https://localhost/x', 'https://127.0.0.1/x', 'https://10.0.0.5/x', 'https://192.168.1.2/x',

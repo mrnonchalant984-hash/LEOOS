@@ -14,7 +14,7 @@ export async function getEffectiveUserPlan(userId: string, isOwner = false) {
   const periodEnd = data?.current_period_end || data?.ends_at;
   const active = Boolean(data && (!periodEnd || new Date(periodEnd) > new Date()));
   const key = active ? String(data?.plan || 'free').toLowerCase() : 'free';
-  const planKey = (key in { free:1, standard:1, pro:1, unlimited:1 } ? key : 'free') as PlanKey | 'free';
+  const planKey = (key in { free:1, standard:1, pro:1, unlimited:1, business:1 } ? key : 'free') as PlanKey | 'free';
   return { ...getPlan(planKey), owner: false, subscription: active ? data : null };
 }
 

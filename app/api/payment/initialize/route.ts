@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest, adminSupabase } from '@/lib/auth';
-import { getPlanPrice, planConfig, type BillingPeriod, type PaidPlanKey } from '@/lib/pricing';
+import { getPlanPrice, resolvePaidPlan, type BillingPeriod } from '@/lib/pricing';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
@@ -32,11 +32,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null);
     const requestedPlan = typeof body?.plan === 'string' ? body.plan : '';
     const requestedPeriod = typeof body?.billing_period === 'string' ? body.billing_period : '';
-    if (!Object.hasOwn(planConfig, requestedPlan) || !billingPeriods.includes(requestedPeriod as BillingPeriod)) {
+    const plan = resolvePaidPlan(requestedPlan);
+    if (!plan || !billingPeriods.includes(requestedPeriod as BillingPeriod)) {
       return NextResponse.json({ error: 'Choose a valid plan and billing period.' }, { status: 400 });
     }
 
-    const plan = requestedPlan as PaidPlanKey;
     const billingPeriod = requestedPeriod as BillingPeriod;
     const amount = getPlanPrice(plan, billingPeriod);
     if (!amount || !Number.isSafeInteger(amount) || amount <= 0) {

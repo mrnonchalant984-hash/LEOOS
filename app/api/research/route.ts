@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOpenAI, LEO_SYSTEM_PROMPT } from '@/lib/openai';
+import { getLeoSystemPrompt, getOpenAI, LEO_PLAN_TERMINOLOGY } from '@/lib/openai';
 import { getProfile } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const response = await getOpenAI().responses.create({
       model: process.env.LEO_RESEARCH_MODEL || 'gpt-5.6-luna',
       tools: [{ type: 'web_search' }],
-      input: `${LEO_SYSTEM_PROMPT}\n\nResearch the user's request using current web information. Distinguish verified current facts from uncertainty. For AI-tool recommendations, compare the user's goal, current capabilities, free/free-tier availability when verified, important limitations, and official websites. Never invent pricing or capabilities.\n\nUser request: ${query}`,
+      input: `${getLeoSystemPrompt()}\n\n${LEO_PLAN_TERMINOLOGY}\n\nResearch the user's request using current web information. Distinguish verified current facts from uncertainty. For AI-tool recommendations, compare the user's goal, current capabilities, free/free-tier availability when verified, important limitations, and official websites. Never invent pricing or capabilities.\n\nUser request: ${query}`,
     });
 
     return NextResponse.json({ reply: response.output_text || 'No research result was returned.', live: true }, {

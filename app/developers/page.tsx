@@ -15,7 +15,7 @@ export default function Developers() {
       </div>
     </div>
     <div className="metric-grid mt-3">
-      <div className="metric"><Code2 size={16}/><strong>v1 / v2</strong><small>Documented API routes</small></div>
+      <div className="metric"><Code2 size={16}/><strong>v1</strong><small>Public API version</small></div>
       <div className="metric"><ShieldCheck size={16}/><strong>Scoped</strong><small>API key access</small></div>
       <div className="metric"><Webhook size={16}/><strong>HMAC</strong><small>Webhook test signing</small></div>
       <div className="metric"><Terminal size={16}/><strong>Local</strong><small>SDK and CLI packages</small></div>
@@ -24,7 +24,7 @@ export default function Developers() {
       <Panel>
         <div className="panel-title">API surface</div>
         <div className="panel-subtitle">Routes currently implemented for API-key access.</div>
-        <div className="code-block mt-4"><span className="accent">GET</span> /api/v1/projects<br/><span className="accent">GET</span> /api/v2/me<br/><span className="accent">GET</span> /api/v2/projects<br/><span className="accent">POST</span> /api/v2/projects<br/><span className="accent">GET</span> /api/v2/projects/:id/status<br/><span className="gold-text">Authorization:</span> Bearer leo_live_…<br/><span className="green-text">X-Request-ID:</span> returned for API requests</div>
+        <div className="code-block mt-4"><span className="accent">GET</span> /api/v1/me<br/><span className="accent">GET</span> /api/v1/projects<br/><span className="accent">POST</span> /api/v1/projects<br/><span className="accent">GET</span> /api/v1/projects/:id/status<br/><span className="accent">GET</span> /api/v1/usage<br/><span className="gold-text">Authorization:</span> Bearer leo_live_…<br/><span className="green-text">X-Request-ID:</span> returned for API requests</div>
       </Panel>
       <Panel>
         <div className="panel-title">Developer resources</div>

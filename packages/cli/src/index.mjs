@@ -50,7 +50,7 @@ async function main(args) {
     const url = new URL(baseUrl);
     if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && url.hostname === 'localhost')) || url.username || url.password || url.search || url.hash) throw new Error('Use an HTTPS base URL (HTTP is allowed only for localhost), without embedded credentials or query parameters.');
     const normalizedBaseUrl = url.toString().replace(/\/$/, '');
-    const response = await fetch(`${normalizedBaseUrl}/api/v2/me`, { headers: { authorization: `Bearer ${apiKey}` } });
+    const response = await fetch(`${normalizedBaseUrl}/api/v1/me`, { headers: { authorization: `Bearer ${apiKey}` } });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body?.error?.message || `Credential validation failed (${response.status}).`);
     saveConfig({ apiKey, baseUrl: normalizedBaseUrl }); process.stdout.write(`Authenticated as ${body?.data?.email || 'LEO OS API user'}. Credentials saved locally.\n`); return;
@@ -59,7 +59,7 @@ async function main(args) {
   if (command === 'init') {
     const workspaceId = resource;
     if (!workspaceId || !/^[\w-]{1,80}$/.test(workspaceId)) throw new Error('Provide a valid workspace id: leo init <workspace-id>');
-    await api(`/api/v2/projects/${encodeURIComponent(workspaceId)}/status`);
+    await api(`/api/v1/projects/${encodeURIComponent(workspaceId)}/status`);
     const directory = resolve(process.cwd(), '.leo'); const linkFile = join(directory, 'config.json');
     if (existsSync(linkFile)) throw new Error('This directory already has a .leo/config.json link. Remove it manually if you intend to relink.');
     mkdirSync(directory, { recursive: true });
@@ -68,7 +68,7 @@ async function main(args) {
   }
   if (command === 'status') {
     const { workspaceId } = readWorkspaceLink();
-    const result = await api(`/api/v2/projects/${encodeURIComponent(workspaceId)}/status`);
+    const result = await api(`/api/v1/projects/${encodeURIComponent(workspaceId)}/status`);
     process.stdout.write(JSON.stringify(result.data, null, 2) + '\n'); return;
   }
   if (command === 'deploy') {
@@ -117,7 +117,7 @@ async function main(args) {
   if (command === 'projects' && resource === 'list') { process.stdout.write(JSON.stringify(await api(`/api/v1/projects${option(args, '--status') ? `?status=${encodeURIComponent(option(args, '--status'))}` : ''}`), null, 2) + '\n'); return; }
   if (command === 'projects' && resource === 'create') {
     const name = action; if (!name) throw new Error('A project name is required.');
-    process.stdout.write(JSON.stringify(await api('/api/v2/projects', { method: 'POST', body: JSON.stringify({ project_name: name, type: option(args, '--type') || 'web_app' }) }), null, 2) + '\n'); return;
+    process.stdout.write(JSON.stringify(await api('/api/v1/projects', { method: 'POST', body: JSON.stringify({ project_name: name, type: option(args, '--type') || 'web_app' }) }), null, 2) + '\n'); return;
   }
   throw new Error('Unknown command. Run leonardx --help.');
 }

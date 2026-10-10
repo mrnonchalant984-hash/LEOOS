@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProfile, adminSupabase } from '@/lib/auth';
+import { getPlanDisplayName } from '@/lib/pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     user: { name: displayName, email: ctx.user.email },
     owner: isOwner,
-    plan: isOwner ? 'OWNER' : hasPaidAccess ? subscription?.plan?.toUpperCase() || 'FREE' : 'FREE',
+    plan: isOwner ? 'OWNER' : hasPaidAccess ? getPlanDisplayName(subscription?.plan || 'free') : 'FREE',
     status: isOwner ? 'owner' : hasPaidAccess ? subscription?.status || 'active' : subscription ? 'expired' : 'free',
     billingPeriod: subscription?.billing_period || null,
     endsAt,

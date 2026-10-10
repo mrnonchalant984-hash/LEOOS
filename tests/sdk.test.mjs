@@ -14,11 +14,17 @@ test('sends bearer key to the right URL and returns parsed data', async () => {
   assert.equal(seen.auth, 'Bearer leo_live_abc');
   assert.equal(out.data[0].id, '1');
 });
+test('project creation uses the versioned v1 write route', async () => {
+  let seen;
+  const leo = new LeoClient({ apiKey: 'leo_live_abc', baseUrl: 'https://api.example.com', fetch: async (url, init) => { seen = { url: String(url), method: init.method }; return json(201, { data: { id: 'p1' }, request_id: 'r1' }); } });
+  await leo.projects.create({ project_name: 'Example' });
+  assert.deepEqual(seen, { url: 'https://api.example.com/api/v1/projects', method: 'POST' });
+});
 test('project status uses a narrow authenticated status endpoint', async () => {
   let seen;
   const leo = new LeoClient({ apiKey: 'leo_live_abc', baseUrl: 'https://api.example.com', fetch: async (url) => { seen = String(url); return json(200, { data: { id: 'a/b', status: 'draft' }, request_id: 'r1' }); } });
   const result = await leo.projects.status('a/b');
-  assert.equal(seen, 'https://api.example.com/api/v2/projects/a%2Fb/status');
+  assert.equal(seen, 'https://api.example.com/api/v1/projects/a%2Fb/status');
   assert.equal(result.data.status, 'draft');
 });
 test('API errors carry status, code and request id', async () => {

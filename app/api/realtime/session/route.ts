@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOpenAI, LEO_SYSTEM_PROMPT } from '@/lib/openai';
+import { getLeoSystemPrompt, getOpenAI, LEO_PLAN_TERMINOLOGY } from '@/lib/openai';
 import { getProfile } from '@/lib/auth';
 export const runtime = 'nodejs';
 const validVoices = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'] as const;
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     const model = process.env.LEO_REALTIME_MODEL || 'gpt-realtime';
     const response = await getOpenAI().realtime.clientSecrets.create({
       expires_after: { anchor: 'created_at', seconds: 600 },
-      session: { type: 'realtime', model, instructions: `${LEO_SYSTEM_PROMPT}\n\nYou are live Leo in LEO OS. Speak naturally, clearly and concisely.`, output_modalities: ['audio'], audio: { input: { turn_detection: { type: 'server_vad', create_response: true, interrupt_response: true, threshold: 0.5, silence_duration_ms: 500, prefix_padding_ms: 300 } }, output: { voice } } },
+      session: { type: 'realtime', model, instructions: `${getLeoSystemPrompt()}\n\n${LEO_PLAN_TERMINOLOGY}\n\nYou are live Leo in LEO OS. Speak naturally, clearly and concisely.`, output_modalities: ['audio'], audio: { input: { turn_detection: { type: 'server_vad', create_response: true, interrupt_response: true, threshold: 0.5, silence_duration_ms: 500, prefix_padding_ms: 300 } }, output: { voice } } },
     });
     return NextResponse.json({ client_secret: { value: response.value, expires_at: response.expires_at }, model, voice });
   } catch (error) {

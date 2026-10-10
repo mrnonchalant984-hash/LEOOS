@@ -46,7 +46,7 @@ export default function DeveloperDocsPage() {
 
     <Section id="scopes" title="Scopes">
       <p>Keys accept the scopes <code>read</code>, <code>write</code>, <code>projects:read</code>, and <code>projects:write</code>. Each route checks its declared scope; a denied request returns <code>403 INSUFFICIENT_SCOPE</code>.</p>
-      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-zinc-400"><tr><th className="py-2 pr-4">Route</th><th className="py-2">Required scope</th></tr></thead><tbody className="divide-y divide-zinc-800"><tr><td className="py-2 pr-4"><code>GET /api/v1/projects</code>, project reads</td><td className="py-2"><code>read</code></td></tr><tr><td className="py-2 pr-4"><code>POST /api/v2/projects</code></td><td className="py-2"><code>write</code></td></tr></tbody></table></div>
+      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-zinc-400"><tr><th className="py-2 pr-4">Route</th><th className="py-2">Required scope</th></tr></thead><tbody className="divide-y divide-zinc-800"><tr><td className="py-2 pr-4"><code>GET /api/v1/me</code>, project reads, usage and status</td><td className="py-2"><code>read</code></td></tr><tr><td className="py-2 pr-4"><code>POST /api/v1/projects</code></td><td className="py-2"><code>write</code></td></tr></tbody></table></div>
     </Section>
 
     <Section id="projects" title="List projects">
@@ -88,7 +88,7 @@ export default function DeveloperDocsPage() {
     </Section>
 
     <Section id="cli" title="Command-line client">
-      <p>The repository includes a local <code>@leo-os/cli</code> package. Login validates credentials against <code>/api/v2/me</code>; project list/create and linked-project status use existing API routes.</p>
+      <p>The repository includes a local <code>@leo-os/cli</code> package. Login validates credentials against <code>/api/v1/me</code>; project list/create and linked-project status use the v1 API.</p>
       <Code>{`node packages/cli/src/index.mjs login --api-key "$LEO_API_KEY" --base-url https://your-leonardx-domain\nnode packages/cli/src/index.mjs projects list\nnode packages/cli/src/index.mjs projects create "My app" --type web_app`}</Code>
       <p>The package is not confirmed published. <code>leo deploy --brief</code> and <code>leo ship</code> currently stop without submitting a task or triggering a deployment because API-key dispatch endpoints are not available.</p>
       <p><Link href="/cli" className="text-yellow-300">Open the interactive CLI guide</Link>.</p>
@@ -99,12 +99,12 @@ export default function DeveloperDocsPage() {
     </Section>
 
     <Section id="versions" title="Versions">
-      <p>The API is versioned in the URL path. Everything here is <code>v1</code>. Backwards-incompatible changes will ship under a new version path, and v1 keeps working.</p>
+      <p>The public API uses <code>/api/v1</code>. Existing <code>/api/v2</code> routes remain as compatibility endpoints for clients already using them; new integrations should use v1. The OpenAPI document is available at <a className="text-yellow-300" href="/api/openapi">/api/openapi</a>. Its document version <code>1.0.0</code> is distinct from the URL API version and plugin manifest <code>apiVersion</code>.</p>
     </Section>
 
     <Section id="changelog" title="Changelog">
       <ul className="space-y-3">
-        <li><strong>v1, 2026-10-08.</strong> Added API keys with scopes, expiry, and revocation. Added <code>GET /api/v1/projects</code>, rate limiting (currently configured at 120 per minute per key), and request IDs. Added signed webhook tests and a delivery log (event: <code>webhook.test</code>). Added the TypeScript SDK source package.</li>
+        <li><strong>v1, 2026-10-08.</strong> Added API keys with scopes, expiry, and revocation; project listing, creation, detail/status reads, usage, and account lookup; database-backed per-key rate limits, request IDs, and request outcome logging. Signed webhook delivery currently supports the <code>webhook.test</code> event. The TypeScript SDK and CLI use v1 for new integrations.</li>
       </ul>
     </Section>
   </main>;

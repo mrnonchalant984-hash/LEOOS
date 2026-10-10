@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getBuilderAvailability } from "../lib/builders/providers.ts";
-import { freePlan, getPlan, getPlanPrice, planConfig } from "../lib/pricing.ts";
+import { PLAN_CURRENCY, formatNairaKobo, freePlan, getPlan, getPlanDisplayName, getPlanPrice, getPlanPriceNgn, planConfig, resolvePaidPlan } from "../lib/pricing.ts";
 
 test("free and paid plans expose bounded builder and image resources", () => {
   assert.deepEqual(freePlan.projectTypes, ["website"]);
@@ -48,16 +48,25 @@ test("mobile and game providers remain unavailable until adapters exist", () => 
   assert.equal(getBuilderAvailability("game").id, "godot-build-service");
 });
 
-test("monthly prices remain environment-configured", () => {
-  const key = "NEXT_PUBLIC_STANDARD_MONTHLY_KOBO";
-  const original = process.env[key];
-  try {
-    process.env[key] = "750000";
-    assert.equal(getPlanPrice("standard", "monthly"), 750000);
-    process.env[key] = "not-a-number";
-    assert.equal(getPlanPrice("standard", "monthly"), null);
-  } finally {
-    if (original === undefined) delete process.env[key];
-    else process.env[key] = original;
+test("central NGN pricing uses exact undiscounted interval totals and kobo integers", () => {
+  assert.equal(PLAN_CURRENCY, "NGN");
+  assert.equal(getPlanPriceNgn("standard", "monthly"), 12_500);
+  assert.equal(getPlanPriceNgn("standard", "quarterly"), 37_500);
+  assert.equal(getPlanPriceNgn("standard", "yearly"), 150_000);
+  assert.equal(getPlanPriceNgn("pro", "monthly"), 31_500);
+  assert.equal(getPlanPriceNgn("pro", "quarterly"), 94_500);
+  assert.equal(getPlanPriceNgn("pro", "yearly"), 378_000);
+  assert.equal(getPlanPriceNgn("business", "monthly"), 63_000);
+  assert.equal(getPlanPriceNgn("business", "quarterly"), 189_000);
+  assert.equal(getPlanPriceNgn("business", "yearly"), 756_000);
+  assert.equal(getPlanPrice("unlimited", "yearly"), 75_600_000);
+  assert.equal(getPlan("business").key, "unlimited");
+  assert.equal(getPlanDisplayName("unlimited"), "BUSINESS");
+  assert.equal(resolvePaidPlan("business"), "unlimited");
+  assert.equal(formatNairaKobo(1_250_000), "₦12,500");
+  for (const plan of ["standard", "pro", "business"]) {
+    for (const period of ["monthly", "quarterly", "yearly"]) {
+      assert.equal(Number.isSafeInteger(getPlanPrice(plan, period)), true);
+    }
   }
 });

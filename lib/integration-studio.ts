@@ -65,7 +65,7 @@ export const integrationScenarios: Record<IntegrationKind, readonly IntegrationS
   cli: [
     {
       id: 'cli-project-status', label: 'Link a project', description: 'Supported CLI commands authenticate and read project metadata.', steps: [
-        { id: 'cli-login', title: 'Authenticate locally', description: 'Login validates the key against /api/v2/me before saving local CLI configuration.', fileName: 'terminal', code: 'leo login --api-key "$LEO_API_KEY" --base-url "https://your-leonardx-domain"', focusLines: [1], terminal: ['$ leo login --api-key "$LEO_API_KEY" --base-url "https://your-leonardx-domain"', '[SIMULATION] Command not run', 'Real command validates credentials before saving them'], outputLabel: 'Supported command · not executed here' },
+        { id: 'cli-login', title: 'Authenticate locally', description: 'Login validates the key against /api/v1/me before saving local CLI configuration.', fileName: 'terminal', code: 'leo login --api-key "$LEO_API_KEY" --base-url "https://your-leonardx-domain"', focusLines: [1], terminal: ['$ leo login --api-key "$LEO_API_KEY" --base-url "https://your-leonardx-domain"', '[SIMULATION] Command not run', 'Real command validates credentials before saving them'], outputLabel: 'Supported command · not executed here' },
         { id: 'cli-status', title: 'Link and inspect', description: 'The CLI checks project ownership, stores a local workspace link, then reads current metadata.', fileName: 'terminal', code: 'leo init <workspace-id>\nleo status', focusLines: [1, 2], terminal: ['$ leo init <workspace-id>', '[SIMULATION] Ownership check not performed', '$ leo status', '[SIMULATION] No workspace data fetched'], outputLabel: 'Supported commands · not executed here' },
       ],
     },

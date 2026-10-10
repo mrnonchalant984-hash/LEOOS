@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOpenAI, LEO_SYSTEM_PROMPT } from "@/lib/openai";
+import { getLeoSystemPrompt, getOpenAI, LEO_PLAN_TERMINOLOGY } from "@/lib/openai";
 import { adminSupabase, getProfile, isPlatformOwner } from "@/lib/auth";
-import { getPlanPrice } from "@/lib/pricing";
+import { getPlanPriceNgn } from "@/lib/pricing";
 import { classifyAgents } from "@/lib/agents/manager";
 import type { ProjectType } from "@/lib/pricing";
 import { getBuilderAvailability } from "@/lib/builders/providers";
@@ -118,22 +118,22 @@ export async function POST(req: NextRequest) {
         }))
       : [];
     const pricingContext =
-      "\nCurrent LEO plan pricing from server configuration: " +
+      "\nCurrent LEO plan pricing from server configuration in NGN (Naira): " +
       JSON.stringify({
         standard: {
-          monthly: getPlanPrice("standard", "monthly"),
-          quarterly: getPlanPrice("standard", "quarterly"),
-          yearly: getPlanPrice("standard", "yearly"),
+          monthly: getPlanPriceNgn("standard", "monthly"),
+          quarterly: getPlanPriceNgn("standard", "quarterly"),
+          yearly: getPlanPriceNgn("standard", "yearly"),
         },
         pro: {
-          monthly: getPlanPrice("pro", "monthly"),
-          quarterly: getPlanPrice("pro", "quarterly"),
-          yearly: getPlanPrice("pro", "yearly"),
+          monthly: getPlanPriceNgn("pro", "monthly"),
+          quarterly: getPlanPriceNgn("pro", "quarterly"),
+          yearly: getPlanPriceNgn("pro", "yearly"),
         },
-        unlimited: {
-          monthly: getPlanPrice("unlimited", "monthly"),
-          quarterly: getPlanPrice("unlimited", "quarterly"),
-          yearly: getPlanPrice("unlimited", "yearly"),
+        business: {
+          monthly: getPlanPriceNgn("business", "monthly"),
+          quarterly: getPlanPriceNgn("business", "quarterly"),
+          yearly: getPlanPriceNgn("business", "yearly"),
         },
       }) +
       "\n";
@@ -142,7 +142,8 @@ export async function POST(req: NextRequest) {
         memories.map((m: any) => "- " + m.memory).join("\n")
       : "";
     const system =
-      LEO_SYSTEM_PROMPT +
+      getLeoSystemPrompt() +
+      `\n${LEO_PLAN_TERMINOLOGY}` +
       pricingContext +
       memoryContext +
       (owner

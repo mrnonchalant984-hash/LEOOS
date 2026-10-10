@@ -34,7 +34,32 @@ export async function authenticateApiKey(req: NextRequest, requiredScope: ApiSco
 
 export async function recordApiRequest(ctx: ApiContext, req: NextRequest, statusCode: number, startedAt: number) {
   const db = adminSupabase();
-  await db.from('api_request_logs').insert({ key_id: ctx.keyId, user_id: ctx.userId, request_id: ctx.requestId, method: req.method, route: new URL(req.url).pathname, status_code: statusCode, latency_ms: Math.max(0, Date.now() - startedAt) });
+  const route = new URL(req.url).pathname.replace(/\/projects\/[A-Za-z0-9_-]+(?=\/|$)/g, '/projects/:id');
+  await db.from('api_request_logs').insert({ key_id: ctx.keyId, user_id: ctx.userId, request_id: ctx.requestId, method: req.method, route, status_code: statusCode, latency_ms: Math.max(0, Date.now() - startedAt) });
+}
+
+/** Runs an API-key route and records its actual HTTP outcome without letting logging failure break the request. */
+export async function withApiKey(
+  req: NextRequest,
+  requiredScope: ApiScope,
+  handler: (context: ApiContext) => Promise<NextResponse>,
+): Promise<NextResponse> {
+  const startedAt = Date.now();
+  const context = await authenticateApiKey(req, requiredScope);
+  if ('error' in context) return context.error;
+
+  let response: NextResponse;
+  try {
+    response = await handler(context);
+  } catch {
+    response = apiResponse({
+      error: { code: 'INTERNAL_ERROR', message: 'The request could not be completed.' },
+      request_id: context.requestId,
+    }, 500, context.requestId);
+  }
+
+  try { await recordApiRequest(context, req, response.status, startedAt); } catch { /* telemetry must not break API availability */ }
+  return response;
 }
 
 export function apiResponse(body: unknown, status = 200, requestId?: string) {

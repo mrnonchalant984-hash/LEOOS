@@ -1,7 +1,7 @@
 import { lookup } from 'node:dns/promises';
 import { randomUUID } from 'node:crypto';
 import { adminSupabase } from '@/lib/auth';
-import { MAX_ATTEMPTS, isPrivateIp, nextAttemptDelaySec, signatureHeader, validateEndpointUrl, type WebhookEvent } from '@/lib/webhooks-core';
+import { MAX_ATTEMPTS, isPrivateIp, nextAttemptDelaySec, signatureHeader, staleDeliveryClaimCutoff, validateEndpointUrl, type WebhookEvent } from '@/lib/webhooks-core';
 
 type Endpoint = { id: string; url: string; secret: string; active: boolean };
 type Delivery = { id: string; endpoint_id: string; user_id: string; event: string; payload: unknown; attempts: number };
@@ -65,7 +65,11 @@ export async function processDueDeliveries(limit = 25) {
     .eq('status', 'pending').lte('next_attempt_at', new Date().toISOString()).lt('attempts', MAX_ATTEMPTS).order('next_attempt_at').limit(limit);
   let succeeded = 0, retried = 0;
   for (const d of due || []) {
-    const { data: claim } = await db.from('webhook_deliveries').update({ claimed_at: new Date().toISOString() }).eq('id', d.id).eq('status', 'pending').is('claimed_at', null).select('id').maybeSingle();
+    const claimedAt = new Date();
+    const { data: claim } = await db.from('webhook_deliveries').update({ claimed_at: claimedAt.toISOString() })
+      .eq('id', d.id).eq('status', 'pending')
+      .or(`claimed_at.is.null,claimed_at.lt.${staleDeliveryClaimCutoff(claimedAt.getTime())}`)
+      .select('id').maybeSingle();
     if (!claim) continue;
     const { data: ep } = await db.from('webhook_endpoints').select('id,url,secret,active').eq('id', d.endpoint_id).maybeSingle();
     if (!ep || !ep.active) { await db.from('webhook_deliveries').update({ status: 'failed', last_error: 'Endpoint was removed or disabled.', next_attempt_at: null, claimed_at: null }).eq('id', d.id); continue; }

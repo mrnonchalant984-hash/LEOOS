@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 
 const endpoints = new Map([
   ['GET /api/v1/projects', '/api/v1/projects'],
-  ['GET /api/v2/me', '/api/v2/me'],
-  ['GET /api/v2/projects', '/api/v2/projects'],
-  ['POST /api/v2/projects', '/api/v2/projects'],
+  ['GET /api/v1/me', '/api/v1/me'],
+  ['GET /api/v1/usage', '/api/v1/usage'],
+  ['POST /api/v1/projects', '/api/v1/projects'],
 ]);
 
 export async function POST(req: NextRequest) {
@@ -13,7 +13,8 @@ export async function POST(req: NextRequest) {
   const method = typeof body.method === 'string' ? body.method.toUpperCase() : 'GET';
   const path = typeof body.path === 'string' ? body.path : '';
   const apiKey = typeof body.api_key === 'string' ? body.api_key.trim() : '';
-  const target = endpoints.get(`${method} ${path}`);
+  const target = endpoints.get(`${method} ${path}`)
+    || (method === 'GET' && /^\/api\/v1\/projects\/[A-Za-z0-9_-]{1,80}(?:\/status)?$/.test(path) ? path : undefined);
   if (!target) return NextResponse.json({ error: 'This endpoint is not available in the playground.' }, { status: 400 });
   if (!/^leo_[A-Za-z0-9_-]{20,160}$/.test(apiKey)) return NextResponse.json({ error: 'Enter a valid API key. It is used only for this request.' }, { status: 400 });
   const response = await fetch(new URL(target, req.url), {
@@ -23,5 +24,5 @@ export async function POST(req: NextRequest) {
     cache: 'no-store',
   });
   const result = await response.json().catch(() => ({ error: { message: 'The API returned a non-JSON response.' } }));
-  return NextResponse.json({ status: response.status, headers: { 'x-request-id': response.headers.get('x-request-id') }, body: result }, { status: 200 });
+  return NextResponse.json({ status: response.status, headers: { 'x-request-id': response.headers.get('x-request-id') }, body: result }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
 }
