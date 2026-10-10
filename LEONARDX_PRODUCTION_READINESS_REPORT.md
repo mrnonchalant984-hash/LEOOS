@@ -88,4 +88,4 @@ No capability is labelled “implemented and verified” solely because a route,
 
 ## Push/deployment status
 
-No production deployment, database migration, or package publication was performed. The source changes and additive migration files are prepared for GitHub; applying the migrations remains blocked until valid database credentials are configured and a dry run succeeds.
+The source changes and additive migration files are pushed to the GitHub branch [`codex/leonardx-readiness-20261010`](https://github.com/mrnonchalant984-hash/LEOOS/tree/codex/leonardx-readiness-20261010). They are not merged to `main` or deployed. No production database migration or package publication was performed; applying the SQL remains blocked until valid database credentials are configured and a dry run succeeds.
