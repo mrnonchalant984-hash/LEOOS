@@ -5,6 +5,8 @@ out
 .env*
 !.env.example
 .vercel
+.leo/
+packages/sdk/dist/
 .DS_Store
 
 .vercel

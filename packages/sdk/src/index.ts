@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export type Project = { id: string; project_name: string; type: string | null; status: string | null; progress: number | null; file_url?: string | null; created_at: string };
+export type ProjectStatus = Pick<Project, 'id' | 'project_name' | 'type' | 'status' | 'progress' | 'created_at'>;
 export type ApiResponse<T> = { data: T; request_id: string; meta?: Record<string, unknown> };
 export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -25,6 +26,7 @@ export class LeoClient {
       return this.request<ApiResponse<Project[]>>(`/api/v1/projects${query.size ? `?${query}` : ''}`);
     },
     create: (input: { project_name: string; type?: string }) => this.request<ApiResponse<Project>>('/api/v2/projects', { method: 'POST', body: JSON.stringify(input) }),
+    status: (id: string) => this.request<ApiResponse<ProjectStatus>>(`/api/v2/projects/${encodeURIComponent(id)}/status`),
   };
   private readonly options: Options;
   constructor(options: Options) {

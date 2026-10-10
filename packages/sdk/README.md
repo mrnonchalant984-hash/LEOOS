@@ -42,4 +42,6 @@ Requests older than 5 minutes are rejected by default (`toleranceSeconds`).
 
 ## What is covered today
 
-The SDK currently supports authenticated project listing and creation plus webhook signature verification. It is not published to npm; build the package locally before consuming it.
+The SDK currently supports authenticated project listing, creation, metadata-only project status reads, and webhook signature verification. It is not published to npm; build the package locally before consuming it.
+
+Agent coordination contracts (path boundaries, run telemetry, and bounded scratchpad metadata) are available from `@leo-os/sdk/orchestration`. They are contracts and local policy helpers, not a hosted multi-agent worker service.

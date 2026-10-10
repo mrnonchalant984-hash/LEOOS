@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LeoClient, LeoApiError, LeoRateLimitError, verifyWebhookSignature } from '../packages/sdk/src/index.ts';
 import { signatureHeader, generateWebhookSecret } from '../lib/webhooks-core.ts';
+import { appendScratchpadEntry, createScratchpadManifest, isAgentPathAllowed, validateScratchpadManifest } from '../packages/sdk/src/orchestration.ts';
 
 const json = (status, body, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
 
@@ -12,6 +13,13 @@ test('sends bearer key to the right URL and returns parsed data', async () => {
   assert.equal(seen.url, 'https://api.example.com/api/v1/projects');
   assert.equal(seen.auth, 'Bearer leo_live_abc');
   assert.equal(out.data[0].id, '1');
+});
+test('project status uses a narrow authenticated status endpoint', async () => {
+  let seen;
+  const leo = new LeoClient({ apiKey: 'leo_live_abc', baseUrl: 'https://api.example.com', fetch: async (url) => { seen = String(url); return json(200, { data: { id: 'a/b', status: 'draft' }, request_id: 'r1' }); } });
+  const result = await leo.projects.status('a/b');
+  assert.equal(seen, 'https://api.example.com/api/v2/projects/a%2Fb/status');
+  assert.equal(result.data.status, 'draft');
 });
 test('API errors carry status, code and request id', async () => {
   const leo = new LeoClient({ apiKey: 'k', fetch: async () => json(403, { error: { code: 'insufficient_scope', message: 'nope', request_id: 'r2' } }, { 'x-request-id': 'r2' }) });
@@ -33,4 +41,20 @@ test('SDK verifies signatures produced by the server signer, and rejects tamperi
   assert.equal(verifyWebhookSignature(secret, header, body + 'x', { nowSeconds: now }), false);
   assert.equal(verifyWebhookSignature(secret, header, body, { nowSeconds: now + 400 }), false);
   assert.equal(verifyWebhookSignature(secret, undefined, body), false);
+});
+
+test('agent directory boundaries reject path traversal and out-of-scope writes', () => {
+  assert.equal(isAgentPathAllowed('database', 'supabase/migrations/001.sql'), true);
+  assert.equal(isAgentPathAllowed('database', 'components/ui/button.tsx'), false);
+  assert.equal(isAgentPathAllowed('ui', 'components/ui/button.tsx'), true);
+  assert.equal(isAgentPathAllowed('ui', 'components/button.tsx'), false);
+  assert.equal(isAgentPathAllowed('ui', '../supabase/config.toml'), false);
+});
+
+test('scratchpad contracts accept bounded handoff metadata and reject unsafe paths', () => {
+  const empty = createScratchpadManifest();
+  const updated = appendScratchpadEntry(empty, { id: 'e1', taskId: 't1', agent: 'ui', createdAt: new Date().toISOString(), summary: 'Added a button', changedPaths: ['components/ui/button.tsx'], validation: { status: 'passed', checks: ['typecheck'] } });
+  assert.equal(validateScratchpadManifest(updated), true);
+  assert.equal(updated.entries[0].changedPaths[0], '/components/ui/button.tsx');
+  assert.throws(() => appendScratchpadEntry(empty, { id: 'e2', taskId: 't1', agent: 'ui', createdAt: '', summary: 'unsafe', changedPaths: ['../../.env'], validation: { status: 'not-run', checks: [] } }));
 });
