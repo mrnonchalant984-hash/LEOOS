@@ -68,4 +68,4 @@ No new route was introduced. The existing Webhooks panel remains the live contro
 - CLI API-key cloud task dispatch and deployment remain unavailable in the existing implementation.
 - Webhooks currently emit only `webhook.test`. The scheduled delivery worker is daily, so retry delays do not imply prompt execution.
 - The repository still has 12 baseline ESLint warnings in unrelated files, and local analytics/ads integrations produce the browser messages noted above.
-- No database migrations, production data changes, deployments, commits, or pushes were performed.
+- No database migrations, production data changes, or deployments were performed for the Integration Studio work. The changes and this report were later included in the reliability upgrade push to `main` (`7c64cb1`).
