@@ -37,7 +37,8 @@ const groups: { label: string; items: NavItem[] }[] = [
   { label: 'Developer platform', items: [
     ['Developers','/developers',Code2], ['API keys','/api-keys',KeyRound], ['Webhooks','/webhooks',Webhook],
     ['Integrations','/integrations',Network], ['Documentation','/docs',BookOpen], ['API reference','/docs/api',FileText],
-    ['SDK','/docs/sdk',TerminalSquare], ['Organizations','/organizations',Building2],
+    ['SDK','/docs/sdk',TerminalSquare], ['CLI','/cli',TerminalSquare], ['Web IDE guide','/ide',Code2],
+    ['Plugins','/plugins',Package], ['Organizations','/organizations',Building2],
   ] },
   { label: 'Explore', items: [
     ['Marketplace / templates','/templates',Package], ['Resources','/resources',Layers3], ['Tutorials','/tutorials',BookOpen], ['Leo overview','/leo-ai',Bot],

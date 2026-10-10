@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { classifyAgents, getAgent, parseAgentExecutionResult, runAgent } from '@/lib/agents/manager';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { withOperationalMonitoring } from '@/lib/monitoring';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  return withOperationalMonitoring(req, 'agent.run', async ({ reportFailure }) => {
   try {
     const ctx = await getProfile(req);
     if (!ctx) return NextResponse.json({ error: 'Sign in required for agent execution.' }, { status: 401 });
@@ -107,10 +109,9 @@ export async function POST(req: NextRequest) {
           });
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Agent execution failed.';
         await db.from('agent_runs').update({
           status: 'failed',
-          error: message.slice(0, 1000),
+          error: 'Agent execution failed. Retry the run or review provider availability.',
           completed_at: new Date().toISOString(),
         }).eq('id', run.id).eq('user_id', ctx.user.id);
         throw error;
@@ -119,7 +120,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ status: 'completed', results });
   } catch (error) {
-    console.error('Agent execution failed:', error instanceof Error ? error.message : 'unknown error');
+    reportFailure(error, 'openai');
     return NextResponse.json({ error: 'Agent execution failed. Review the run history and try again.' }, { status: 500 });
   }
+  });
 }

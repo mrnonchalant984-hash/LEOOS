@@ -5,6 +5,7 @@ import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import type { ProjectType } from '@/lib/pricing';
 import { getBuilderAvailability } from '@/lib/builders/providers';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { withOperationalMonitoring } from '@/lib/monitoring';
 
 export const runtime = 'nodejs';
 
@@ -105,6 +106,7 @@ async function recordBuildState(
 }
 
 export async function POST(req: NextRequest) {
+  return withOperationalMonitoring(req, 'project.build_deploy', async ({ reportFailure, requestId }) => {
   let deploymentUrl: string | null = null;
   let buildContext: (BuildContext & { stage: 'building' | 'testing' | 'deploying' | 'live' }) | null = null;
   try {
@@ -346,17 +348,18 @@ export async function POST(req: NextRequest) {
       reviewUrl: wallOfLoveUrl,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Build/deploy failed';
+    reportFailure(e, buildContext?.stage === 'deploying' || buildContext?.stage === 'live' ? 'vercel' : 'openai');
     if (buildContext?.stage === 'live') {
-      return NextResponse.json({ status: 'deployed', liveUrl: deploymentUrl, warning: `Vercel confirmed this deployment is live, but project tracking failed: ${message}` });
+      return NextResponse.json({ status: 'deployed', liveUrl: deploymentUrl, warning: 'Deployment is live, but project status could not be fully recorded.' });
     }
     if (buildContext) {
       const status = buildContext.stage === 'deploying' ? 'deploy_failed' : 'build_failed';
       await recordBuildState(buildContext, status, status === 'deploy_failed' ? 'Deployment failed' : 'Build failed', {
-        error: message,
-        message,
-      }).catch((recordError) => console.error('Could not persist project build failure:', recordError));
+        error: 'Build or deployment operation failed.',
+        message: 'Build or deployment operation failed.',
+      }).catch(() => console.error(JSON.stringify({ level: 'error', event: 'leo.operation.persistence_failure', operation: 'project.build_deploy', request_id: requestId })));
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Build or deployment could not be completed. Review the project operation status and retry.' }, { status: 500 });
   }
+  });
 }

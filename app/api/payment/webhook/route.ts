@@ -4,6 +4,7 @@ import { adminSupabase } from '@/lib/auth';
 import { verifyAndApplyPaystack, verifyPaystackTransaction } from '@/lib/payments';
 import { matchesHostingRenewal } from '@/lib/payments-core';
 import { promoteVercelDeployment } from '@/lib/vercel-hosting';
+import { withOperationalMonitoring } from '@/lib/monitoring';
 
 export const runtime = 'nodejs';
 
@@ -29,6 +30,7 @@ function safePaidAt(value: unknown) {
 }
 
 export async function POST(req: NextRequest) {
+  return withOperationalMonitoring(req, 'payment.webhook', async ({ reportFailure }) => {
   const body = await req.text();
   if (body.length > 1_000_000) return NextResponse.json({ error: 'Webhook payload is too large.' }, { status: 413 });
 
@@ -154,7 +156,8 @@ export async function POST(req: NextRequest) {
             updated_at: new Date().toISOString(),
           }).eq('id', hosting.website_project_id);
         } catch (error) {
-          restoreError = error instanceof Error ? error.message.slice(0, 300) : 'Deployment restoration failed.';
+          restoreError = 'Deployment restoration failed.';
+          reportFailure(error, 'vercel');
         }
       }
 
@@ -196,11 +199,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error('Paystack webhook processing failed', {
-      event: eventName || 'unknown',
-      reference: reference || undefined,
-      reason: error instanceof Error ? error.message : 'unknown error',
-    });
+    reportFailure(error, 'paystack');
     return NextResponse.json({ error: 'Webhook processing failed. Paystack may retry this event.' }, { status: 500 });
   }
+  });
 }

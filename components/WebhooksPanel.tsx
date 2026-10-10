@@ -64,7 +64,7 @@ export function WebhooksPanel() {
     load();
   }
 
-  return <section className="mt-8 rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
+  return <section id="webhook-endpoints" className="mt-8 scroll-mt-24 rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
     <h2 className="text-xl font-bold">Webhooks</h2>
     <p className="mt-1 text-sm text-zinc-400">LEO OS sends signed HTTPS POST requests to your URL when events happen. Failed deliveries are retried with increasing delays.</p>
     {error && <div role="alert" className="mt-4 rounded-2xl border border-red-900/60 bg-black p-3 text-sm text-red-300">{error}</div>}

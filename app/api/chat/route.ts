@@ -6,6 +6,7 @@ import { classifyAgents } from "@/lib/agents/manager";
 import type { ProjectType } from "@/lib/pricing";
 import { getBuilderAvailability } from "@/lib/builders/providers";
 import { getEffectiveUserPlan, planAllows } from "@/lib/plan-access";
+import { withOperationalMonitoring } from '@/lib/monitoring';
 export const runtime = "nodejs";
 
 function inferProjectType(message: string): ProjectType | null {
@@ -48,6 +49,7 @@ export async function GET(req: NextRequest) {
   });
 }
 export async function POST(req: NextRequest) {
+  return withOperationalMonitoring(req, 'leo.ai.request', async ({ reportFailure }) => {
   try {
     const { session_id, message, mode = "normal" } = await req.json();
     if (!session_id || typeof message !== "string" || !message.trim())
@@ -149,6 +151,7 @@ export async function POST(req: NextRequest) {
     const ai = getOpenAI();
     let reply = "";
     let usage: any = null;
+    try {
     if (requestedProjectType && projectBuilder) {
       reply = `I can help with a ${requestedProjectType.replaceAll("_", " ")} project. ${projectBuilder.message} I have not created or deployed a project yet.`;
     } else if (mode === "deep") {
@@ -187,6 +190,10 @@ export async function POST(req: NextRequest) {
         response.choices[0]?.message?.content ||
         "I could not generate a reply.";
       usage = response.usage;
+    }
+    } catch (error) {
+      reportFailure(error, 'openai');
+      throw error;
     }
     if (ctx && db && usage) {
       await db
@@ -255,10 +262,11 @@ export async function POST(req: NextRequest) {
       projectBuilder,
     });
   } catch (e) {
-    console.error(e);
+    reportFailure(e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Chat unavailable" },
+      { error: "Leo could not complete this request. Please try again." },
       { status: 500 },
     );
   }
+  });
 }

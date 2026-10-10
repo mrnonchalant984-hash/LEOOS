@@ -82,4 +82,27 @@ const nextConfig = {
   },
   images: { remotePatterns: [{ protocol: 'https', hostname: 'source.unsplash.com' }, { protocol: 'https', hostname: 'images.unsplash.com' }, { protocol: 'https', hostname: 'localhost' }] },
 };
-module.exports = nextConfig;
+const sentryConfigured = Boolean(
+  process.env.SENTRY_DSN
+  && process.env.NEXT_PUBLIC_SENTRY_DSN
+);
+const sourceMapUploadConfigured = Boolean(
+  process.env.SENTRY_AUTH_TOKEN
+  && process.env.SENTRY_ORG
+  && process.env.SENTRY_PROJECT
+);
+
+const { withSentryConfig } = require('@sentry/nextjs/config');
+
+module.exports = withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  tunnelRoute: sentryConfigured ? '/_monitoring' : undefined,
+  sourcemaps: {
+    disable: !sourceMapUploadConfigured,
+    deleteSourcemapsAfterUpload: true,
+  },
+  widenClientFileUpload: sourceMapUploadConfigured,
+});
