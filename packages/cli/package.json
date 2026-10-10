@@ -1,9 +1,10 @@
 {
   "name": "@leo-os/cli",
   "version": "1.0.0",
+  "publishConfig": { "access": "public" },
   "description": "Official LeonardX command-line client",
   "type": "module",
-  "bin": { "leo": "./src/index.mjs", "leonardx": "./src/index.mjs" },
+  "bin": { "leo": "src/index.mjs", "leonardx": "src/index.mjs" },
   "engines": { "node": ">=18" },
   "files": ["src", "README.md"],
   "scripts": { "help": "node src/index.mjs --help" }

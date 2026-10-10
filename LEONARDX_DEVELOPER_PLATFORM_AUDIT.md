@@ -3,7 +3,7 @@
 **Reviewed:** 2026-10-10  
 **Scope:** Current working tree for the developer platform, API, packages, webhooks, plugins, pricing, and Paystack flow.
 
-This review preserves the pre-existing uncommitted worktree changes. No production deployment, database migration, payment, npm publish, or push to `main` was performed.
+This review preserves the pre-existing uncommitted worktree changes. No production deployment, database migration, payment, npm publish, or push to `main` was performed. The CLI package metadata was corrected so npm retains both published command names, and both package manifests now declare public scoped publishing.
 
 ## Feature status
 
@@ -62,7 +62,7 @@ This review added a five-minute claim lease so a delivery left claimed by a time
 - `npm test` — **passed**, 49 tests, 0 failures.
 - `npm --prefix packages/sdk run build` — **passed**.
 - `node packages/cli/src/index.mjs --help` — **passed**.
-- `npm pack --dry-run --json --ignore-scripts` in both package directories — **passed**; no package was published. The SDK dry run shows that its package-local LICENSE is missing.
+- `npm pack --dry-run --json --ignore-scripts` and `npm publish --dry-run --access public` in both package directories — **passed**; no package was published. The CLI dry run retains both `leo` and `leonardx` binaries after its manifest fix. The SDK dry run shows that its package-local LICENSE is missing.
 - `npm run build` — **not completed**. Next.js compiled successfully, then the build was stopped when its process used about 7.4 GB and the 12 GB machine had about 100 MB free. Post-compile/static build completion is unverified. The existing Sentry source-map upload hook was eligible during this build; whether upload completed before interruption is unknown.
 - No live Supabase migration, API-key login, Paystack payment, webhook delivery, plugin registration, or deployed browser flow was run.
 
@@ -71,5 +71,5 @@ This review added a five-minute claim lease so a delivery left claimed by a time
 1. Compare the hidden Vercel Production price values against the proposed totals and approve the customer-facing price change. The application has not been deployed.
 2. Decide whether the daily webhook worker is acceptable; otherwise provision a supported more frequent scheduler and reconcile the two webhook storage systems, including encrypted handling of legacy endpoint secrets.
 3. Apply the plugin registry and API request-log migrations only through the authorized migration process; neither migration has been pushed here.
-4. Confirm package copyright/license metadata, include a package-local license, and verify npm scope ownership before publishing.
+4. Confirm package copyright/license metadata, include a package-local license, authenticate with npm, and verify npm scope ownership before publishing. `npm whoami` currently fails with `ENEEDAUTH`.
 5. Run the complete production build on a machine with adequate free memory, then perform authorized live checks for database persistence, API-key authentication, webhook delivery, and Paystack test-mode verification.
