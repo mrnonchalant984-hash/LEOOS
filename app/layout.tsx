@@ -20,4 +20,4 @@ export const metadata: Metadata = {
   },
 };
 
-export default function Layout({children}:{children:React.ReactNode}){return <html lang='en' data-scroll-behavior='smooth'><head><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8872751811502892" crossOrigin="anonymous"></script></head><body className='min-h-screen bg-black text-white'><VisualBackground/><Providers><Header/>{children}<GlobalLEOWidget/><Footer/></Providers><ObservabilityScripts/></body></html>}
+export default function Layout({children}:{children:React.ReactNode}){return <html lang='en' data-scroll-behavior='smooth'><body className='min-h-screen bg-black text-white'><VisualBackground/><Providers><Header/>{children}<GlobalLEOWidget/><Footer/></Providers><ObservabilityScripts/></body></html>}

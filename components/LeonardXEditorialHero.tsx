@@ -3,37 +3,45 @@
 import Link from "next/link";
 import { ArrowRight, Play } from "lucide-react";
 import { useEffect, useRef } from "react";
+import DesignWorldScene from "@/components/DesignWorldScene";
 
-const HERO_VIDEO = "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260823_050407_500d0339-ab28-41c1-9688-132a74a3b5aa.mp4";
 const ABOUT_VIDEO = "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260823_063501_2e2c8971-de1e-473a-8611-a0c9ae7ee186.mp4";
 
-function ResilientVideo({ src, className }: { src: string; className?: string }) {
+function ResilientVideo({ src, className, preload = "metadata" }: { src: string; className?: string; preload?: "none" | "metadata" }) {
   const ref = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     const video = ref.current;
     if (!video) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const play = () => {
       video.muted = true;
       void video.play().catch(() => undefined);
     };
-    const retry = window.setInterval(play, 1000);
+    let attempts = 0;
+    let retry: number | undefined;
+    const retryPlay = () => {
+      if (attempts >= 3 || !video.paused) return;
+      attempts += 1;
+      play();
+      if (video.paused) retry = window.setTimeout(retryPlay, 1500);
+    };
     document.addEventListener("pointerdown", play, { once: true, passive: true });
-    play();
+    retryPlay();
     return () => {
-      window.clearInterval(retry);
+      if (retry) window.clearTimeout(retry);
       document.removeEventListener("pointerdown", play);
     };
   }, []);
 
-  return <video ref={ref} className={className} src={src} autoPlay muted loop playsInline preload="metadata" aria-hidden="true" />;
+  return <video ref={ref} className={className} src={src} autoPlay muted loop playsInline preload={preload} aria-hidden="true" />;
 }
 
 export default function LeonardXEditorialHero() {
   return (
     <>
       <section className="lx-editorial-hero" aria-labelledby="lx-hero-title">
-        <ResilientVideo src={HERO_VIDEO} className="lx-editorial-hero-video" />
+        <DesignWorldScene />
         <div className="lx-editorial-hero-scrim" aria-hidden="true" />
         <div className="lx-editorial-hero-content">
           <p className="lx-editorial-kicker">AI SOFTWARE CREATION PLATFORM</p>
@@ -56,7 +64,7 @@ export default function LeonardXEditorialHero() {
           <Link href="/about" className="lx-cyan-button">MEET LEONARD <ArrowRight size={16} /></Link>
         </div>
         <div className="lx-editorial-about-media">
-          <ResilientVideo src={ABOUT_VIDEO} className="lx-editorial-about-video" />
+          <ResilientVideo src={ABOUT_VIDEO} className="lx-editorial-about-video" preload="none" />
           <div className="lx-editorial-about-tint" aria-hidden="true" />
         </div>
       </section>

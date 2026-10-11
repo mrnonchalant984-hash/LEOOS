@@ -36,7 +36,13 @@ export default function VisualBackground() {
 
   useEffect(() => {
     if (pathname === "/" || inWorkspace) return;
-    const timer = window.setTimeout(() => setReady(true), 900);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (window.matchMedia("(max-width: 700px)").matches) return;
+    if (window.requestIdleCallback) {
+      const idle = window.requestIdleCallback(() => setReady(true), { timeout: 1800 });
+      return () => window.cancelIdleCallback(idle);
+    }
+    const timer = window.setTimeout(() => setReady(true), 1200);
     return () => window.clearTimeout(timer);
   }, [inWorkspace, pathname]);
 

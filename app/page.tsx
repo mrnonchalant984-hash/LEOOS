@@ -2,7 +2,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowDown, ArrowRight, Bot, Boxes, Check, Code2, GitBranch, Globe2, Play, ShieldCheck, Sparkles, Terminal } from 'lucide-react';
 import { Reveal } from '@/components/Reveal';
-import LandingExperience from '@/components/LandingExperience';
 import LeonardXEditorialHero from '@/components/LeonardXEditorialHero';
 
 const stages = [
@@ -25,7 +24,6 @@ export default function Home(){
  return <main className="landing-page">
   <LeonardXEditorialHero />
   <section className="landing-legacy-hero">
-    <LandingExperience/>
     <div className="landing-hero-content">
       <div className="landing-eyebrow"><span/> LEONARD X <span className="slash">/</span> AI SOFTWARE CREATION</div>
       <h1>Turn bold ideas into <em>working software.</em></h1>
