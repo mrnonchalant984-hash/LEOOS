@@ -8,6 +8,10 @@ const configDir = join(homedir(), '.config', 'leonardx');
 const configFile = join(configDir, 'config.json');
 const usage = `LEO OS CLI\n\nCommands:\n  leo login --api-key <key> --base-url <url>  Validate and store credentials\n  leo init <workspace-id>                     Link this directory to a workspace\n  leo status                                  Read the linked workspace status\n  leo deploy --brief "<prompt>"               Cloud dispatch (currently browser-auth only)\n  leo ship                                    Cloud deploy (currently browser-auth only)\n  leo agents strategy <strategy>              Select a conflict strategy\n  leo agents check-path --role <role> <path>   Check a worker path boundary\n  leo agents worktree <create|validate|merge>  Manage an isolated Git worktree\n  leo agents scratchpad <read|add>             Read or append handoff metadata\n  leo projects list [--status <status>]       List your projects\n  leo projects create <name> [--type <type>]  Create a project\n  leo logout                                  Remove local credentials\n`;
 
+const usageText = usage
+  .replace('Cloud dispatch (currently browser-auth only)', 'Build and deploy the linked project')
+  .replace('Cloud deploy (currently browser-auth only)', 'Build and deploy the linked project');
+
 function readConfig() {
   if (!existsSync(configFile)) return null;
   try { return JSON.parse(readFileSync(configFile, 'utf8')); } catch { return null; }
@@ -42,7 +46,7 @@ function readWorkspaceLink() {
   return link;
 }
 async function main(args) {
-  if (!args.length || args.includes('--help') || args.includes('-h')) { process.stdout.write(usage); return; }
+  if (!args.length || args.includes('--help') || args.includes('-h')) { process.stdout.write(usageText); return; }
   const [command, resource, action] = args;
   if (command === 'login') {
     const apiKey = option(args, '--api-key'); const baseUrl = option(args, '--base-url');
