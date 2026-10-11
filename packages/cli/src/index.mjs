@@ -74,9 +74,15 @@ async function main(args) {
   if (command === 'deploy') {
     const brief = option(args, '--brief');
     if (!brief?.trim()) throw new Error('Provide a task brief: leo deploy --brief "Describe the change"');
-    throw new Error('Cloud task dispatch is not exposed to API keys yet. Use the authenticated LeonardX workspace to run this task; no task was submitted.');
+    const { workspaceId } = readWorkspaceLink();
+    const result = await api(`/api/v1/projects/${encodeURIComponent(workspaceId)}/deploy`, { method: 'POST', body: JSON.stringify({ brief: brief.trim() }) });
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n'); return;
   }
-  if (command === 'ship') throw new Error('CLI deployment is not exposed to API keys yet. Use the authenticated project deployment flow; no deployment was triggered.');
+  if (command === 'ship') {
+    const { workspaceId } = readWorkspaceLink();
+    const result = await api(`/api/v1/projects/${encodeURIComponent(workspaceId)}/deploy`, { method: 'POST', body: JSON.stringify({ brief: `Build and deploy the linked ${workspaceId} project.` }) });
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n'); return;
+  }
   if (command === 'agents' && resource === 'strategy') {
     const selected = action;
     if (!strategies.includes(selected)) throw new Error(`Choose one strategy: ${strategies.join(', ')}`);

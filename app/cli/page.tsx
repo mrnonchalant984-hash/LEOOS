@@ -20,7 +20,7 @@ export default function CliGuidePage() {
       </Panel>
       <Panel>
         <div className="panel-title">Cloud execution boundary</div>
-        <p className="mt-3 text-sm leading-6 text-zinc-300"><code>leo deploy --brief</code> and <code>leo ship</code> currently stop without submitting a task or triggering a deployment. API-key cloud dispatch is not implemented.</p>
+        <p className="mt-3 text-sm leading-6 text-zinc-300"><code>leo deploy --brief</code> and <code>leo ship</code> use the authenticated API-key deployment bridge for linked developer projects. The command waits for the existing OpenAI, GitHub, and Vercel flow to return a verified result.</p>
         <div className="mt-4 rounded-xl border border-amber-100/15 bg-amber-100/[.04] p-3 text-xs leading-5 text-amber-50/75">The terminal preview below is simulated. It does not access your computer, read your key, or make API requests.</div>
       </Panel>
     </div>

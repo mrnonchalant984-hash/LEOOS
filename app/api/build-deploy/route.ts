@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProfile, adminSupabase } from '@/lib/auth';
+import { authenticateApiKey } from '@/lib/api-auth';
 import { getOpenAI } from '@/lib/openai';
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import type { ProjectType } from '@/lib/pricing';
@@ -110,8 +111,17 @@ export async function POST(req: NextRequest) {
   let deploymentUrl: string | null = null;
   let buildContext: (BuildContext & { stage: 'building' | 'testing' | 'deploying' | 'live' }) | null = null;
   try {
-    const ctx = await getProfile(req);
-    if (!ctx) return NextResponse.json({ error: 'Login required' }, { status: 401 });
+    const browserContext = await getProfile(req);
+    let ctx: { user: { id: string; email?: string | null }; profile: { role?: string | null; email?: string | null } } | null = browserContext
+      ? { user: { id: browserContext.user.id, email: browserContext.user.email }, profile: browserContext.profile }
+      : null;
+    if (!ctx) {
+      const apiContext = await authenticateApiKey(req, 'write');
+      if ('error' in apiContext) return apiContext.error;
+      const { data: apiProfile } = await adminSupabase().from('profiles').select('id,email,role').eq('id', apiContext.userId).maybeSingle();
+      if (!apiProfile) return NextResponse.json({ error: 'Account profile could not be loaded.' }, { status: 403 });
+      ctx = { user: { id: apiContext.userId, email: apiProfile.email }, profile: apiProfile };
+    }
     const limited = await enforceUserRateLimit(ctx.user.id, 'project-build-deploy', 3, 3600);
     if (limited) return limited;
     const body = await req.json();

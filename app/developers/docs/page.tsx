@@ -90,7 +90,7 @@ export default function DeveloperDocsPage() {
     <Section id="cli" title="Command-line client">
       <p><code>@leo-os/cli@1.0.0</code> is published on npm. Login validates credentials against <code>/api/v1/me</code>; project list/create and linked-project status use the v1 API.</p>
       <Code>{`node packages/cli/src/index.mjs login --api-key "$LEO_API_KEY" --base-url https://your-leonardx-domain\nnode packages/cli/src/index.mjs projects list\nnode packages/cli/src/index.mjs projects create "My app" --type web_app`}</Code>
-      <p><code>leo deploy --brief</code> and <code>leo ship</code> currently stop without submitting a task or triggering a deployment because API-key dispatch endpoints are not available. The published CLI reports this boundary explicitly.</p>
+      <p><code>leo deploy --brief</code> and <code>leo ship</code> call the authenticated project deployment endpoint. They reuse the existing builder pipeline and only return a deployment result after Vercel confirms the deployment state.</p>
       <p><Link href="/cli" className="text-yellow-300">Open the interactive CLI guide</Link>.</p>
     </Section>
 

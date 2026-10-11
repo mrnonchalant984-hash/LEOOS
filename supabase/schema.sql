@@ -367,6 +367,8 @@ alter table website_projects add column if not exists build_status text not null
 alter table website_projects add column if not exists build_step text;
 alter table website_projects add column if not exists last_build_at timestamptz;
 create index if not exists idx_website_projects_project_type on website_projects(owner_user_id,project_type,created_at desc);
+alter table website_projects add column if not exists source_project_id uuid references projects(id) on delete set null;
+create unique index if not exists idx_website_projects_source_project on website_projects(source_project_id) where source_project_id is not null;
 
 create table if not exists project_builds (
   id uuid primary key default gen_random_uuid(),
