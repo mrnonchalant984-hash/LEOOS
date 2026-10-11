@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
 import { apiResponse, withApiKey } from '@/lib/api-auth';
 import { POST as buildDeploy } from '@/app/api/build-deploy/route';
@@ -61,6 +61,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (result.status >= 200 && result.status < 300) {
       await db.from('projects').update({ status: 'deployed', progress: 100 }).eq('id', source.id).eq('user_id', auth.userId);
     }
-    return result;
+    return new NextResponse(result.body, { status: result.status, statusText: result.statusText, headers: result.headers });
   });
 }
