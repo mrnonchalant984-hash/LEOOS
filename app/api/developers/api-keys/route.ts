@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
   const body = await req.json().catch(() => ({}));
+  const rotateId = typeof body.rotate_id === 'string' ? body.rotate_id : '';
   const name = typeof body.name === 'string' ? body.name.trim().slice(0, 80) : '';
   if (!name) return NextResponse.json({ error: 'Key name is required' }, { status: 400 });
   const parsedScopes = parseScopes(body.scopes);
@@ -26,6 +27,13 @@ export async function POST(req: NextRequest) {
   const generated = generateApiKey();
   const { data, error } = await adminSupabase().from('api_keys').insert({ user_id: ctx.user.id, name, prefix: generated.prefix, key_hash: hashSecret(generated.raw), scopes, expires_at: expiresAt }).select('id,name,prefix,scopes,revoked,expires_at,created_at').single();
   if (error) return NextResponse.json({ error: 'API key could not be created' }, { status: 500 });
+  if (rotateId) {
+    const { data: revoked, error: revokeError } = await adminSupabase().from('api_keys').update({ revoked: true }).eq('id', rotateId).eq('user_id', ctx.user.id).eq('revoked', false).select('id').maybeSingle();
+    if (revokeError || !revoked) {
+      await adminSupabase().from('api_keys').update({ revoked: true }).eq('id', data.id).eq('user_id', ctx.user.id);
+      return NextResponse.json({ error: 'The old key could not be rotated. No new active key was left behind.' }, { status: revokeError ? 500 : 404 });
+    }
+  }
   return NextResponse.json({ key: data, secret: generated.raw, warning: 'Store this secret securely. It will not be shown again.' }, { status: 201 });
 }
 

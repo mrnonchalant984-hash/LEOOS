@@ -11,6 +11,7 @@ type KeyRecord = {
   scopes: string[];
   revoked: boolean;
   created_at: string;
+  expires_at: string | null;
 };
 
 const SCOPE_OPTIONS = [
@@ -24,6 +25,7 @@ export default function Keys() {
   const [keys, setKeys] = useState<KeyRecord[]>([]);
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState<string[]>(['read']);
+  const [expiryDays, setExpiryDays] = useState('');
   const [secret, setSecret] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -54,7 +56,7 @@ export default function Keys() {
       const response = await fetch('/api/developers/api-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, scopes }),
+        body: JSON.stringify({ name, scopes, expires_at: expiryDays ? new Date(Date.now() + Number(expiryDays) * 86400000).toISOString() : null }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -63,12 +65,33 @@ export default function Keys() {
       }
       setSecret(data.secret || '');
       setName('');
+      setExpiryDays('');
       await load();
     } catch {
       setError('Network error. Try creating the key again.');
     } finally {
       setSaving(false);
     }
+  }
+
+  async function revoke(id: string) {
+    const response = await fetch(`/api/developers/api-keys?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (response.ok) await load();
+    else setError((await response.json().catch(() => ({}))).error || 'The key could not be revoked.');
+  }
+
+  async function rotate(key: KeyRecord) {
+    setError('');
+    const response = await fetch('/api/developers/api-keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rotate_id: key.id, name: key.name, scopes: key.scopes, expires_at: key.expires_at }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) { setError(data.error || 'The key could not be rotated.'); return; }
+    setSecret(data.secret || '');
+    setCopied(false);
+    await load();
   }
 
   async function copySecret() {
@@ -84,7 +107,10 @@ export default function Keys() {
         <h2>Keys are scoped, revocable and never shown twice.</h2>
         <p>Create a least-privilege key for each integration. The full secret is returned only at creation time.</p>
         <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Key name" aria-label="Key name" className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none focus:border-amber-200/50" />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Key name" aria-label="Key name" className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none focus:border-amber-200/50" />
+            <input value={expiryDays} onChange={(event) => setExpiryDays(event.target.value.replace(/[^0-9]/g, '').slice(0, 5))} inputMode="numeric" min="1" placeholder="Never expires (days)" aria-label="Key expiry in days" className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none focus:border-amber-200/50" />
+          </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {SCOPE_OPTIONS.map(([scope, description]) => (
               <label key={scope} className="flex cursor-pointer items-start gap-2 rounded-xl border border-white/10 bg-black/20 p-3 text-xs">
@@ -105,7 +131,7 @@ export default function Keys() {
       <Panel className="mt-3">
         <div className="panel-title">Your keys</div>
         <div className="data-list mt-4">
-          {keys.length ? keys.map((key) => <div className="data-card" key={key.id}><div className="data-icon"><KeyRound size={15} /></div><main><strong>{key.name}</strong><small>{key.prefix}… · {key.scopes.join(', ')} · {new Date(key.created_at).toLocaleDateString()}</small></main><StatusPill status={key.revoked ? 'REVOKED' : 'ACTIVE'} /></div>) : <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-[10px] text-zinc-600"><ShieldAlert size={17} className="mx-auto mb-2" />No API keys created.</div>}
+          {keys.length ? keys.map((key) => <div className="data-card" key={key.id}><div className="data-icon"><KeyRound size={15} /></div><main><strong>{key.name}</strong><small>{key.prefix}… · {key.scopes.join(', ')} · {key.expires_at ? `expires ${new Date(key.expires_at).toLocaleDateString()}` : 'never expires'}</small></main><div className="flex items-center gap-2"><StatusPill status={key.revoked ? 'REVOKED' : 'ACTIVE'} />{!key.revoked && <><button type="button" className="text-[10px] text-amber-200 hover:text-white" onClick={() => void rotate(key)}>Rotate</button><button type="button" className="text-[10px] text-red-200 hover:text-white" onClick={() => void revoke(key.id)}>Revoke</button></>}</div></div>) : <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-[10px] text-zinc-600"><ShieldAlert size={17} className="mx-auto mb-2" />No API keys created.</div>}
         </div>
       </Panel>
     </LEOAppShell>
