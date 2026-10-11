@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Float, Line, Sparkles, Torus } from "@react-three/drei";
+import { Float, Line, RoundedBox, Sparkles, Text, Torus } from "@react-three/drei";
 import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
@@ -46,6 +46,40 @@ function Core() {
       {[2.05, 2.55, 3.05].map((r, i) => <Torus key={r} args={[r, i === 1 ? 0.018 : 0.01, 24, 160]} rotation={[i * .55, i * .35, i * .2]}><meshBasicMaterial color={i === 1 ? '#38bdf8' : '#8b5cf6'} transparent opacity={.28 - i * .04}/></Torus>)}
     </group>
     {[0, 1, 2].map((i) => <mesh key={i} position={[Math.cos(i * 2.1) * 2.65, Math.sin(i * 2.1) * 2.65, 0.1]}><sphereGeometry args={[0.075, 16, 16]} /><meshBasicMaterial color={i === 1 ? '#67d7ff' : '#c4b5fd'} transparent opacity={0.85} /></mesh>)}
+  </group>;
+}
+
+function GlassCuboid() {
+  const cube = useRef<THREE.Group>(null);
+  const orbits = useRef<THREE.Group>(null);
+  useFrame(({ pointer }, delta) => {
+    if (cube.current) {
+      cube.current.rotation.x = THREE.MathUtils.lerp(cube.current.rotation.x, pointer.y * 0.16 - 0.22, delta * 1.5);
+      cube.current.rotation.y = THREE.MathUtils.lerp(cube.current.rotation.y, pointer.x * 0.24 + 0.45, delta * 1.5);
+      cube.current.rotation.z += delta * 0.035;
+    }
+    if (orbits.current) {
+      orbits.current.children[0].rotation.z += delta * 0.07;
+      orbits.current.children[1].rotation.z -= delta * 0.045;
+      orbits.current.children[2].rotation.y += delta * 0.035;
+    }
+  });
+  return <group ref={cube} position={[0.55, 0.15, 0]}>
+    <Text position={[0, 0.75, -1.1]} fontSize={0.78} maxWidth={5.8} lineHeight={1.02} textAlign="center" color="#f1f1f1" fillOpacity={0.2} anchorX="center" anchorY="middle">
+      EXPLORE{`\n`}NEW{`\n`}IDEAS
+    </Text>
+    <Float speed={0.7} rotationIntensity={0.08} floatIntensity={0.18}>
+      <RoundedBox args={[2.45, 2.45, 2.45]} radius={0.2} smoothness={8}>
+        <meshPhysicalMaterial color="#b8c9d8" metalness={0.18} roughness={0.08} transmission={0.86} thickness={1.15} ior={1.22} clearcoat={1} clearcoatRoughness={0.06} transparent opacity={0.78} attenuationColor="#8bd5ff" attenuationDistance={2.8} />
+      </RoundedBox>
+      <RoundedBox args={[2.2, 2.2, 2.2]} radius={0.18} smoothness={8}>
+        <meshBasicMaterial color="#7dd3fc" wireframe transparent opacity={0.16} />
+      </RoundedBox>
+    </Float>
+    <group ref={orbits}>
+      {[1.9, 2.4, 2.9].map((r, i) => <Torus key={r} args={[r, i === 1 ? 0.018 : 0.01, 24, 160]} rotation={[i * .55, i * .35, i * .2]}><meshBasicMaterial color={i === 1 ? '#8bd5ff' : '#f0c88e'} transparent opacity={.28 - i * .04}/></Torus>)}
+    </group>
+    {[0, 1, 2].map((i) => <mesh key={i} position={[Math.cos(i * 2.1) * 2.5, Math.sin(i * 2.1) * 2.5, 0.1]}><sphereGeometry args={[0.075, 16, 16]} /><meshBasicMaterial color={i === 1 ? '#8bd5ff' : '#f0c88e'} transparent opacity={0.85} /></mesh>)}
   </group>;
 }
 
@@ -100,7 +134,7 @@ function Scene() {
     <LaptopModel/>
     <ComputeRack/>
     <BuildPath/>
-    <Core/>
+    <GlassCuboid/>
   </>;
 }
 
