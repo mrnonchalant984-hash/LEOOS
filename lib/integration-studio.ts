@@ -52,7 +52,7 @@ export const integrationScenarios: Record<IntegrationKind, readonly IntegrationS
   sdk: [
     {
       id: 'sdk-projects', label: 'List projects', description: 'Use the typed client that is present in the repository package.', steps: [
-        { id: 'build-package', title: 'Build the local package', description: 'The SDK is not published to npm yet. Build it from the repository before importing it locally.', fileName: 'terminal', code: 'cd packages/sdk\nnpx tsc -p tsconfig.json', focusLines: [1, 2], terminal: ['$ cd packages/sdk', '$ npx tsc -p tsconfig.json', '[SIMULATION] Commands are shown, not executed'], outputLabel: 'Local build instructions · not executed' },
+        { id: 'build-package', title: 'Install the published package', description: 'The SDK is published as @leo-os/sdk@2.0.0 and targets the live /api/v1 contract.', fileName: 'terminal', code: 'npm install @leo-os/sdk', focusLines: [1], terminal: ['$ npm install @leo-os/sdk', '[SIMULATION] Commands are shown, not executed', 'Package: @leo-os/sdk@2.0.0'], outputLabel: 'Published package instruction · not executed' },
         { id: 'sdk-call', title: 'Call the typed client', description: 'LeoClient.projects.list() uses the implemented API and returns typed project data.', fileName: 'example.ts', code: "import { LeoClient } from '@leo-os/sdk'\n\nconst leo = new LeoClient({\n  apiKey: process.env.LEO_API_KEY!\n})\n\nconst { data, request_id } = await leo.projects.list()", focusLines: [1, 3, 4, 5, 7], terminal: ['[SIMULATION] No SDK request made', 'Method: LeoClient.projects.list()', 'Authentication: server-side environment variable', 'Result: ApiResponse<Project[]>'], outputLabel: 'Example call · not executed' },
       ],
     },

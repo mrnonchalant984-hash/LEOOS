@@ -7,16 +7,16 @@ export default function CliGuidePage() {
   return <LEOAppShell title="LeonardX CLI" subtitle="Use the supported project API from a local terminal.">
     <div className="mb-5"><Link href="/developers" className="inline-flex items-center gap-2 text-xs text-zinc-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"><ArrowLeft size={14}/> Back to developer platform</Link></div>
     <div className="page-hero">
-      <span className="mini-label">@leo-os/cli · source package</span>
+      <span className="mini-label">@leo-os/cli · v1.0.0 · npm package</span>
       <h2>Manage supported workspace operations locally.</h2>
-      <p>The CLI validates your API key, links an owned project, and reads or creates projects through existing LeonardX API routes. Commands shown in the Studio are examples; it never runs a local process.</p>
+      <p>The published CLI validates your API key, links an owned project, and reads or creates projects through existing LeonardX API routes. Commands shown in the Studio are examples; it never runs a local process.</p>
       <div className="hero-actions"><Link href="/developers/docs#cli" className="primary-button"><TerminalSquare size={14}/> CLI reference <ArrowRight size={13}/></Link><Link href="/api-keys" className="secondary-button"><ShieldCheck size={13}/> Create an API key</Link></div>
     </div>
     <div className="two-grid">
       <Panel>
         <div className="panel-title">Supported commands</div>
         <div className="code-block mt-4">leo login --api-key &quot;$LEO_API_KEY&quot; --base-url https://your-domain<br/>leo init &lt;workspace-id&gt;<br/>leo status<br/>leo projects list<br/>leo projects create &quot;My app&quot; --type web_app</div>
-        <p className="mt-4 text-xs leading-5 text-zinc-500">Credentials are stored in the user config directory with restrictive permissions. The package can be run from source; npm publication is not verified.</p>
+        <p className="mt-4 text-xs leading-5 text-zinc-500">Credentials are stored in the user config directory with restrictive permissions. Install the published package with <code>npm install -g @leo-os/cli</code>.</p>
       </Panel>
       <Panel>
         <div className="panel-title">Cloud execution boundary</div>

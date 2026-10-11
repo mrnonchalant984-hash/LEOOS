@@ -83,14 +83,14 @@ export default function DeveloperDocsPage() {
     </Section>
 
     <Section id="sdk" title="TypeScript SDK">
-      <p><code>@leo-os/sdk</code> wraps the API with typed errors and a webhook verifier. It has no dependencies and needs Node 18 or newer. It is not yet published to npm; see the package README in the repository for build steps.</p>
+      <p><code>@leo-os/sdk@2.0.0</code> is published on npm. It wraps the API with typed errors and a webhook verifier, has no runtime dependencies, and needs Node 18 or newer.</p>
       <Code>{`import { LeoClient, verifyWebhookSignature } from '@leo-os/sdk';\n\nconst leo = new LeoClient({ apiKey: process.env.LEO_API_KEY! });\nconst { data } = await leo.projects.list();\n\n// In your webhook handler (rawBody is the unparsed request body string):\nconst ok = verifyWebhookSignature(secret, req.headers['leo-signature'], rawBody);`}</Code>
     </Section>
 
     <Section id="cli" title="Command-line client">
-      <p>The repository includes a local <code>@leo-os/cli</code> package. Login validates credentials against <code>/api/v1/me</code>; project list/create and linked-project status use the v1 API.</p>
+      <p><code>@leo-os/cli@1.0.0</code> is published on npm. Login validates credentials against <code>/api/v1/me</code>; project list/create and linked-project status use the v1 API.</p>
       <Code>{`node packages/cli/src/index.mjs login --api-key "$LEO_API_KEY" --base-url https://your-leonardx-domain\nnode packages/cli/src/index.mjs projects list\nnode packages/cli/src/index.mjs projects create "My app" --type web_app`}</Code>
-      <p>The package is not confirmed published. <code>leo deploy --brief</code> and <code>leo ship</code> currently stop without submitting a task or triggering a deployment because API-key dispatch endpoints are not available.</p>
+      <p><code>leo deploy --brief</code> and <code>leo ship</code> currently stop without submitting a task or triggering a deployment because API-key dispatch endpoints are not available. The published CLI reports this boundary explicitly.</p>
       <p><Link href="/cli" className="text-yellow-300">Open the interactive CLI guide</Link>.</p>
     </Section>
 

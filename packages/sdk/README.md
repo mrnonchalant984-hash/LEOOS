@@ -4,8 +4,11 @@ Official TypeScript client for the LEO OS API. Zero dependencies. Requires Node 
 
 ## Install
 
-Not published to npm yet. To use it from this repository, build it (`cd packages/sdk && npx tsc -p tsconfig.json`) and import from `dist/`.
-When published: `npm install @leo-os/sdk`.
+Published on npm as `@leo-os/sdk@2.0.0`:
+
+```sh
+npm install @leo-os/sdk
+```
 
 ## Quick start
 
@@ -42,6 +45,6 @@ Requests older than 5 minutes are rejected by default (`toleranceSeconds`).
 
 ## What is covered today
 
-The SDK currently supports authenticated project listing, creation, metadata-only project status reads, and webhook signature verification. It is not published to npm; build the package locally before consuming it.
+The SDK currently supports authenticated project listing, creation, metadata-only project status reads, and webhook signature verification. Cloud task dispatch, deployment, and plugin execution are not part of the published SDK because those API capabilities are not exposed.
 
 Agent coordination contracts (path boundaries, run telemetry, and bounded scratchpad metadata) are available from `@leo-os/sdk/orchestration`. They are contracts and local policy helpers, not a hosted multi-agent worker service.
