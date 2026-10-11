@@ -54,7 +54,10 @@ async function readLeonardX(path: string) {
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) return { response: json({ error: { code: 'LEONARDX_API_ERROR', message: 'LeonardX could not complete the plugin request.' } }, 502) };
-    return { data: body };
+    const normalizedData = body && typeof body === 'object' && 'data' in body
+      ? (body as { data: unknown }).data
+      : body;
+    return { data: normalizedData };
   } catch (error) {
     const timedOut = error instanceof Error && error.name === 'AbortError';
     return { response: json({ error: { code: timedOut ? 'LEONARDX_API_TIMEOUT' : 'LEONARDX_API_UNAVAILABLE', message: 'LeonardX could not be reached.' } }, 504) };

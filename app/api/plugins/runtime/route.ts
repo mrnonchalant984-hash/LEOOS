@@ -122,7 +122,10 @@ export async function POST(req: NextRequest) {
     if (!response.ok) return json({ error: { code: 'PLUGIN_RESPONSE_ERROR', message: 'The plugin returned an error.' }, request_id: requestId }, 502, requestId);
     let data: unknown = null;
     try { data = output ? JSON.parse(output) : null; } catch { data = { text: output }; }
-    return json({ data, request_id: requestId }, 200, requestId);
+    const normalizedData = data && typeof data === 'object' && 'data' in data
+      ? (data as { data: unknown }).data
+      : data;
+    return json({ data: normalizedData, request_id: requestId }, 200, requestId);
   } catch (error) {
     const timedOut = error instanceof Error && error.name === 'AbortError';
     await recordExecution(execution.data.id, { status: timedOut ? 'timed_out' : 'failed', duration_ms: Date.now() - startedAt, error_code: timedOut ? 'TIMEOUT' : 'NETWORK_ERROR', completed_at: new Date().toISOString() });
