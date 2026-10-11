@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Float, Stars, Sparkles, Torus, Icosahedron } from "@react-three/drei";
+import { Float, RoundedBox, Stars, Sparkles, Torus, Icosahedron } from "@react-three/drei";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useReducedMotion } from "framer-motion";
@@ -25,14 +25,12 @@ function EnergyCore() {
   return (
     <group ref={group} position={[0, 0, -1.8]}>
       <Float speed={1.15} rotationIntensity={0.35} floatIntensity={0.8}>
-        <mesh ref={core}>
-          <icosahedronGeometry args={[1.35, 2]} />
-          <meshStandardMaterial color="#a78bfa" emissive="#3b2b78" emissiveIntensity={0.65} roughness={0.24} metalness={0.75} transparent opacity={0.62} />
-        </mesh>
-        <mesh scale={1.12}>
-          <icosahedronGeometry args={[1.35, 1]} />
-          <meshBasicMaterial color="#38bdf8" wireframe transparent opacity={0.24} />
-        </mesh>
+        <RoundedBox ref={core} args={[2.35, 2.35, 2.35]} radius={0.2} smoothness={7}>
+          <meshPhysicalMaterial color="#afc5d8" metalness={0.2} roughness={0.1} transmission={0.78} thickness={1.1} ior={1.2} clearcoat={1} transparent opacity={0.62} />
+        </RoundedBox>
+        <RoundedBox args={[2.16, 2.16, 2.16]} radius={0.18} smoothness={7}>
+          <meshBasicMaterial color="#7dd3fc" wireframe transparent opacity={0.18} />
+        </RoundedBox>
       </Float>
 
       {[2.25, 2.9, 3.55].map((radius, index) => (
