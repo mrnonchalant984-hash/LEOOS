@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ArrowDown, ArrowRight, Bot, Boxes, Check, Code2, GitBranch, Globe2, Play, ShieldCheck, Sparkles, Terminal } from 'lucide-react';
 import { Reveal } from '@/components/Reveal';
 import LandingExperience from '@/components/LandingExperience';
+import LeonardXEditorialHero from '@/components/LeonardXEditorialHero';
 
 const stages = [
   ['IDEA','Start with a description, a problem, or a product you want to bring to life.'],
@@ -22,7 +23,8 @@ const capabilities = [
 
 export default function Home(){
  return <main className="landing-page">
-  <section className="landing-hero">
+  <LeonardXEditorialHero />
+  <section className="landing-legacy-hero">
     <LandingExperience/>
     <div className="landing-hero-content">
       <div className="landing-eyebrow"><span/> LEONARD X <span className="slash">/</span> AI SOFTWARE CREATION</div>
@@ -34,7 +36,7 @@ export default function Home(){
     <a href="#story" className="landing-scroll"><ArrowDown size={15}/> Explore the platform</a>
   </section>
 
-  <section id="story" className="landing-story section-space">
+  <section className="landing-story section-space">
     <Reveal><div className="editorial-grid"><div><p className="landing-kicker">THE IDEA</p><h2>Most development tools begin after the hardest decision has already been made.</h2></div><div className="editorial-copy"><p>You already know what you want to create. What usually comes next is a long chain of decisions: architecture, files, interfaces, dependencies, integrations, tests, deployments and the endless work of keeping everything aligned.</p><p>Leonard X is designed around that entire journey. You bring the intention. Leo helps turn it into structured work, then works with the project and its connected tools as the product becomes real.</p></div></div></Reveal>
   </section>
 

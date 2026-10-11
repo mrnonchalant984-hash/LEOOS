@@ -100,6 +100,51 @@ body:has(.landing-page) .landing-eyebrow, body:has(.landing-page) .landing-kicke
 body:has(.landing-page) .landing-eyebrow > span:first-child { background: #a78bfa !important; box-shadow: 0 0 16px rgba(167,139,250,.7) !important; }
 body:has(.landing-page) .landing-hero h1, body:has(.landing-page) .landing-hero h1 em { color: #f5f7ff !important; }
 body:has(.landing-page) .landing-hero h1 em { background: linear-gradient(110deg, #c4b5fd, #67d7ff) !important; -webkit-background-clip: text !important; background-clip: text !important; }
+
+/* LeonardX editorial hero: adapted from the supplied Targo reference while retaining platform navigation and content. */
+.lx-editorial-hero { position: relative; min-height: min(760px, 100svh); overflow: hidden; isolation: isolate; background: #f2f1f0; color: #2b3033; }
+.lx-editorial-hero-video { position: absolute; inset: 0 -20% auto auto; width: 99%; height: auto; max-height: 100%; object-fit: contain; pointer-events: none; z-index: -2; }
+.lx-editorial-hero-scrim { position: absolute; inset: 0 30% 0 0; z-index: -1; background: linear-gradient(90deg, #f2f1f0 0%, #f2f1f0 55%, rgba(242,241,240,.85) 78%, rgba(242,241,240,0) 100%); pointer-events: none; }
+.lx-editorial-hero-content { position: relative; z-index: 1; max-width: 670px; padding: min(clamp(80px, 9vw, 120px), 12vh) 20px min(clamp(40px, 4vw, 70px), 8vh) clamp(20px, 9vw, 118px); }
+.lx-editorial-kicker { margin: 0; color: #596064; font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
+.lx-editorial-hero h1, .lx-editorial-about h2 { margin: 18px 0 0; color: #2b3033; font-family: 'Arial Narrow', Arial, sans-serif; font-size: clamp(3.2rem, 7.6vw, 6.4rem); font-weight: 700; letter-spacing: .01em; line-height: .9; text-transform: uppercase; }
+.lx-editorial-hero h1 span, .lx-editorial-about h2 span { display: block; }
+.lx-editorial-hero h1 span:last-child, .lx-editorial-about h2 span:last-child { margin-left: min(238px, 28vw); color: #15bcdf; }
+.lx-editorial-lead { max-width: 510px; margin: 28px 0 0 min(238px, 28vw); color: #6b6f72; font-size: 14px; line-height: 1.7; }
+.lx-editorial-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 28px 0 0 min(238px, 28vw); }
+.lx-cyan-button, .lx-editorial-outline { display: inline-flex; align-items: center; gap: 10px; min-height: 46px; padding: 0 20px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-decoration: none; text-transform: uppercase; transition: background .25s ease, color .25s ease, box-shadow .25s ease, transform .25s ease; }
+.lx-cyan-button { background: #15bcdf; border: 1px solid #0fa3c2; color: #1a1c1e; box-shadow: 0 0 0 1px rgba(21,188,223,.25), 0 10px 30px -12px rgba(15,163,194,.6); clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 13px 100%, 0 calc(100% - 13px)); }
+.lx-cyan-button:hover { background: #3fd0ef; box-shadow: 0 0 0 1px rgba(21,188,223,.45), 0 14px 34px -10px rgba(15,163,194,.72); transform: translateY(-1px); }
+.lx-editorial-outline { border: 1px solid rgba(43,48,51,.35); color: #3a3a3a; }
+.lx-editorial-outline:hover { background: #2b3033; color: #fff; }
+.lx-editorial-proof { display: flex; flex-wrap: wrap; gap: 18px; margin: 24px 0 0 min(238px, 28vw); color: #7a8083; font-size: 8px; letter-spacing: .1em; }
+.lx-editorial-telemetry { position: absolute; right: clamp(20px, 8vw, 120px); top: 24%; z-index: 1; display: grid; gap: 7px; min-width: 155px; padding: 14px; border: 1px solid rgba(255,255,255,.45); background: rgba(20,24,26,.66); color: #fff; font-size: 8px; letter-spacing: .1em; backdrop-filter: blur(14px); }
+.lx-editorial-telemetry b { color: #79e7b0; font-size: 8px; }
+.lx-editorial-telemetry small { color: rgba(255,255,255,.65); font-size: 8px; letter-spacing: .04em; }
+.lx-editorial-about { display: flex; flex-wrap: wrap; align-items: center; gap: 40px; padding: clamp(70px, 10vw, 140px) 0 clamp(50px, 6vw, 80px) clamp(20px, 9vw, 118px); background: linear-gradient(180deg, #f2f1f0 0%, #f7f6f8 18%, #f7f6f8 100%); color: #2b3033; }
+.lx-editorial-about-copy { flex: 1 1 420px; min-width: 300px; max-width: 650px; padding-right: 20px; }
+.lx-editorial-about h2 { font-size: clamp(3rem, 6.5vw, 5.8rem); }
+.lx-editorial-about-copy>p:not(.lx-editorial-kicker) { max-width: 520px; margin: 32px 0 28px min(160px, 18vw); color: #6b6f72; font-size: clamp(14px, 1.6vw, 17px); line-height: 1.7; }
+.lx-editorial-about-copy .lx-cyan-button { margin-left: min(160px, 18vw); }
+.lx-editorial-about-media { position: relative; flex: 1 1 360px; min-width: 280px; align-self: stretch; min-height: 360px; }
+.lx-editorial-about-video { position: absolute; inset: 0 0 0 auto; width: 100%; max-width: 644px; height: 100%; object-fit: cover; pointer-events: none; }
+.lx-editorial-about-tint { position: absolute; inset: 0 0 0 auto; width: 100%; max-width: 644px; background: #15bcdf; mix-blend-mode: hue; pointer-events: none; }
+.landing-legacy-hero { display: none; }
+@media (max-width: 700px) {
+  .lx-editorial-hero { min-height: 760px; }
+  .lx-editorial-hero-video { inset: 0 auto auto -12%; width: 119%; max-width: none; }
+  .lx-editorial-hero-scrim { display: none; }
+  .lx-editorial-hero-content { padding: 360px 20px 28px; }
+  .lx-editorial-hero h1, .lx-editorial-about h2 { font-size: clamp(2.8rem, 10vw, 4rem); }
+  .lx-editorial-hero h1 span:last-child, .lx-editorial-about h2 span:last-child { margin-left: min(160px, 28vw); }
+  .lx-editorial-lead, .lx-editorial-actions, .lx-editorial-proof { margin-left: 0; }
+  .lx-editorial-telemetry { display: none; }
+  .lx-editorial-about { padding-left: 20px; }
+  .lx-editorial-about-media { min-height: 300px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lx-cyan-button, .lx-editorial-outline { transition: none; }
+}
 body:has(.landing-page) .landing-lead { color: #aab4c9 !important; }
 body:has(.landing-page) .landing-primary { color: white !important; background: linear-gradient(120deg, #8b5cf6, #6551d8) !important; }
 body:has(.landing-page) .landing-secondary { color: #e4e9f5 !important; border-color: rgba(196,205,255,.18) !important; background: rgba(18,24,42,.72) !important; }
