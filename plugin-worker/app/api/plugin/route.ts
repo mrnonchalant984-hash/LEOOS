@@ -96,5 +96,20 @@ export async function POST(request: NextRequest) {
     return json({ data: result.data, request_id: body.request_id });
   }
 
+  if (body.action === 'webhooks.list') {
+    const result = await readLeonardX('/api/v2/webhooks');
+    if ('response' in result) return result.response;
+    return json({ data: result.data, request_id: body.request_id });
+  }
+
+  if (body.action === 'webhooks.read') {
+    const input = body.input && typeof body.input === 'object' ? body.input as Record<string, unknown> : {};
+    const webhookId = typeof input.webhook_id === 'string' && /^[0-9a-f-]{20,}$/i.test(input.webhook_id) ? input.webhook_id : '';
+    if (!webhookId) return json({ error: { code: 'VALIDATION_ERROR', message: 'input.webhook_id is required.' } }, 400);
+    const result = await readLeonardX(`/api/v2/webhooks/${encodeURIComponent(webhookId)}`);
+    if ('response' in result) return result.response;
+    return json({ data: result.data, request_id: body.request_id });
+  }
+
   return json({ error: { code: 'UNSUPPORTED_ACTION', message: 'This plugin action is not supported.' } }, 400);
 }

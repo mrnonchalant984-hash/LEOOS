@@ -11,5 +11,5 @@ Required server-only environment variables:
 - `LEO_API_KEY`: a LeonardX developer API key with read access.
 
 The worker accepts signed `leo-plugin-v1` requests at `/api/plugin` and
-supports `projects.list` and `projects.read`. It never exposes the API key to
-the browser.
+supports `projects.list`, `projects.read`, `webhooks.list`, and `webhooks.read`.
+It never exposes the API key to the browser.
