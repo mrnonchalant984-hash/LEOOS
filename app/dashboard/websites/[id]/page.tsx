@@ -37,6 +37,7 @@ type BuildRecord = {
 };
 
 export default function WebsiteManagementPage() {
+  const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [project, setProject] = useState<WebsiteProject | null>(null);
