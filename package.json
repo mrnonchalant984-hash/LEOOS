@@ -12,6 +12,7 @@
     "verify": "npm run typecheck && npm run lint && npm test && npm run build",
     "db:dry-run": "npx supabase db push --dry-run",
     "db:push": "npx supabase db push",
+    "load:smoke": "node scripts/load-smoke.mjs",
     "migrate": "npm run verify && npx supabase db push --dry-run && npx supabase db push && npx supabase migration list",
     "clean": "node scripts/clean-next.mjs"
   },

@@ -1,0 +1,3 @@
+# LeonardX technology stack guide
+
+Next.js 16 App Router and React 19 provide the web runtime; TypeScript provides route and component contracts. Supabase/Postgres provides auth, RLS, storage and durable state. Vercel hosts the application and telemetry. Sentry handles sanitized errors. OpenAI powers Leo; Paystack handles Nigerian payment flows. `@leo-os/sdk` and `@leo-os/cli` expose the supported developer API. Three/R3F and Framer Motion are used for selected visual experiences. See [`package.json`](./package.json) and [`LEONARDX_ARCHITECTURE_GUIDE.md`](./LEONARDX_ARCHITECTURE_GUIDE.md). No Redis or queue vendor is currently configured.
