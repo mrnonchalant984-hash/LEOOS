@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { classifyAgents, getAgent, parseAgentExecutionResult, runAgent } from '@/lib/agents/manager';
-import { enforceIpRateLimit, enforceUserRateLimit } from '@/lib/rate-limit';
+import { enforceDimensionRateLimit, enforceIpRateLimit, enforceUserRateLimit } from '@/lib/rate-limit';
 import { getEffectiveUserPlan } from '@/lib/plan-access';
 import { canWriteOrganization, getOrganizationRole } from '@/lib/organization-access';
 import { withOperationalMonitoring } from '@/lib/monitoring';
@@ -40,7 +40,11 @@ export async function POST(req: NextRequest) {
     if (organizationId) {
       const organizationRole = await getOrganizationRole(ctx.user.id, organizationId);
       if (!canWriteOrganization(organizationRole)) return NextResponse.json({ error: 'You do not have permission to run agents in this organization.' }, { status: 403 });
+      const organizationLimited = await enforceDimensionRateLimit(req, `organization:${organizationId}`, 'agent-org', owner ? 240 : 120, 3600);
+      if (organizationLimited) return organizationLimited;
     }
+    const planLimited = await enforceDimensionRateLimit(req, `plan:${plan.key}`, 'agent-plan', owner ? 1000 : plan.key === 'business' || plan.key === 'unlimited' ? 240 : plan.key === 'pro' ? 120 : 30, 3600);
+    if (planLimited) return planLimited;
     const providerLimit = owner ? 120 : plan.key === 'pro' ? 40 : plan.key === 'business' || plan.key === 'unlimited' ? 80 : 15;
     const providerLimited = await enforceUserRateLimit(ctx.user.id, `agent-provider-${agent.id}`, providerLimit, 3600);
     if (providerLimited) return providerLimited;

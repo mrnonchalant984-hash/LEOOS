@@ -1,22 +1,22 @@
 # LeonardX Release Readiness
 
 Assessment date: 2026-10-12  
-Recommendation: **NO-GO** for public production release at this point.
+Recommendation: **NO-GO** for public production release at this point. The application build and database migration are now verified, but external provider operation and several lifecycle/security gates remain incomplete.
 
 ## Evidence summary
 
 | Area | Result | Evidence |
 |---|---|---|
 | Unit/security regression tests | PASS | `npm test`: 49 passed, 0 failed. |
-| Lint | PASS WITH WARNINGS | `npm run lint`: exit 0, 11 warnings. |
+| Lint | PASS | `npm run lint`: exit 0 with no reported warnings/errors. |
 | TypeScript | PASS | `npm run typecheck`: route types generated and TypeScript exited 0. |
-| Production build | NOT VERIFIED | Compile succeeded, but the post-compile phase stalled without final output and was stopped on request. |
+| Production build | PASS | `npm run build`: compile, Sentry post-compile, TypeScript, static generation, and optimization completed successfully. |
 | Authentication/API authorization | PARTIAL | Auth and API-key ownership checks exist; organization and cross-tenant negative testing is incomplete. |
 | Payments | PARTIAL | Paystack signature/provider verification and idempotent apply path exist; cancellation lifecycle and production RPC parity are not verified. |
 | Webhooks | PARTIAL | HMAC, retries, claims, and delivery records exist; competing schemas/workers and narrow event coverage remain. |
 | Provider integrations | BLOCKED BY EXTERNAL SETUP | No live credential or provider health verification was performed. |
 | Monitoring | BLOCKED BY EXTERNAL SETUP | Sentry and Speed Insights code exists; ingestion, alerts, and dashboard data are not verified. |
-| Database migrations | NOT VERIFIED | Files inspected only; nothing was applied or compared against production. |
+| Database migrations | PASS FOR CURRENT MIGRATION SET | `20261012160000_reliability_controls.sql` was applied with `npm run db:push`; `npx supabase migration list` reports local and remote IDs aligned. |
 | API-key management | PARTIAL | Hashing/scopes/revocation/expiry and new rate limits exist; atomic rotation and migration parity remain. |
 | CLI/SDK | PARTIAL | Supported metadata API operations and tests exist; CLI deploy/ship are deliberately unavailable and publication was not verified here. |
 | Plugins | PARTIAL | Trusted metadata registry and remote gateway exist; no sandboxed arbitrary-code execution or marketplace exists. |
@@ -50,7 +50,6 @@ Recommendation: **NO-GO** for public production release at this point.
 
 ## Go/no-go decision
 
-**NO-GO.** The repository has a working tested foundation and the first two code repairs are complete, but production readiness is not established while build completion, tenant isolation, payment lifecycle, webhook canonicalization, migration parity, and provider monitoring remain unresolved or unverified.
+**NO-GO.** The repository has a tested foundation, a successful production build, and migration parity for the current Supabase project. Production readiness is not established while tenant isolation, payment lifecycle, webhook canonicalization, durable worker scheduling, and provider monitoring remain unresolved or externally unverified.
 
 The next release gate should be a staging-only Phase 1 verification: authorization matrix, payment lifecycle fixtures, canonical webhook decision, and migration/RPC parity report. Do not label the product production-ready until those results pass and the build exits successfully.
-
