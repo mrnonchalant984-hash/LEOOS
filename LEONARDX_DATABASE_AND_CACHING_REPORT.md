@@ -1,18 +1,76 @@
-# LeonardX database and caching report
+# LeonardX Database and Caching Report
 
-## Current database
+Date: 2026-10-12
 
-Supabase/Postgres is the source of truth for profiles, organizations, projects, payments, credits, API keys, usage, webhooks, agent runs and jobs. RLS is enabled on sensitive tables, while service-role access in route handlers must reapply ownership or membership predicates.
+## Status summary
 
-The applied [`20261012160000_reliability_controls.sql`](./supabase/migrations/20261012160000_reliability_controls.sql) adds organization indexes, shared rate-limit buckets, payment lifecycle fields and `agent_jobs` without rewriting existing rows.
+- VERIFIED WITH EVIDENCE: SQL-heavy application routes exist and the repo compiles.
+- PARTIAL: actual Supabase query plans and DB tuning remain unverified because no live DB credentials or staging environment were available here.
+- BLOCKED: EXPLAIN/ANALYZE and migration execution require live Postgres access.
 
-## Findings
+## Observed database patterns
 
-- Indexes exist for common user/organization and queue access paths, but no representative `EXPLAIN` evidence is recorded.
-- Organization creation in [`app/api/organizations/route.ts`](./app/api/organizations/route.ts) uses separate organization and owner-membership writes; a transaction/RPC is required for atomic creation.
-- Credits use database-side locking in [`supabase/schema.sql`](./supabase/schema.sql), but concurrency tests against the deployed RPC are not recorded.
-- No shared Redis/cache is configured. This is intentional until measurement shows a need; payment, authorization and credit state must never come from a cache.
+The app uses Supabase Postgres heavily across:
 
-## Safe next actions
+- auth/session data via [lib/auth.ts](lib/auth.ts)
+- dashboards and runtime data via [app/api/admin/overview/route.ts](app/api/admin/overview/route.ts)
+- project data via [app/api/setup/projects/route.ts](app/api/setup/projects/route.ts)
+- payment and verification via [lib/payments.ts](lib/payments.ts)
+- webhook delivery state via [app/api/internal/webhooks/worker/route.ts](app/api/internal/webhooks/worker/route.ts)
+- AI memory/knowledge via [app/api/admin/leo/training/knowledge/route.ts](app/api/admin/leo/training/knowledge/route.ts)
 
-Collect query plans on a staging clone, verify RLS with allowed/denied fixtures, and only then propose indexes or a cache. Define cache keys, TTL, invalidation and tenant boundaries before adding any shared cache.
+## Query behavior observations
+
+- Several routes use `select('*')` and large row sets rather than narrow projections, which is acceptable for small scale but can create hot spots under load.
+- Some dashboards are aggregated in memory on the app server rather than precomputed materialized summaries; this is flexible but can lead to fan-out under heavy usage.
+- RLS and service-role usage are present, which is correct for secure server-side writes, but auth/data policy performance needs live benchmarking.
+
+## Caching decisions
+
+Current repo status:
+
+- Browser/public CDN caching is not explicitly configured beyond Next.js defaults.
+- No Redis cache or distributed cache layer is present.
+- Several expensive operations are still request-driven and should not be cached unless the data is explicitly public and safe.
+
+Safe candidates for future cache layers:
+
+- public static page data and immutable assets
+- low-churn reference data that is not user or tenant specific
+- frequently read but minimally changing pricing/configuration metadata
+
+Unsafe to cache without strong tenancy isolation:
+
+- user profiles and role data
+- payment verification state
+- AI output and chat state per user
+- credits/subscription entitlements
+- webhook delivery state and event payloads
+
+## Proposed cache policy
+
+- TTL: 30s–5m for safe, non-sensitive metadata only
+- key format: user or tenant scoped plus resource path
+- invalidate on mutation or explicit version bump
+- no stale cache for auth or payment state
+- no cross-user caching for private data
+
+## Index and migration status
+
+The repo contains a supabase migration system under [supabase](supabase), but the environment did not have valid DB credentials to run `db:dry-run` or apply any migration in this session.
+
+This means the database improvement plan is still a design recommendation, not a validated production optimization.
+
+## Recommended next actions
+
+1. Enable live Supabase query logs.
+2. Run `EXPLAIN ANALYZE` for top dashboard and payment endpoints.
+3. Add composite indexes for high-traffic filters, ordered queries, and joined lookups once the schema is live.
+4. Keep RLS simple and test performance with `EXPLAIN` rather than broad index proliferation.
+5. Evaluate cache only after actual workload data shows repeated reads and low churn.
+
+## Evidence confidence
+
+- VERIFIED WITH EVIDENCE: repo architecture and code patterns are as above.
+- PARTIAL: DB optimization must be data-driven and live.
+- BLOCKED: actual plan and migration validation require a valid Supabase environment.

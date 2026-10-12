@@ -1,12 +1,46 @@
-# LeonardX operations and ecosystem plan
+# LeonardX Operations and Ecosystem Plan
 
-Current developer surfaces are documented in [`LEONARDX_DEVELOPER_PLATFORM_AUDIT.md`](./LEONARDX_DEVELOPER_PLATFORM_AUDIT.md), [`packages/sdk/README.md`](./packages/sdk/README.md), and [`packages/cli/README.md`](./packages/cli/README.md). The SDK and CLI support real API-key project operations; deploy/ship and arbitrary plugin execution remain intentionally unavailable.
+Date: 2026-10-12
 
-Priorities:
+## Status summary
 
-1. Authorization/payment/webhook correctness and negative tests.
-2. Durable worker lease/scheduler and canonical webhook migration.
-3. Staging load, query plans, provider alerts and restore drill.
-4. API compatibility, release gates, dependency patching and cost reviews.
+- VERIFIED WITH EVIDENCE: the repo already exposes API routes, SDK package scaffolding, and developer-facing integration surfaces.
+- PARTIAL: developer ecosystem governance, public API compatibility, and support readiness are under-documented and not fully validated.
+- BLOCKED: publishing SDK/CLI or breaking API changes requires explicit approval and environment-backed validation.
 
-No plugin sandbox, Redis service, paid worker, package publication, or provider integration should be added merely to imply maturity.
+## Current ecosystem observations
+
+- Developer API routes: [app/api/v1](app/api/v1), [app/api/v2](app/api/v2)
+- SDK package: [packages/sdk](packages/sdk)
+- CLI UI/docs: [app/cli/page.tsx](app/cli/page.tsx), [app/developers/docs/page.tsx](app/developers/docs/page.tsx)
+- Integration status: [lib/integration-status.ts](lib/integration-status.ts)
+
+## Operational responsibilities
+
+- product owner: roadmap, feature prioritization, approval gates
+- engineering: app quality, API compatibility, DB changes
+- security: auth policy review, secret rotation, threat review
+- support: incident response and customer communication
+- finance/ops: payment reconciliation and provider cost review
+
+## Governance standards
+
+- version APIs explicitly and document deprecations
+- record significant architecture decisions
+- keep change logs and migration review
+- test auth and tenant isolation for every new sensitive route
+- require approval before breaking public API contracts
+
+## Developer ecosystem plan
+
+- keep example requests and response contracts in repo docs
+- verify SDK compatibility against actual API routes
+- document rate limits and errors
+- maintain webhook replay and diagnostics tools
+- keep CLI and SDK updates behind explicit release gates
+
+## Evidence status
+
+- VERIFIED WITH EVIDENCE: surfaces exist in code.
+- PARTIAL: governance and operational process are not yet fully formalized in live operations.
+- BLOCKED: public release or package publication should wait for staged validation and owner approval.

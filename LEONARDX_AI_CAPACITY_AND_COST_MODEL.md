@@ -1,18 +1,60 @@
-# LeonardX AI capacity and cost model
+# LeonardX AI Capacity and Cost Model
 
-Leo requests use the existing OpenAI integration in [`lib/openai.ts`](./lib/openai.ts) and usage records in `ai_usage`. Prompts and private project content must not be copied into monitoring logs.
+Date: 2026-10-12
 
-## Model
+## Status summary
 
-For a period, estimate provider cost as:
+- VERIFIED WITH EVIDENCE: the repo uses OpenAI server-side via [lib/openai.ts](lib/openai.ts), and AI features are structured under app routes.
+- PARTIAL: no real provider quota, token usage, or cost data was measured in this environment.
+- BLOCKED: provider rate limits, cost per model, concurrency ceilings, and real token usage require live credentials and configured provider instrumentation.
 
-`requests × (input_tokens × input_price + output_tokens × output_price) + image/tool/provider charges`
+## Observed architecture
 
-Use the provider’s current official pricing and the actual model recorded in `ai_usage`; do not hardcode a price in the application. Add concurrency, timeout and retry counts to the measurement sheet. Retries must not create an unbounded spend loop.
+AI-related routes include:
 
-## Controls present / missing
+- [app/api/chat/route.ts](app/api/chat/route.ts)
+- [app/api/research/route.ts](app/api/research/route.ts)
+- [app/api/speak/route.ts](app/api/speak/route.ts)
+- [app/api/voice/route.ts](app/api/voice/route.ts)
+- [app/api/generate-image/route.ts](app/api/generate-image/route.ts)
+- [app/api/admin/leo/training/test/route.ts](app/api/admin/leo/training/test/route.ts)
 
-- Present: user rate limits, plan-aware provider buckets in agent execution, bounded request context, operational monitoring and approval states.
-- Missing or unverified: complete per-organization budget ledger, provider Retry-After handling across every AI path, measured first-token latency, and provider outage drill.
+## AI risk points
 
-Routine tests should use a mocked provider. Production cost and capacity remain NOT VERIFIED.
+- provider quotas are constrained by environment config, but not measured here
+- no real concurrency budget is enforced in repo-level code for all routes
+- no per-user AI cost model is documented from actual traffic and rate plans
+- retries risk compounding cost during provider failures
+
+## Recommended guardrails
+
+- enforce per-user and per-tenant concurrency caps
+- set per-request timeout and total token ceilings
+- apply exponential backoff with jitter on rate limit and timeout retries
+- keep mock-provider load tests by default
+- cap total daily spend for each workspace or user with config-driven limits
+- require server-side authorization before any tool or model side effect
+
+## Illustrative capacity model
+
+This is a planning model, not verified production capacity.
+
+| Scenario | Assumption | Estimated cost pattern |
+|---|---|---|
+| Light product usage | 50 active users, few chat requests/day | low, stable |
+| Moderate usage | 500 active users, chat + simple generation | moderate, provider-dependent |
+| High usage | multiple concurrent AI tasks, rich generation | provider throttling risk, cost spikes |
+
+## Cost drivers
+
+- input/output token count
+- image generation model and output size
+- audio transcription/speech calls
+- concurrency and retries
+- model selection and fallback behavior
+
+## Evidence status
+
+- VERIFIED WITH EVIDENCE: OpenAI integration exists and the repo compiles.
+- PARTIAL: cost model is not validated with real provider data.
+- BLOCKED: accurate token/cost quotas need real provider access and billing configuration.
