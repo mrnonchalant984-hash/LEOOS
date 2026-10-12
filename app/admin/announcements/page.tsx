@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { GlassCard } from '@/components/GlassCard';
 
@@ -19,6 +20,7 @@ type Announcement = {
 };
 
 export default function AdminAnnouncementsPage() {
+  const router = useRouter();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
@@ -33,10 +35,6 @@ export default function AdminAnnouncementsPage() {
     release_date: new Date().toISOString().slice(0, 16),
   });
 
-  useEffect(() => {
-    void loadAnnouncements();
-  }, []);
-
   async function getSession() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -46,10 +44,10 @@ export default function AdminAnnouncementsPage() {
     return session;
   }
 
-  async function loadAnnouncements() {
+  const loadAnnouncements = useCallback(async () => {
     const session = await getSession();
     if (!session) {
-      window.location.href = '/auth';
+      router.push('/auth');
       return;
     }
 
@@ -65,7 +63,12 @@ export default function AdminAnnouncementsPage() {
 
     setAnnouncements(json.announcements || []);
     setLoading(false);
-  }
+  }, [router]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadAnnouncements(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadAnnouncements]);
 
   async function saveAnnouncement() {
     const session = await getSession();

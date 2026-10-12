@@ -57,15 +57,15 @@ The only untracked item observed before and after the audit was the pre-existing
 
 ### P1-1 — Public integration status has a misleading parallel implementation
 
-**Status: BROKEN**
+**Status: PARTIAL**
 
 - **Evidence:** [`app/integrations/page.tsx`](./app/integrations/page.tsx) maps environment-variable presence to `status: 'CONNECTED'`, then renders a `verified` marker. Its copy says actual configuration is enough. In contrast, [`lib/integration-status.ts`](./lib/integration-status.ts) performs owner-only server checks for selected providers and [`app/api/setup/integrations/status/route.ts`](./app/api/setup/integrations/status/route.ts) protects that endpoint with owner authorization and rate limiting. [`app/setup/keys/page.tsx`](./app/setup/keys/page.tsx) uses the newer status center.
 - **What works:** The setup status center has explicit states, an allowlist, server-side checks, sanitized messages, and owner authorization.
-- **Missing/broken:** `/integrations` still tells users that configuration presence is connected/verified. `/status` intentionally shows configuration only, but the product has two different status semantics without a prominent separation.
+- **Missing/broken:** The generic page is now configuration-only, but `/status` intentionally shows configuration only and the product still has two status surfaces. The owner-only setup center remains the only surface with safe live checks.
 - **User impact:** Users can believe Paystack, OpenAI, GitHub, or Vercel is operational when only an environment variable exists.
 - **Security risk:** Misleading operational status can cause unsafe production decisions, especially for payments and deployments.
 - **External dependencies:** Provider credentials and deployment configuration.
-- **Recommended action:** P1: make `/integrations` consume the same sanitized status contract or explicitly label it configuration-only and remove the verified marker. Keep `/setup/keys` as the owner-only connection center.
+- **Recommended action:** P1: keep `/integrations` explicitly configuration-only, link it clearly to the owner-only check center, and prevent future copy from implying health. Keep `/setup/keys` as the owner-only connection center.
 - **Verification method:** With each provider absent, invalid, and valid in staging, compare every integration page’s badge and explanatory text.
 
 ### P1-2 — Webhook infrastructure has two schemas and narrow event coverage
@@ -87,11 +87,11 @@ The only untracked item observed before and after the audit was the pre-existing
 
 - **Evidence:** [`lib/api-auth.ts`](./lib/api-auth.ts) invokes the Supabase `consume_api_rate_limit` RPC at 120 requests/minute per key and emits `Retry-After`. [`supabase/migrations/20261010120000_user_rate_limits.sql`](./supabase/migrations/20261010120000_user_rate_limits.sql) defines the user bucket function. [`lib/rate-limit.ts`](./lib/rate-limit.ts) provides user buckets for selected expensive operations.
 - **What works:** API-key limits use a shared database function rather than process memory; expensive routes such as agent runs, checkout, build/deploy, and website audits use user buckets.
-- **Missing/broken:** The inspected implementation does not provide separate configurable limits by IP, organization, subscription plan, or provider cost class. Several API-key management and authenticated routes are not wrapped by the user limiter. The exact `consume_api_rate_limit` migration/function was not found in the listed migration set, so production schema parity is not verified.
+- **Missing/broken:** The inspected implementation does not provide separate configurable limits by IP, organization, subscription plan, or provider cost class. API-key list/create/revoke now have user buckets, but other management and authenticated routes still need review. The exact `consume_api_rate_limit` migration/function was not found in the listed migration set, so production schema parity is not verified.
 - **User impact:** Limits may be too coarse for teams and too permissive or unavailable for some expensive paths.
 - **Security risk:** Missing abuse controls can increase AI/payment/provider costs and permit denial-of-service patterns.
 - **External dependencies:** Supabase RPC deployment and provider/network limits.
-- **Recommended action:** P1: verify the API-key RPC migration exists remotely, define plan/org/IP dimensions, and apply a shared limiter to key management, playground, plugin runtime, webhooks, and all expensive AI/build routes.
+- **Recommended action:** P1: verify the API-key RPC migration exists remotely, define plan/org/IP dimensions, and apply a shared limiter to the playground, plugin runtime, webhooks, and all expensive AI/build routes.
 - **Verification method:** Load-test from multiple instances/identities and assert 429 metadata, fail-closed behavior, and isolation of buckets.
 
 ### P1-4 — Agent execution is synchronous and not a durable workflow worker
@@ -232,11 +232,11 @@ The only untracked item observed before and after the audit was the pre-existing
 
 - **Evidence:** [`lib/integration-studio.ts`](./lib/integration-studio.ts) labels API/SDK/CLI/IDE/plugin/webhook walkthrough outputs as simulations or examples. Its plugin scenario still says persistence is a process-local Map, while current [`lib/plugins.ts`](./lib/plugins.ts) and [`supabase/migrations/20261010140000_plugin_manifests.sql`](./supabase/migrations/20261010140000_plugin_manifests.sql) are durable metadata.
 - **What works:** Tests in [`tests/integration-studio.test.mjs`](./tests/integration-studio.test.mjs) verify each walkthrough and that it avoids claiming live execution.
-- **Missing/broken:** Documentation is stale for plugins and should distinguish a real remote gateway from a simulation. The studio is not an interactive live API/deployment tutorial.
+- **Missing/broken:** The plugin wording has been corrected to distinguish durable metadata from the trusted remote gateway. The studio is still not an interactive live API/deployment tutorial.
 - **User impact:** Developers receive contradictory capability information.
 - **Security risk:** Stale claims can lead to unsafe integration assumptions.
 - **External dependencies:** Current API and plugin registry contracts.
-- **Recommended action:** P2: update tutorial data after contract review and add a separate explicitly authenticated playground if needed.
+- **Recommended action:** P2: add a separate explicitly authenticated playground if needed and keep all simulated steps visibly labeled.
 - **Verification method:** Compare every tutorial claim against route tests and live staging behavior.
 
 ### P2-5 — SEO inventory is incomplete and dynamic metadata is weak
@@ -379,4 +379,3 @@ The following require provider-side or deployment-side confirmation and were not
 ## Recommended first implementation phase
 
 Start with P0/P1 integrity work: unify organization authorization, verify the production Supabase migration/RPC set, complete payment subscription lifecycle handling, canonicalize webhook schema/events/worker behavior, and remove the misleading `/integrations` status path. Only after those checks should the team add durable agent jobs or broaden SDK/CLI capabilities.
-

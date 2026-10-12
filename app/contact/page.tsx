@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import Link from 'next/link';
-import { Mail, MapPin, MessageCircle, Phone, Send } from 'lucide-react';
+import { Mail, MapPin, Phone, Send } from 'lucide-react';
 import { siteData } from '@/data/site';
 
 export default function ContactPage() {
@@ -80,8 +80,6 @@ export default function ContactPage() {
             <a href={`tel:${siteData.phone}`} className="flex gap-3 rounded-xl border border-zinc-800 p-4 hover:border-[var(--gold)]"><Phone className="text-[var(--gold)]" /> <span>{siteData.phoneDisplay}</span></a>
             <div className="flex gap-3 rounded-xl border border-zinc-800 p-4"><MapPin className="text-[var(--gold)]" /> <span>{siteData.location}</span></div>
           </div>
-          <Link href={siteData.whatsapp} target="_blank" className="mt-6 block rounded-xl bg-[var(--gold)] px-5 py-4 text-center font-black text-black"><MessageCircle className="mr-2 inline" size={18} />Message LeonardX on WhatsApp</Link>
-          <p className="mt-4 text-sm text-zinc-500">WhatsApp: {siteData.phoneDisplay}</p>
         </aside>
       </div>
     </main>

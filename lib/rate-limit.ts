@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
 
 /** Consume a shared Postgres user bucket. Fail closed if the limiter is unavailable. */
@@ -37,4 +37,38 @@ export async function enforceUserRateLimit(
       { status: 503, headers: { 'Retry-After': '5', 'Cache-Control': 'no-store' } },
     );
   }
+}
+
+function clientAddress(req: NextRequest) {
+  const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return forwarded || req.headers.get('x-real-ip')?.trim() || 'unknown';
+}
+
+/** Shared serverless limiter for IP, organization, plan, provider, or API-key dimensions. */
+export async function enforceDimensionRateLimit(
+  req: NextRequest,
+  subject: string,
+  bucket: string,
+  limit: number,
+  windowSeconds: number,
+): Promise<NextResponse | null> {
+  const normalized = subject.trim().slice(0, 180);
+  if (!normalized) return NextResponse.json({ error: 'Rate-limit subject is unavailable.' }, { status: 503 });
+  try {
+    const { data, error } = await adminSupabase().rpc('consume_rate_limit_bucket', {
+      p_subject_key: normalized,
+      p_bucket: bucket,
+      p_limit: limit,
+      p_window_seconds: windowSeconds,
+    });
+    if (error) return NextResponse.json({ error: 'Rate limiting is temporarily unavailable. Try again shortly.' }, { status: 503, headers: { 'Retry-After': '5', 'Cache-Control': 'no-store' } });
+    if (data !== true) return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429, headers: { 'Retry-After': String(windowSeconds), 'Cache-Control': 'no-store' } });
+    return null;
+  } catch {
+    return NextResponse.json({ error: 'Rate limiting is temporarily unavailable. Try again shortly.' }, { status: 503, headers: { 'Retry-After': '5', 'Cache-Control': 'no-store' } });
+  }
+}
+
+export async function enforceIpRateLimit(req: NextRequest, bucket: string, limit: number, windowSeconds: number) {
+  return enforceDimensionRateLimit(req, `ip:${clientAddress(req)}`, bucket, limit, windowSeconds);
 }

@@ -11,9 +11,12 @@ export const runtime = 'nodejs';
 type PaystackEvent = {
   event?: unknown;
   data?: {
+    id?: unknown;
     reference?: unknown;
     metadata?: unknown;
     customer?: { customer_code?: unknown };
+    subscription_code?: unknown;
+    subscription?: { subscription_code?: unknown };
   };
 };
 
@@ -57,8 +60,19 @@ export async function POST(req: NextRequest) {
   const metadata = getMetadata(transaction.metadata);
   const reference = typeof transaction.reference === 'string' ? transaction.reference : '';
   const db = adminSupabase();
+  const providerEventId = typeof transaction.id === 'string' || typeof transaction.id === 'number'
+    ? `${eventName}:${String(transaction.id)}`
+    : reference ? `${eventName}:${reference}` : '';
+  let providerEventColumnAvailable = true;
 
   try {
+    if (providerEventId && ['charge.success', 'charge.failed', 'refund.processed', 'charge.refund'].includes(eventName)) {
+      const { data: seen, error: seenError } = await db.from('payments').select('reference,status').eq('provider_event_id', providerEventId).maybeSingle();
+      if (seenError?.code === '42703') providerEventColumnAvailable = false;
+      else if (seenError) throw seenError;
+      if (seen) return NextResponse.json({ received: true, idempotent: true });
+    }
+
     if (eventName === 'charge.success' && metadata.type === 'hosting_renewal' && reference) {
       const hostingId = typeof metadata.hosting_id === 'string' ? metadata.hosting_id : '';
       const { data: renewal, error: renewalReadError } = await db.from('hosting_renewal_payments')
@@ -176,12 +190,15 @@ export async function POST(req: NextRequest) {
 
     if (eventName === 'charge.success' && metadata.user_id && reference) {
       const payment = await verifyAndApplyPaystack(reference);
+      if (providerEventColumnAvailable && providerEventId) await db.from('payments').update({ provider_event_id: providerEventId }).eq('reference', reference);
       return NextResponse.json({ received: true, idempotent: payment.alreadyApplied });
     }
 
     if (eventName === 'charge.failed' && reference) {
+      const failedUpdate: Record<string, string> = { status: 'failed', verified_at: new Date().toISOString() };
+      if (providerEventColumnAvailable && providerEventId) failedUpdate.provider_event_id = providerEventId;
       const { error: paymentError } = await db.from('payments')
-        .update({ status: 'failed', verified_at: new Date().toISOString() })
+        .update(failedUpdate)
         .eq('reference', reference)
         .eq('status', 'pending');
       if (paymentError) throw paymentError;
@@ -192,9 +209,23 @@ export async function POST(req: NextRequest) {
         .eq('status', 'pending');
     }
 
-    if (eventName === 'subscription.disable' && transaction.customer?.customer_code) {
-      // Provider cancellations are intentionally not mapped to local access until a
-      // corresponding provider subscription identifier is stored in the product model.
+    if (eventName === 'refund.processed' || eventName === 'charge.refund') {
+      if (reference) {
+        const refundUpdate: Record<string, string> = { status: 'refunded', refunded_at: new Date().toISOString() };
+        if (providerEventColumnAvailable && providerEventId) refundUpdate.provider_event_id = providerEventId;
+        const { error: refundError } = await db.from('payments').update(refundUpdate).eq('reference', reference);
+        if (refundError) throw refundError;
+      }
+    }
+
+    if (eventName === 'subscription.disable') {
+      const subscriptionCode = typeof transaction.subscription_code === 'string'
+        ? transaction.subscription_code
+        : typeof transaction.subscription?.subscription_code === 'string' ? transaction.subscription.subscription_code : '';
+      if (subscriptionCode) {
+        const { error: subscriptionError } = await db.from('subscriptions').update({ status: 'cancelled', provider_status: 'disabled', canceled_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('paystack_subscription_code', subscriptionCode).eq('status', 'active');
+        if (subscriptionError && subscriptionError.code !== '42703') throw subscriptionError;
+      }
     }
 
     return NextResponse.json({ received: true });

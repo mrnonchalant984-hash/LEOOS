@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { classifyAgents, getAgent, parseAgentExecutionResult, runAgent } from '@/lib/agents/manager';
-import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { enforceIpRateLimit, enforceUserRateLimit } from '@/lib/rate-limit';
+import { getEffectiveUserPlan } from '@/lib/plan-access';
+import { canWriteOrganization, getOrganizationRole } from '@/lib/organization-access';
 import { withOperationalMonitoring } from '@/lib/monitoring';
 
 export const runtime = 'nodejs';
@@ -18,11 +20,14 @@ export async function POST(req: NextRequest) {
 
     const limited = await enforceUserRateLimit(ctx.user.id, 'agent-run', 10, 60);
     if (limited) return limited;
+    const ipLimited = await enforceIpRateLimit(req, 'agent-run-ip', 60, 60);
+    if (ipLimited) return ipLimited;
 
-    const requested = typeof body.agent_id === 'string' ? getAgent(body.agent_id) : null;
-    if (body.agent_id && !requested) return NextResponse.json({ error: 'The requested agent is not available.' }, { status: 404 });
+    const requested = typeof body?.agent_id === 'string' ? getAgent(body.agent_id) : null;
+    if (body?.agent_id && !requested) return NextResponse.json({ error: 'The requested agent is not available.' }, { status: 404 });
 
     const owner = isPlatformOwner(ctx.profile);
+    const plan = await getEffectiveUserPlan(ctx.user.id, owner);
     const agents = requested ? [requested] : classifyAgents(task, owner);
     if (!agents.length) return NextResponse.json({ error: 'No permitted agent is available for this task.' }, { status: 403 });
     if (agents.some((agent) => agent.ownerOnly && !owner)) {
@@ -31,7 +36,33 @@ export async function POST(req: NextRequest) {
 
     const db = adminSupabase();
     const agent = agents[0];
+    const organizationId = typeof body.organization_id === 'string' ? body.organization_id : null;
+    if (organizationId) {
+      const organizationRole = await getOrganizationRole(ctx.user.id, organizationId);
+      if (!canWriteOrganization(organizationRole)) return NextResponse.json({ error: 'You do not have permission to run agents in this organization.' }, { status: 403 });
+    }
+    const providerLimit = owner ? 120 : plan.key === 'pro' ? 40 : plan.key === 'business' || plan.key === 'unlimited' ? 80 : 15;
+    const providerLimited = await enforceUserRateLimit(ctx.user.id, `agent-provider-${agent.id}`, providerLimit, 3600);
+    if (providerLimited) return providerLimited;
     const context = typeof body.context === 'string' ? body.context.slice(0, 18_000) : '';
+
+    if (body.async === true) {
+      if (process.env.AGENT_WORKER_ENABLED !== 'true') {
+        return NextResponse.json({ error: 'Durable agent execution is not enabled in this deployment.' }, { status: 503 });
+      }
+      const { data: queuedRun, error: queuedRunError } = await db.from('agent_runs').insert({
+        user_id: ctx.user.id,
+        agent_id: agent.id,
+        task,
+        status: 'queued',
+        ...(organizationId ? { organization_id: organizationId } : {}),
+        metadata: { context, requested_agents: agents.map((item) => item.id), execution_mode: 'durable_worker' },
+      }).select('id').single();
+      if (queuedRunError) throw queuedRunError;
+      const { error: jobError } = await db.from('agent_jobs').insert({ run_id: queuedRun.id, user_id: ctx.user.id });
+      if (jobError) throw jobError;
+      return NextResponse.json({ status: 'queued', run_id: queuedRun.id, agent: { id: agent.id, name: agent.name } }, { status: 202 });
+    }
 
     if (agent.approvalRequired) {
       const { data: run, error: runError } = await db.from('agent_runs').insert({
@@ -39,6 +70,7 @@ export async function POST(req: NextRequest) {
         agent_id: agent.id,
         task,
         status: 'waiting_approval',
+        ...(organizationId ? { organization_id: organizationId } : {}),
         metadata: { context, requested_agents: agents.map((item) => item.id) },
       }).select('id').single();
       if (runError) throw runError;
@@ -70,6 +102,7 @@ export async function POST(req: NextRequest) {
         task,
         status: 'running',
         started_at: new Date().toISOString(),
+        ...(organizationId ? { organization_id: organizationId } : {}),
       }).select('id,metadata').single();
       if (runError) throw runError;
 

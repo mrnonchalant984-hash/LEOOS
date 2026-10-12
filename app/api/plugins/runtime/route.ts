@@ -61,6 +61,9 @@ async function recordExecution(id: string, values: Record<string, unknown>) {
 
 export async function POST(req: NextRequest) {
   const requestId = req.headers.get('X-Request-ID')?.trim() || randomUUID();
+  if (process.env.PLUGIN_RUNTIME_ENABLED !== 'true' || process.env.PLUGIN_RUNTIME_SANDBOX_ATTESTED !== 'true') {
+    return json({ error: { code: 'PLUGIN_RUNTIME_DISABLED', message: 'Plugin execution is disabled until an isolated runtime is attested.' }, request_id: requestId }, 503, requestId);
+  }
   if (!tokenMatches(req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim() || null, process.env.PLUGIN_RUNTIME_TOKEN)) {
     return json({ error: { code: 'UNAUTHORIZED', message: 'Plugin runtime authentication failed.' }, request_id: requestId }, 401, requestId);
   }

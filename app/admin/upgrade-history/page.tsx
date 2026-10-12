@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { GlassCard } from '@/components/GlassCard';
 
 export default function UpgradeHistoryPage() {
+  const router = useRouter();
   const [jobs, setJobs] = useState<any[]>([]);
 
   useEffect(() => {
@@ -17,7 +19,7 @@ export default function UpgradeHistoryPage() {
       const supabase = createBrowserClient(url, key);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        window.location.href = '/auth';
+        router.push('/auth');
         return;
       }
 
@@ -32,7 +34,7 @@ export default function UpgradeHistoryPage() {
         alert(json.error || 'Unable to load upgrade history.');
       }
     })();
-  }, []);
+  }, [router]);
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-10">

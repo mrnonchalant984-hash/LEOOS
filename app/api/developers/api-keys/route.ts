@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile } from '@/lib/auth';
 import { generateApiKey, parseScopes } from '@/lib/api-keys-core';
 import { hashSecret } from '@/lib/api-security';
+import { enforceUserRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+  const limited = await enforceUserRateLimit(ctx.user.id, 'api-key-read', 30, 60);
+  if (limited) return limited;
   const { data, error } = await adminSupabase().from('api_keys').select('id,name,prefix,scopes,revoked,expires_at,last_used_at,created_at').eq('user_id', ctx.user.id).order('created_at', { ascending: false });
   if (error) return NextResponse.json({ error: 'API keys could not be loaded' }, { status: 500 });
   return NextResponse.json({ keys: data || [] });
@@ -16,6 +19,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+  const limited = await enforceUserRateLimit(ctx.user.id, 'api-key-write', 10, 60);
+  if (limited) return limited;
   const body = await req.json().catch(() => ({}));
   const rotateId = typeof body.rotate_id === 'string' ? body.rotate_id : '';
   const name = typeof body.name === 'string' ? body.name.trim().slice(0, 80) : '';
@@ -40,6 +45,8 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+  const limited = await enforceUserRateLimit(ctx.user.id, 'api-key-write', 10, 60);
+  if (limited) return limited;
   const id = req.nextUrl.searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Key id is required' }, { status: 400 });
   const { data, error } = await adminSupabase().from('api_keys').update({ revoked: true }).eq('id', id).eq('user_id', ctx.user.id).eq('revoked', false).select('id').maybeSingle();

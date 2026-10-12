@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { GlassCard } from '@/components/GlassCard';
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -18,7 +20,7 @@ export default function NotificationsPage() {
       const supabase = createBrowserClient(url, key);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        window.location.href = '/auth';
+        router.push('/auth');
         return;
       }
 
@@ -34,7 +36,7 @@ export default function NotificationsPage() {
       }
       setLoading(false);
     })();
-  }, []);
+  }, [router]);
 
   async function markAllRead() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -73,7 +73,7 @@ export default function Privacy() {
               >
                 {siteData.email}
               </a>{" "}
-              or through the WhatsApp link on this site.
+              or through the contact page on this site.
             </p>
           </section>
           <section>

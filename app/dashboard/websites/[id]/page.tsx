@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ExternalLink, Loader2, Rocket } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import { LEO_TEMPLATES } from "@/data/website-templates";
@@ -38,6 +38,7 @@ type BuildRecord = {
 
 export default function WebsiteManagementPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [project, setProject] = useState<WebsiteProject | null>(null);
   const [builds, setBuilds] = useState<BuildRecord[]>([]);
   const [deployments, setDeployments] = useState<{ id: string; event_type: string; status: string; message: string | null; metadata: Record<string, unknown>; created_at: string }[]>([]);
@@ -58,7 +59,7 @@ export default function WebsiteManagementPage() {
       );
       const session = (await supabase.auth.getSession()).data.session;
       if (!session) {
-        location.assign("/auth");
+        router.push("/auth");
         return;
       }
       const response = await fetch(
@@ -79,7 +80,7 @@ export default function WebsiteManagementPage() {
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id, router]);
 
   async function deploy() {
     if (!project || deploying) return;

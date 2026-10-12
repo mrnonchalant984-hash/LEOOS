@@ -56,7 +56,7 @@ This roadmap follows the read-only audit in [`LEONARDX_COMPLETE_GAP_AUDIT.md`](.
 **Priority: P1**  
 **Dependencies:** Phase 0; provider credentials.
 
-1. Make [`app/integrations/page.tsx`](./app/integrations/page.tsx) use the sanitized contract from [`lib/integration-status.ts`](./lib/integration-status.ts), or clearly label it configuration-only and remove its verified marker.
+1. Keep [`app/integrations/page.tsx`](./app/integrations/page.tsx) clearly configuration-only and aligned with the sanitized owner-only status center; its misleading verified marker has been removed.
 2. Keep owner-only connection tests behind [`app/api/setup/integrations/status/route.ts`](./app/api/setup/integrations/status/route.ts); add provider-specific timeout, rate-limit, and failure tests.
 3. Verify Supabase, OpenAI, Paystack, Vercel, GitHub, Google, Resend, and Web3Forms in staging without sending paid transactions or unsolicited messages.
 4. Keep Stripe and WhatsApp explicitly unavailable until an approved implementation exists.
@@ -158,4 +158,3 @@ This roadmap follows the read-only audit in [`LEONARDX_COMPLETE_GAP_AUDIT.md`](.
 ## Definition of done for the next approved implementation change
 
 The first approved implementation change should be narrowly scoped to Phase 1: canonical authorization/payment/webhook integrity. It should include tests, a migration dry-run only, no production migration, and an updated evidence report. Features should remain explicitly partial or blocked until their real external and runtime dependencies are verified.
-

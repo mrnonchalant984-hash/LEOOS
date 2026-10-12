@@ -1,4 +1,6 @@
 "use client";
+/* Provider-generated and data URLs are intentionally rendered natively. */
+/* eslint-disable @next/next/no-img-element */
 import { useEffect, useRef, useState } from "react";
 import {
   Bot,

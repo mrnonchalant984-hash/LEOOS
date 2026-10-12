@@ -9,4 +9,4 @@ function getBaseUrl() {
   return process.env.NODE_ENV === 'production' ? 'https://leoos-omega.vercel.app' : 'http://localhost:3000';
 }
 
-export default function sitemap():MetadataRoute.Sitemap{const base=getBaseUrl();const paths=['/','/pricing','/leo-ai','/about','/contact','/portfolio','/audit','/wall-of-love','/blog','/terms','/privacy','/refund-policy','/setup','/setup/keys','/payment/hosting-renewal','/dashboard','/admin','/blog/freelancers-ai-10x','/blog/leo-vs-chatgpt','/blog/build-website-10-minutes-5000'];return paths.map(path=>({url:`${base}${path}`,lastModified:new Date()}));}
+export default function sitemap():MetadataRoute.Sitemap{const base=getBaseUrl();const paths=['/','/pricing','/leo-ai','/about','/contact','/portfolio','/audit','/wall-of-love','/blog','/terms','/privacy','/refund-policy','/blog/freelancers-ai-10x','/blog/leo-vs-chatgpt','/blog/build-website-10-minutes-5000'];return paths.map(path=>({url:`${base}${path}`,lastModified:new Date()}));}
