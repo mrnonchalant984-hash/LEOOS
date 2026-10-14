@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Activity, BarChart3, Bot, Boxes, BookOpen, Code2, CreditCard, Globe2, Video,
+  Activity, BarChart3, Bot, Boxes, BookOpen, Code2, CreditCard, Globe2, Video, Image,
   FileText, FolderKanban, Gauge, GitBranch, KeyRound, LayoutDashboard,
   LifeBuoy, Menu, Network, Newspaper, Package, Search, ShieldCheck,
   Users, Webhook, X, Bell, CircleHelp, ChevronDown, Building2,
@@ -30,7 +30,7 @@ function getServerSidebarCollapsed() { return false; }
 type NavItem = readonly [string, string, typeof LayoutDashboard];
 const groups: { label: string; items: NavItem[] }[] = [
   { label: 'Workspace', items: [
-    ['Overview','/dashboard',LayoutDashboard], ['Projects','/projects',FolderKanban], ['Leo workspace','/app',Bot],
+    ['Overview','/dashboard',LayoutDashboard], ['Projects','/projects',FolderKanban], ['AI Studio','/studio',Image], ['Leo workspace','/app',Bot],
     ['Agents','/agents',Boxes], ['Workflow studio','/workflows',GitBranch], ['Deployments','/deployments',GitBranch], ['Analytics','/analytics',BarChart3],
     ['Observability','/observability',Activity], ['System status','/status',Gauge],
   ] },
