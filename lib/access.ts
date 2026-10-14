@@ -1,4 +1,4 @@
-import { adminSupabase } from "./auth";
+import { adminSupabase, isPlatformOwner } from "./auth";
 import { getEffectiveUserPlan, planAllows } from "./plan-access";
 export const CREDIT_COST: Record<string, number> = {
   image_generation: 1,
@@ -13,12 +13,7 @@ export async function accountAccess(userId: string, feature: string) {
     .select("role,email")
     .eq("id", userId)
     .single();
-  if (
-    profile?.role === "owner" &&
-    profile.email?.toLowerCase() ===
-      (process.env.OWNER_EMAIL || "leonardudoh5@gmail.com").toLowerCase()
-  )
-    return { allowed: true, owner: true, credits: null };
+  if (isPlatformOwner(profile)) return { allowed: true, owner: true, credits: null };
   const plan = await getEffectiveUserPlan(userId);
   const planFeature = feature.replaceAll("_", "-");
   const entitled = planAllows(plan, planFeature);

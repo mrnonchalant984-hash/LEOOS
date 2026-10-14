@@ -37,8 +37,8 @@ type BuildRecord = {
 };
 
 export default function WebsiteManagementPage() {
-  const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<WebsiteProject | null>(null);
   const [builds, setBuilds] = useState<BuildRecord[]>([]);
   const [deployments, setDeployments] = useState<{ id: string; event_type: string; status: string; message: string | null; metadata: Record<string, unknown>; created_at: string }[]>([]);

@@ -1,0 +1,32 @@
+name: CI
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key
+          OWNER_EMAIL: owner@example.invalid
+          OPENAI_API_KEY: ci-placeholder-key
+          CRON_SECRET: ci-placeholder-cron-secret-that-is-long-enough-123456
+          AGENT_WORKER_ENABLED: 'false'
+          WORKFORCE_WORKER_ENABLED: 'false'
+          WORKFLOW_WORKER_ENABLED: 'false'

@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLeoSystemPrompt, getOpenAI, LEO_PLAN_TERMINOLOGY } from "@/lib/openai";
+import { getLeoSystemPrompt, getTextOpenAI as getOpenAI, getConfiguredModel, LEO_PLAN_TERMINOLOGY } from "@/lib/openai";
 import { adminSupabase, getProfile, isPlatformOwner } from "@/lib/auth";
 import { getPlanPriceNgn } from "@/lib/pricing";
 import { classifyAgents } from "@/lib/agents/manager";
+import { getAllowedAgentIds } from "@/lib/agents/entitlements";
 import type { ProjectType } from "@/lib/pricing";
 import { getBuilderAvailability } from "@/lib/builders/providers";
 import { getEffectiveUserPlan, planAllows } from "@/lib/plan-access";
 import { withOperationalMonitoring } from '@/lib/monitoring';
 export const runtime = "nodejs";
+const PROJECT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function inferProjectType(message: string): ProjectType | null {
   const text = message.toLowerCase();
@@ -51,7 +53,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   return withOperationalMonitoring(req, 'leo.ai.request', async ({ reportFailure }) => {
   try {
-    const { session_id, message, mode = "normal" } = await req.json();
+    const { session_id, message, mode = "normal", project_id = null } = await req.json();
     if (!session_id || typeof message !== "string" || !message.trim())
       return NextResponse.json(
         { error: "Missing session or message" },
@@ -59,6 +61,14 @@ export async function POST(req: NextRequest) {
       );
     const ctx = await getProfile(req);
     const db = ctx ? adminSupabase() : null;
+    if (project_id !== null && (typeof project_id !== "string" || !PROJECT_ID_RE.test(project_id))) {
+      return NextResponse.json({ error: "Invalid project ID." }, { status: 400 });
+    }
+    if (ctx && db && project_id) {
+      const { data: project, error: projectError } = await db.from("projects").select("id").eq("id", project_id).eq("user_id", ctx.user.id).maybeSingle();
+      if (projectError) return NextResponse.json({ error: "Project context is temporarily unavailable." }, { status: 503 });
+      if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
+    }
     let history: Array<{ role: "user" | "assistant"; content: string }> = [];
     let existingChat = false;
     if (ctx && db) {
@@ -78,13 +88,18 @@ export async function POST(req: NextRequest) {
     }
     let memories: any[] = [];
     if (ctx && db) {
-      const { data } = await db
+      let memoryQuery = db
         .from("leo_memories")
         .select("memory")
         .eq("user_id", ctx.user.id)
         .eq("active", true)
         .order("updated_at", { ascending: false })
         .limit(20);
+      memoryQuery = project_id
+        ? memoryQuery.or(`project_id.is.null,project_id.eq.${project_id}`)
+        : memoryQuery.is("project_id", null);
+      const { data, error: memoryError } = await memoryQuery;
+      if (memoryError) return NextResponse.json({ error: "Memory is temporarily unavailable. Apply the project-memory migration if needed." }, { status: 503 });
       memories = data || [];
     }
     const owner = isPlatformOwner(ctx?.profile);
@@ -109,8 +124,10 @@ export async function POST(req: NextRequest) {
       }
       builderContext = `\nRequested project type: ${requestedProjectType}. Current builder state: ${projectBuilder.message} Never claim a project has been created, built, tested, or deployed until the corresponding operation confirms it.`;
     }
+    const agentPlan = ctx ? await getEffectiveUserPlan(ctx.user.id, owner) : null;
+    const allowedAgentIds = agentPlan ? getAllowedAgentIds(agentPlan.key, owner) : [];
     const agentSuggestions = ctx
-      ? classifyAgents(message, owner).map((a) => ({
+      ? classifyAgents(message, owner, allowedAgentIds || undefined).map((a) => ({
           id: a.id,
           name: a.name,
           ownerOnly: a.ownerOnly,
@@ -156,29 +173,35 @@ export async function POST(req: NextRequest) {
     if (requestedProjectType && projectBuilder) {
       reply = `I can help with a ${requestedProjectType.replaceAll("_", " ")} project. ${projectBuilder.message} I have not created or deployed a project yet.`;
     } else if (mode === "deep") {
-      const response = await ai.responses.create({
-        model: process.env.LEO_REASONING_MODEL || "gpt-5.6-luna",
-        reasoning: { effort: "high" },
-        input: [
-          { role: "system", content: system },
-          {
-            role: "user",
-            content: [
-              ...history
-                .slice(-20)
-                .map((m) => ({
-                  type: "input_text" as const,
-                  text: `${m.role}: ${m.content}`,
-                })),
+      if (process.env.LEO_LOCAL_MODEL_URL) {
+        const response = await ai.chat.completions.create({
+          model: getConfiguredModel(),
+          messages: [
+            { role: "system", content: system },
+            ...history.slice(-20),
+            { role: "user", content: message },
+          ],
+          max_tokens: 1200,
+          temperature: 0.3,
+        });
+        reply = response.choices[0]?.message?.content || "I could not generate a reply.";
+      } else {
+        const response = await ai.responses.create({
+          model: process.env.LEO_REASONING_MODEL || "gpt-5.6-luna",
+          reasoning: { effort: "high" },
+          input: [
+            { role: "system", content: system },
+            { role: "user", content: [
+              ...history.slice(-20).map((m) => ({ type: "input_text" as const, text: `${m.role}: ${m.content}` })),
               { type: "input_text" as const, text: message },
-            ],
-          },
-        ],
-      });
-      reply = response.output_text || "I could not generate a reply.";
+            ] },
+          ],
+        });
+        reply = response.output_text || "I could not generate a reply.";
+      }
     } else {
       const response = await ai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: getConfiguredModel(),
         messages: [
           { role: "system", content: system },
           ...history.slice(-20),
@@ -228,7 +251,7 @@ export async function POST(req: NextRequest) {
         if (memory)
           await db
             .from("leo_memories")
-            .insert({ user_id: ctx.user.id, memory, source: "chat" });
+            .insert({ user_id: ctx.user.id, memory, source: project_id ? "project" : "chat", project_id });
       }
       const messages = [
         ...history,

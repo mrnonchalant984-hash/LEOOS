@@ -1,0 +1,19 @@
+# LeonardX
+
+LeonardX is an AI-assisted software creation platform for planning, building, reviewing and managing websites, web apps and software projects.
+
+## Public pages
+- https://leoos-omega.vercel.app/
+- https://leoos-omega.vercel.app/pricing
+- https://leoos-omega.vercel.app/leo-ai
+- https://leoos-omega.vercel.app/developers
+- https://leoos-omega.vercel.app/developers/docs
+- https://leoos-omega.vercel.app/docs
+- https://leoos-omega.vercel.app/templates
+- https://leoos-omega.vercel.app/tutorials
+- https://leoos-omega.vercel.app/resources
+- https://leoos-omega.vercel.app/integrations
+- https://leoos-omega.vercel.app/blog
+
+## Indexing
+The XML sitemap is available at https://leoos-omega.vercel.app/sitemap.xml. Respect robots.txt and the canonical URL declared by each page.

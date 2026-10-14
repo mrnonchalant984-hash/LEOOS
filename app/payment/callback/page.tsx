@@ -5,18 +5,31 @@ import Link from 'next/link';
 
 export default function PaymentCallbackPage() {
   const [message, setMessage] = useState('Verifying your payment…');
+  const [isApiPlan, setIsApiPlan] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const reference = params.get('reference');
     const isHostingRenewal = params.get('type') === 'hosting_renewal';
+    const isApiPlanPayment = params.get('type') === 'api_plan';
     let cancelled = false;
+    const apiPlanTimer = window.setTimeout(() => { if (!cancelled) setIsApiPlan(isApiPlanPayment); }, 0);
 
     if (!reference) {
       window.setTimeout(() => { if (!cancelled) setMessage('No payment reference was supplied.'); }, 0);
       return () => { cancelled = true; };
     }
     const paymentReference = reference;
+
+    async function verifyApiPlan() {
+      try {
+        const response = await fetch('/api/developers/billing/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reference: paymentReference }), cache: 'no-store' });
+        const data = await response.json().catch(() => ({}));
+        if (!cancelled) setMessage(data.ok ? 'Payment verified. Your API plan is active and your included credits are ready.' : data.error || 'Payment could not be verified. API access remains inactive until confirmation.');
+      } catch {
+        if (!cancelled) setMessage('Payment verification is temporarily unavailable. Your API access will remain inactive until the server confirms payment.');
+      }
+    }
 
     async function verifySubscription() {
       try {
@@ -56,17 +69,20 @@ export default function PaymentCallbackPage() {
       if (!cancelled) setMessage('Payment confirmation is still pending. Please refresh this page later or contact support; access changes only after server verification.');
     }
 
-    void (isHostingRenewal ? verifyHostingRenewal() : verifySubscription());
-    return () => { cancelled = true; };
+    void (isApiPlanPayment ? verifyApiPlan() : isHostingRenewal ? verifyHostingRenewal() : verifySubscription());
+    return () => { cancelled = true; window.clearTimeout(apiPlanTimer); };
   }, []);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-24 text-center">
       <h1 className="text-4xl font-black">Payment status</h1>
       <p className="mt-5 text-zinc-400" role="status" aria-live="polite">{message}</p>
-      <Link href="/account" className="mt-8 inline-block rounded-xl bg-yellow-400 px-5 py-3 font-bold text-black">
-        Open my account
-      </Link>
+      <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <Link href={isApiPlan ? '/developers/pricing' : '/account'} className="inline-block rounded-xl bg-yellow-400 px-5 py-3 font-bold text-black">
+          {isApiPlan ? 'Return to API pricing' : 'Open my account'}
+        </Link>
+        {isApiPlan && <Link href="/api-keys" className="inline-block rounded-xl border border-white/10 px-5 py-3 font-semibold text-white">Manage API keys</Link>}
+      </div>
     </main>
   );
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProfile, adminSupabase } from '@/lib/auth';
+import { getProfile, adminSupabase, isPlatformOwner } from '@/lib/auth';
 import { authenticateApiKey } from '@/lib/api-auth';
-import { getOpenAI } from '@/lib/openai';
+import { getTextOpenAI as getOpenAI, getConfiguredModel } from '@/lib/openai';
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import type { ProjectType } from '@/lib/pricing';
 import { getBuilderAvailability } from '@/lib/builders/providers';
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
     if (projectError) return NextResponse.json({ error: 'Project ownership could not be verified.' }, { status: 500 });
     if (!ownedProject) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
 
-    const owner = ctx.profile.role === 'owner' && ctx.profile.email?.toLowerCase() === (process.env.OWNER_EMAIL || 'leonardudoh5@gmail.com').toLowerCase();
+    const owner = isPlatformOwner(ctx.profile);
     const plan = await getEffectiveUserPlan(ctx.user.id, owner);
     const projectType = String(ownedProject.project_type || 'website') as ProjectType;
     const requiredFeature = projectType === 'saas' ? 'saas-builder' : projectType === 'web_app' ? 'web-app-builder' : 'website-builder';
@@ -162,14 +162,14 @@ export async function POST(req: NextRequest) {
 
     const ai = getOpenAI();
     const baseSystem = 'Generate a coherent production-oriented Next.js App Router website. Return ONLY JSON: {"files":[{"path":"...","content":"..."}],"missingRequirements":["..."]}. Do not invent client facts. Use clearly marked placeholders only where the client has not supplied required assets, and list every missing asset in missingRequirements. The output MUST include package.json, app/layout.tsx, app/page.tsx, app/admin/page.tsx, app/sitemap.ts, app/robots.ts, secure server-side environment handling, a client-friendly admin area relevant to the selected website type, SEO metadata, and real error states. If chatbot is enabled, include app/api/chat/route.ts using only the client-owned AI credential. Never put secrets in NEXT_PUBLIC_* or source files.';
-    let generated = await ai.chat.completions.create({ model:'gpt-4o-mini', messages:[{role:'system',content:baseSystem},{role:'user',content:prompt}], max_tokens:16000 });
+    let generated = await ai.chat.completions.create({ model:getConfiguredModel(), messages:[{role:'system',content:baseSystem},{role:'user',content:prompt}], max_tokens:16000 });
     let content = generated.choices[0]?.message?.content || '';
     let json = JSON.parse(content.replace(/^```json\s*|```$/g, '')) as GeneratedSite;
     buildContext.stage = 'testing';
     await recordBuildState(buildContext, 'testing', 'Checking generated project files');
     let missing = validateGeneratedSite(json, Boolean(body.chatbot_enabled));
     if (missing.length) {
-      generated = await ai.chat.completions.create({ model:'gpt-4o-mini', messages:[{role:'system',content:baseSystem},{role:'user',content:`Your previous output was incomplete. These required files were missing: ${missing.join(', ')}. Return a corrected complete JSON project. Original request:\n${prompt}`}], max_tokens:18000 });
+      generated = await ai.chat.completions.create({ model:getConfiguredModel(), messages:[{role:'system',content:baseSystem},{role:'user',content:`Your previous output was incomplete. These required files were missing: ${missing.join(', ')}. Return a corrected complete JSON project. Original request:\n${prompt}`}], max_tokens:18000 });
       content = generated.choices[0]?.message?.content || '';
       json = JSON.parse(content.replace(/^```json\s*|```$/g, '')) as GeneratedSite;
       missing = validateGeneratedSite(json, Boolean(body.chatbot_enabled));

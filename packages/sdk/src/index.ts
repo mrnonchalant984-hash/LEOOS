@@ -14,6 +14,16 @@ export class LeoRateLimitError extends LeoApiError {
   constructor(status: number, message: string, requestId: string | undefined, retryAfterSeconds: number | null) { super(status, 'rate_limited', message, requestId); this.name = 'LeoRateLimitError'; this.retryAfterSeconds = retryAfterSeconds; }
 }
 
+export type LeoMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+export type LeoModel = { id: string; object: 'model'; owned_by: string };
+export type LeoStreamEvent = { event: string; data: Record<string, unknown> };
+export type LeoMessageResponse = {
+  id: string; type: 'message'; role: 'assistant'; model: string;
+  content: Array<{ type: 'text'; text: string }>;
+  stop_reason: 'end_turn' | 'max_tokens' | 'refusal' | string; stop_sequence: string | null;
+  usage: { input_tokens: number; output_tokens: number; total_tokens: number; credits_used: number };
+  request_id: string;
+};
 type Options = { apiKey: string; baseUrl?: string; fetch?: FetchLike };
 export class LeoClient {
   private readonly baseUrl: string;
@@ -28,18 +38,74 @@ export class LeoClient {
     create: (input: { project_name: string; type?: string }) => this.request<ApiResponse<Project>>('/api/v1/projects', { method: 'POST', body: JSON.stringify(input) }),
     status: (id: string) => this.request<ApiResponse<ProjectStatus>>(`/api/v1/projects/${encodeURIComponent(id)}/status`),
   };
+  public readonly models = {
+    list: () => this.request<ApiResponse<LeoModel[]>>('/api/v1/models'),
+  };
+  public readonly messages = {
+    create: (input: { model?: string; messages: LeoMessage[]; max_tokens?: number }) => this.request<LeoMessageResponse>('/api/v1/messages', { method: 'POST', body: JSON.stringify(input) }),
+    stream: (input: { model?: string; messages: LeoMessage[]; max_tokens?: number }) => this.streamMessages(input),
+  };
+  public readonly usage = {
+    list: () => this.request<ApiResponse<Array<{ feature: string; model: string | null; total_tokens: number | null; credits_used: number | null; created_at: string }>>>('/api/v1/usage'),
+  };
   private readonly options: Options;
   constructor(options: Options) {
     this.options = options;
     if (!options?.apiKey || typeof options.apiKey !== 'string') throw new TypeError('apiKey is required');
-    this.baseUrl = (options.baseUrl || '').replace(/\/$/, '');
+    this.baseUrl = (options.baseUrl || 'https://leoos-omega.vercel.app').replace(/\/$/, '');
     this.fetcher = options.fetch || fetch;
   }
+  private async *streamMessages(input: { model?: string; messages: LeoMessage[]; max_tokens?: number }): AsyncGenerator<LeoStreamEvent> {
+    if (!this.baseUrl || !/^https?:\/\//i.test(this.baseUrl)) throw new TypeError('baseUrl must be an absolute HTTP(S) URL');
+    const response = await this.fetcher(`${this.baseUrl}/api/v1/messages`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json', accept: 'text/event-stream' },
+      body: JSON.stringify({ ...input, stream: true }),
+    });
+    const requestId = response.headers.get('x-request-id') || undefined;
+    if (!response.ok || !response.body) {
+      let body: any = null;
+      try { body = await response.json(); } catch { /* keep generic error */ }
+      const error = body?.error || {};
+      throw new LeoApiError(response.status, String(error.code || 'api_error'), String(error.message || `LEO OS API error (${response.status})`), requestId || body?.request_id);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        let boundary: number;
+        while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+          const block = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          let event = 'message';
+          const dataLines: string[] = [];
+          for (const line of block.split(/\r?\n/)) {
+            if (line.startsWith('event:')) event = line.slice(6).trim();
+            else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+          }
+          if (!dataLines.length) continue;
+          let data: Record<string, unknown>;
+          try { data = JSON.parse(dataLines.join('\n')) as Record<string, unknown>; }
+          catch { throw new LeoApiError(502, 'invalid_stream', 'The API returned an invalid stream event.', requestId); }
+          if (event === 'error') throw new LeoApiError(502, 'stream_error', String((data.error as { message?: string } | undefined)?.message || 'The model stream failed.'), requestId);
+          yield { event, data };
+        }
+        if (done) break;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers: Record<string, string> = {};
     new Headers(init.headers).forEach((value, key) => { headers[key] = value; });
     headers.authorization = `Bearer ${this.options.apiKey}`;
     headers['content-type'] = 'application/json';
+    if (!this.baseUrl || !/^https?:\/\//i.test(this.baseUrl)) throw new TypeError('baseUrl must be an absolute HTTP(S) URL');
     const response = await this.fetcher(`${this.baseUrl}${path}`, { ...init, headers });
     const requestId = response.headers.get('x-request-id') || undefined;
     let body: any = null;

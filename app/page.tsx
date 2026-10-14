@@ -1,8 +1,17 @@
+import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowDown, ArrowRight, Bot, Boxes, Check, Code2, GitBranch, Globe2, Play, ShieldCheck, Sparkles, Terminal } from 'lucide-react';
 import { Reveal } from '@/components/Reveal';
 import LeonardXEditorialHero from '@/components/LeonardXEditorialHero';
+
+export const metadata: Metadata = {
+  title: 'AI Website Builder and Software Creation Workspace',
+  description: 'Build websites, web apps and software with LeonardX. Use AI coding assistance, project workspaces, specialist agents, developer tools and connected deployment workflows.',
+  alternates: { canonical: '/' },
+  openGraph: { title: 'LeonardX — AI Website Builder and Software Creation Workspace', description: 'Build websites, web apps and software with AI-assisted project workflows in LeonardX.', url: '/', type: 'website' },
+  twitter: { card: 'summary_large_image', title: 'LeonardX — Build Software with AI', description: 'AI-assisted website, web app and software development in one connected workspace.' },
+};
 
 const stages = [
   ['IDEA','Start with a description, a problem, or a product you want to bring to life.'],
@@ -21,7 +30,13 @@ const capabilities = [
 ] as const;
 
 export default function Home(){
- return <main className="landing-page">
+ const faqSchema = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: [
+  { '@type': 'Question', name: 'What can I build with LeonardX?', acceptedAnswer: { '@type': 'Answer', text: 'Plan and develop websites, web apps and software projects with AI assistance, project workspaces and the integrations available to your account.' } },
+  { '@type': 'Question', name: 'Does LeonardX support developers and businesses?', acceptedAnswer: { '@type': 'Answer', text: 'Yes. The platform includes a general workspace alongside developer-focused tools such as API access, SDK foundations, webhooks and CLI workflows.' } },
+  { '@type': 'Question', name: 'Can LeonardX deploy my project?', acceptedAnswer: { '@type': 'Answer', text: 'Deployment depends on the project, account permissions and configured hosting provider. Always review the deployment result from the connected service.' } },
+  { '@type': 'Question', name: 'Can I try LeonardX before choosing a plan?', acceptedAnswer: { '@type': 'Answer', text: 'Visit the workspace and pricing pages to review the current access and plan options available to your account.' } },
+ ] };
+ return <main className="landing-page"><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema).replace(/</g, '\\u003c') }} />
   <LeonardXEditorialHero />
   <section className="landing-legacy-hero">
     <div className="landing-hero-content">
@@ -50,6 +65,7 @@ export default function Home(){
 
   <section className="landing-founder section-space"><Reveal><div className="founder-grid"><div className="founder-visual"><Image src="/profile.png" alt="Leonard Udoh working at his development desk" fill sizes="(max-width: 900px) 100vw, 34vw" className="founder-photo"/><div className="founder-caption"><strong>Leonard Udoh</strong><span>Founder · Developer</span></div></div><div><p className="landing-kicker">BUILT BY LEONARD</p><h2>Leonard X is founder-led — and still being built.</h2></div><div className="editorial-copy"><p>LEO OS is an ambitious platform, but it is not presented as something it has not become. No invented customer numbers. No manufactured testimonials. No fake teams. No imaginary integrations.</p><p>The product is being built in public, one real system at a time — with the goal of giving builders a place where an idea can become software and then continue evolving.</p><Link href="/about" className="text-action">Learn about Leonard X <ArrowRight size={15}/></Link></div></div></Reveal></section>
 
+  <section className="landing-faq section-space"><Reveal><div className="editorial-grid"><div><p className="landing-kicker">COMMON QUESTIONS</p><h2>Know what LeonardX can help you do.</h2></div><div className="editorial-copy"><p>LeonardX brings AI assistance and software workflows into one workspace. The exact actions available depend on your account, project configuration and connected services.</p><div className="faq-list"><details><summary>What can I build with LeonardX?</summary><p>Plan and develop websites, web apps and software projects with AI assistance, project workspaces and the integrations available to your account.</p></details><details><summary>Does LeonardX support developers and businesses?</summary><p>Yes. The platform includes a general workspace alongside developer-focused tools such as API access, SDK foundations, webhooks and CLI workflows.</p></details><details><summary>Can LeonardX deploy my project?</summary><p>Deployment depends on the project, account permissions and configured hosting provider. Always review the deployment result from the connected service.</p></details><details><summary>Can I try LeonardX before choosing a plan?</summary><p>Visit the workspace and pricing pages to review the current access and plan options available to your account.</p></details></div></div></div></Reveal></section>
   <section className="landing-final"><div className="final-glow"/><Reveal><p className="landing-kicker">YOUR NEXT PRODUCT</p><h2>Start with the idea.</h2><p>Give Leo the problem, the vision or the product you have been thinking about. Then build from there.</p><div className="landing-actions"><Link href="/app" className="landing-primary">Start building <ArrowRight size={16}/></Link><Link href="/pricing" className="landing-secondary">View plans</Link></div></Reveal></section>
  </main>;
 }

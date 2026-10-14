@@ -1,13 +1,15 @@
 "use client";
-/* Provider-generated and data URLs are intentionally rendered natively. */
-/* eslint-disable @next/next/no-img-element */
+import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
 import {
   Bot,
   Mic,
   Send,
   Trash2,
   Image as ImageIcon,
+  Video,
   Sparkles,
   Lightbulb,
   Rocket,
@@ -24,6 +26,20 @@ import {
   Loader2,
   PhoneOff,
   Settings2,
+  MessageSquare,
+  PlusCircle,
+  History,
+  UserCircle,
+  CreditCard,
+  Library,
+  Compass,
+  Laptop,
+  PanelLeftClose,
+  Menu,
+  Bookmark,
+  Trash,
+  Users,
+  Video as VideoIcon,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import type { LucideIcon } from "lucide-react";
@@ -39,8 +55,14 @@ type Msg = {
   role: "user" | "assistant";
   content: string;
   image?: string;
+  video?: string;
+  assetId?: string;
   projectBuilder?: ProjectBuilderAction;
 };
+type ChatHistoryItem = { id: string; title: string; updatedAt: number };
+type MemoryItem = { id: string; memory: string; source?: string; created_at?: string };
+type RemotePairing = { id: string; created_device_name: string; paired_device_name?: string | null; status: "pending" | "paired" | "revoked" | "expired"; expires_at: string; paired_at?: string | null; last_seen_at?: string | null; created_at?: string };
+type RemoteEvent = { id: number; event_type: string; payload: { text?: string; [key: string]: unknown }; device_id: string; created_at: string };
 type VoiceStatus =
   | "Idle"
   | "Connecting"
@@ -51,6 +73,8 @@ type VoiceStatus =
   | "Reconnecting"
   | "Error"
   | "Ended";
+type OfflineDraft = { text: string; mode: "normal" | "deep"; savedAt: string };
+const OFFLINE_DRAFT_KEY = "leo_offline_chat_draft_v1";
 const actions = [
   {
     label: "Let’s brainstorm",
@@ -71,6 +95,17 @@ function getBrowserSupabase() {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   return url && key ? createBrowserClient(url, key) : null;
 }
+function getRemoteDeviceId() {
+  try {
+    const key = "leo_remote_device_id";
+    const existing = window.localStorage.getItem(key);
+    if (existing && /^[a-f0-9-]{36}$/i.test(existing)) return existing;
+    const id = window.crypto.randomUUID();
+    window.localStorage.setItem(key, id);
+    return id;
+  } catch { return "web-device"; }
+}
+
 export function LEOWidget({ full = false }: { full?: boolean }) {
   const [open, setOpen] = useState(full),
     [messages, setMessages] = useState<Msg[]>([]),
@@ -85,8 +120,57 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     [voice, setVoice] = useState("marin"),
     [muted, setMuted] = useState(false),
     [voiceLocked, setVoiceLocked] = useState(false);
+  const [platformCredits, setPlatformCredits] = useState<number | null>(null);
+  const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memories, setMemories] = useState<MemoryItem[]>([]);
+  const [memoryDraft, setMemoryDraft] = useState("");
+  const [memoryBusy, setMemoryBusy] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [networkOnline, setNetworkOnline] = useState(true);
+  const [offlineDraft, setOfflineDraft] = useState<OfflineDraft | null>(null);
+  const [remoteOpen, setRemoteOpen] = useState(false);
+  const [remoteBusy, setRemoteBusy] = useState(false);
+  const [remoteStatus, setRemoteStatus] = useState("");
+  const [remoteCode, setRemoteCode] = useState("");
+  const [remoteClaimCode, setRemoteClaimCode] = useState("");
+  const [remotePairings, setRemotePairings] = useState<RemotePairing[]>([]);
+  const [remoteSessionId, setRemoteSessionId] = useState("");
+  const [remoteEvents, setRemoteEvents] = useState<RemoteEvent[]>([]);
+  useEffect(() => {
+    const updateNetworkState = () => setNetworkOnline(navigator.onLine);
+    updateNetworkState();
+    window.addEventListener("online", updateNetworkState);
+    window.addEventListener("offline", updateNetworkState);
+    return () => {
+      window.removeEventListener("online", updateNetworkState);
+      window.removeEventListener("offline", updateNetworkState);
+    };
+  }, []);
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(OFFLINE_DRAFT_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as OfflineDraft;
+        if (typeof parsed.text === "string" && (parsed.mode === "normal" || parsed.mode === "deep")) queueMicrotask(() => setOfflineDraft(parsed));
+      }
+    } catch {
+      window.localStorage.removeItem(OFFLINE_DRAFT_KEY);
+    }
+  }, []);
+  const [remoteCursor, setRemoteCursor] = useState(0);
+  const [remoteMessage, setRemoteMessage] = useState("");
+  const [videoConfirmPrompt, setVideoConfirmPrompt] = useState("");
+  const [videoDuration, setVideoDuration] = useState(5);
+  const [videoAspectRatio, setVideoAspectRatio] = useState<"landscape" | "portrait">("landscape");
+  const [videoCreditsPerSecond, setVideoCreditsPerSecond] = useState<number | null>(null);
+  const [videoCreditsAvailable, setVideoCreditsAvailable] = useState<number | null>(null);
+  const [activeVideoJobId, setActiveVideoJobId] = useState("");
+  const [videoStatus, setVideoStatus] = useState("");
   const [error, setError] = useState("");
   const sidRef = useRef("");
+  const [activeChatId, setActiveChatId] = useState("");
   const media = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const pc = useRef<RTCPeerConnection | null>(null);
@@ -99,11 +183,20 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
   useEffect(() => {
     const sid = localStorage.getItem("leo_chat_id") || crypto.randomUUID();
     sidRef.current = sid;
+    queueMicrotask(() => setActiveChatId(sid));
     localStorage.setItem("leo_chat_id", sid);
+    try {
+      const saved = JSON.parse(localStorage.getItem("leo_chat_sessions") || "[]");
+      if (Array.isArray(saved)) queueMicrotask(() => setChatHistory(saved.filter((item) => item && typeof item.id === "string" && typeof item.title === "string").slice(0, 30)));
+    } catch {}
     const s = getBrowserSupabase();
     (async () => {
       try {
         const session = s ? (await s.auth.getSession()).data.session : null;
+        if (session) {
+          const creditResponse = await fetch('/api/credits', { headers: { Authorization: `Bearer ${session.access_token}` }, cache: 'no-store' });
+          if (creditResponse.ok) { const creditData = await creditResponse.json(); setPlatformCredits(Number.isSafeInteger(creditData.platform_credits) ? creditData.platform_credits : null); }
+        }
         const r = await fetch(`/api/chat?session_id=${sid}`, {
           headers: session
             ? { Authorization: `Bearer ${session.access_token}` }
@@ -123,15 +216,226 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
+  useEffect(() => {
+    if (!full || !sidRef.current || messages.length === 0) return;
+    const firstUser = messages.find((message) => message.role === "user")?.content || "New chat";
+    const item: ChatHistoryItem = { id: sidRef.current, title: firstUser.slice(0, 54), updatedAt: Date.now() };
+    setChatHistory((current) => {
+      const next = [item, ...current.filter((chat) => chat.id !== item.id)].slice(0, 30);
+      try { localStorage.setItem("leo_chat_sessions", JSON.stringify(next)); } catch {}
+      return next;
+    });
+    try { localStorage.setItem(`leo_chat_${sidRef.current}`, JSON.stringify(messages)); } catch {}
+  }, [messages, full]);
+
+  async function startNewChat() {
+    const sid = crypto.randomUUID();
+    sidRef.current = sid;
+    setActiveChatId(sid);
+    localStorage.setItem("leo_chat_id", sid);
+    setMessages([]);
+    setError("");
+    setMemoryOpen(false);
+  }
+
   async function token() {
     const s = getBrowserSupabase();
     return s
       ? (await s.auth.getSession()).data.session?.access_token || ""
       : "";
   }
+
+  async function openSavedChat(chat: ChatHistoryItem) {
+    sidRef.current = chat.id;
+    setActiveChatId(chat.id);
+    localStorage.setItem("leo_chat_id", chat.id);
+    setError("");
+    try {
+      const local = localStorage.getItem(`leo_chat_${chat.id}`);
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed)) { setMessages(parsed); setMemoryOpen(false); return; }
+      }
+      const t = await token();
+      const response = await fetch(`/api/chat?session_id=${encodeURIComponent(chat.id)}`, { headers: t ? { Authorization: `Bearer ${t}` } : {}, cache: "no-store" });
+      const data = await response.json();
+      setMessages(Array.isArray(data.messages) ? data.messages : []);
+    } catch { setMessages([]); setError("This chat could not be loaded on this device."); }
+    setMemoryOpen(false);
+  }
+
+  async function loadMemories() {
+    setMemoryBusy(true);
+    try {
+      const t = await token();
+      const response = await fetch("/api/memory", { headers: t ? { Authorization: `Bearer ${t}` } : {}, cache: "no-store" });
+      const data = await response.json();
+      setMemories(Array.isArray(data.memories) ? data.memories : []);
+    } catch { setMemories([]); }
+    finally { setMemoryBusy(false); }
+  }
+
+  async function addMemory() {
+    if (!memoryDraft.trim()) return;
+    setMemoryBusy(true);
+    try {
+      const t = await token();
+      const response = await fetch("/api/memory", { method: "POST", headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) }, body: JSON.stringify({ memory: memoryDraft.trim(), source: "user" }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not save memory");
+      setMemoryDraft("");
+      await loadMemories();
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not save memory"); }
+    finally { setMemoryBusy(false); }
+  }
+
+  async function deleteMemory(id: string) {
+    const t = await token();
+    const response = await fetch(`/api/memory?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: t ? { Authorization: `Bearer ${t}` } : {} });
+    if (response.ok) setMemories((current) => current.filter((memory) => memory.id !== id));
+  }
+
+  async function remoteRequest(url: string, init: RequestInit = {}) {
+    const t = await token();
+    const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}), ...(init.headers || {}) }, cache: "no-store" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Remote device service request failed.");
+    return data;
+  }
+
+  async function loadRemotePairings() {
+    try {
+      const data = await remoteRequest("/api/remote/pairings");
+      const pairings = Array.isArray(data.pairings) ? data.pairings as RemotePairing[] : [];
+      setRemotePairings(pairings);
+      if (remoteSessionId && !pairings.some((item) => item.id === remoteSessionId && item.status === "paired")) {
+        setRemoteSessionId(""); setRemoteEvents([]); setRemoteCursor(0);
+      }
+    } catch (e) { setRemoteStatus(e instanceof Error ? e.message : "Could not load paired devices."); }
+  }
+
+  async function createRemotePairing() {
+    setRemoteBusy(true); setRemoteStatus("");
+    try {
+      const data = await remoteRequest("/api/remote/pairings", { method: "POST", body: JSON.stringify({ deviceName: `${navigator.platform || "Browser"} · Leo AI` }) });
+      setRemoteCode(String(data.pairing?.code || ""));
+      setRemoteStatus("Code created. On your other device, sign in to the same Leo account and enter this code within five minutes.");
+      await loadRemotePairings();
+    } catch (e) { setRemoteStatus(e instanceof Error ? e.message : "Could not create a pairing code."); }
+    finally { setRemoteBusy(false); }
+  }
+
+  async function claimRemotePairing(event?: FormEvent) {
+    event?.preventDefault(); setRemoteBusy(true); setRemoteStatus("");
+    try {
+      const data = await remoteRequest("/api/remote/pairings/claim", { method: "POST", body: JSON.stringify({ code: remoteClaimCode, deviceName: `${navigator.platform || "Browser"} · Leo AI` }) });
+      const id = String(data.pairing?.id || "");
+      setRemoteClaimCode(""); setRemoteSessionId(id); setRemoteEvents([]); setRemoteCursor(0);
+      setRemoteStatus("Device paired. Keep this panel open on both devices to exchange remote workspace messages.");
+      await loadRemotePairings();
+    } catch (e) { setRemoteStatus(e instanceof Error ? e.message : "Pairing failed."); }
+    finally { setRemoteBusy(false); }
+  }
+
+  async function revokeRemotePairing(id: string) {
+    try { await remoteRequest(`/api/remote/pairings?id=${encodeURIComponent(id)}`, { method: "DELETE" }); if (remoteSessionId === id) { setRemoteSessionId(""); setRemoteEvents([]); setRemoteCursor(0); } await loadRemotePairings(); setRemoteStatus("Device disconnected."); }
+    catch (e) { setRemoteStatus(e instanceof Error ? e.message : "Could not disconnect device."); }
+  }
+
+  async function shareCurrentChat() {
+    if (!remoteSessionId) return;
+    setRemoteBusy(true); setRemoteStatus("");
+    try {
+      const title = messages.find((message) => message.role === "user")?.content.slice(0, 54) || "Shared Leo chat";
+      const data = await remoteRequest(`/api/remote/sessions/${encodeURIComponent(remoteSessionId)}/events`, { method: "POST", body: JSON.stringify({ type: "chat.open", deviceId: getRemoteDeviceId(), payload: { sessionId: sidRef.current, title } }) });
+      if (data.event) { const item = data.event as RemoteEvent; setRemoteEvents((current) => current.some((e) => e.id === item.id) ? current : [...current, item].slice(-80)); setRemoteCursor((cursor) => Math.max(cursor, item.id)); }
+      setRemoteStatus("Current chat handoff sent. On your other device, choose Open shared chat in the relay.");
+    } catch (e) { setRemoteStatus(e instanceof Error ? e.message : "Could not share this chat."); }
+    finally { setRemoteBusy(false); }
+  }
+
+  async function sendRemoteMessage(event?: FormEvent) {
+    event?.preventDefault();
+    const text = remoteMessage.trim(); if (!text || !remoteSessionId) return;
+    setRemoteBusy(true);
+    try {
+      const data = await remoteRequest(`/api/remote/sessions/${encodeURIComponent(remoteSessionId)}/events`, { method: "POST", body: JSON.stringify({ type: "message", deviceId: getRemoteDeviceId(), payload: { text } }) });
+      if (data.event) { const item = data.event as RemoteEvent; setRemoteEvents((current) => current.some((e) => e.id === item.id) ? current : [...current, item].slice(-80)); setRemoteCursor((cursor) => Math.max(cursor, item.id)); }
+      setRemoteMessage("");
+    } catch (e) { setRemoteStatus(e instanceof Error ? e.message : "Message could not be sent."); }
+    finally { setRemoteBusy(false); }
+  }
+
+  useEffect(() => {
+    if (!remoteOpen) return;
+    const initial = window.setTimeout(() => { void loadRemotePairings(); }, 0);
+    const timer = window.setInterval(() => { void loadRemotePairings(); }, 3000);
+    return () => { window.clearTimeout(initial); window.clearInterval(timer); };
+    // loadRemotePairings intentionally reads the latest session ID for each polling tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteOpen]);
+
+  useEffect(() => {
+    if (!remoteOpen || !remoteSessionId) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    const connect = async () => {
+      let cursor = remoteCursor;
+      while (!cancelled) {
+        try {
+          const t = await token();
+          const response = await fetch(`/api/remote/sessions/${encodeURIComponent(remoteSessionId)}/events?stream=1&after=${cursor}`, { headers: t ? { Authorization: `Bearer ${t}`, Accept: "text/event-stream" } : { Accept: "text/event-stream" }, cache: "no-store", signal: controller.signal });
+          if (!response.ok || !response.body) { const data = await response.json().catch(() => ({})); throw new Error(data.error || "Remote connection could not be opened."); }
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          while (!cancelled) {
+            const part = await reader.read();
+            if (part.done) break;
+            buffer += decoder.decode(part.value, { stream: true });
+            const frames = buffer.split("\n\n"); buffer = frames.pop() || "";
+            for (const frame of frames) {
+              const line = frame.split("\n").find((value) => value.startsWith("data: "));
+              if (!line) continue;
+              try {
+                const value = JSON.parse(line.slice(6)) as { event?: RemoteEvent; error?: string; cursor?: number };
+                if (value.event) {
+                  const item = value.event;
+                  cursor = Math.max(cursor, Number(item.id) || cursor);
+                  setRemoteEvents((current) => current.some((existing) => existing.id === item.id) ? current : [...current, item].slice(-80));
+                }
+                if (value.error) setRemoteStatus(value.error);
+              } catch { /* Ignore malformed or partial SSE frames. */ }
+            }
+          }
+          setRemoteCursor((current) => Math.max(current, cursor));
+        } catch (e) {
+          if (cancelled || (e instanceof DOMException && e.name === "AbortError")) break;
+          setRemoteStatus(e instanceof Error ? e.message : "Remote connection interrupted.");
+          await new Promise((resolve) => window.setTimeout(resolve, 1200));
+        }
+      }
+    };
+    void connect();
+    return () => { cancelled = true; controller.abort(); };
+  }, [remoteOpen, remoteSessionId, remoteCursor]);
+
   async function send(text = input, mode: "normal" | "deep" = "normal") {
     if (!text.trim() || loading) return;
     const next = text.trim();
+    if (!navigator.onLine) {
+      const draft: OfflineDraft = { text: next, mode, savedAt: new Date().toISOString() };
+      try {
+        window.localStorage.setItem(OFFLINE_DRAFT_KEY, JSON.stringify(draft));
+        setOfflineDraft(draft);
+        setInput("");
+        setMenu(false);
+        setError("You are offline. Your prompt is saved on this device and has not been sent to Leo.");
+      } catch {
+        setError("You are offline and this browser could not save the prompt locally. Copy it before leaving this page.");
+      }
+      return;
+    }
     setInput("");
     setMenu(false);
     setMessages((m) => [...m, { role: "user", content: next }]);
@@ -154,6 +458,10 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Leo is unavailable");
       setMessages((m) => [...m, { role: "assistant", content: d.reply, projectBuilder: d.projectBuilder }]);
+      if (offlineDraft?.text === next && offlineDraft.mode === mode) {
+        setOfflineDraft(null);
+        window.localStorage.removeItem(OFFLINE_DRAFT_KEY);
+      }
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Leo is temporarily unavailable.",
@@ -168,25 +476,18 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     setError("");
     try {
       const t = await token();
+      const requestId = crypto.randomUUID();
       const r = await fetch("/api/generate-image", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${t}`,
-        },
-        body: JSON.stringify({
-          prompt: input || "A modern business website hero image",
-        }),
+        headers: { "Content-Type": "application/json", "Idempotency-Key": requestId, Authorization: `Bearer ${t}` },
+        body: JSON.stringify({ prompt: input || "A modern business website hero image", request_id: requestId }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Image generation failed");
+      if (Number.isSafeInteger(d.platform_credits_remaining)) setPlatformCredits(d.platform_credits_remaining);
       setMessages((m) => [
         ...m,
-        {
-          role: "assistant",
-          content: `Image generated. ${d.credits_remaining ?? ""} credits left.`,
-          image: d.url,
-        },
+        { role: "assistant", content: `Image saved to your private assets. ${Number.isSafeInteger(d.platform_credits_charged) && d.platform_credits_charged > 0 ? `${d.platform_credits_charged} platform credit${d.platform_credits_charged === 1 ? '' : 's'} charged.` : 'Your plan image allowance was used.'}`, image: d.url },
       ]);
       setInput("");
     } catch (e) {
@@ -201,32 +502,21 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     setError("");
     try {
       const t = await token();
+      const requestId = crypto.randomUUID();
       const r = await fetch("/api/generate-visual", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${t}`,
-        },
-        body: JSON.stringify({
-          prompt: input || "A premium futuristic visual concept",
-          mode,
-        }),
+        headers: { "Content-Type": "application/json", "Idempotency-Key": requestId, Authorization: `Bearer ${t}` },
+        body: JSON.stringify({ prompt: input || "A premium futuristic visual concept", mode, request_id: requestId }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Visual generation failed");
       const src =
         d.url || (d.b64_json ? `data:image/png;base64,${d.b64_json}` : null);
       if (!src) throw new Error("No visual was returned.");
+      if (Number.isSafeInteger(d.platform_credits_remaining)) setPlatformCredits(d.platform_credits_remaining);
       setMessages((m) => [
         ...m,
-        {
-          role: "assistant",
-          content:
-            mode === "3d"
-              ? `3D-rendered visual generated. ${d.credits_remaining ?? ""} credits left.`
-              : "Visual generated.",
-          image: src,
-        },
+        { role: "assistant", content: `${mode === "3d" ? '3D-rendered still image' : 'Visual'} saved to your private assets. ${Number.isSafeInteger(d.platform_credits_charged) && d.platform_credits_charged > 0 ? `${d.platform_credits_charged} platform credit${d.platform_credits_charged === 1 ? '' : 's'} charged.` : 'Your plan image allowance was used.'}`, image: src, assetId: d.asset_id },
       ]);
       setInput("");
     } catch (e) {
@@ -442,7 +732,8 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       },
     ],
     [Brain, "Think deeper", () => send(input, "deep")],
-    [ImageIcon, "Generate image", generateImage],
+    [ImageIcon, "Generate image · 1 credit", generateImage],
+    [Video, "Generate video", prepareVideo],
     [Sparkles, "Generate 3D visual", () => generateVisual("3d")],
     [Sparkles, "Generate diagram", () => generateVisual("diagram")],
     [
@@ -510,6 +801,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       {menu && (
         <div className="absolute bottom-[calc(100%+10px)] left-0 z-50 w-[min(360px,calc(100vw-24px))] rounded-3xl border border-white/10 bg-[#101011]/98 p-2 shadow-2xl backdrop-blur-xl">
           <div className="grid grid-cols-2 gap-1">
+            {/* Tool callbacks read DOM refs only when invoked by the user's click. */}
             {tools.map(([Icon, label, action]) => (
               <button
                 key={label}
@@ -531,6 +823,111 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       )}
     </div>
   );
+  async function prepareVideo() {
+    const prompt = input.trim();
+    if (!prompt) { setError("Enter a video prompt first."); return; }
+    setMenu(false);
+    setError("");
+    try {
+      const t = await token();
+      const r = await fetch("/api/generate-video?duration=5", { headers: { ...(t ? { Authorization: `Bearer ${t}` } : {}) }, cache: "no-store" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.available !== true) throw new Error(d.error || "Video generation is unavailable.");
+      setVideoConfirmPrompt(prompt);
+      setVideoDuration(5);
+      setVideoAspectRatio("landscape");
+      setVideoCreditsPerSecond(Number.isSafeInteger(d.platform_credits_per_second) ? d.platform_credits_per_second : 0);
+      setVideoCreditsAvailable(Number.isSafeInteger(d.platform_credits_available) ? d.platform_credits_available : 0);
+      setVideoStatus("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Video generation is unavailable.");
+    }
+  }
+  async function generateVideo() {
+    if (!videoConfirmPrompt || loading) return;
+    setLoading(true);
+    setError("");
+    setVideoStatus("Starting the Runway video task…");
+    try {
+      const t = await token();
+      const requestId = crypto.randomUUID();
+      const r = await fetch("/api/generate-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": requestId, ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+        body: JSON.stringify({ prompt: videoConfirmPrompt, duration: videoDuration, aspect_ratio: videoAspectRatio, request_id: requestId }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.job_id) throw new Error(d.error || "Video generation could not be started.");
+      setActiveVideoJobId(d.job_id);
+      setVideoStatus(`Runway task ${d.status === "processing" ? "is processing" : "is queued"}. Checking the actual provider status…`);
+      setInput("");
+      setVideoConfirmPrompt("");
+      for (let attempt = 0; attempt < 180; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const statusResponse = await fetch(`/api/generate-video/status?job_id=${encodeURIComponent(d.job_id)}`, { headers: { ...(t ? { Authorization: `Bearer ${t}` } : {}) }, cache: "no-store" });
+        const statusData = await statusResponse.json().catch(() => ({}));
+        if (!statusResponse.ok) throw new Error(statusData.error || "Video status is temporarily unavailable. The job remains tracked.");
+        if (statusData.status === "completed" && statusData.video_url) {
+          setMessages((m) => [...m, { role: "assistant", content: `Video generation completed. ${statusData.platform_credits_charged || 0} platform credits charged. The preview URL expires after one hour; use the secure asset link below to open a fresh URL.`, video: statusData.video_url, assetId: statusData.asset_id }]);
+          if (Number.isSafeInteger(d.platform_credits_remaining)) setPlatformCredits(d.platform_credits_remaining);
+          setVideoStatus("");
+          setActiveVideoJobId("");
+          return;
+        }
+        if (statusData.status === "failed" || statusData.status === "cancelled") throw new Error(statusData.error || "Video generation did not complete.");
+        setVideoStatus("Runway is still processing the job. This status comes from the provider; no progress percentage is estimated.");
+      }
+      setVideoStatus(`Automatic polling stopped after nine minutes. Job ${d.job_id} remains tracked by the server; use Check status to query the provider again. No cancel action is exposed because cancellation is not verified for this provider adapter.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Video generation failed.");
+      setVideoStatus("");
+    } finally {
+      setLoading(false);
+    }
+  }
+  async function refreshVideoStatus() {
+    if (!activeVideoJobId) return;
+    try {
+      const t = await token();
+      const response = await fetch(`/api/generate-video/status?job_id=${encodeURIComponent(activeVideoJobId)}`, { headers: { ...(t ? { Authorization: `Bearer ${t}` } : {}) }, cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Video status is temporarily unavailable.");
+      if (data.status === "completed" && data.video_url) {
+        setMessages((m) => [...m, { role: "assistant", content: `Video generation completed. ${data.platform_credits_charged || 0} platform credits charged.`, video: data.video_url, assetId: data.asset_id }]);
+        setActiveVideoJobId("");
+        setVideoStatus("");
+      } else if (data.status === "failed" || data.status === "cancelled") {
+        setError(data.error || "Video generation did not complete.");
+        setActiveVideoJobId("");
+        setVideoStatus("");
+      } else {
+        setVideoStatus(`Provider status: ${data.status || "processing"}. The job remains tracked; check again later.`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Video status is temporarily unavailable.");
+    }
+  }
+  const videoConfirmationPanel = videoConfirmPrompt ? (
+    <div className="mb-3 rounded-2xl border border-white/10 bg-white/[.04] p-3 text-xs">
+      <p className="font-semibold text-white">Confirm video generation</p>
+      <p className="mt-1 line-clamp-3 text-zinc-400">{videoConfirmPrompt}</p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <label className="text-zinc-400">Duration
+          <select value={videoDuration} onChange={(e) => setVideoDuration(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-white/10 bg-black p-2 text-white">
+            {[2,3,4,5,6,7,8,9,10].map((seconds) => <option key={seconds} value={seconds}>{seconds} seconds</option>)}
+          </select>
+        </label>
+        <label className="text-zinc-400">Aspect ratio
+          <select value={videoAspectRatio} onChange={(e) => setVideoAspectRatio(e.target.value as "landscape" | "portrait")} className="mt-1 w-full rounded-lg border border-white/10 bg-black p-2 text-white">
+            <option value="landscape">Landscape</option><option value="portrait">Portrait</option>
+          </select>
+        </label>
+      </div>
+      <p className="mt-2 text-zinc-400">Credits required: {videoCreditsPerSecond === null ? "checking availability…" : `${videoCreditsPerSecond * videoDuration}`} · available: {videoCreditsAvailable ?? "checking…"}</p>
+      {videoCreditsPerSecond !== null && videoCreditsPerSecond > 0 && videoCreditsAvailable !== null && videoCreditsAvailable < videoCreditsPerSecond * videoDuration && <p className="mt-2 text-amber-300">Insufficient platform credits for this duration. Choose a shorter duration or add credits.</p>}
+      <div className="mt-3 flex gap-2"><button type="button" disabled={loading || (videoCreditsPerSecond !== null && videoCreditsPerSecond > 0 && videoCreditsAvailable !== null && videoCreditsAvailable < videoCreditsPerSecond * videoDuration)} onClick={generateVideo} className="rounded-xl bg-[var(--gold)] px-3 py-2 font-semibold text-black disabled:opacity-40">Confirm and generate</button><button type="button" disabled={loading} onClick={() => setVideoConfirmPrompt("")} className="rounded-xl border border-white/10 px-3 py-2 text-white disabled:opacity-40">Cancel</button></div>
+    </div>
+  ) : null;
   async function research() {
     const q = input.trim();
     if (!q) return;
@@ -582,18 +979,34 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
             </div>
           )}
           {m.image && (
-            <img
-              src={m.image}
-              alt="Generated by Leo"
-              className="mt-3 max-h-72 rounded-2xl"
-            />
+            <a href={m.image} target="_blank" rel="noreferrer" aria-label="Open saved generated image">
+              <Image
+                src={m.image}
+                alt="Generated by Leo"
+                width={1200}
+                height={800}
+                unoptimized
+                className="mt-3 max-h-72 rounded-2xl object-contain"
+              />
+            </a>
           )}
+          {m.video && <video src={m.video} controls playsInline preload="metadata" className="mt-3 max-h-72 w-full rounded-2xl border border-white/10" aria-label="Generated video" />}
+          {m.assetId && <a href={`/api/media/${encodeURIComponent(m.assetId)}?download=1`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-[var(--gold)] underline">Open saved private asset</a>}
         </div>
       ))}
       {loading && (
         <div className="flex max-w-fit items-center gap-2 rounded-3xl bg-black/40 p-3 text-sm text-zinc-400">
           <Loader2 size={15} className="animate-spin" />
           Leo is working…
+        </div>
+      )}
+      {offlineDraft && (
+        <div className="mx-3 mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100" role="status">
+          <div className="min-w-0"><p className="font-semibold">Saved offline — not submitted</p><p className="mt-1 break-words text-xs text-amber-100/70">{offlineDraft.text}</p></div>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" disabled={!networkOnline || loading} onClick={() => { const draft = offlineDraft; void send(draft.text, draft.mode); }} className="rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-bold text-black disabled:opacity-40">Send now</button>
+            <button type="button" onClick={() => { setOfflineDraft(null); window.localStorage.removeItem(OFFLINE_DRAFT_KEY); }} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300">Discard</button>
+          </div>
         </div>
       )}
       {error && (
@@ -610,14 +1023,77 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     return (
       <>
         <>{inputs}</>
-        <div className="h-[calc(100vh-73px)]">
-          <div className="relative mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-white/[.035] backdrop-blur-xl">
-            <header className="flex items-center justify-between border-b border-white/10 p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--gold)] text-black">
+        <div className="flex h-[calc(100vh-73px)] min-h-[520px] overflow-hidden rounded-3xl border border-white/10 bg-[#09090b]">
+          <aside className={`${sidebarOpen ? "w-60" : "w-[68px]"} hidden shrink-0 flex-col border-r border-white/10 bg-black/35 transition-[width] duration-200 md:flex`}>
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 p-3">
+              {sidebarOpen && <div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--gold)] text-black"><Bot size={17}/></div><div><b className="text-sm">Leo AI</b><p className="text-[10px] text-zinc-500">Your workspace</p></div></div>}
+              <button type="button" onClick={() => setSidebarOpen((value) => !value)} className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white" aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}><PanelLeftClose size={16}/></button>
+            </div>
+            <div className="space-y-1 p-2">
+              <button type="button" onClick={startNewChat} title="New chat" className="flex w-full items-center gap-3 rounded-xl bg-[var(--gold)] px-3 py-2.5 text-left text-sm font-semibold text-black"><PlusCircle size={17}/>{sidebarOpen && "New chat"}</button>
+              <button type="button" onClick={() => { setMemoryOpen(false); }} title="Chat" className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-zinc-300 hover:bg-white/5"><MessageSquare size={17}/>{sidebarOpen && "Chat"}</button>
+              <button type="button" onClick={() => { setMemoryOpen(true); void loadMemories(); }} title="Memory" className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-white/5 ${memoryOpen ? "bg-white/10 text-white" : "text-zinc-300"}`}><Brain size={17}/>{sidebarOpen && "Memory"}</button>
+              <button type="button" onClick={() => { setMemoryOpen(false); setMenu(true); }} title="Images and tools" className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-zinc-300 hover:bg-white/5"><ImageIcon size={17}/>{sidebarOpen && "Images & tools"}</button>
+            </div>
+            {sidebarOpen && <div className="px-3 pb-2 pt-3"><p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-zinc-500"><History size={13}/> Recent chats</p></div>}
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+              {chatHistory.length === 0 ? (sidebarOpen && <p className="px-2 py-3 text-xs leading-5 text-zinc-600">Your recent chats will appear here on this device.</p>) : chatHistory.map((chat) => <button key={chat.id} type="button" onClick={() => void openSavedChat(chat)} title={chat.title} className={`mb-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs ${activeChatId === chat.id ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5 hover:text-white"}`}><MessageSquare size={14} className="shrink-0"/>{sidebarOpen && <span className="truncate">{chat.title}</span>}</button>)}
+            </div>
+            <div className="space-y-1 border-t border-white/10 p-2">
+              <Link href="/projects" title="Projects and library" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><Library size={17}/>{sidebarOpen && "Library & projects"}</Link>
+              <Link href="/templates" title="Explore" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><Compass size={17}/>{sidebarOpen && "Explore"}</Link>
+              <Link href="/account" title="Account" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><UserCircle size={17}/>{sidebarOpen && "Account"}</Link>
+              <Link href="/pricing" title="Upgrade plan" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><CreditCard size={17}/>{sidebarOpen && "Upgrade plan"}</Link>
+              <Link href="/ide" title="Developer workspace" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>{sidebarOpen && "Developer workspace"}</Link>
+              <button type="button" onClick={() => { setRemoteOpen(true); setMemoryOpen(false); setRemoteStatus(""); }} title="Pair and connect devices" className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>{sidebarOpen && "Remote devices"}</button>
+              {sidebarOpen && <p className="px-3 pb-1 pt-2 text-[10px] leading-4 text-zinc-600">Pair your devices securely and exchange workspace messages.</p>}
+            </div>
+          </aside>
+          {mobileSidebarOpen && (
+            <div className="fixed inset-0 z-[60] md:hidden" role="dialog" aria-modal="true" aria-label="Leo AI workspace navigation">
+              <button type="button" className="absolute inset-0 bg-black/70" aria-label="Close workspace navigation" onClick={() => setMobileSidebarOpen(false)} />
+              <aside className="absolute inset-y-0 left-0 flex w-[min(84vw,320px)] flex-col border-r border-white/10 bg-[#0b0b0d] shadow-2xl">
+                <div className="flex items-center justify-between border-b border-white/10 p-4">
+                  <div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--gold)] text-black"><Bot size={18}/></div><div><b className="text-sm">Leo AI</b><p className="text-[10px] text-zinc-500">Your workspace</p></div></div>
+                  <button type="button" onClick={() => setMobileSidebarOpen(false)} className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white" aria-label="Close workspace navigation"><X size={18}/></button>
+                </div>
+                <div className="space-y-1 p-3">
+                  <button type="button" onClick={() => { startNewChat(); setMobileSidebarOpen(false); }} className="flex w-full items-center gap-3 rounded-xl bg-[var(--gold)] px-3 py-3 text-left text-sm font-semibold text-black"><PlusCircle size={17}/>New chat</button>
+                  <button type="button" onClick={() => { setMemoryOpen(false); setMobileSidebarOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-zinc-300 hover:bg-white/5"><MessageSquare size={17}/>Chat</button>
+                  <button type="button" onClick={() => { setMemoryOpen(true); void loadMemories(); setMobileSidebarOpen(false); }} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm ${memoryOpen ? "bg-white/10 text-white" : "text-zinc-300 hover:bg-white/5"}`}><Brain size={17}/>Memory</button>
+                  <button type="button" onClick={() => { setMemoryOpen(false); setMenu(true); setMobileSidebarOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-zinc-300 hover:bg-white/5"><ImageIcon size={17}/>Images & tools</button>
+                </div>
+                <div className="px-4 pb-2 pt-3"><p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-zinc-500"><History size={13}/>Recent chats</p></div>
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+                  {chatHistory.length === 0 ? <p className="px-2 py-3 text-xs leading-5 text-zinc-600">Your recent chats will appear here on this device.</p> : chatHistory.map((chat) => <button key={chat.id} type="button" onClick={() => { void openSavedChat(chat); setMobileSidebarOpen(false); }} className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-xs ${activeChatId === chat.id ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5"}`}><MessageSquare size={14} className="shrink-0"/><span className="truncate">{chat.title}</span></button>)}
+                </div>
+                <div className="space-y-1 border-t border-white/10 p-3">
+                  <Link href="/projects" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Library size={17}/>Library & projects</Link>
+                  <Link href="/templates" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Compass size={17}/>Explore</Link>
+                  <Link href="/account" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><UserCircle size={17}/>Account</Link>
+                  <Link href="/pricing" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><CreditCard size={17}/>Upgrade plan</Link>
+                  <Link href="/ide" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>Developer workspace</Link>
+                  <button type="button" onClick={() => { setRemoteOpen(true); setMemoryOpen(false); setRemoteStatus(""); setMobileSidebarOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>Remote devices</button>
+                </div>
+              </aside>
+            </div>
+          )}
+          <div className="relative mx-auto flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-white/[.025] backdrop-blur-xl">
+            {remoteOpen && <div className="absolute inset-0 z-40 overflow-y-auto bg-[#080809]/95 p-4 backdrop-blur-xl md:p-7"><section className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-[#111113] p-5 shadow-2xl md:p-7"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-[var(--gold)]"><Laptop size={20}/><span className="text-xs font-bold uppercase tracking-[.18em]">Leo Remote</span></div><h2 className="mt-3 text-2xl font-black">Connect your devices</h2><p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">Sign in to the same Leo account on both devices. Create a one-time code on one device, then enter it on the other. Codes expire in five minutes.</p></div><button type="button" onClick={() => setRemoteOpen(false)} aria-label="Close remote devices" className="rounded-xl border border-white/10 p-2 text-zinc-400 hover:text-white"><X size={18}/></button></div>
+              <div className="mt-6 grid gap-4 md:grid-cols-2"><div className="rounded-2xl border border-white/10 bg-black/20 p-4"><h3 className="font-bold">Pair this device</h3><p className="mt-1 text-xs leading-5 text-zinc-500">Generate a short-lived code to enter on your other signed-in device.</p><button type="button" disabled={remoteBusy} onClick={() => void createRemotePairing()} className="mt-4 w-full rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">{remoteBusy ? "Please wait…" : "Generate pairing code"}</button>{remoteCode && <div className="mt-4 rounded-xl border border-[var(--gold)]/30 bg-[var(--gold)]/5 p-4 text-center"><p className="text-[10px] uppercase tracking-widest text-zinc-400">One-time pairing code</p><p className="my-2 font-mono text-2xl font-black tracking-[.22em] text-[var(--gold)]">{remoteCode}</p><button type="button" onClick={() => { void navigator.clipboard?.writeText(remoteCode); setRemoteStatus("Pairing code copied."); }} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-200">Copy code</button></div>}</div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4"><h3 className="font-bold">Join a device</h3><p className="mt-1 text-xs leading-5 text-zinc-500">Enter the code displayed on the other device. Both devices must belong to the same account.</p><form onSubmit={(event) => void claimRemotePairing(event)} className="mt-4 space-y-3"><input value={remoteClaimCode} onChange={(event) => setRemoteClaimCode(event.target.value.toUpperCase().replace(/[^A-F0-9]/g, "").slice(0, 10))} inputMode="text" autoComplete="one-time-code" maxLength={10} placeholder="10-character code" className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 font-mono text-sm uppercase tracking-widest outline-none focus:border-[var(--gold)]"/><button type="submit" disabled={remoteBusy || remoteClaimCode.length !== 10} className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-white disabled:opacity-40">Pair this device</button></form></div></div>
+              {remoteStatus && <p role="status" aria-live="polite" className="mt-4 rounded-xl border border-white/10 bg-white/[.03] p-3 text-sm text-zinc-300">{remoteStatus}</p>}
+              <div className="mt-6"><div className="mb-3 flex items-center justify-between gap-3"><h3 className="font-bold">Devices and sessions</h3><button type="button" onClick={() => void loadRemotePairings()} className="text-xs text-[var(--gold)]">Refresh</button></div>{remotePairings.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 p-5 text-sm text-zinc-500">No devices paired yet. Generate a code to begin.</p> : <div className="space-y-2">{remotePairings.map((pairing) => <div key={pairing.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{pairing.created_device_name}{pairing.paired_device_name ? ` ↔ ${pairing.paired_device_name}` : ""}</p><p className="mt-1 text-xs text-zinc-500">{pairing.status === "paired" ? "Connected · remote message relay available" : `Waiting for pairing · expires ${new Date(pairing.expires_at).toLocaleTimeString()}`}</p></div><div className="flex gap-2">{pairing.status === "paired" && <button type="button" onClick={() => { setRemoteSessionId(pairing.id); setRemoteEvents([]); setRemoteCursor(0); }} className={`rounded-lg px-3 py-2 text-xs font-semibold ${remoteSessionId === pairing.id ? "bg-[var(--gold)] text-black" : "border border-white/10 text-white"}`}>{remoteSessionId === pairing.id ? "Selected" : "Open relay"}</button>}<button type="button" onClick={() => void revokeRemotePairing(pairing.id)} className="rounded-lg border border-red-400/20 px-3 py-2 text-xs text-red-300">Disconnect</button></div></div>)}</div>}</div>
+              {remoteSessionId && <div className="mt-6 rounded-2xl border border-[var(--gold)]/20 bg-black/20 p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="font-bold">Live remote message relay</h3><p className="mt-1 text-xs text-zinc-500">Messages sent here appear on the paired device when it opens this session.</p></div><span className="rounded-full border border-emerald-500/20 px-2 py-1 text-[10px] text-emerald-300">Connected</span></div><div className="mt-4 max-h-52 space-y-2 overflow-y-auto">{remoteEvents.length === 0 ? <p className="text-xs text-zinc-600">Waiting for messages or chat handoffs from either device…</p> : remoteEvents.map((item) => <article key={item.id} className="rounded-xl border border-white/10 bg-white/[.03] p-3">{item.event_type === "chat.open" && typeof item.payload.sessionId === "string" ? <><p className="text-sm font-semibold text-zinc-200">Shared chat: {String(item.payload.title || "Leo conversation")}</p><button type="button" onClick={() => { void openSavedChat({ id: String(item.payload.sessionId), title: String(item.payload.title || "Shared Leo chat"), updatedAt: Date.now() }); setRemoteOpen(false); }} className="mt-2 rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-bold text-black">Open shared chat</button></> : <p className="whitespace-pre-wrap break-words text-sm text-zinc-200">{item.event_type === "message" ? String(item.payload.text || "") : `[${item.event_type}]`}</p>}<p className="mt-1 text-[10px] text-zinc-600">{item.device_id} · {new Date(item.created_at).toLocaleTimeString()}</p></article>)}</div><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={remoteBusy} onClick={() => void shareCurrentChat()} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-200 disabled:opacity-50">Share current chat</button></div><form onSubmit={(event) => void sendRemoteMessage(event)} className="mt-3 flex gap-2"><input value={remoteMessage} onChange={(event) => setRemoteMessage(event.target.value)} maxLength={4000} placeholder="Send a message to the paired device…" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none focus:border-[var(--gold)]"/><button type="submit" disabled={remoteBusy || !remoteMessage.trim()} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-40"><Send size={16}/></button></form></div>}
+              <p className="mt-5 text-[11px] leading-5 text-zinc-600">Security: pairing is limited to the same signed-in account; codes are one-time and expire after five minutes. Revoke a paired device to stop further access. This provides a live message relay, not unattended screen or mouse control.</p>
+            </section></div>}
+            <header className="flex items-center justify-between border-b border-white/10 p-3 sm:p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <button type="button" onClick={() => setMobileSidebarOpen(true)} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--gold)]/40 bg-[var(--gold)]/10 px-3 text-sm font-semibold text-[var(--gold)] shadow-sm hover:bg-[var(--gold)]/15 md:hidden" aria-label="Open workspace navigation" aria-haspopup="dialog"><Menu size={18}/><span>Menu</span></button>
+                <div className="hidden h-10 w-10 items-center justify-center rounded-2xl bg-[var(--gold)] text-black sm:flex">
                   <Bot size={20} />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <b>LEO AI</b>
                     {plan && (
@@ -625,8 +1101,15 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
                         {plan}
                       </span>
                     )}
+                    {platformCredits !== null && <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-zinc-400" aria-live="polite">{platformCredits} credits</span>}
                   </div>
-                  <div className="text-xs text-green-400">● Online</div>
+                  <div className="flex items-center gap-2 text-xs text-zinc-500">
+                    <span>Chat workspace</span>
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${networkOnline ? "border-emerald-500/20 text-emerald-300" : "border-amber-500/30 text-amber-200"}`} aria-live="polite">
+                      <span className={`h-1.5 w-1.5 rounded-full ${networkOnline ? "bg-emerald-400" : "bg-amber-300"}`} />
+                      {networkOnline ? "Network online" : "Offline"}
+                    </span>
+                  </div>
                 </div>
               </div>
               <button
@@ -636,8 +1119,15 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
                 <Trash2 size={16} /> Clear chat
               </button>
             </header>
+            <div className="flex gap-2 overflow-x-auto border-b border-white/10 px-3 py-2 md:hidden">
+              <button type="button" onClick={startNewChat} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-bold text-black"><PlusCircle size={14}/> New chat</button>
+              <button type="button" onClick={() => { setMemoryOpen(true); void loadMemories(); }} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300"><Brain size={14}/> Memory</button>
+              <button type="button" onClick={() => { setMemoryOpen(false); setMenu(true); }} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300"><ImageIcon size={14}/> Images & tools</button>
+              <a href="/account" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300"><UserCircle size={14}/> Account</a>
+              <a href="/pricing" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300"><CreditCard size={14}/> Upgrade</a>
+            </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-8">
-              {messages.length === 0 ? (
+              {memoryOpen ? <div className="mx-auto max-w-2xl"><div className="mb-6 flex items-start gap-3"><div className="rounded-2xl bg-[var(--gold)]/10 p-3 text-[var(--gold)]"><Brain size={22}/></div><div><h1 className="text-2xl font-bold">Leo memory</h1><p className="mt-1 text-sm text-zinc-400">Saved notes help Leo retain useful context. Manage what is remembered.</p></div></div><form onSubmit={(event) => { event.preventDefault(); void addMemory(); }} className="mb-6 flex gap-2"><input value={memoryDraft} onChange={(event) => setMemoryDraft(event.target.value)} placeholder="Remember that I prefer…" maxLength={1000} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none focus:border-[var(--gold)]"/><button disabled={memoryBusy || !memoryDraft.trim()} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">Save</button></form>{memoryBusy ? <p className="text-sm text-zinc-500">Loading memories…</p> : memories.length ? <div className="space-y-2">{memories.map((memory) => <article key={memory.id} className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4"><div><p className="whitespace-pre-wrap text-sm text-zinc-200">{memory.memory}</p><p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-600">{memory.source || "saved"}</p></div><button type="button" onClick={() => void deleteMemory(memory.id)} className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-300" aria-label="Delete memory"><Trash size={15}/></button></article>)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center"><Bookmark className="mx-auto mb-3 text-zinc-500"/><p className="text-sm text-zinc-300">No saved memories yet</p><p className="mt-1 text-xs text-zinc-500">Add preferences, project context or instructions you want to keep.</p></div>}</div> : messages.length === 0 ? (
                 <div className="mx-auto max-w-2xl py-10 text-center">
                   <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full border border-[var(--gold)]/30 bg-[var(--gold)]/10">
                     <div className="h-14 w-14 animate-pulse rounded-full bg-[var(--gold)]/70 blur-[2px]" />
@@ -665,9 +1155,11 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
                 messagesView
               )}
             </div>
-            <div className="border-t border-white/10 p-3 md:p-4">
+            {!memoryOpen && <div className="border-t border-white/10 p-3 md:p-4">
+              {videoConfirmationPanel}
+              {videoStatus && <div className="mb-2 text-xs text-zinc-400" role="status" aria-live="polite"><p>{videoStatus}</p>{activeVideoJobId && !loading && <button type="button" onClick={refreshVideoStatus} className="mt-2 rounded-lg border border-white/10 px-3 py-2 text-white">Check status</button>}</div>}
               {composer}
-            </div>
+            </div>}
             {voiceOpen && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xl">
                 <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#101011] p-6 text-center shadow-2xl">
@@ -747,13 +1239,18 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
             <div className="flex items-center gap-2">
               <Bot size={18} />
               <b>LEO AI</b>
+              {platformCredits !== null && <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] text-zinc-400" aria-live="polite">{platformCredits} platform credits</span>}
             </div>
             <button onClick={() => setOpen(false)} aria-label="Close Leo">
               <X size={18} />
             </button>
           </header>
           <div className="flex-1 overflow-y-auto p-4">{messagesView}</div>
-          <div className="border-t border-white/10 p-3">{composer}</div>
+          <div className="border-t border-white/10 p-3">
+{videoConfirmationPanel}
+            {videoStatus && <div className="mb-2 text-xs text-zinc-400" role="status" aria-live="polite"><p>{videoStatus}</p>{activeVideoJobId && !loading && <button type="button" onClick={refreshVideoStatus} className="mt-2 rounded-lg border border-white/10 px-3 py-2 text-white">Check status</button>}</div>}
+            {composer}
+          </div>
         </div>
       )}
     </>

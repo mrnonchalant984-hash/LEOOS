@@ -64,3 +64,19 @@ test('scratchpad contracts accept bounded handoff metadata and reject unsafe pat
   assert.equal(updated.entries[0].changedPaths[0], '/components/ui/button.tsx');
   assert.throws(() => appendScratchpadEntry(empty, { id: 'e2', taskId: 't1', agent: 'ui', createdAt: '', summary: 'unsafe', changedPaths: ['../../.env'], validation: { status: 'not-run', checks: [] } }));
 });
+
+test('SDK defaults to the deployed LeonardX base URL and supports models and messages', async () => {
+  const seen = [];
+  const leo = new LeoClient({ apiKey: 'leo_live_abc', fetch: async (url, init) => {
+    seen.push({ url: String(url), method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : null });
+    if (String(url).endsWith('/api/v1/models')) return json(200, { data: [{ id: 'gpt-4o-mini', object: 'model', owned_by: 'leonardx' }], request_id: 'r1' });
+    return json(200, { id: 'msg_1', type: 'message', role: 'assistant', model: 'gpt-4o-mini', content: [{ type: 'text', text: 'Hello' }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2, credits_used: 1 }, request_id: 'r2' });
+  }});
+  const models = await leo.models.list();
+  const message = await leo.messages.create({ messages: [{ role: 'user', content: 'Hello' }] });
+  assert.equal(seen[0].url, 'https://leoos-omega.vercel.app/api/v1/models');
+  assert.equal(models.data[0].id, 'gpt-4o-mini');
+  assert.equal(seen[1].url, 'https://leoos-omega.vercel.app/api/v1/messages');
+  assert.equal(seen[1].method, 'POST');
+  assert.equal(message.content[0].text, 'Hello');
+});

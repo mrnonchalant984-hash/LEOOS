@@ -1,0 +1,22 @@
+LEONARDX PLATFORM UPGRADE — SOURCE PACKAGE
+
+This package updates the existing LeonardX codebase. It is not deployed automatically.
+
+UX corrections in this revision:
+- Removed internal worker/scheduler/lease/staging notes from customer-facing Workflow Studio.
+- Prevented workflow runs and scheduled workflows from being accepted while the worker is disabled.
+- Replaced draft API price cards and internal checkout warnings with a clean Developer API access request page.
+- Removed unapproved API draft prices from the public plans endpoint.
+- Removed internal metering/provider-cost implementation notes from the Leo plans and video-generation UI.
+
+Before production:
+1. Review the code diff and environment variables.
+2. Install dependencies from the lockfile; run typecheck, lint, the full test suite, and a production build.
+3. Apply the included Supabase migration to staging only, then verify RLS, grants, and tenant isolation.
+4. Finish and test API billing, signed payment webhooks, transactional usage metering, and subscription lifecycle before publishing API prices or enabling checkout.
+5. Finish and test worker scheduling, timeouts, cancellation, lease recovery, output redaction, and monitoring before setting WORKFLOW_WORKER_ENABLED=true.
+6. Deploy only after explicit release approval.
+
+The NGN API prices in lib/api-plan-catalog.ts are draft assumptions and are not displayed publicly. They were not validated against provider costs or approved business pricing. Review and approve the commercial model before exposing them.
+
+No production database migration, GitHub push, or deployment was performed by this package creation.

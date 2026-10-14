@@ -44,7 +44,9 @@ export function adminSupabase() {
 }
 
 export function isPlatformOwner(profile: { role?: string | null; email?: string | null } | null | undefined) {
-  const ownerEmail = (process.env.OWNER_EMAIL || 'leonardudoh5@gmail.com').toLowerCase();
+  const ownerEmail = process.env.OWNER_EMAIL?.trim().toLowerCase();
+  // Fail closed: an unset owner identity must never silently fall back to a baked-in email.
+  if (!ownerEmail) return false;
   return profile?.role === 'owner' && profile.email?.toLowerCase() === ownerEmail;
 }
 

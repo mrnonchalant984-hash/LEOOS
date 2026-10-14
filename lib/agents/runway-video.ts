@@ -44,19 +44,19 @@ export async function getRunwayVideo(taskId:string,runId?:string,userId?:string)
     let videoUrl=sourceUrl;
     // Runway output URLs are temporary. Copy the result into the existing private LEO file bucket.
     if(userId){
-      const fileResponse=await fetch(sourceUrl);
-      if(fileResponse.ok){
-        const buffer=Buffer.from(await fileResponse.arrayBuffer());
-        const path=`agent-videos/${userId}/${taskId}.mp4`;
-        const db=adminSupabase();
-        const upload=await db.storage.from('leo-files').upload(path,buffer,{contentType:'video/mp4',upsert:true});
-        if(!upload.error){
-          const signed=await db.storage.from('leo-files').createSignedUrl(path,60*60*24*7);
-          if(!signed.error&&signed.data?.signedUrl) videoUrl=signed.data.signedUrl;
-        }
-      }
+      const fileResponse=await fetch(sourceUrl,{signal:AbortSignal.timeout(60_000),redirect:'follow'});
+      if(!fileResponse.ok) throw new Error('Runway completed, but the video could not be downloaded for private storage.');
+      const buffer=Buffer.from(await fileResponse.arrayBuffer());
+      if(!buffer.length || buffer.length > 500 * 1024 * 1024) throw new Error('Runway returned an invalid video size.');
+      const path=`agent-videos/${userId}/${taskId}.mp4`;
+      const db=adminSupabase();
+      const upload=await db.storage.from('leo-files').upload(path,buffer,{contentType:'video/mp4',upsert:true});
+      if(upload.error) throw new Error('Runway completed, but the video could not be saved to private storage.');
+      const signed=await db.storage.from('leo-files').createSignedUrl(path,60*60);
+      if(signed.error||!signed.data?.signedUrl) throw new Error('Runway completed, but a secure video URL could not be issued.');
+      videoUrl=signed.data.signedUrl;
     }
-    await persist(runId,userId,{runway_task_id:taskId,video_status:'completed',video_url:videoUrl,runway_source_url:sourceUrl});
+    await persist(runId,userId,{runway_task_id:taskId,video_status:'completed',video_url:videoUrl,});
     return {status:'completed',task_id:taskId,video_url:videoUrl};
   }
   if(status==='FAILED'||status==='CANCELED'){

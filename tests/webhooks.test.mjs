@@ -40,5 +40,5 @@ test('private IP detection covers v4, mapped v6 and v6 ranges', () => {
   for (const ip of ['8.8.8.8', '172.32.0.1', '93.184.216.34']) assert.equal(isPrivateIp(ip), false, ip);
 });
 test('only real events are accepted', () => {
-  assert.deepEqual(parseEvents(['webhook.test', 'project.deployed', 'webhook.test']), ['webhook.test']);
+  assert.deepEqual(parseEvents(['webhook.test', 'project.deployed', 'api.usage.completed', 'webhook.test']), ['webhook.test', 'project.deployed', 'api.usage.completed']);
 });

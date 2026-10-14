@@ -583,11 +583,13 @@ create table if not exists leo_memories (
   user_id uuid not null references profiles(id) on delete cascade,
   memory text not null,
   source text not null default 'user',
+  project_id uuid references public.projects(id) on delete cascade,
   active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 create index if not exists idx_leo_memories_user on leo_memories(user_id,active,updated_at desc);
+create index if not exists idx_leo_memories_project_user_active on leo_memories(user_id,project_id,active,updated_at desc);
 alter table leo_memories enable row level security;
 drop policy if exists leo_memories_self on leo_memories;
 create policy leo_memories_self on leo_memories for all using(auth.uid()=user_id or public.is_owner(auth.uid())) with check(auth.uid()=user_id or public.is_owner(auth.uid()));
@@ -902,3 +904,260 @@ revoke all on public.security_events from anon;
 create or replace function public.set_updated_at() returns trigger language plpgsql as $$ begin new.updated_at=now(); return new; end; $$;
 drop trigger if exists trg_webhooks_updated_at on public.webhooks;
 create trigger trg_webhooks_updated_at before update on public.webhooks for each row execute function public.set_updated_at();
+-- LeonardX workforce meeting persistence. Apply through the existing Supabase migration workflow.
+-- No existing production rows are modified or dropped by this migration.
+create table if not exists public.workforce_meetings (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  title text not null check (length(title) between 2 and 160),
+  objective text not null check (length(objective) between 5 and 5000),
+  agenda jsonb not null default '[]'::jsonb,
+  participants jsonb not null default '[]'::jsonb,
+  room_layout text not null default 'conference' check (room_layout in ('conference','boardroom','discussion')),
+  status text not null default 'scheduled' check (status in ('scheduled','in_progress','completed','paused','cancelled','failed')),
+  summary text,
+  decisions jsonb not null default '[]'::jsonb,
+  action_items jsonb not null default '[]'::jsonb,
+  model text,
+  started_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists idx_workforce_meetings_user_created on public.workforce_meetings(user_id, created_at desc);
+create index if not exists idx_workforce_meetings_user_status on public.workforce_meetings(user_id, status, updated_at desc);
+alter table public.workforce_meetings enable row level security;
+drop policy if exists workforce_meetings_self on public.workforce_meetings;
+create policy workforce_meetings_self on public.workforce_meetings for all using (auth.uid() = user_id or public.is_owner(auth.uid())) with check (auth.uid() = user_id or public.is_owner(auth.uid()));
+
+create table if not exists public.workforce_meeting_messages (
+  id uuid primary key default gen_random_uuid(),
+  meeting_id uuid not null references public.workforce_meetings(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  speaker_id text not null,
+  speaker_name text not null,
+  speaker_role text not null,
+  message text not null check (length(message) between 1 and 12000),
+  message_type text not null default 'contribution' check (message_type in ('contribution','moderator_summary','user_note','system')),
+  turn_index integer not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_workforce_meeting_messages_meeting on public.workforce_meeting_messages(meeting_id, turn_index, created_at);
+alter table public.workforce_meeting_messages enable row level security;
+drop policy if exists workforce_meeting_messages_self on public.workforce_meeting_messages;
+create policy workforce_meeting_messages_self on public.workforce_meeting_messages for all using (auth.uid() = user_id or public.is_owner(auth.uid())) with check (auth.uid() = user_id or public.is_owner(auth.uid()));
+
+create table if not exists public.workforce_meeting_action_items (
+  id uuid primary key default gen_random_uuid(),
+  meeting_id uuid not null references public.workforce_meetings(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  title text not null check (length(title) between 2 and 200),
+  description text not null default '',
+  suggested_role_id text,
+  priority text not null default 'medium' check (priority in ('low','medium','high','critical')),
+  status text not null default 'proposed' check (status in ('proposed','approved','task_created','dismissed')),
+  linked_run_id uuid references public.agent_runs(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists idx_workforce_meeting_actions_user on public.workforce_meeting_action_items(user_id, meeting_id, created_at);
+alter table public.workforce_meeting_action_items enable row level security;
+drop policy if exists workforce_meeting_action_items_self on public.workforce_meeting_action_items;
+create policy workforce_meeting_action_items_self on public.workforce_meeting_action_items for all using (auth.uid() = user_id or public.is_owner(auth.uid())) with check (auth.uid() = user_id or public.is_owner(auth.uid()));
+
+-- Persistent one-to-one conversations with role-defined AI specialists.
+create table if not exists public.workforce_conversations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  role_id text not null,
+  role_name text not null,
+  title text not null default 'Engineer conversation' check (length(title) between 2 and 160),
+  status text not null default 'active' check (status in ('active','archived')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists idx_workforce_conversations_user_updated on public.workforce_conversations(user_id, updated_at desc);
+alter table public.workforce_conversations enable row level security;
+drop policy if exists workforce_conversations_self on public.workforce_conversations;
+create policy workforce_conversations_self on public.workforce_conversations for all using (auth.uid() = user_id or public.is_owner(auth.uid())) with check (auth.uid() = user_id or public.is_owner(auth.uid()));
+create table if not exists public.workforce_conversation_messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.workforce_conversations(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  role_id text not null,
+  speaker text not null check (speaker in ('user','assistant','system')),
+  content text not null check (length(content) between 1 and 12000),
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_workforce_conversation_messages_history on public.workforce_conversation_messages(conversation_id, created_at);
+alter table public.workforce_conversation_messages enable row level security;
+drop policy if exists workforce_conversation_messages_self on public.workforce_conversation_messages;
+create policy workforce_conversation_messages_self on public.workforce_conversation_messages for all using (auth.uid() = user_id or public.is_owner(auth.uid())) with check (auth.uid() = user_id or public.is_owner(auth.uid()));
+
+
+-- Production workforce hardening snapshot (2026-10-14)
+-- Production hardening for durable agent workers.
+-- This migration is additive and must be applied through the controlled release process.
+
+alter table public.agent_jobs
+  add column if not exists lease_expires_at timestamptz;
+
+create index if not exists idx_agent_jobs_lease_recovery
+  on public.agent_jobs(status, lease_expires_at)
+  where status = 'running';
+
+create or replace function public.claim_agent_jobs(
+  p_worker text,
+  p_limit integer default 1,
+  p_lease_seconds integer default 90
+)
+returns setof public.agent_jobs
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_worker is null or length(p_worker) < 8 or length(p_worker) > 120 then
+    raise exception 'invalid worker id';
+  end if;
+  if p_limit < 1 or p_limit > 5 or p_lease_seconds < 30 or p_lease_seconds > 180 then
+    raise exception 'invalid claim limits';
+  end if;
+
+  -- Jobs that exhausted their retry budget are finalized before claiming.
+  with expired as (
+    update public.agent_jobs j
+       set status = 'failed', locked_at = null, locked_by = null,
+           lease_expires_at = null,
+           last_error = 'Worker lease expired after maximum attempts.',
+           updated_at = now()
+     where j.status = 'running'
+       and j.lease_expires_at < now()
+       and j.attempts >= 3
+     returning j.run_id, j.user_id
+  )
+  update public.agent_runs r
+     set status = 'failed',
+         error = 'Worker lease expired after maximum attempts.',
+         completed_at = now()
+    from expired e
+   where r.id = e.run_id and r.user_id = e.user_id;
+
+  return query
+  with candidates as (
+    select j.id
+      from public.agent_jobs j
+     where ((j.status = 'queued' and j.available_at <= now())
+         or (j.status = 'running' and j.lease_expires_at < now() and j.attempts < 3))
+     order by j.available_at, j.created_at
+     limit p_limit
+     for update skip locked
+  )
+  update public.agent_jobs j
+     set status = 'running',
+         attempts = j.attempts + 1,
+         locked_at = now(),
+         locked_by = p_worker,
+         lease_expires_at = now() + make_interval(secs => p_lease_seconds),
+         last_error = case when j.status = 'running' then 'Recovered after expired worker lease.' else j.last_error end,
+         updated_at = now()
+    from candidates c
+   where j.id = c.id
+  returning j.*;
+end;
+$$;
+
+revoke all on function public.claim_agent_jobs(text, integer, integer) from public, anon, authenticated;
+grant execute on function public.claim_agent_jobs(text, integer, integer) to service_role;
+
+-- A queue item cannot be read or changed directly by client roles.
+revoke all on table public.agent_jobs from public, anon, authenticated;
+grant all on table public.agent_jobs to service_role;
+
+-- Durable owner-only workforce role queue (2026-10-14)
+-- Durable owner-only role execution with dependency gating and lease-based recovery.
+create table if not exists public.workforce_role_jobs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role_id text not null check (char_length(role_id) between 1 and 100),
+  role_name text not null check (char_length(role_name) between 1 and 160),
+  project_id uuid references public.projects(id) on delete set null,
+  task text not null check (char_length(task) between 1 and 12000),
+  context text not null default '' check (char_length(context) <= 12000),
+  dependencies uuid[] not null default '{}',
+  idempotency_key text,
+  status text not null default 'queued' check (status in ('queued','running','succeeded','failed','blocked','cancelled')),
+  attempts integer not null default 0 check (attempts >= 0 and attempts <= 3),
+  available_at timestamptz not null default now(),
+  lease_owner text,
+  lease_expires_at timestamptz,
+  result text,
+  error_code text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  started_at timestamptz,
+  completed_at timestamptz,
+  unique (user_id, idempotency_key),
+  check (cardinality(dependencies) <= 10),
+  check (not (id = any(dependencies)))
+);
+create index if not exists workforce_role_jobs_queue_idx
+  on public.workforce_role_jobs(status, available_at, created_at)
+  where status in ('queued','running');
+create index if not exists workforce_role_jobs_user_created_idx
+  on public.workforce_role_jobs(user_id, created_at desc);
+alter table public.workforce_role_jobs enable row level security;
+drop policy if exists workforce_role_jobs_owner_read on public.workforce_role_jobs;
+create policy workforce_role_jobs_owner_read on public.workforce_role_jobs for select using (auth.uid() = user_id);
+revoke all on table public.workforce_role_jobs from public, anon, authenticated;
+grant select on table public.workforce_role_jobs to authenticated;
+grant all on table public.workforce_role_jobs to service_role;
+
+create or replace function public.claim_workforce_role_jobs(
+  p_worker text,
+  p_limit integer default 1,
+  p_lease_seconds integer default 90
+)
+returns setof public.workforce_role_jobs
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_worker is null or length(p_worker) < 8 or length(p_worker) > 120 then raise exception 'invalid worker id'; end if;
+  if p_limit < 1 or p_limit > 5 or p_lease_seconds < 30 or p_lease_seconds > 180 then raise exception 'invalid claim limits'; end if;
+
+  update public.workforce_role_jobs j
+     set status = 'blocked', error_code = 'dependency_failed', completed_at = now(), updated_at = now()
+   where j.status = 'queued'
+     and exists (
+       select 1 from unnest(j.dependencies) as dep(dependency_id)
+       join public.workforce_role_jobs d on d.id = dep.dependency_id and d.user_id = j.user_id
+       where d.status in ('failed','blocked','cancelled')
+     );
+
+  update public.workforce_role_jobs j
+     set status = 'failed', lease_owner = null, lease_expires_at = null,
+         error_code = 'worker_lease_exhausted', completed_at = now(), updated_at = now()
+   where j.status = 'running' and j.lease_expires_at < now() and j.attempts >= 3;
+
+  return query
+  with candidates as (
+    select j.id from public.workforce_role_jobs j
+     where ((j.status = 'queued' and j.available_at <= now())
+         or (j.status = 'running' and j.lease_expires_at < now() and j.attempts < 3))
+       and not exists (
+         select 1 from unnest(j.dependencies) as dep(dependency_id)
+         left join public.workforce_role_jobs d on d.id = dep.dependency_id and d.user_id = j.user_id
+         where d.id is null or d.status <> 'succeeded'
+       )
+     order by j.available_at, j.created_at
+     limit p_limit for update skip locked
+  )
+  update public.workforce_role_jobs j
+     set status = 'running', attempts = j.attempts + 1, lease_owner = p_worker,
+         lease_expires_at = now() + make_interval(secs => p_lease_seconds),
+         started_at = coalesce(j.started_at, now()), updated_at = now()
+    from candidates c where j.id = c.id
+  returning j.*;
+end;
+$$;
+revoke all on function public.claim_workforce_role_jobs(text, integer, integer) from public, anon, authenticated;
+grant execute on function public.claim_workforce_role_jobs(text, integer, integer) to service_role;

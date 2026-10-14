@@ -23,12 +23,12 @@ export const planConfig: Record<PaidPlanKey, PlanDefinition> = {
   },
   pro: {
     key: 'pro', name: 'PRO', description: 'Advanced web product development with higher project and build capacity.',
-    features: ['chat', 'file-review', 'image-generation', 'code-review', 'website-builder', 'web-app-builder', 'saas-builder', 'voice'],
+    features: ['chat', 'file-review', 'image-generation', 'code-review', 'agent-access', 'video-generation', 'website-builder', 'web-app-builder', 'saas-builder', 'voice'],
     projectTypes: ['website', 'web_app', 'saas'], limits: { maxProjects: 10, monthlyBuilds: 30, monthlyImageCredits: 100 },
   },
   unlimited: {
     key: 'unlimited', name: 'BUSINESS', description: 'Higher-capacity development for teams and growing businesses.',
-    features: ['chat', 'file-review', 'image-generation', 'code-review', 'website-builder', 'web-app-builder', 'saas-builder', 'voice'],
+    features: ['chat', 'file-review', 'image-generation', 'code-review', 'agent-access', 'video-generation', 'website-builder', 'web-app-builder', 'saas-builder', 'voice'],
     projectTypes: ['website', 'web_app', 'saas'], limits: { maxProjects: 25, monthlyBuilds: 100, monthlyImageCredits: 500 },
   },
 };

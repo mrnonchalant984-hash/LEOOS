@@ -10,6 +10,8 @@ test('OpenAPI document version is separate and public endpoints use v1', () => {
   assert.equal('apiVersion' in openApiV1.info, false);
   assert.deepEqual(Object.keys(openApiV1.paths).sort(), [
     '/v1/me',
+    '/v1/messages',
+    '/v1/models',
     '/v1/projects',
     '/v1/projects/{id}',
     '/v1/projects/{id}/status',
@@ -25,6 +27,8 @@ test('every documented API route is backed by a route handler', async () => {
     '/v1/projects/{id}': 'app/api/v1/projects/[id]/route.ts',
     '/v1/projects/{id}/status': 'app/api/v1/projects/[id]/status/route.ts',
     '/v1/usage': 'app/api/v1/usage/route.ts',
+    '/v1/models': 'app/api/v1/models/route.ts',
+    '/v1/messages': 'app/api/v1/messages/route.ts',
   };
   await Promise.all(Object.values(files).map((file) => access(join(process.cwd(), file))));
 });

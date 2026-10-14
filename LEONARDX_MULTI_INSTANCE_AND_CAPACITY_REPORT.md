@@ -1,19 +1,50 @@
-# LeonardX multi-instance and capacity report
+# LeonardX Multi-instance and Capacity Report
 
-## Result
+Date: 2026-10-12
 
-The application is compatible with multiple stateless Next.js instances for database-backed state, but multi-instance readiness is NOT VERIFIED. No representative benchmark or failover test has been run.
+## Status summary
 
-## Shared-state controls present
+- PARTIAL: app logic is designed to run multiple instances, but no multiple-instance staging validation was run here.
+- BLOCKED: actual capacity and scaling behavior require a staging environment with multiple app instances, DB connections, and workers.
+- VERIFIED WITH EVIDENCE: repo has explicit auth + DB + worker logic that should be reviewed for singleton assumptions.
 
-- Supabase/Postgres stores sessions, API keys, rate limits, payments, webhooks, agent runs and jobs.
-- API rate limits use database RPCs rather than process memory.
-- Sentry and Vercel telemetry are external sinks.
+## What was checked
 
-## Open risks
+- Next.js app has standard serverless-style request handling.
+- Supabase is used for auth/session data and server-side DB access.
+- worker logic runs via cron endpoint rather than dedicated background daemon.
+- application behavior is not validated for race conditions or cross-instance duplicates.
 
-- Worker scheduling and lease recovery are not externally verified.
-- Provider credentials, connection budgets and deployment limits are not measured.
-- Streaming/long-running AI behavior under multiple instances has no load evidence.
+## Multi-instance risk areas
 
-Run [`LEONARDX_LOAD_TEST_PLAN.md`](./LEONARDX_LOAD_TEST_PLAN.md) in staging before publishing capacity numbers.
+- auth cookies and session assumptions
+- rate limiting across nodes
+- duplicate job execution
+- payment finalization under parallel requests
+- AI request concurrency and provider quotas
+- deployment job deduplication
+- webhook retry ordering and duplicate delivery
+- database pool consumption under multiple instances
+
+## Capacity estimate
+
+At current local evidence, we cannot state a supported user count or throughput number. The only verified fact is: the project compiles and routes are generated successfully.
+
+## Required validation before claiming scale
+
+- run N app instances behind a local load balancer
+- confirm DB pool capacity and slow query behavior
+- test duplicate payment/credit flows under concurrency
+- test concurrent AI request limits with mock provider
+- validate worker leader election or cron coordination
+- confirm queue backlog stays bounded
+
+## Recommendation
+
+Keep the architecture modest until the team has environment-backed concurrency evidence. The current design can support growth, but the current repo does not yet provide measured evidence for multi-instance production scale.
+
+## Evidence status
+
+- VERIFIED WITH EVIDENCE: code paths exist; app builds cleanly.
+- PARTIAL: multi-instance concurrency testing remains to be executed.
+- BLOCKED: external environment required.

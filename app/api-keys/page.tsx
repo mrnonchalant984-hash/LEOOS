@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, KeyRound, Plus, ShieldAlert } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ArrowRight, Check, Copy, KeyRound, Plus, ShieldAlert } from 'lucide-react';
 import { LEOAppShell, Panel, StatusPill } from '@/components/LEOAppShell';
 
 type KeyRecord = {
@@ -22,6 +23,7 @@ const SCOPE_OPTIONS = [
 ] as const;
 
 export default function Keys() {
+  const router = useRouter();
   const [keys, setKeys] = useState<KeyRecord[]>([]);
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState<string[]>(['read']);
@@ -30,6 +32,7 @@ export default function Keys() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [keyCreated, setKeyCreated] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetch('/api/developers/api-keys');
@@ -52,6 +55,7 @@ export default function Keys() {
     setError('');
     setSecret('');
     setCopied(false);
+    setKeyCreated(false);
     try {
       const response = await fetch('/api/developers/api-keys', {
         method: 'POST',
@@ -64,6 +68,7 @@ export default function Keys() {
         return;
       }
       setSecret(data.secret || '');
+      setKeyCreated(true);
       setName('');
       setExpiryDays('');
       await load();
@@ -100,6 +105,17 @@ export default function Keys() {
     setCopied(true);
   }
 
+  async function copyAndContinue() {
+    if (!secret) return;
+    try {
+      await navigator.clipboard.writeText(secret);
+      setCopied(true);
+      window.setTimeout(() => router.push('/developers/pricing'), 350);
+    } catch {
+      setError('Copy was blocked by your browser. Copy the key manually before continuing to pricing.');
+    }
+  }
+
   return (
     <LEOAppShell title="API Keys" subtitle="Scoped credentials for authorized API access.">
       <div className="page-hero">
@@ -126,7 +142,7 @@ export default function Keys() {
           </button>
         </div>
         {error && <div role="alert" className="mt-3 rounded-xl border border-red-300/20 bg-red-300/5 p-3 text-xs text-red-100">{error}</div>}
-        {secret && <div role="status" className="code-block mt-3 flex flex-wrap items-center justify-between gap-3"><span><span className="gold-text">Copy now:</span> {secret}</span><button type="button" onClick={copySecret} className="secondary-button">{copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy secret'}</button></div>}
+        {secret && <div role="status" className="mt-3 space-y-3 rounded-xl border border-amber-200/20 bg-amber-200/[.04] p-3"><div className="flex flex-wrap items-center justify-between gap-3"><span className="break-all text-xs"><span className="gold-text">Copy your key now:</span> {secret}</span><button type="button" onClick={() => void copySecret()} className="secondary-button">{copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy secret'}</button></div><p className="text-xs leading-5 text-zinc-400">Your key is saved, but billable API requests stay locked until you activate a paid API plan. You will keep this same key after payment.</p>{keyCreated && <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => void copyAndContinue()} className="primary-button">Copy key & continue to pricing <ArrowRight size={13}/></button><span className="text-[10px] text-zinc-500">Copy the secret before leaving; it cannot be shown again.</span></div>}</div>}
       </div>
       <Panel className="mt-3">
         <div className="panel-title">Your keys</div>

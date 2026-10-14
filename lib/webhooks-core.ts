@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 // Only events the platform actually emits. Add to this list only when the event is wired to real code.
-export const WEBHOOK_EVENTS = ['webhook.test'] as const;
+export const WEBHOOK_EVENTS = ['webhook.test', 'project.created', 'project.deployed', 'api.usage.completed'] as const;
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 export const MAX_ATTEMPTS = 6; // first try + 5 retries
 export const DELIVERY_CLAIM_LEASE_MS = 5 * 60 * 1000;

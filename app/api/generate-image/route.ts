@@ -1,42 +1,30 @@
+import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { getOpenAI } from '@/lib/openai';
 import { getProfile } from '@/lib/auth';
-import { consumeCredit } from '@/lib/access';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { generateAndPersistImage } from '@/lib/generation/images';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Please log in to generate images.' }, { status: 401 });
-
   const body = await req.json().catch(() => null);
   const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
   if (prompt.length < 3 || prompt.length > 2000) {
     return NextResponse.json({ error: 'Enter an image prompt between 3 and 2,000 characters.' }, { status: 400 });
   }
-
   const limited = await enforceUserRateLimit(ctx.user.id, 'image-generation', 10, 60);
   if (limited) return limited;
-
+  const requestKey = req.headers.get('idempotency-key') || (typeof body?.request_id === 'string' ? body.request_id : randomUUID());
+  if (requestKey.length > 128 || /[\r\n]/.test(requestKey)) return NextResponse.json({ error: 'Invalid request ID.' }, { status: 400 });
   try {
-    const usage = await consumeCredit(ctx.user.id, 'image_generation');
-    const result = await getOpenAI().images.generate({
-      model: process.env.LEO_IMAGE_MODEL || 'gpt-image-2',
-      prompt,
-      size: '1024x1024',
-      quality: 'standard',
-      n: 1,
-    });
-    const url = result.data?.[0]?.url;
-    if (!url) return NextResponse.json({ error: 'No image was returned. Please try again.' }, { status: 502 });
-    const creditsRemaining = 'remaining' in usage ? usage.remaining : usage.credits;
-    return NextResponse.json({ url, credits_remaining: creditsRemaining }, {
-      headers: { 'Cache-Control': 'no-store' },
-    });
+    const result = await generateAndPersistImage({ userId: ctx.user.id, prompt, requestKey });
+    return NextResponse.json(result, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
+    const status = typeof error === 'object' && error && 'statusCode' in error ? Number((error as { statusCode: number }).statusCode) : 0;
     const message = error instanceof Error ? error.message : '';
-    const status = message.toLowerCase().includes('credit') || message.toLowerCase().includes('plan') ? 402 : 502;
-    return NextResponse.json({ error: status === 402 ? message : 'Image generation is temporarily unavailable.' }, { status });
+    const isCredit = /credit|plan|subscription|entitled/i.test(message);
+    return NextResponse.json({ error: isCredit ? message : status === 409 ? message : 'Image generation is temporarily unavailable. Any reserved credits were returned when possible.' }, { status: status === 409 ? 409 : isCredit ? 402 : /migration|accounting/i.test(message) ? 503 : 502 });
   }
 }

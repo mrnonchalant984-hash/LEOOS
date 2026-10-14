@@ -14,13 +14,17 @@ function flattenFiles(files: Record<string, string>) {
 export default function WebIde({ workspaceId }: { workspaceId: string }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [files, setFiles] = useState<Record<string, string>>({});
+  const [savedFiles, setSavedFiles] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState('');
+  const [fileSearch, setFileSearch] = useState('');
   const [terminalInput, setTerminalInput] = useState('help');
   const [terminal, setTerminal] = useState<TerminalLine[]>([{ kind: 'output', text: 'LEO workspace console · safe preview mode\nType "help" to see available commands.' }]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const filePaths = useMemo(() => flattenFiles(files), [files]);
+  const visibleFilePaths = useMemo(() => filePaths.filter(path => path.toLowerCase().includes(fileSearch.toLowerCase())), [filePaths, fileSearch]);
+  const isDirty = useMemo(() => JSON.stringify(files) !== JSON.stringify(savedFiles), [files, savedFiles]);
 
   const loadWorkspace = useCallback(async () => {
     try {
@@ -31,6 +35,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
       const loadedFiles = record.files || {};
       setWorkspace(record);
       setFiles(loadedFiles);
+      setSavedFiles(loadedFiles);
       setSelected(previous => previous && previous in loadedFiles ? previous : Object.keys(loadedFiles).sort()[0] || '');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Workspace could not be loaded.');
@@ -50,6 +55,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
         const loadedFiles = record.files || {};
         setWorkspace(record);
         setFiles(loadedFiles);
+        setSavedFiles(loadedFiles);
         setSelected(previous => previous && previous in loadedFiles ? previous : Object.keys(loadedFiles).sort()[0] || '');
       })
       .catch(cause => { if (active) setError(cause instanceof Error ? cause.message : 'Workspace could not be loaded.'); })
@@ -57,7 +63,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
     return () => { active = false; };
   }, [workspaceId]);
 
-  async function saveFiles() {
+  const saveFiles = useCallback(async () => {
     setSaving(true);
     setError('');
     try {
@@ -66,13 +72,14 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Files could not be saved.');
+      setSavedFiles(files);
       setTerminal(lines => [...lines, { kind: 'output', text: 'Workspace files saved.' }]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Files could not be saved.');
     } finally {
       setSaving(false);
     }
-  }
+  }, [files, workspaceId]);
 
   function createFile() {
     const path = window.prompt('New file path (relative to the workspace)');
@@ -86,6 +93,37 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
     setError('');
   }
 
+  function formatSelectedFile() {
+    if (!selected) return;
+    const content = files[selected] || '';
+    if (!/\.json$/i.test(selected)) {
+      setTerminal(lines => [...lines, { kind: 'error', text: 'Format JSON is available for .json files. Other languages are preserved as typed.' }]);
+      return;
+    }
+    try {
+      setFiles(previous => ({ ...previous, [selected]: JSON.stringify(JSON.parse(content), null, 2) + '\n' }));
+      setError('');
+    } catch {
+      setError('This JSON file has a syntax error and could not be formatted.');
+    }
+  }
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        void saveFiles();
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
+        event.preventDefault();
+        const query = window.prompt('Find a file by name');
+        if (query !== null) setFileSearch(query);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [saveFiles]);
+
   function runPreviewCommand(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const command = terminalInput.trim();
@@ -93,8 +131,14 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
     const [verb, ...args] = command.split(/\s+/);
     let output = '';
     let kind: TerminalLine['kind'] = 'output';
-    if (verb === 'help') output = 'Supported preview commands: help, ls, cat <path>, clear\nThis panel does not execute shell commands or run project code.';
+    if (verb === 'help') output = 'Workspace commands: help, ls, find <filename-fragment>, cat <path>, clear\nEdit and save files here. Arbitrary shell commands are disabled for workspace safety.';
     else if (verb === 'ls') output = filePaths.length ? filePaths.join('\n') : 'No project files yet.';
+    else if (verb === 'find') {
+      const needle = args.join(' ').toLowerCase();
+      const matches = filePaths.filter(path => path.toLowerCase().includes(needle));
+      output = needle ? (matches.length ? matches.join('\n') : 'No matching files.') : 'Usage: find <filename-fragment>';
+      if (!needle) kind = 'error';
+    }
     else if (verb === 'cat') {
       const path = args.join(' ');
       output = path in files ? files[path] : `File not found: ${path || '(missing path)'}`;
@@ -111,21 +155,21 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
   return <main className="min-h-[calc(100vh-140px)] bg-[#090a0c] px-3 py-5 text-white sm:px-6">
     <header className="mx-auto mb-4 flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
       <div><div className="flex items-center gap-2 text-xs text-white/45"><Link href="/dashboard" className="hover:text-white">Dashboard</Link><ChevronRight size={13}/><span>Web IDE</span></div><h1 className="mt-1 text-xl font-semibold">{workspace?.project_name || 'Workspace'}</h1></div>
-      <div className="flex items-center gap-2"><span className="rounded border border-white/10 px-2 py-1 text-xs text-white/55">{workspace?.status || 'Workspace'}</span><button onClick={() => void saveFiles()} disabled={saving} className="inline-flex items-center gap-2 rounded-md bg-[#d7aa70] px-3 py-2 text-sm font-medium text-black disabled:opacity-60"><Save size={15}/>{saving ? 'Saving…' : 'Save files'}</button></div>
+      <div className="flex items-center gap-2"><span className="rounded border border-white/10 px-2 py-1 text-xs text-white/55">{workspace?.status || 'Workspace'}</span><span className={`text-xs ${isDirty ? 'text-amber-300' : 'text-emerald-300'}`}>{isDirty ? 'Unsaved changes' : 'All changes saved'}</span><button onClick={() => void saveFiles()} disabled={saving || !isDirty} className="inline-flex items-center gap-2 rounded-md bg-[#d7aa70] px-3 py-2 text-sm font-medium text-black disabled:opacity-60"><Save size={15}/>{saving ? 'Saving…' : 'Save files'}</button></div>
     </header>
     {error && <div role="alert" className="mx-auto mb-3 max-w-[1600px] rounded-md border border-red-400/30 bg-red-950/30 px-4 py-2 text-sm text-red-200">{error}</div>}
     <section aria-label="Workspace editor" className="mx-auto grid min-h-[68vh] max-w-[1600px] overflow-hidden rounded-xl border border-white/10 bg-[#101114] lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.75fr)]">
       <div className="flex min-h-[58vh] flex-col border-b border-white/10 lg:border-b-0 lg:border-r">
-        <div className="flex h-11 items-center gap-2 border-b border-white/10 px-4 text-xs text-white/55"><FileCode2 size={15}/> Files <button onClick={createFile} className="ml-auto rounded px-2 py-1 text-white/70 hover:bg-white/10 hover:text-white">New file</button><span>{filePaths.length} items</span></div>
+        <div className="flex h-11 items-center gap-2 border-b border-white/10 px-4 text-xs text-white/55"><FileCode2 size={15}/> Files <input aria-label="Search files" value={fileSearch} onChange={event => setFileSearch(event.target.value)} placeholder="Search files…" className="ml-auto min-w-0 w-32 rounded border border-white/10 bg-black/20 px-2 py-1 text-xs text-white outline-none focus:border-[#d7aa70]/60"/><button onClick={createFile} className="ml-auto rounded px-2 py-1 text-white/70 hover:bg-white/10 hover:text-white">New file</button><span>{filePaths.length} items</span></div>
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(150px,0.28fr)_minmax(0,1fr)]">
-          <nav aria-label="Project files" className="overflow-auto border-r border-white/10 p-2">{filePaths.length ? filePaths.map(path => <button key={path} onClick={() => setSelected(path)} className={`flex w-full items-center gap-2 rounded px-2 py-2 text-left text-xs ${selected === path ? 'bg-white/10 text-white' : 'text-white/55 hover:bg-white/5 hover:text-white'}`}><FileCode2 size={14}/><span className="truncate">{path}</span></button>) : <p className="px-2 py-3 text-xs leading-5 text-white/45">No files in this workspace yet. Create files in the project builder to edit them here.</p>}</nav>
-          <div className="flex min-h-[50vh] min-w-0 flex-col"><div className="h-10 border-b border-white/10 px-4 py-3 font-mono text-xs text-white/55">{selected || 'No file selected'}</div>{selected ? <textarea aria-label={`Edit ${selected}`} spellCheck={false} value={files[selected] || ''} onChange={event => setFiles(previous => ({ ...previous, [selected]: event.target.value }))} className="min-h-[48vh] flex-1 resize-y bg-transparent p-4 font-mono text-[13px] leading-6 text-[#e6e7e9] outline-none focus:ring-1 focus:ring-inset focus:ring-[#d7aa70]/40" /> : <div className="grid flex-1 place-items-center p-8 text-center text-sm text-white/40">Choose a project file to start editing.</div>}</div>
+          <nav aria-label="Project files" className="overflow-auto border-r border-white/10 p-2">{visibleFilePaths.length ? visibleFilePaths.map(path => <button key={path} onClick={() => setSelected(path)} className={`flex w-full items-center gap-2 rounded px-2 py-2 text-left text-xs ${selected === path ? 'bg-white/10 text-white' : 'text-white/55 hover:bg-white/5 hover:text-white'}`}><FileCode2 size={14}/><span className="truncate">{path}</span></button>) : <p className="px-2 py-3 text-xs leading-5 text-white/45">No matching files. Use New file to add one.</p>}</nav>
+          <div className="flex min-h-[50vh] min-w-0 flex-col"><div className="flex h-10 items-center gap-2 border-b border-white/10 px-4 font-mono text-xs text-white/55"><span className="truncate">{selected || 'No file selected'}</span>{selected && /\.json$/i.test(selected) && <button onClick={formatSelectedFile} className="ml-auto rounded px-2 py-1 hover:bg-white/10">Format JSON</button>}</div>{selected ? <textarea aria-label={`Edit ${selected}`} spellCheck={false} value={files[selected] || ''} onChange={event => setFiles(previous => ({ ...previous, [selected]: event.target.value }))} className="min-h-[48vh] flex-1 resize-y bg-transparent p-4 font-mono text-[13px] leading-6 text-[#e6e7e9] outline-none focus:ring-1 focus:ring-inset focus:ring-[#d7aa70]/40" /> : <div className="grid flex-1 place-items-center p-8 text-center text-sm text-white/40">Choose a project file to start editing.</div>}</div>
         </div>
       </div>
       <aside aria-label="Workspace terminal" className="flex min-h-[45vh] flex-col bg-[#0b0c0e]">
-        <div className="flex h-11 items-center gap-2 border-b border-white/10 px-4 text-xs text-white/60"><TerminalSquare size={15}/> Workspace console <span className="ml-auto rounded bg-white/5 px-2 py-1 text-[10px] uppercase tracking-wide">Preview only</span></div>
+        <div className="flex h-11 items-center gap-2 border-b border-white/10 px-4 text-xs text-white/60"><TerminalSquare size={15}/> Workspace tools <span className="ml-auto rounded bg-white/5 px-2 py-1 text-[10px] uppercase tracking-wide">Safe mode</span></div>
         <div className="flex-1 space-y-3 overflow-auto p-4 font-mono text-xs leading-5" aria-live="polite">{terminal.map((line, index) => <pre key={`${index}-${line.text}`} className={`whitespace-pre-wrap break-words ${line.kind === 'input' ? 'text-[#d7aa70]' : line.kind === 'error' ? 'text-red-300' : 'text-white/65'}`}>{line.text}</pre>)}</div>
-        <form onSubmit={runPreviewCommand} className="flex items-center gap-2 border-t border-white/10 p-3"><span aria-hidden="true" className="font-mono text-[#d7aa70]">›</span><input aria-label="Preview command" value={terminalInput} onChange={event => setTerminalInput(event.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-xs text-white outline-none placeholder:text-white/35" placeholder="help, ls, cat <path>"/><button aria-label="Run preview command" className="rounded p-2 text-white/60 hover:bg-white/10 hover:text-white"><Play size={14}/></button></form>
+        <form onSubmit={runPreviewCommand} className="flex items-center gap-2 border-t border-white/10 p-3"><span aria-hidden="true" className="font-mono text-[#d7aa70]">›</span><input aria-label="Preview command" value={terminalInput} onChange={event => setTerminalInput(event.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-xs text-white outline-none placeholder:text-white/35" placeholder="help, ls, find <name>, cat <path>"/><button aria-label="Run preview command" className="rounded p-2 text-white/60 hover:bg-white/10 hover:text-white"><Play size={14}/></button></form>
       </aside>
     </section>
   </main>;

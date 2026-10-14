@@ -1,0 +1,148 @@
+--- a/components/LEOAppShell.tsx
++++ b/components/LEOAppShell.tsx
+@@ -35,7 +35,7 @@
+     ['Observability','/observability',Activity], ['System status','/status',Gauge],
+   ] },
+   { label: 'Developer platform', items: [
+-    ['Developers','/developers',Code2], ['API keys','/api-keys',KeyRound], ['Webhooks','/webhooks',Webhook],
++    ['Developers','/developers',Code2], ['API plans','/developers/pricing',Wallet], ['API keys','/api-keys',KeyRound], ['Webhooks','/webhooks',Webhook],
+     ['Integrations','/integrations',Network], ['Documentation','/docs',BookOpen], ['API reference','/docs/api',FileText],
+     ['SDK','/docs/sdk',TerminalSquare], ['CLI','/cli',TerminalSquare], ['Web IDE guide','/ide',Code2],
+     ['Plugins','/plugins',Package], ['Organizations','/organizations',Building2],
+@@ -105,6 +105,8 @@
+     return () => window.removeEventListener('keydown', onKey);
+   }, [openPalette]);
+   const navigate = (href: string) => { setPaletteOpen(false); setOpen(false); router.push(href); };
++  const allNavItems = [...groups.flatMap(group => group.items), ...publicGroup.items, ...(isOwner ? adminGroup.items : [])];
++  const activeHref = allNavItems.map(([, href]) => href).filter(href => pathname === href || (href !== '/' && pathname.startsWith(href + '/'))).sort((a, b) => b.length - a.length)[0];
+ 
+   return <div className={`leo-app-shell ${collapsed ? 'leo-app-shell-collapsed' : ''}`} data-visual-identity={resolveVisualIdentity(pathname)}>
+     <aside className={`leo-sidebar ${open ? 'leo-sidebar-open' : ''} ${collapsed ? 'leo-sidebar-collapsed' : ''}`}>
+@@ -116,10 +118,10 @@
+       </div>
+       <button className="command-button" type="button" onClick={openPalette} title="Search pages and actions"><Search size={15}/><span className="sidebar-label">Search workspace</span><kbd>Ctrl K</kbd></button>
+       <nav className="leo-nav" aria-label="LeonardX application navigation">
+-        {[...groups, publicGroup, ...(isOwner ? [adminGroup] : [])].map(group => <div className="leo-nav-group" key={group.label}>
++        {[...groups, ...(isOwner ? [adminGroup] : [])].map(group => <div className="leo-nav-group" key={group.label}>
+           <p className="sidebar-label">{group.label}</p>
+           {group.items.map(([label, href, Icon]) => {
+-            const active = pathname === href || (href !== '/' && pathname.startsWith(href + '/'));
++            const active = href === activeHref;
+             return <Link key={`${label}:${href}`} href={href} title={collapsed ? label : undefined} aria-current={active ? 'page' : undefined} onClick={() => setOpen(false)} className={`leo-nav-item ${active ? 'active' : ''}`}><Icon size={17}/><span className="sidebar-label">{label}</span>{active && <i/>}</Link>;
+           })}
+         </div>)}
+--- a/app/pricing/page.tsx
++++ b/app/pricing/page.tsx
+@@ -116,6 +116,13 @@
+       {priceState === "error" && <p className="mt-3 text-sm text-amber-200" role="alert">Current prices could not be loaded. Paid checkout is disabled until pricing is available.</p>}
+       {purchaseError && <p className="mt-3 text-sm text-red-300" role="alert">{purchaseError}</p>}
+       <p className="mt-3 text-xs text-zinc-500">Quarterly and yearly prices are undiscounted totals. The full amount is charged for the selected period; plans do not auto-renew.</p>
++      <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[.03] p-4 sm:flex-row sm:items-center sm:justify-between">
++        <div>
++          <p className="text-sm font-semibold text-white">Developer API billing is separate</p>
++          <p className="mt-1 text-xs leading-5 text-zinc-400">These prices cover Leo AI and project-building subscriptions. API keys, API usage limits, and any future paid API tiers are managed separately.</p>
++        </div>
++        <Link href="/developers/pricing" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-white hover:bg-white/[.06]">View API plans <span aria-hidden="true">→</span></Link>
++      </div>
+       <div className="pricing-grid mt-8 grid gap-5 md:grid-cols-3">
+         {plans.map((p) => {
+           const publicKey = p.key === "unlimited" ? "business" : p.key;
+--- a/app/developers/pricing/page.tsx
++++ b/app/developers/pricing/page.tsx
+@@ -0,0 +1,63 @@
++import Link from 'next/link';
++import { ArrowLeftRight, ArrowRight, Code2, KeyRound, ShieldCheck, Webhook, CircleAlert, Gauge } from 'lucide-react';
++import { LEOAppShell, Panel } from '@/components/LEOAppShell';
++
++const currentControls = [
++  'API keys are scoped, revocable, and can have an expiry date.',
++  'Requests are authenticated by the existing API-key gateway.',
++  'Rate limits and supported operations are enforced by server policy.',
++  'Usage endpoints and request identifiers are available where supported by the current API.',
++];
++
++export const metadata = {
++  title: 'Developer API Plans | LeonardX',
++  description: 'Developer API access and billing status, separate from Leo AI subscriptions.',
++};
++
++export default function DeveloperPricingPage() {
++  return (
++    <LEOAppShell title="Developer API plans" subtitle="API access and billing are separate from Leo AI subscriptions.">
++      <section className="page-hero">
++        <span className="mini-label">DEVELOPER PLATFORM / BILLING</span>
++        <h2>Choose how your software connects to LeonardX.</h2>
++        <p>Developer API plans are a separate product from Leo AI chat, image/video credits, website-building subscriptions, and hosting. This page shows only verified availability; paid API prices and quotas are not published until they are configured and approved.</p>
++        <div className="hero-actions">
++          <Link href="/api-keys" className="primary-button"><KeyRound size={14}/> Manage API keys <ArrowRight size={13}/></Link>
++          <Link href="/docs/api" className="secondary-button"><Code2 size={14}/> API documentation</Link>
++          <Link href="/pricing" className="secondary-button"><ArrowLeftRight size={14}/> Leo AI plans</Link>
++        </div>
++      </section>
++
++      <div className="mt-4 grid gap-3 lg:grid-cols-3">
++        <Panel className="flex flex-col">
++          <span className="mini-label">CURRENT API ACCESS</span>
++          <h3 className="mt-2 text-xl font-bold">Developer access</h3>
++          <p className="mt-2 text-sm text-zinc-400">Use the existing API surface with a valid key and the scopes supported by each endpoint.</p>
++          <div className="mt-5 rounded-xl border border-white/10 bg-white/[.03] p-3"><p className="text-xs text-zinc-400">Published API subscription price</p><p className="mt-1 text-lg font-bold">Not configured</p><p className="mt-1 text-xs text-zinc-500">No separate paid amount is asserted here.</p></div>
++          <ul className="mt-5 space-y-3 text-sm text-zinc-300">{currentControls.map(item => <li key={item} className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-emerald-300"/><span>{item}</span></li>)}</ul>
++          <Link href="/api-keys" className="secondary-button mt-6 justify-center">Open API keys <ArrowRight size={13}/></Link>
++        </Panel>
++
++        <Panel className="flex flex-col">
++          <span className="mini-label">PROPOSED EXTENSION</span>
++          <h3 className="mt-2 text-xl font-bold">Paid API tiers</h3>
++          <p className="mt-2 text-sm text-zinc-400">Higher quotas, optional model access, and overage rules require approved commercial terms and independent server-side entitlement enforcement.</p>
++          <div className="mt-5 rounded-xl border border-amber-200/15 bg-amber-200/[.04] p-3"><p className="text-xs text-amber-100">Status</p><p className="mt-1 text-lg font-bold">Pending approval</p><p className="mt-1 text-xs text-zinc-500">Price, quota, and overage policy are intentionally unpublished.</p></div>
++          <div className="mt-5 flex gap-3 text-sm text-zinc-400"><Gauge size={17} className="mt-0.5 shrink-0"/><p>There is no checkout action for a paid API tier until its limits, price, billing lifecycle, and usage metering are implemented and verified.</p></div>
++        </Panel>
++
++        <Panel className="flex flex-col">
++          <span className="mini-label">ENTERPRISE EXTENSION</span>
++          <h3 className="mt-2 text-xl font-bold">Enterprise API</h3>
++          <p className="mt-2 text-sm text-zinc-400">An extension point for organization-level access, usage commitments, and support arrangements. It is not currently a purchasable plan.</p>
++          <div className="mt-5 rounded-xl border border-white/10 bg-white/[.03] p-3"><p className="text-xs text-zinc-400">Availability</p><p className="mt-1 text-lg font-bold">Not enabled</p><p className="mt-1 text-xs text-zinc-500">No enterprise entitlement or price is implied by this page.</p></div>
++          <Link href="/support" className="secondary-button mt-6 justify-center"><Webhook size={14}/> Ask support about API access</Link>
++        </Panel>
++      </div>
++
++      <Panel className="mt-4">
++        <div className="flex items-start gap-3"><CircleAlert size={19} className="mt-0.5 shrink-0 text-amber-200"/><div><h3 className="panel-title">Billing separation and current limits</h3><p className="mt-2 text-sm leading-6 text-zinc-400">Leo AI subscriptions are priced on <Link href="/pricing" className="text-amber-100 underline underline-offset-4">the Leo AI pricing page</Link>. They do not automatically grant a paid Developer API plan. Website hosting is also separate. Current API request limits remain governed by the deployed API gateway; exact numeric quotas are not shown here because they have not been verified as a public pricing contract.</p></div></div>
++      </Panel>
++    </LEOAppShell>
++  );
++}
+--- a/tests/workspace-navigation.test.mjs
++++ b/tests/workspace-navigation.test.mjs
+@@ -0,0 +1,30 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { readFile } from 'node:fs/promises';
++
++const root = new URL('../', import.meta.url);
++const read = (path) => readFile(new URL(path, root), 'utf8');
++
++test('workspace sidebar keeps public marketing pages out of the product navigation', async () => {
++  const shell = await read('components/LEOAppShell.tsx');
++  assert.match(shell, /\[\.\.\.groups, \.\.\.\(isOwner \? \[adminGroup\] : \[\]\)\]/);
++  assert.doesNotMatch(shell, /\[\.\.\.groups, publicGroup, \.\.\.\(isOwner \? \[adminGroup\] : \[\]\)\]/);
++  assert.match(shell, /\['API plans','\/developers\/pricing',Wallet\]/);
++});
++
++test('nested workspace routes select the most specific navigation item', async () => {
++  const shell = await read('components/LEOAppShell.tsx');
++  assert.match(shell, /\.sort\(\(a, b\) => b\.length - a\.length\)\[0\]/);
++  assert.match(shell, /const active = href === activeHref/);
++});
++
++test('Developer API pricing is separate and does not invent paid prices', async () => {
++  const apiPricing = await read('app/developers/pricing/page.tsx');
++  const leoPricing = await read('app/pricing/page.tsx');
++  assert.match(apiPricing, /paid API prices and quotas are not published/i);
++  assert.match(apiPricing, /Pending approval/);
++  assert.match(apiPricing, /href="\/pricing"/);
++  assert.match(leoPricing, /Developer API billing is separate/);
++  assert.match(leoPricing, /href="\/developers\/pricing"/);
++  assert.doesNotMatch(apiPricing, /\$\s?\d|₦\s?\d|\d+\s?USD/i);
++});

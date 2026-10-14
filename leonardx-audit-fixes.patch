@@ -1,0 +1,76 @@
+*** Begin Patch
+*** Update File: app/api/auth/logout/route.ts
+@@
+-import { NextResponse } from 'next/server';
+-export async function POST() {
+-  const res = NextResponse.json({ ok: true });
++import { NextResponse } from 'next/server';
++
++function clearAuthCookies(res: NextResponse) {
+   res.cookies.set('leo_access_token', '', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 0 });
+   res.cookies.set('leo_refresh_token', '', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 0 });
++  return res;
++}
++
++// The dashboard currently links to this endpoint with a normal browser GET.
++// Redirect after clearing the same server-managed cookies used by POST logout.
++export async function GET(request: Request) {
++  const res = NextResponse.redirect(new URL('/auth', request.url));
++  return clearAuthCookies(res);
++}
++
++export async function POST() {
++  const res = NextResponse.json({ ok: true });
++  clearAuthCookies(res);
+   return res;
+ }
+*** Update File: .env.example
+@@
+-next_PUBLIC_SUPABASE_URL=
++NEXT_PUBLIC_SUPABASE_URL=
+ NEXT_PUBLIC_SUPABASE_ANON_KEY=
+ NEXT_PUBLIC_SITE_URL=https://YOUR-PROJECT.vercel.app
+-NEXT_PUBLIC_STANDARD_MONTHLY_KOBO=750000
+-NEXT_PUBLIC_STANDARD_QUARTERLY_KOBO=1350000
+-NEXT_PUBLIC_STANDARD_YEARLY_KOBO=4800000
+-NEXT_PUBLIC_PRO_MONTHLY_KOBO=1500000
+-NEXT_PUBLIC_PRO_QUARTERLY_KOBO=4000000
+-NEXT_PUBLIC_PRO_YEARLY_KOBO=12000000
+-NEXT_PUBLIC_UNLIMITED_MONTHLY_KOBO=3000000
+-NEXT_PUBLIC_UNLIMITED_QUARTERLY_KOBO=8000000
+-NEXT_PUBLIC_UNLIMITED_YEARLY_KOBO=24000000
++# Reference prices only (NGN kobo). Runtime prices are defined centrally in
++# lib/pricing.ts; these example variables are not currently read by the app.
++NEXT_PUBLIC_STANDARD_MONTHLY_KOBO=1250000
++NEXT_PUBLIC_STANDARD_QUARTERLY_KOBO=3750000
++NEXT_PUBLIC_STANDARD_YEARLY_KOBO=15000000
++NEXT_PUBLIC_PRO_MONTHLY_KOBO=3150000
++NEXT_PUBLIC_PRO_QUARTERLY_KOBO=9450000
++NEXT_PUBLIC_PRO_YEARLY_KOBO=37800000
++NEXT_PUBLIC_UNLIMITED_MONTHLY_KOBO=6300000
++NEXT_PUBLIC_UNLIMITED_QUARTERLY_KOBO=18900000
++NEXT_PUBLIC_UNLIMITED_YEARLY_KOBO=75600000
+*** Add File: app/pricing/layout.tsx
++import type { Metadata } from 'next';
++
++export const metadata: Metadata = {
++  title: 'Pricing | LeonardX',
++  description:
++    'Compare LeonardX Free, Standard, Pro, and Business plans for AI-assisted website, web app, and SaaS development. Review prepaid monthly, quarterly, and yearly prices.',
++  alternates: {
++    canonical: '/pricing',
++  },
++  openGraph: {
++    title: 'LeonardX Pricing — Plans for Building Software',
++    description:
++      'Compare LeonardX plans and prepaid billing periods for building websites, web apps, and SaaS products.',
++    url: '/pricing',
++  },
++};
++
++export default function PricingLayout({
++  children,
++}: Readonly<{ children: React.ReactNode }>) {
++  return children;
++}
+*** End Patch

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase, getProfile, isPlatformOwner } from "@/lib/auth";
+import { getEffectiveUserPlan } from "@/lib/plan-access";
+import { agentAllowed } from "@/lib/agents/entitlements";
 import {
   getAgent,
   runAgent,
@@ -38,6 +40,9 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     const owner = isPlatformOwner(ctx.profile);
+    const plan = await getEffectiveUserPlan(ctx.user.id, owner);
+    if (!agentAllowed(agent.id, plan.key, owner)) return NextResponse.json({ error: 'This specialist agent is not included in your current plan.' }, { status: 403 });
+    if (agent.id === 'image' || agent.id === 'video') return NextResponse.json({ error: 'Generation tools must be started through their dedicated credit-protected endpoints.' }, { status: 400 });
     if (agent.ownerOnly && !owner)
       return NextResponse.json(
         { error: "Owner-only agent access denied" },

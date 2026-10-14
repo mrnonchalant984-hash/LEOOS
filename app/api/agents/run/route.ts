@@ -3,6 +3,7 @@ import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { classifyAgents, getAgent, parseAgentExecutionResult, runAgent } from '@/lib/agents/manager';
 import { enforceDimensionRateLimit, enforceIpRateLimit, enforceUserRateLimit } from '@/lib/rate-limit';
 import { getEffectiveUserPlan } from '@/lib/plan-access';
+import { agentAllowed, canUseManualAgents, getAllowedAgentIds } from '@/lib/agents/entitlements';
 import { canWriteOrganization, getOrganizationRole } from '@/lib/organization-access';
 import { withOperationalMonitoring } from '@/lib/monitoring';
 
@@ -25,10 +26,17 @@ export async function POST(req: NextRequest) {
 
     const requested = typeof body?.agent_id === 'string' ? getAgent(body.agent_id) : null;
     if (body?.agent_id && !requested) return NextResponse.json({ error: 'The requested agent is not available.' }, { status: 404 });
+    if (requested && (requested.id === 'image' || requested.id === 'video')) return NextResponse.json({ error: 'Generation tools must be started through their dedicated credit-protected endpoints.' }, { status: 400 });
 
     const owner = isPlatformOwner(ctx.profile);
     const plan = await getEffectiveUserPlan(ctx.user.id, owner);
-    const agents = requested ? [requested] : classifyAgents(task, owner);
+    if (/\b(generate|create|make|render)\b.{0,40}\b(image|picture|photo|visual)\b/i.test(task)) return NextResponse.json({ error: 'Image generation uses the dedicated, credit-protected endpoint. Use the Image Generation mode.' }, { status: 400 });
+    if (/\b(generate|create|make|render)\b.{0,40}\b(video|clip|film)\b/i.test(task)) return NextResponse.json({ error: 'Video generation uses the dedicated, credit-protected endpoint. Use the Video Generation mode.' }, { status: 400 });
+    if (!owner && !canUseManualAgents(plan.key, owner)) return NextResponse.json({ error: 'Manual specialist agents require a Pro or Business plan. Free users can use Leo AI chat in Auto mode.' }, { status: 403 });
+    const allowedAgentIds = getAllowedAgentIds(plan.key, owner);
+    if (requested && !agentAllowed(requested.id, plan.key, owner)) return NextResponse.json({ error: 'This specialist agent is not included in your current plan.' }, { status: 403 });
+    const selectedAgents = requested ? [requested] : classifyAgents(task, owner, allowedAgentIds || undefined);
+    const agents = selectedAgents.slice(0, 4); // Bounded specialist handoffs prevent unbounded agent fan-out.
     if (!agents.length) return NextResponse.json({ error: 'No permitted agent is available for this task.' }, { status: 403 });
     if (agents.some((agent) => agent.ownerOnly && !owner)) {
       return NextResponse.json({ error: 'Owner-only agent access denied.' }, { status: 403 });
@@ -99,6 +107,7 @@ export async function POST(req: NextRequest) {
     }
 
     const results = [];
+    let sharedContext = context;
     for (const currentAgent of agents) {
       const { data: run, error: runError } = await db.from('agent_runs').insert({
         user_id: ctx.user.id,
@@ -111,17 +120,21 @@ export async function POST(req: NextRequest) {
       if (runError) throw runError;
 
       try {
-        const result = await runAgent(currentAgent, task, context, owner, { runId: run.id, userId: ctx.user.id });
+        const result = await runAgent(currentAgent, task, sharedContext, owner, { runId: run.id, userId: ctx.user.id });
         const parsed = parseAgentExecutionResult(result);
         const waitingForOwner = parsed?.status === 'waiting_owner_input';
+        const verifiedOutput = parsed?.result || result;
         results.push({
+          run_id: run.id,
           agent: currentAgent.id,
           name: currentAgent.name,
-          result: parsed?.result || result,
+          result: verifiedOutput,
           status: parsed?.status || 'completed',
           session_id: parsed?.session_id,
           approvals: parsed?.approvals,
         });
+        // Pass a bounded, explicitly untrusted handoff to the next specialist.
+        sharedContext = `${sharedContext.slice(0, 9000)}\n\n[UNTRUSTED SPECIALIST HANDOFF: ${currentAgent.name} -> next selected specialist]\n${String(verifiedOutput).slice(0, 5000)}`.slice(-18000);
 
         const { error: updateError } = await db.from('agent_runs').update({
           status: waitingForOwner ? 'waiting_approval' : 'completed',
@@ -155,7 +168,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ status: 'completed', results });
+    return NextResponse.json({ status: 'completed', orchestration: { selected_agent_count: agents.length, max_agents_per_request: 4, handoff_mode: agents.length > 1 ? 'bounded_sequential' : 'single_agent' }, results });
   } catch (error) {
     reportFailure(error, 'openai');
     return NextResponse.json({ error: 'Agent execution failed. Review the run history and try again.' }, { status: 500 });

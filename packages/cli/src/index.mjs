@@ -6,11 +6,9 @@ import { appendScratchpad, createAgentWorktree, isPathAllowed, mergeAgentWorktre
 
 const configDir = join(homedir(), '.config', 'leonardx');
 const configFile = join(configDir, 'config.json');
-const usage = `LEO OS CLI\n\nCommands:\n  leo login --api-key <key> --base-url <url>  Validate and store credentials\n  leo init <workspace-id>                     Link this directory to a workspace\n  leo status                                  Read the linked workspace status\n  leo deploy --brief "<prompt>"               Cloud dispatch (currently browser-auth only)\n  leo ship                                    Cloud deploy (currently browser-auth only)\n  leo agents strategy <strategy>              Select a conflict strategy\n  leo agents check-path --role <role> <path>   Check a worker path boundary\n  leo agents worktree <create|validate|merge>  Manage an isolated Git worktree\n  leo agents scratchpad <read|add>             Read or append handoff metadata\n  leo projects list [--status <status>]       List your projects\n  leo projects create <name> [--type <type>]  Create a project\n  leo logout                                  Remove local credentials\n`;
+const usage = `LEO OS CLI\n\nCommands:\n  leo login --api-key <key> [--base-url <url>]  Validate and store credentials\n  leo init <workspace-id>                     Link this directory to a workspace\n  leo status                                  Read the linked workspace status\n  leo deploy --brief "<prompt>"               Build and deploy the linked project\n  leo ship                                    Build and deploy the linked project\n  leo agents strategy <strategy>              Select a conflict strategy\n  leo agents check-path --role <role> <path>   Check a worker path boundary\n  leo agents worktree <create|validate|merge>  Manage an isolated Git worktree\n  leo agents scratchpad <read|add>             Read or append handoff metadata\n  leo projects list [--status <status>]       List your projects\n  leo projects create <name> [--type <type>]  Create a project\n  leo models list                               List available models\n  leo chat --message <text> [--model <id>]      Send a model request (paid plan required)\n  leo usage                                    Show recent usage\n  leo logout                                  Remove local credentials\n`;
 
-const usageText = usage
-  .replace('Cloud dispatch (currently browser-auth only)', 'Build and deploy the linked project')
-  .replace('Cloud deploy (currently browser-auth only)', 'Build and deploy the linked project');
+const usageText = usage;
 
 function readConfig() {
   if (!existsSync(configFile)) return null;
@@ -29,7 +27,7 @@ function option(args, name) {
 }
 async function api(path, init = {}) {
   const config = readConfig();
-  if (!config?.apiKey || !config?.baseUrl) throw new Error('Not authenticated. Run: leonardx login --api-key <key> --base-url <url>');
+  if (!config?.apiKey || !config?.baseUrl) throw new Error('Not authenticated. Run: leonardx login --api-key <key> (or pass --base-url for another deployment)');
   const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}${path}`, {
     ...init,
     headers: { authorization: `Bearer ${config.apiKey}`, 'content-type': 'application/json', ...(init.headers || {}) },
@@ -49,8 +47,8 @@ async function main(args) {
   if (!args.length || args.includes('--help') || args.includes('-h')) { process.stdout.write(usageText); return; }
   const [command, resource, action] = args;
   if (command === 'login') {
-    const apiKey = option(args, '--api-key'); const baseUrl = option(args, '--base-url');
-    if (!apiKey || !baseUrl) throw new Error('Both --api-key and --base-url are required.');
+    const apiKey = option(args, '--api-key'); const baseUrl = option(args, '--base-url') || process.env.LEONARDX_BASE_URL || 'https://leoos-omega.vercel.app';
+    if (!apiKey) throw new Error('Provide --api-key <key>. Set LEONARDX_BASE_URL or pass --base-url to use another deployment.');
     const url = new URL(baseUrl);
     if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && url.hostname === 'localhost')) || url.username || url.password || url.search || url.hash) throw new Error('Use an HTTPS base URL (HTTP is allowed only for localhost), without embedded credentials or query parameters.');
     const normalizedBaseUrl = url.toString().replace(/\/$/, '');
@@ -123,6 +121,14 @@ async function main(args) {
       process.stdout.write(JSON.stringify(await appendScratchpad(root, entry), null, 2) + '\n'); return;
     }
     throw new Error('Usage: leo agents scratchpad <read|add --entry <json>>');
+  }
+  if (command === 'models' && resource === 'list') { process.stdout.write(JSON.stringify((await api('/api/v1/models')).data || [], null, 2) + '\n'); return; }
+  if (command === 'usage') { process.stdout.write(JSON.stringify((await api('/api/v1/usage')).data || [], null, 2) + '\n'); return; }
+  if (command === 'chat') {
+    const message = option(args, '--message');
+    if (!message?.trim()) throw new Error('Usage: leo chat --message "Hello" [--model gpt-4o-mini]');
+    const result = await api('/api/v1/messages', { method: 'POST', body: JSON.stringify({ model: option(args, '--model') || 'gpt-4o-mini', messages: [{ role: 'user', content: message.trim() }], max_tokens: Number(option(args, '--max-tokens') || 1024) }) });
+    process.stdout.write(`${result.content?.find(part => part.type === 'text')?.text || JSON.stringify(result)}\n\nUsage: ${JSON.stringify(result.usage || {})}\n`); return;
   }
   if (command === 'projects' && resource === 'list') { process.stdout.write(JSON.stringify(await api(`/api/v1/projects${option(args, '--status') ? `?status=${encodeURIComponent(option(args, '--status'))}` : ''}`), null, 2) + '\n'); return; }
   if (command === 'projects' && resource === 'create') {

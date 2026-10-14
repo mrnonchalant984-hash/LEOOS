@@ -1,4 +1,4 @@
-import {NextRequest,NextResponse} from 'next/server'; import {getProfile,adminSupabase} from '@/lib/auth'; import {getEffectiveUserPlan,planAllows} from '@/lib/plan-access';
+import {NextRequest,NextResponse} from 'next/server'; import {getProfile,adminSupabase,isPlatformOwner} from '@/lib/auth'; import {getEffectiveUserPlan,planAllows} from '@/lib/plan-access';
 import {getBuilderAvailability,supportedProjectTypes} from '@/lib/builders/providers'; import type {ProjectType} from '@/lib/pricing';
 
 const websiteTypes = new Set(['company','portfolio','agency','restaurant','real_estate','ecommerce','digital_products','booking','membership','saas','blog','magazine','forum','event','school','course','church_ngo','government','landing','cv']);
@@ -9,7 +9,7 @@ export async function GET(req:NextRequest){
  const ctx=await getProfile(req);
  if(!ctx)return NextResponse.json({error:'Login required'},{status:401});
  const id=req.nextUrl.searchParams.get('project_id');
- const owner=ctx.profile.role==='owner'&&ctx.profile.email?.toLowerCase()===(process.env.OWNER_EMAIL||'leonardudoh5@gmail.com').toLowerCase();
+ const owner=isPlatformOwner(ctx.profile);
  const plan=await getEffectiveUserPlan(ctx.user.id,owner);
  if(!id){
   const providers=Object.fromEntries(supportedProjectTypes.map(type=>[type,getBuilderAvailability(type)]));
@@ -48,7 +48,7 @@ export async function POST(req:NextRequest){
   const paymentMode=typeof body.payment_mode==='string'?body.payment_mode:'manual_email';
   if(!paymentModes.has(paymentMode))return NextResponse.json({error:'Choose a valid payment option.'},{status:400});
   if(body.requirements!==undefined&&(!body.requirements||typeof body.requirements!=='object'||Array.isArray(body.requirements)))return NextResponse.json({error:'Project requirements must be an object.'},{status:400});
-    const owner=ctx.profile.role==='owner'&&ctx.profile.email?.toLowerCase()===(process.env.OWNER_EMAIL||'leonardudoh5@gmail.com').toLowerCase();
+    const owner=isPlatformOwner(ctx.profile);
     const plan=await getEffectiveUserPlan(ctx.user.id,owner);
   const requiredFeature=projectType==='saas'?'saas-builder':projectType==='web_app'?'web-app-builder':'website-builder';
     if(!planAllows(plan,requiredFeature)||!plan.projectTypes.includes(projectType))return NextResponse.json({error:'This project type is not included in your current plan.',upgrade_url:'/pricing'},{status:403});

@@ -66,7 +66,10 @@ export default function AdminAnnouncementsPage() {
   }, [router]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void loadAnnouncements(); }, 0);
+    const timer = window.setTimeout(() => {
+      void loadAnnouncements();
+    }, 0);
+
     return () => window.clearTimeout(timer);
   }, [loadAnnouncements]);
 

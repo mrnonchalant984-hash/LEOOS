@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
 import { apiResponse, withApiKey } from '@/lib/api-auth';
 import { POST as buildDeploy } from '@/app/api/build-deploy/route';
+import { emitWebhookEvent } from '@/lib/webhooks';
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 /**
  * API-key entry point for the existing production builder. It creates only the
@@ -60,6 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const result = await buildDeploy(internalRequest);
     if (result.status >= 200 && result.status < 300) {
       await db.from('projects').update({ status: 'deployed', progress: 100 }).eq('id', source.id).eq('user_id', auth.userId);
+      after(async () => { try { await emitWebhookEvent(auth.userId, 'project.deployed', { project_id: source.id, project_name: source.project_name }); } catch { /* queued delivery retries handle transient failures */ } });
     }
     return new NextResponse(result.body, { status: result.status, statusText: result.statusText, headers: result.headers });
   });

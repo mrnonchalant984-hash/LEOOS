@@ -20,8 +20,5 @@
   "scripts": {
     "help": "node src/index.mjs --help"
   },
-  "dependencies": {
-    "@leo-os/cli": "^1.0.0",
-    "@leo-os/sdk": "^2.0.0"
-  }
+  "dependencies": {}
 }

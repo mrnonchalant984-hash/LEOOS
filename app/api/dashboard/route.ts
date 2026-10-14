@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProfile, adminSupabase } from '@/lib/auth';
+import { getProfile, adminSupabase, isPlatformOwner } from '@/lib/auth';
 import { getPlanDisplayName } from '@/lib/pricing';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
   const displayName = [ctx.profile?.full_name, ctx.user.user_metadata?.full_name, ctx.user.user_metadata?.name, ctx.user.email?.split('@')[0], 'there']
     .map(v => typeof v === 'string' ? v.trim() : '').find(v => Boolean(v) && !/^user$/i.test(v)) || 'there';
-  const isOwner = ctx.profile.role === 'owner' && ctx.profile.email?.toLowerCase() === (process.env.OWNER_EMAIL || 'leonardudoh5@gmail.com').toLowerCase();
+  const isOwner = isPlatformOwner(ctx.profile);
   const subscription = subscriptionResult.data;
   const endsAt = subscription?.ends_at || subscription?.current_period_end || null;
   const hasPaidAccess = Boolean(subscription && (!endsAt || new Date(endsAt) > new Date()));

@@ -12,6 +12,7 @@ export default function Developers() {
       <div className="hero-actions">
         <Link href="/docs/api" className="primary-button">Read API docs <ArrowRight size={13}/></Link>
         <Link href="/api-keys" className="secondary-button"><KeyRound size={13}/> Manage API keys</Link>
+        <Link href="/developers/pricing" className="secondary-button">API pricing <ArrowRight size={13}/></Link>
       </div>
     </div>
     <div className="metric-grid mt-3">

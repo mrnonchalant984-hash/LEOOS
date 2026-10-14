@@ -3,6 +3,7 @@ import { adminSupabase, getProfile } from '@/lib/auth';
 import { generateApiKey, parseScopes } from '@/lib/api-keys-core';
 import { hashSecret } from '@/lib/api-security';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { getApiPlan } from '@/lib/api-plan-catalog';
 
 export const runtime = 'nodejs';
 
@@ -28,14 +29,26 @@ export async function POST(req: NextRequest) {
   const parsedScopes = parseScopes(body.scopes);
   const scopes = parsedScopes.length ? parsedScopes : ['read'];
   const expiresAt = typeof body.expires_at === 'string' && !Number.isNaN(Date.parse(body.expires_at)) ? new Date(body.expires_at).toISOString() : null;
+  // Free accounts can prepare credentials before paying; paid plans raise the key quota.
+  const db = adminSupabase();
+  const { data: activePlan, error: planError } = await db.from('api_plan_subscriptions')
+    .select('plan_key').eq('user_id', ctx.user.id).eq('status', 'active').gt('current_period_end', new Date().toISOString())
+    .order('current_period_end', { ascending: false }).limit(1).maybeSingle();
+  if (planError) return NextResponse.json({ error: 'API plan status could not be checked. Please try again.' }, { status: 503 });
+  const entitlements = activePlan ? getApiPlan(activePlan.plan_key) : null;
+  const maxKeys = entitlements && 'maxKeys' in entitlements ? entitlements.maxKeys : 2;
+  const { count: activeKeyCount, error: countError } = await db.from('api_keys').select('id', { count: 'exact', head: true }).eq('user_id', ctx.user.id).eq('revoked', false);
+  if (countError) return NextResponse.json({ error: 'API key limits could not be checked. Please try again.' }, { status: 503 });
+  const isRotatingActiveKey = Boolean(rotateId);
+  if ((activeKeyCount ?? 0) >= maxKeys && !isRotatingActiveKey) return NextResponse.json({ error: `Your current plan allows up to ${maxKeys} active API keys. Revoke a key or choose a higher plan.` }, { status: 409 });
   if (expiresAt && new Date(expiresAt) <= new Date()) return NextResponse.json({ error: 'Expiry must be in the future' }, { status: 400 });
   const generated = generateApiKey();
-  const { data, error } = await adminSupabase().from('api_keys').insert({ user_id: ctx.user.id, name, prefix: generated.prefix, key_hash: hashSecret(generated.raw), scopes, expires_at: expiresAt }).select('id,name,prefix,scopes,revoked,expires_at,created_at').single();
+  const { data, error } = await db.from('api_keys').insert({ user_id: ctx.user.id, name, prefix: generated.prefix, key_hash: hashSecret(generated.raw), scopes, expires_at: expiresAt }).select('id,name,prefix,scopes,revoked,expires_at,created_at').single();
   if (error) return NextResponse.json({ error: 'API key could not be created' }, { status: 500 });
   if (rotateId) {
-    const { data: revoked, error: revokeError } = await adminSupabase().from('api_keys').update({ revoked: true }).eq('id', rotateId).eq('user_id', ctx.user.id).eq('revoked', false).select('id').maybeSingle();
+    const { data: revoked, error: revokeError } = await db.from('api_keys').update({ revoked: true }).eq('id', rotateId).eq('user_id', ctx.user.id).eq('revoked', false).select('id').maybeSingle();
     if (revokeError || !revoked) {
-      await adminSupabase().from('api_keys').update({ revoked: true }).eq('id', data.id).eq('user_id', ctx.user.id);
+      await db.from('api_keys').update({ revoked: true }).eq('id', data.id).eq('user_id', ctx.user.id);
       return NextResponse.json({ error: 'The old key could not be rotated. No new active key was left behind.' }, { status: revokeError ? 500 : 404 });
     }
   }

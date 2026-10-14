@@ -1,6 +1,7 @@
-import { NextRequest } from 'next/server';
+import { after, NextRequest } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
 import { apiResponse, withApiKey } from '@/lib/api-auth';
+import { emitWebhookEvent } from '@/lib/webhooks';
 
 export async function GET(req: NextRequest) {
   return withApiKey(req, 'read', async (auth) => {
@@ -25,6 +26,7 @@ export async function POST(req: NextRequest) {
       .select('id,project_name,type,status,progress,file_url,created_at')
       .single();
     if (error) return apiResponse({ error: { code: 'DATABASE_ERROR', message: 'Project could not be created.' }, request_id: auth.requestId }, 500, auth.requestId);
+    after(async () => { try { await emitWebhookEvent(auth.userId, 'project.created', { project: data }); } catch { /* queued delivery retries handle transient failures */ } });
     return apiResponse({ data, request_id: auth.requestId }, 201, auth.requestId);
   });
 }

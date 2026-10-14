@@ -14,6 +14,10 @@ const featureLabels: Record<string, string> = {
   "web-app-builder": "Web app building",
   "saas-builder": "SaaS building",
   voice: "Leo voice",
+  "agent-access": "Manual AI agent selection",
+  "video-generation": "AI video generation (credit-priced)",
+  "browser-automation": "Leo Workspace browser automation",
+  "advertising-studio": "Advertising Studio",
 };
 export default function Pricing() {
   const router = useRouter();
@@ -94,11 +98,15 @@ export default function Pricing() {
           Your plan controls project types and build capacity. Hosting is separate after each project’s 90-day trial.
         </p>
         <p className="mt-3 text-sm text-zinc-500">
-          Plans are prepaid for the selected period and do not automatically renew. Purchase another period to continue paid access.
+          Plans are prepaid for the selected period and do not automatically renew. Choose the period that works for you.
         </p>
         <p className="mt-3 text-sm text-amber-200/80">
-          Mobile builds are unavailable until Expo/EAS is integrated. Game builds are unavailable until a Godot build provider is integrated.
+          Websites, web apps, and SaaS projects are available according to each plan’s listed limits.
         </p>
+        <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 text-sm text-zinc-300">
+          <p className="font-semibold text-white">50 welcome credits for new accounts</p>
+          <p className="mt-1">Receive this one-time welcome bonus when you join. Your plan’s included image allowance is shown on each plan card.</p>
+        </div>
       </div>
       <div className="pricing-toggle mt-8 inline-flex rounded-xl border border-zinc-800 bg-zinc-950 p-1" aria-label="Billing period">
         {(["monthly", "quarterly", "yearly"] as const).map((p) => (
@@ -113,9 +121,16 @@ export default function Pricing() {
         ))}
       </div>
       {priceState === "loading" && <p className="mt-3 text-xs text-zinc-500" aria-live="polite">Loading current prices…</p>}
-      {priceState === "error" && <p className="mt-3 text-sm text-amber-200" role="alert">Current prices could not be loaded. Paid checkout is disabled until pricing is available.</p>}
+      {priceState === "error" && <p className="mt-3 text-sm text-amber-200" role="alert">We couldn’t load the latest prices. Please refresh the page or contact support.</p>}
       {purchaseError && <p className="mt-3 text-sm text-red-300" role="alert">{purchaseError}</p>}
       <p className="mt-3 text-xs text-zinc-500">Quarterly and yearly prices are undiscounted totals. The full amount is charged for the selected period; plans do not auto-renew.</p>
+      <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[.03] p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-white">Developer API billing is separate</p>
+          <p className="mt-1 text-xs leading-5 text-zinc-400">These prices cover Leo AI and project-building subscriptions. API keys, API usage limits, and any future paid API tiers are managed separately.</p>
+        </div>
+        <Link href="/developers/pricing" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-white hover:bg-white/[.06]">Request API access <span aria-hidden="true">→</span></Link>
+      </div>
       <div className="pricing-grid mt-8 grid gap-5 md:grid-cols-3">
         {plans.map((p) => {
           const publicKey = p.key === "unlimited" ? "business" : p.key;

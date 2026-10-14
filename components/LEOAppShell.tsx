@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Activity, BarChart3, Bot, Boxes, BookOpen, Code2, CreditCard, Globe2,
+  Activity, BarChart3, Bot, Boxes, BookOpen, Code2, CreditCard, Globe2, Video,
   FileText, FolderKanban, Gauge, GitBranch, KeyRound, LayoutDashboard,
   LifeBuoy, Menu, Network, Newspaper, Package, Search, ShieldCheck,
   Users, Webhook, X, Bell, CircleHelp, ChevronDown, Building2,
-  ScrollText, UserRound, Wallet, Layers3, TerminalSquare, LockKeyhole, Settings,
+  ScrollText, UserRound, Wallet, Layers3, TerminalSquare, LockKeyhole, Settings, Workflow,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { resolveVisualIdentity } from '@/components/visual-identity';
@@ -31,11 +31,11 @@ type NavItem = readonly [string, string, typeof LayoutDashboard];
 const groups: { label: string; items: NavItem[] }[] = [
   { label: 'Workspace', items: [
     ['Overview','/dashboard',LayoutDashboard], ['Projects','/projects',FolderKanban], ['Leo workspace','/app',Bot],
-    ['Agents','/agents',Boxes], ['Deployments','/deployments',GitBranch], ['Analytics','/analytics',BarChart3],
+    ['Agents','/agents',Boxes], ['Workflow studio','/workflows',GitBranch], ['Deployments','/deployments',GitBranch], ['Analytics','/analytics',BarChart3],
     ['Observability','/observability',Activity], ['System status','/status',Gauge],
   ] },
   { label: 'Developer platform', items: [
-    ['Developers','/developers',Code2], ['API keys','/api-keys',KeyRound], ['Webhooks','/webhooks',Webhook],
+    ['Developers','/developers',Code2], ['Developer API','/developers/pricing',Wallet], ['API keys','/api-keys',KeyRound], ['Webhooks','/webhooks',Webhook],
     ['Integrations','/integrations',Network], ['Documentation','/docs',BookOpen], ['API reference','/docs/api',FileText],
     ['SDK','/docs/sdk',TerminalSquare], ['CLI','/cli',TerminalSquare], ['Web IDE guide','/ide',Code2],
     ['Plugins','/plugins',Package], ['Organizations','/organizations',Building2],
@@ -50,7 +50,7 @@ const groups: { label: string; items: NavItem[] }[] = [
   ] },
 ];
 const adminGroup: { label: string; items: NavItem[] } = { label: 'Administration', items: [
-  ['Admin overview','/admin',ShieldCheck], ['Leo training','/admin/leo/training',Bot], ['Agent management','/admin/agents',Boxes],
+  ['Admin overview','/admin',ShieldCheck], ['Leo training','/admin/leo/training',Bot], ['Agent management','/admin/agents',Boxes], ['AI workforce','/workforce',Users], ['Meeting room','/meeting-room',Video], ['Engineer conversations','/workforce/conversations',Bot], ['Durable role queue','/workforce/jobs',Workflow],
   ['Announcements','/admin/announcements',Bell], ['Upgrade history','/admin/upgrade-history',ScrollText], ['Audit log','/audit',LockKeyhole],
 ] };
 const publicGroup: { label: string; items: NavItem[] } = { label: 'Public site', items: [
@@ -105,6 +105,8 @@ export function LEOAppShell({ children, title = 'LeonardX', subtitle = 'Your sof
     return () => window.removeEventListener('keydown', onKey);
   }, [openPalette]);
   const navigate = (href: string) => { setPaletteOpen(false); setOpen(false); router.push(href); };
+  const allNavItems = [...groups.flatMap(group => group.items), ...publicGroup.items, ...(isOwner ? adminGroup.items : [])];
+  const activeHref = allNavItems.map(([, href]) => href).filter(href => pathname === href || (href !== '/' && pathname.startsWith(href + '/'))).sort((a, b) => b.length - a.length)[0];
 
   return <div className={`leo-app-shell ${collapsed ? 'leo-app-shell-collapsed' : ''}`} data-visual-identity={resolveVisualIdentity(pathname)}>
     <aside className={`leo-sidebar ${open ? 'leo-sidebar-open' : ''} ${collapsed ? 'leo-sidebar-collapsed' : ''}`}>
@@ -116,10 +118,10 @@ export function LEOAppShell({ children, title = 'LeonardX', subtitle = 'Your sof
       </div>
       <button className="command-button" type="button" onClick={openPalette} title="Search pages and actions"><Search size={15}/><span className="sidebar-label">Search workspace</span><kbd>Ctrl K</kbd></button>
       <nav className="leo-nav" aria-label="LeonardX application navigation">
-        {[...groups, publicGroup, ...(isOwner ? [adminGroup] : [])].map(group => <div className="leo-nav-group" key={group.label}>
+        {[...groups, ...(isOwner ? [adminGroup] : [])].map(group => <div className="leo-nav-group" key={group.label}>
           <p className="sidebar-label">{group.label}</p>
           {group.items.map(([label, href, Icon]) => {
-            const active = pathname === href || (href !== '/' && pathname.startsWith(href + '/'));
+            const active = href === activeHref;
             return <Link key={`${label}:${href}`} href={href} title={collapsed ? label : undefined} aria-current={active ? 'page' : undefined} onClick={() => setOpen(false)} className={`leo-nav-item ${active ? 'active' : ''}`}><Icon size={17}/><span className="sidebar-label">{label}</span>{active && <i/>}</Link>;
           })}
         </div>)}
