@@ -32,7 +32,7 @@ Set deployment secrets in the hosting provider's encrypted environment settings,
 
 ## Worker scheduling
 
-`vercel.json` configures minute-level scheduled calls to the agent, workflow, and workforce workers. Deployments must use a hosting plan that supports this cadence. If the current plan does not support it, configure an external scheduler to call each endpoint with `Authorization: Bearer $CRON_SECRET`. Never put the secret in client-side code or logs. Keep workers disabled until migrations and scheduler credentials are installed.
+The cron entries in `vercel.json` are set to run once per day to support Vercel Hobby deployments, which reject schedules more frequent than daily. Hobby invocation timing may vary by up to 59 minutes. This cadence is not suitable for timely webhook retries or durable worker queues; use a Vercel plan with per-minute cron support or a protected external scheduler for those workloads. Keep workers disabled until migrations and scheduler credentials are installed.
 
 ## CI and release checks
 

@@ -29,7 +29,7 @@ These are actual remaining blockers, not cosmetic follow-ups:
 2. Fully offline device inference, offline task execution, and reliable local/cloud outbox conflict reconciliation are not implemented. The local model adapter works only when the app server can reach a configured local model endpoint.
 3. Meeting avatars are interface animations, not generated video avatars. Browser speech dictation and sequential spoken transcript playback are not full-duplex real-time meetings.
 4. CI has been added but must run successfully on GitHub with dependencies installed. The migrations must be applied to staging, verified, then applied to production using the approved process.
-5. The minute-level Vercel cron schedule requires a deployment plan that supports that cadence; otherwise an external protected scheduler must be configured.
+5. Vercel cron entries are set to daily so Hobby deployments are accepted. Daily processing is not suitable for timely webhook retries or durable worker queues; use a plan supporting per-minute crons or an external protected scheduler for those workloads.
 
 **Release decision: NOT READY TO PROMOTE YET.** Production readiness requires the remaining sandbox/offline capabilities or an explicit scope decision to defer them, plus successful CI, staging migration, load/security tests, configured workers, readiness HTTP 200, and production smoke tests.
 
