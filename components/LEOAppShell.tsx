@@ -7,7 +7,7 @@ import {
   FileText, FolderKanban, Gauge, GitBranch, KeyRound, LayoutDashboard,
   LifeBuoy, Menu, Network, Newspaper, Package, Search, ShieldCheck,
   Users, Webhook, X, Bell, CircleHelp, ChevronDown, Building2,
-  ScrollText, UserRound, Wallet, Layers3, TerminalSquare, LockKeyhole, Settings, Workflow,
+  ScrollText, UserRound, Wallet, Layers3, TerminalSquare, LockKeyhole, Settings, Workflow, Sparkles,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { resolveVisualIdentity } from '@/components/visual-identity';
@@ -54,7 +54,7 @@ const adminGroup: { label: string; items: NavItem[] } = { label: 'Administration
   ['Announcements','/admin/announcements',Bell], ['Upgrade history','/admin/upgrade-history',ScrollText], ['Audit log','/audit',LockKeyhole],
 ] };
 const publicGroup: { label: string; items: NavItem[] } = { label: 'Public site', items: [
-  ['Home','/',LayoutDashboard], ['About','/about',Users], ['Contact','/contact',LifeBuoy], ['Portfolio','/portfolio',Boxes], ['Team','/team',Users],
+  ['Home','/',LayoutDashboard], ['About','/about',Users], ['Services','/services',Sparkles], ['Contact','/contact',LifeBuoy], ['Team','/team',Users],
   ['Testimonials','/wall-of-love',Users], ['Terms','/terms',FileText],
   ['Privacy','/privacy',ShieldCheck], ['Refund policy','/refund-policy',CreditCard], ['Setup','/setup',Settings], ['Setup keys','/setup/keys',KeyRound],
 ] };

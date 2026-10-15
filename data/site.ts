@@ -21,7 +21,7 @@ export const projects = big12Projects
 export const profileImage = '/profile.png'
 
 export const siteData = {
-  owner: 'Leonard Udoh', title: 'Web Developer', description: 'Build websites, web apps, and SaaS projects with the LEO OS development platform.', tagline: 'Plan-authorized AI development for websites, web apps, and SaaS projects, with separate hosting after the included trial.', price: 'Included with LEO OS plans', location: 'Remote — Worldwide', email: 'leonardudoh5@gmail.com', phone: '+2349115936466', phoneDisplay: '+234 911 593 6466', brand: '#FFD700', cv: '/documents/Leonard-Udoh-CV.pdf',
+  owner: 'Leonard Udoh', title: 'Software & AI Services', description: 'Website concepts, software builds, and practical code reviews for businesses and creators.', tagline: 'Practical website and software services, powered by thoughtful design and AI-assisted development.', price: 'Services from ₦20,000', location: 'Remote — Worldwide', email: 'leonardudoh5@gmail.com', phone: '+2349115936466', phoneDisplay: '+234 911 593 6466', brand: '#FFD700', cv: '/documents/Leonard-Udoh-CV.pdf',
   liveProjects: [
     {name:'Qveli',description:'A social media platform for creators.',url:process.env.NEXT_PUBLIC_LIVE_QVELI_URL||'',image:'/qveli-logo.svg'},
     {name:'LeonardX',description:'A freelancing platform connecting clients with freelancers.',url:process.env.NEXT_PUBLIC_LIVE_LEONARDX_URL||'',image:'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1600&q=85'}

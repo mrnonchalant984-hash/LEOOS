@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu, X, ArrowRight, Search } from 'lucide-react';
 
-const links = [['Product','/'],['Leo AI','/leo-ai'],['Developers','/developers'],['Resources','/resources'],['Pricing','/pricing'],['Company','/about']] as const;
+const links = [['Product','/'],['Services','/services'],['Leo AI','/leo-ai'],['Developers','/developers'],['Resources','/resources'],['Pricing','/pricing'],['Company','/about']] as const;
 const appPrefixes = ['/dashboard','/app','/projects','/agents','/deployments','/analytics','/api-keys','/audit','/auth','/account','/admin','/developers','/docs','/integrations','/leo-ai','/notifications','/observability','/organizations','/resources','/setup','/support','/status','/team','/templates','/tutorials','/webhooks','/whats-new'];
 export function Header(){
   const [open,setOpen]=useState(false); const pathname=usePathname();

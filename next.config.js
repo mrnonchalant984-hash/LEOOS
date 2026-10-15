@@ -76,6 +76,7 @@ const nextConfig = {
   },
   async redirects() {
     return [
+      { source: '/portfolio', destination: '/services', permanent: true },
       { source: '/blog/nigerian-freelancers-ai-10x', destination: '/blog/freelancers-ai-10x', permanent: true },
       { source: '/blog/leo-vs-chatgpt-nigeria', destination: '/blog/leo-vs-chatgpt', permanent: true },
     ];
