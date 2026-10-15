@@ -73,7 +73,7 @@ type VoiceStatus =
   | "Reconnecting"
   | "Error"
   | "Ended";
-type OfflineDraft = { text: string; mode: "normal" | "deep"; savedAt: string };
+type OfflineDraft = { text: string; mode: "normal" | "deep" | "tools"; savedAt: string };
 const OFFLINE_DRAFT_KEY = "leo_offline_chat_draft_v1";
 const actions = [
   {
@@ -153,7 +153,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       const stored = window.localStorage.getItem(OFFLINE_DRAFT_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as OfflineDraft;
-        if (typeof parsed.text === "string" && (parsed.mode === "normal" || parsed.mode === "deep")) queueMicrotask(() => setOfflineDraft(parsed));
+        if (typeof parsed.text === "string" && (parsed.mode === "normal" || parsed.mode === "deep" || parsed.mode === "tools")) queueMicrotask(() => setOfflineDraft(parsed));
       }
     } catch {
       window.localStorage.removeItem(OFFLINE_DRAFT_KEY);
@@ -420,7 +420,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     return () => { cancelled = true; controller.abort(); };
   }, [remoteOpen, remoteSessionId, remoteCursor]);
 
-  async function send(text = input, mode: "normal" | "deep" = "normal") {
+  async function send(text = input, mode: "normal" | "deep" | "tools" = "normal") {
     if (!text.trim() || loading) return;
     const next = text.trim();
     if (!navigator.onLine) {
@@ -732,6 +732,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       },
     ],
     [Brain, "Think deeper", () => send(input, "deep")],
+    [Wrench, "Use approved read-only tools", () => send(input, "tools")],
     [ImageIcon, "Generate image · 1 credit", generateImage],
     [Video, "Generate video", prepareVideo],
     [Sparkles, "Generate 3D visual", () => generateVisual("3d")],

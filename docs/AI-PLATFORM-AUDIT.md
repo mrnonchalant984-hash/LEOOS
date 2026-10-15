@@ -1,6 +1,6 @@
 # LeonardX AI platform audit
 
-Audit date: 2026-10-14. This is a focused audit of the AI, data, security, and deployment paths relevant to the requested model-provider, MCP, workforce, and creative upgrade; it is not a line-by-line audit of every application feature.
+Audit date: 2026-10-15. This is a focused audit of the AI, data, security, and deployment paths relevant to the requested model-provider, MCP, workforce, and creative upgrade; it is not a line-by-line audit of every application feature.
 
 ## Actual architecture
 
@@ -19,21 +19,23 @@ Audit date: 2026-10-14. This is a focused audit of the AI, data, security, and d
 | --- | --- | --- |
 | OpenAI text | `lib/openai.ts`, `/api/chat`, agent and meeting routes | Implemented |
 | Local text model | `lib/openai.ts`, offline setup docs | Implemented for configured OpenAI-compatible text endpoints |
-| Anthropic/Claude adapter | No official SDK integration or provider adapter found in inspected application sources/dependencies | Missing |
-| Google/Gemini adapter | No official SDK integration or provider adapter found in inspected application sources/dependencies | Missing |
-| Capability-based model registry/router | No shared registry/router found; model selection is currently configuration-specific | Missing |
-| External MCP client | No MCP SDK or server connection manager found in inspected application sources/dependencies | Missing |
-| LeonardX MCP server | No `/mcp` endpoint or MCP protocol server found | Missing |
-| Workforce | Existing protected role and durable-job routes, worker, and UI | Partial; not a shared MCP/model orchestration layer |
+| Anthropic/Claude adapter | `lib/ai/provider-registry.ts`, official Anthropic SDK, `/api/chat` | Implemented in working tree; provider call not live-tested |
+| Google/Gemini adapter | `lib/ai/provider-registry.ts`, official Google GenAI SDK, `/api/chat` | Implemented in working tree; provider call not live-tested |
+| Capability-based model registry/router | `lib/ai/model-catalog.ts`, `/api/models`, `/api/chat` | Implemented in working tree; credentials and hosted routing not live-tested |
+| External MCP client | `lib/mcp/remote-clients.ts`, `/api/mcp/servers`, Integrations page | Implemented in working tree; migration and remote server not live-tested |
+| LeonardX MCP server | `/mcp`, OAuth 2.1 + PKCE routes, `lib/mcp/server.ts` | Implemented in working tree; migration and deployment not verified |
+| Workforce | Existing protected role and durable-job routes, worker, and UI | Partial; chat tool mode orchestrates only user-scoped read-only tools |
 | Image create | Existing OpenAI-compatible image generation and private persistence | Implemented, subject to provider config |
 | Image edit | Added in this implementation through the existing OpenAI Images client, credit controls, and private storage | Implemented; live provider not verified |
 | Video create | Existing asynchronous Runway Gen-4.5 text-to-video | Implemented, subject to provider config |
-| Image-to-video | No configured adapter in the checked video route | Missing; not exposed in Studio |
+| Image-to-video | `/api/generate-video` now supplies an ownership-checked private asset's short-lived signed URL to Runway | Implemented in working tree; live provider not tested |
+
+The capability changes are implemented in the working tree but are not confirmed deployed. `supabase migration list` reports `20261015120000` applied in the linked Supabase project; this does not prove that the deployed application targets that database. Remote MCP still requires operator hostname allowlisting and optional credential-encryption key configuration. Autonomous orchestration intentionally excludes write-capable remote tools.
 
 ## Security and operations observations
 
 - Provider keys and Supabase service credentials are server-only by convention. New Studio handlers use server-side `getProfile`, `adminSupabase`, user-scoped queries, request limits, bounded image upload validation, private storage, and signed URLs.
-- MCP connections do not exist yet. Adding arbitrary remote MCP URLs without strict egress/SSRF controls, per-tool approvals, and isolated credentials would create a significant security risk. No remote server should receive provider credentials or service-role data.
+- Remote MCP connections now require strict egress/SSRF controls, per-tool approvals, and isolated credentials. These protections are implemented in the working tree but have not been live-tested against an external MCP server. No remote server should receive provider credentials or service-role data.
 - The existing durable worker endpoints are not proof of a deployable always-on worker. Vercel Hobby daily schedules cannot provide timely queue processing. MCP server transport and long-running execution must be designed for the actual serverless lifecycle.
 - Existing plan gates, rate limiting, credits, owner checks, and signed media routes should be reused; client-supplied user IDs or job states must never authorize operations.
 - Live provider, staging database, and production deployment verification require the applicable environment credentials and external account access. None is claimed by this audit.
@@ -49,12 +51,10 @@ Audit date: 2026-10-14. This is a focused audit of the AI, data, security, and d
 - Existing generation migration: `supabase/migrations/20261013110000_leonardx_generation_credits.sql`
 - Deployment schedules: `vercel.json`
 
-## Implementation order
+## Remaining release checks
 
-1. Finish and validate the truthful Studio vertical slice using only the existing image and video providers.
-2. Introduce a typed provider-neutral registry with explicit capability and configuration status, then add provider adapters one at a time using official SDKs and mocked contract tests.
-3. Implement task routing only after the registry and capability checks exist; preserve explicit model selections and make fallbacks visible.
-4. Design external MCP registration and client execution with fixed outbound controls, per-server/per-tool grants, approval, isolation, and audit before connecting user-supplied servers.
-5. Design an inbound MCP endpoint only after choosing a deployment-compatible stateless transport and a real user authentication/authorization flow. Existing app cookies are not an OAuth flow.
-6. Extend, rather than duplicate, durable workforce orchestration; use an execution runtime with bounded duration, retry, cancellation, and supported scheduling.
-7. Add live staging/provider verification and deployment only after migrations, secrets, transport, and worker cadence are confirmed.
+1. Complete the production build and push the reviewed changes to the intended branch.
+2. Verify deployment environment variables, especially provider credentials, `MCP_PUBLIC_URL`, trusted origins, outbound hostname allowlisting, and the stable credential-encryption key when remote bearer credentials are used.
+3. Verify that the deployed application uses the Supabase project where migration `20261015120000` is applied.
+4. Exercise OAuth, inbound MCP initialization/tool discovery/read-only calls, outbound MCP discovery/manual approval, provider routing, and image-to-video using non-production accounts and configured providers.
+5. Inspect deployment logs and validate the deployed MCP endpoint with protocol-aware clients before claiming production availability.

@@ -38,5 +38,7 @@ test('studio UI exposes only implemented creative modes', async () => {
   assert.match(workspace, /Create image/);
   assert.match(workspace, /Edit image/);
   assert.match(workspace, /Create video/);
-  assert.doesNotMatch(workspace, /Image-to-video|Animate image|Save to project/i);
+  assert.match(workspace, /Text- or image-to-video/);
+  assert.match(workspace, /Source image/);
+  assert.doesNotMatch(workspace, /Animate image|Save to project/i);
 });

@@ -30,6 +30,10 @@ export async function POST(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: 'Sign in to generate video.' }, { status: 401 });
   const body = await req.json().catch(() => null);
   const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
+  const sourceAssetId = typeof body?.image_asset_id === 'string' ? body.image_asset_id : '';
+  if (body?.image_asset_id !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceAssetId)) {
+    return NextResponse.json({ error: 'Choose a valid source image from your private library.' }, { status: 400 });
+  }
   const duration = body?.duration === undefined ? 5 : Number(body.duration);
   const aspectRatio = body?.aspect_ratio === 'portrait' ? 'portrait' : body?.aspect_ratio === 'landscape' || body?.aspect_ratio === undefined ? 'landscape' : null;
   if (prompt.length < 3 || prompt.length > 2000) return NextResponse.json({ error: 'Enter a video prompt between 3 and 2,000 characters.' }, { status: 400 });
@@ -56,10 +60,28 @@ export async function POST(req: NextRequest) {
   if (model !== 'gen4.5') return NextResponse.json({ error: 'This endpoint currently supports the Runway Gen-4.5 model only.' }, { status: 503 });
 
   const db = adminSupabase();
+  let imageUrl: string | undefined;
+  if (sourceAssetId) {
+    const { data: sourceAsset, error: sourceError } = await db.from('media_assets')
+      .select('id,bucket,storage_path,mime_type,kind')
+      .eq('id', sourceAssetId)
+      .eq('user_id', ctx.user.id)
+      .maybeSingle();
+    if (sourceError) return NextResponse.json({ error: 'The selected source image could not be checked.' }, { status: 503 });
+    if (!sourceAsset || sourceAsset.kind !== 'image' || sourceAsset.bucket !== 'leo-files' || !sourceAsset.mime_type?.startsWith('image/')) {
+      return NextResponse.json({ error: 'Source image not found in your private library.' }, { status: 404 });
+    }
+    const { data: signedSource, error: signError } = await db.storage.from('leo-files')
+      .createSignedUrl(sourceAsset.storage_path, 60 * 10);
+    if (signError || !signedSource?.signedUrl) {
+      return NextResponse.json({ error: 'A temporary source image URL could not be created.' }, { status: 503 });
+    }
+    imageUrl = signedSource.signedUrl;
+  }
   const { data: job, error: insertError } = await db.from('generation_jobs').insert({
     user_id: ctx.user.id, request_key: requestKey, job_type: 'video', provider: 'runway', model,
     status: 'queued', prompt, platform_credits_reserved: platformCost,
-    metadata: { duration_seconds: duration, aspect_ratio: aspectRatio, platform_credits_per_second: creditsPerSecond, provider_cost_usd: null, provider_cost_estimate_usd: Number((duration * 0.12).toFixed(2)) },
+    metadata: { duration_seconds: duration, aspect_ratio: aspectRatio, mode: imageUrl ? 'image_to_video' : 'text_to_video', source_asset_id: sourceAssetId || null, platform_credits_per_second: creditsPerSecond, provider_cost_usd: null, provider_cost_estimate_usd: Number((duration * 0.12).toFixed(2)) },
   }).select('id,status').single();
   if (insertError) {
     if (insertError.code === '23505') {
@@ -81,11 +103,11 @@ export async function POST(req: NextRequest) {
     }
     reserved = platformCost > 0;
     await db.from('generation_jobs').update({ status: 'processing', credit_source: platformCost > 0 ? 'platform' : null, platform_credits_reserved: platformCost, updated_at: new Date().toISOString() }).eq('id', job.id).eq('user_id', ctx.user.id);
-    const created = await createRunwayVideo({ prompt, duration, ratio: aspectRatio === 'portrait' ? '768:1280' : '1280:768', model });
-    const { error: updateError } = await db.from('generation_jobs').update({ provider_task_id: created.task_id, status: 'processing', updated_at: new Date().toISOString(), metadata: { duration_seconds: duration, aspect_ratio: aspectRatio, platform_credits_per_second: creditsPerSecond, provider_cost_usd: null, provider_cost_estimate_usd: Number((duration * 0.12).toFixed(2)) } }).eq('id', job.id).eq('user_id', ctx.user.id);
+    const created = await createRunwayVideo({ prompt, imageUrl, duration, ratio: aspectRatio === 'portrait' ? '768:1280' : '1280:768', model });
+    const { error: updateError } = await db.from('generation_jobs').update({ provider_task_id: created.task_id, status: 'processing', updated_at: new Date().toISOString(), metadata: { duration_seconds: duration, aspect_ratio: aspectRatio, mode: imageUrl ? 'image_to_video' : 'text_to_video', source_asset_id: sourceAssetId || null, platform_credits_per_second: creditsPerSecond, provider_cost_usd: null, provider_cost_estimate_usd: Number((duration * 0.12).toFixed(2)) } }).eq('id', job.id).eq('user_id', ctx.user.id);
     if (updateError) throw new Error('Provider task started but its tracking record could not be updated. Contact support before retrying.');
     const { data: account } = await db.from('platform_credit_accounts').select('balance').eq('user_id', ctx.user.id).maybeSingle();
-    return NextResponse.json({ job_id: job.id, task_id: created.task_id, status: 'processing', provider: 'runway', model, duration_seconds: duration, aspect_ratio: aspectRatio, platform_credits_charged: platformCost, platform_credits_remaining: account?.balance ?? null, provider_cost_estimate_usd: Number((duration * 0.12).toFixed(2)), provider_cost_usd: null }, { status: 202, headers: { 'Cache-Control': 'private, no-store' } });
+    return NextResponse.json({ job_id: job.id, task_id: created.task_id, status: 'processing', provider: 'runway', model, mode: imageUrl ? 'image_to_video' : 'text_to_video', source_asset_id: sourceAssetId || null, duration_seconds: duration, aspect_ratio: aspectRatio, platform_credits_charged: platformCost, platform_credits_remaining: account?.balance ?? null, provider_cost_estimate_usd: Number((duration * 0.12).toFixed(2)), provider_cost_usd: null }, { status: 202, headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     if (reserved) await db.rpc('refund_platform_credits', { p_user_id: ctx.user.id, p_job_id: job.id, p_cost: platformCost });
     await db.from('generation_jobs').update({ status: 'failed', error_code: 'provider_start_failed', error_message: 'Video generation could not be started. Any reserved platform credits were returned when possible.', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', job.id).eq('user_id', ctx.user.id);
