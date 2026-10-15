@@ -36,6 +36,6 @@ export async function POST(request: NextRequest) {
     token_endpoint_auth_method: 'none',
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
-    scope: 'mcp:read',
+    scope: 'mcp:read mcp:write',
   }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
 }

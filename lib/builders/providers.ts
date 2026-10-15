@@ -52,3 +52,23 @@ export function getBuilderAvailability(projectType: ProjectType): BuilderAvailab
     message: "Game builds are unavailable until a Godot build adapter is implemented and configured.",
   };
 }
+
+export function getExternalModelBuilderAvailability(
+  projectType: ProjectType,
+  environment: NodeJS.ProcessEnv = process.env,
+): BuilderAvailability {
+  if (!["website", "web_app", "saas"].includes(projectType)) {
+    return getBuilderAvailability(projectType);
+  }
+  const requiredEnvironment = ["GITHUB_TOKEN", "VERCEL_TOKEN"];
+  const missing = requiredEnvironment.filter((key) => !environment[key]);
+  return {
+    id: "vercel-nextjs",
+    label: "Next.js on GitHub and Vercel",
+    requiredEnvironment,
+    status: missing.length ? "not_configured" : "ready",
+    ...(missing.length
+      ? { message: `Configure ${missing.join(", ")} to enable external-model deployments.` }
+      : {}),
+  };
+}

@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, UserRound } from 'lucide-react';
+import { ArrowRight, Chrome, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, UserRound } from 'lucide-react';
 
 type Mode = 'login' | 'signup' | 'forgot' | 'reset';
 
@@ -80,6 +80,30 @@ export function AuthForm() {
     } finally { setBusy(false); }
   }
 
+  async function signInWithGoogle() {
+    setStatus('');
+    setStatusError(false);
+    setBusy(true);
+    try {
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        throw new Error('Authentication is not configured yet. Please contact the platform owner.');
+      }
+      const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+      const requestedNext = new URLSearchParams(window.location.search).get('next');
+      const next = requestedNext?.startsWith('/') && !requestedNext.startsWith('//') && !requestedNext.includes('\\') ? requestedNext : '/dashboard';
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo, queryParams: { access_type: 'offline', prompt: 'select_account' } },
+      });
+      if (error) throw error;
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Google sign-in could not be started.');
+      setStatusError(true);
+      setBusy(false);
+    }
+  }
+
   const title = mode === 'login' ? 'Welcome back.' : mode === 'signup' ? 'Create your workspace.' : mode === 'reset' ? 'Set a new password.' : 'Recover your account.';
   const description = mode === 'login' ? 'Sign in to continue building with LeonardX.' : mode === 'signup' ? 'One account for your projects, builds, deployments, and Leo workspace.' : mode === 'reset' ? 'Choose a new password for your LeonardX account.' : 'Enter your account email and we’ll request password recovery instructions.';
 
@@ -95,6 +119,13 @@ export function AuthForm() {
         {(mode === 'signup' || mode === 'reset') && <label className="auth-field"><span>Confirm password</span><div><LockKeyhole size={16}/><input value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} type={showPassword ? 'text' : 'password'} required minLength={8} autoComplete="new-password" placeholder="Enter your password again"/></div></label>}
         {mode === 'login' && <div className="auth-inline-links"><span>Use your registered account credentials.</span><button type="button" onClick={() => changeMode('forgot')}>Forgot password?</button></div>}
         <button disabled={busy} className="auth-submit" type="submit">{busy ? <><LoaderCircle size={16} className="auth-spinner"/> Please wait…</> : <>{mode === 'login' ? 'Sign in to LeonardX' : mode === 'signup' ? 'Create account' : mode === 'reset' ? 'Update password' : 'Request recovery email'} <ArrowRight size={16}/></>}</button>
+        {(mode === 'login' || mode === 'signup') && <>
+          <div className="relative my-1 text-center text-xs text-zinc-500"><span className="bg-[#09090b] px-3">or continue with</span><span className="absolute left-0 right-0 top-1/2 -z-10 border-t border-white/10" /></div>
+          <button type="button" disabled={busy} onClick={() => void signInWithGoogle()} className="flex min-h-12 items-center justify-center gap-3 rounded-xl border border-white/15 bg-white/[.03] px-4 font-semibold text-white transition hover:border-white/30 disabled:opacity-50">
+            {busy ? <LoaderCircle size={17} className="animate-spin" /> : <Chrome size={17} />}
+            Continue with Google
+          </button>
+        </>}
       </div>
       {status && <p role={statusError ? 'alert' : 'status'} className={`auth-status ${statusError ? 'error' : ''}`}>{status}</p>}
       <div className="auth-switch">{mode === 'login' ? <>New to LeonardX? <button type="button" onClick={() => changeMode('signup')}>Create an account</button></> : mode === 'signup' ? <>Already have an account? <button type="button" onClick={() => changeMode('login')}>Sign in</button></> : <>Remembered your password? <button type="button" onClick={() => changeMode('login')}>Return to sign in</button></>}</div>

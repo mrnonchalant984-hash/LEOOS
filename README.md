@@ -106,3 +106,24 @@ RUNWAY_VIDEO_TIMEOUT_MS=540000
 ```
 
 The Video Agent is not available to normal users.
+
+## Google sign-in and MCP
+
+### Google sign-in
+
+Google sign-in is initiated from `/auth` and returns through `/auth/callback`. To enable it:
+
+1. In Supabase, enable **Google** under **Authentication → Providers** and enter the Google OAuth client ID and secret.
+2. In Google Cloud Console, add Supabase's displayed callback URL (`https://<project-ref>.supabase.co/auth/v1/callback`) as an authorized redirect URI.
+3. In Supabase **Authentication → URL Configuration**, allow the deployed app callback, such as `https://leoos-omega.vercel.app/auth/callback`. Add any local or preview callback URLs you actually use.
+4. Keep the Google client secret in Supabase/provider configuration; do not add it to a `NEXT_PUBLIC_*` variable.
+
+The app verifies the returned Supabase session before setting its secure authentication cookies. If Google is not enabled in Supabase, the Google button cannot complete sign-in.
+
+### LeonardX MCP connection
+
+The deployed Streamable HTTP endpoint is `https://leoos-omega.vercel.app/mcp`. Clients authenticate through LeonardX's OAuth 2.1 authorization-code flow with PKCE; do not create or share API keys. The initial authorization can grant read-only access. Approving `mcp:write` additionally exposes project creation/rename, source-file saving, and plan-limited build/deploy tools. Reconnect an existing MCP client to review and grant the write scope.
+
+Claude, ChatGPT, or another connected model supplies its own model inference; these MCP tools do not call Leo AI or consume Leo AI credits. Every write tool requires `confirm: true` and client-side user approval. Build/deploy starts the existing no-cost hosting trial; after the trial, the site may be suspended unless hosting is renewed through the LeonardX account flow. MCP cannot make payments or renew hosting. Project deletion is not available.
+
+For production, configure `MCP_PUBLIC_URL` to the HTTPS origin only, such as `https://leoos-omega.vercel.app` (no `/mcp` path). Leave `MCP_ALLOWED_ORIGINS` blank for server-to-server clients; browser MCP clients that send an `Origin` header need their exact HTTPS origins, comma-separated. External-model project deployments require `GITHUB_TOKEN` and `VERCEL_TOKEN`; they do not require `OPENAI_API_KEY` for inference. Apply the MCP OAuth and rate-limit Supabase migrations before enabling the endpoint, and verify the deployment's OAuth metadata at `/.well-known/oauth-authorization-server`.

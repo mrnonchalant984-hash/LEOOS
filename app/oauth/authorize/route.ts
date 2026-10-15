@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
-import { getMcpBaseUrl, MCP_SCOPE, validateRedirectUri } from '@/lib/mcp/oauth';
+import { getMcpBaseUrl, MCP_READ_SCOPE, MCP_WRITE_SCOPE, parseMcpScopes, validateRedirectUri } from '@/lib/mcp/oauth';
 
 export const runtime = 'nodejs';
 
@@ -12,7 +12,8 @@ export async function GET(request: NextRequest) {
   const challenge = query.get('code_challenge') || '';
   const challengeMethod = query.get('code_challenge_method');
   const state = query.get('state') || '';
-  const requestedScope = query.get('scope')?.trim() || MCP_SCOPE;
+  const requestedScope = query.get('scope')?.trim() || MCP_READ_SCOPE;
+  const scopes = parseMcpScopes(requestedScope);
   let baseUrl: string;
   try {
     baseUrl = getMcpBaseUrl(request);
@@ -24,8 +25,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'The requested resource does not match this MCP server.' }, { status: 400 });
   }
   if (responseType !== 'code' || challengeMethod !== 'S256' || !/^[A-Za-z0-9_-]{43}$/.test(challenge) ||
-      state.length > 512 || requestedScope !== MCP_SCOPE || !validateRedirectUri(redirectUri)) {
-    return NextResponse.json({ error: 'Invalid OAuth authorization request. Authorization code flow with PKCE S256 and mcp:read is required.' }, { status: 400 });
+      state.length > 512 || !scopes || !validateRedirectUri(redirectUri)) {
+    return NextResponse.json({ error: `Invalid OAuth authorization request. Authorization code flow with PKCE S256 and ${MCP_READ_SCOPE} are required; ${MCP_WRITE_SCOPE} is optional.` }, { status: 400 });
   }
 
   const db = adminSupabase();
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
       redirect_uri: redirectUri,
       state,
       code_challenge: challenge,
-      scope: requestedScope,
+      scope: scopes.join(' '),
       expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
     })
     .select('id')

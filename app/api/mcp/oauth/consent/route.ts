@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile } from '@/lib/auth';
+import { parseMcpScopes } from '@/lib/mcp/oauth';
 
 export const runtime = 'nodejs';
 
@@ -17,6 +18,8 @@ export async function GET(request: NextRequest) {
   if (!data || data.completed_at || new Date(data.expires_at) <= new Date()) {
     return NextResponse.json({ error: 'The authorization request is invalid or expired.' }, { status: 404 });
   }
+  const scopes = parseMcpScopes(data.scope);
+  if (!scopes) return NextResponse.json({ error: 'The requested permissions are invalid.' }, { status: 400 });
   const { data: client, error: clientError } = await db.from('mcp_oauth_clients')
     .select('client_name')
     .eq('client_id', data.client_id)
@@ -26,6 +29,7 @@ export async function GET(request: NextRequest) {
     request_id: data.id,
     client_name: client?.client_name,
     scope: data.scope,
+    permissions: scopes,
     account_name: ctx.profile.full_name || ctx.user.email || 'your LeonardX account',
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }

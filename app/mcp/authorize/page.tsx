@@ -6,6 +6,7 @@ type ConsentRequest = {
   request_id: string;
   client_name: string;
   scope: string;
+  permissions: string[];
   account_name: string;
 };
 
@@ -81,11 +82,15 @@ export default function McpConsentPage() {
             <p className="mt-4 text-sm leading-6 text-zinc-300"><strong className="text-white">{consent.client_name || 'An MCP client'}</strong> is requesting access to <strong className="text-white">{consent.account_name}</strong>.</p>
             <div className="mt-5 rounded-xl border border-white/10 bg-black/20 p-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Requested permission</p>
-              <p className="mt-2 text-sm text-white">Read your project names, types, statuses, and progress.</p>
-              <p className="mt-2 text-xs text-zinc-500">This connection cannot create, update, delete, or deploy projects.</p>
+              <p className="mt-2 text-sm text-white">Read your project details and plan limits.</p>
+              {consent.permissions.includes('mcp:write') ? (
+                <p className="mt-2 text-xs leading-5 text-zinc-300">Also requested: create and rename projects, save code files, and use your plan-authorized build/deploy allowance. Deployment starts the existing free hosting trial; after it expires, the site may be suspended unless you renew through your account. This client cannot make payments or renew hosting. Tool calls require explicit confirmation. Project deletion is unavailable.</p>
+              ) : (
+                <p className="mt-2 text-xs text-zinc-500">This is read-only access; it cannot create, update, or deploy projects.</p>
+              )}
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
-              <button type="button" disabled={busy} onClick={() => void decide(true)} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">{busy ? 'Saving…' : 'Approve read-only access'}</button>
+              <button type="button" disabled={busy} onClick={() => void decide(true)} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">{busy ? 'Saving…' : consent.permissions.includes('mcp:write') ? 'Approve project access' : 'Approve read-only access'}</button>
               <button type="button" disabled={busy} onClick={() => void decide(false)} className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-zinc-200 disabled:opacity-50">Deny</button>
             </div>
           </>

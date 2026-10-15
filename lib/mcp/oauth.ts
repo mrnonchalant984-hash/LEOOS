@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { adminSupabase } from '@/lib/auth';
-
-export const MCP_SCOPE = 'mcp:read';
+import { MCP_READ_SCOPE, MCP_SCOPES, parseMcpScopes } from './scopes';
+export { MCP_READ_SCOPE, MCP_SCOPES, MCP_WRITE_SCOPE, parseMcpScopes } from './scopes';
+export const MCP_SCOPE = MCP_READ_SCOPE;
 export const MCP_ACCESS_TOKEN_SECONDS = 60 * 60;
 export const MCP_REFRESH_TOKEN_SECONDS = 60 * 60 * 24 * 90;
 
@@ -20,7 +21,8 @@ export function pkceChallenge(verifier: string) {
 export function getMcpBaseUrl(request: Request) {
   const configured = process.env.MCP_PUBLIC_URL?.trim() || process.env.NEXT_PUBLIC_SITE_URL?.trim();
   const base = new URL(configured || new URL(request.url).origin);
-  if (!['https:', 'http:'].includes(base.protocol) || base.username || base.password || base.search || base.hash) {
+  if (!['https:', 'http:'].includes(base.protocol) || base.username || base.password ||
+      base.pathname !== '/' || base.search || base.hash) {
     throw new Error('MCP_PUBLIC_URL must be an HTTP(S) origin without credentials, query, or fragment.');
   }
   if (process.env.NODE_ENV === 'production' && base.protocol !== 'https:') {
@@ -38,14 +40,14 @@ export async function validateMcpAccessToken(rawToken: string) {
     .maybeSingle();
   if (error) throw new Error('MCP access-token storage is unavailable.');
   if (!data || data.revoked_at || new Date(data.expires_at) <= new Date()) return null;
-  const scopes = String(data.scope || '').split(/\s+/).filter(Boolean);
-  if (!scopes.includes(MCP_SCOPE)) return null;
+  const scopes = parseMcpScopes(String(data.scope || ''));
+  if (!scopes) return null;
   const { error: updateError } = await db.from('mcp_oauth_tokens')
     .update({ last_used_at: new Date().toISOString() })
     .eq('id', data.id)
     .is('revoked_at', null);
   if (updateError) throw new Error('MCP access-token activity could not be recorded.');
-  return { userId: data.user_id as string, scopes };
+  return { userId: data.user_id as string, scope: data.scope as string, scopes };
 }
 
 export function validateRedirectUri(value: string) {

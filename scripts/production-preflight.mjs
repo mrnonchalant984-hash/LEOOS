@@ -4,6 +4,7 @@ const required = [
   'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY',
   'OWNER_EMAIL', 'CRON_SECRET', 'OPENAI_API_KEY',
   'AGENT_WORKER_ENABLED', 'WORKFORCE_WORKER_ENABLED', 'WORKFLOW_WORKER_ENABLED',
+  'GITHUB_TOKEN', 'VERCEL_TOKEN',
 ];
 const missing = required.filter((key) => {
   const value = process.env[key]?.trim();
@@ -13,6 +14,7 @@ const missing = required.filter((key) => {
   return !value;
 });
 const migrations = [
+  'supabase/migrations/20261015120000_mcp_oauth_and_connections.sql',
   'supabase/migrations/20261012160000_reliability_controls.sql',
   'supabase/migrations/20261013130000_api_enterprise_workflow_foundation.sql',
   'supabase/migrations/20261014100000_workforce_meetings.sql',
@@ -25,6 +27,19 @@ const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
 const lockExists = existsSync('package-lock.json');
 const issues = [];
 if (missing.length) issues.push(`Missing or unsafe deployment settings: ${missing.join(', ')}`);
+const mcpPublicUrl = process.env.MCP_PUBLIC_URL?.trim() || process.env.NEXT_PUBLIC_SITE_URL?.trim();
+if (!mcpPublicUrl) {
+  issues.push('Set MCP_PUBLIC_URL to the deployed HTTPS origin.');
+} else {
+  try {
+    const parsed = new URL(mcpPublicUrl);
+    if (parsed.protocol !== 'https:' || parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) {
+      issues.push('MCP_PUBLIC_URL must be an HTTPS origin only, without credentials, path, query, or fragment.');
+    }
+  } catch {
+    issues.push('MCP_PUBLIC_URL must be a valid HTTPS origin.');
+  }
+}
 if (missingMigrations.length) issues.push(`Missing migrations: ${missingMigrations.join(', ')}`);
 if (!lockExists) issues.push('package-lock.json is missing; deterministic installation is not available.');
 if (!packageJson.scripts?.verify) issues.push('The full verify script is not configured.');
@@ -36,5 +51,5 @@ if (issues.length) {
   process.exitCode = 1;
 } else {
   console.log('LeonardX production preflight: static configuration checks passed.');
-  console.log('Still required: npm run verify, apply migrations in staging, exercise readiness endpoint, load/security tests, and operator approval.');
+  console.log('Still required: apply migrations in staging, enable Google in Supabase, allowlist the app callback URL in Supabase, exercise readiness and MCP OAuth, load/security tests, and operator approval.');
 }

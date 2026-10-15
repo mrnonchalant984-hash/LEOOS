@@ -5,6 +5,7 @@ import {
   getModelProviderStatus,
   resolveModel,
 } from '../lib/ai/model-catalog.ts';
+import { getExternalModelBuilderAvailability } from '../lib/builders/providers.ts';
 
 test('provider registry resolves its supported named models to concrete providers', () => {
   assert.deepEqual(resolveModel('openai/gpt-4o-mini'), { provider: 'openai', model: 'gpt-4o-mini' });
@@ -46,4 +47,19 @@ test('model defaults preserve local-model preference and support an explicit cro
     if (oldChatModel === undefined) delete process.env.LEO_CHAT_MODEL;
     else process.env.LEO_CHAT_MODEL = oldChatModel;
   }
+});
+
+test('external-model deployments require GitHub and Vercel but not a LeonardX AI key', () => {
+  assert.deepEqual(
+    getExternalModelBuilderAvailability('website', { GITHUB_TOKEN: 'configured', VERCEL_TOKEN: 'configured' }),
+    {
+      id: 'vercel-nextjs',
+      label: 'Next.js on GitHub and Vercel',
+      requiredEnvironment: ['GITHUB_TOKEN', 'VERCEL_TOKEN'],
+      status: 'ready',
+    },
+  );
+  const missing = getExternalModelBuilderAvailability('website', { GITHUB_TOKEN: 'configured' });
+  assert.equal(missing.status, 'not_configured');
+  assert.deepEqual(missing.requiredEnvironment, ['GITHUB_TOKEN', 'VERCEL_TOKEN']);
 });
