@@ -15,11 +15,12 @@ Date: 2026-10-15
 - Full repository test run: 147 passed, 0 failed.
 - TypeScript check: passed.
 - ESLint: passed with one existing `selectedExecutor` hook-dependency warning in `app/meeting-room/page.tsx`.
-- Production build: compiling successfully; final build completion is pending.
+- Production build: compilation completed locally, but the Windows build process crashed during a later stage (exit code `-1073740791`). GitHub Actions `npm run verify` passed on commit `4bcf48a6d4aabb763b98624968fceaf9fd98e906`.
 - `supabase migration list` reports the MCP OAuth/connections migration as applied in the linked Supabase project. This does not establish which production deployment or environment is connected.
-- Live provider calls and Vercel deployment are not verified.
+- The public `/mcp` route responds with `405` to GET and `401` to an unauthenticated Streamable HTTP initialize POST. OAuth discovery metadata advertises the `/mcp` resource and PKCE S256. Authenticated deployed initialization, tool discovery, and tool calls have not been performed.
+- Live provider calls and the exact Vercel deployed commit are not verified.
 
-## Added in the current working changes (not yet deployed)
+## Implemented in the pushed changes (not fully live-verified)
 
 - Server-side OpenAI, Anthropic, Google Gemini, and configured local text adapters use a typed model registry. The `/api/models` endpoint reports configured provider/model availability without exposing credentials.
 - Inbound MCP is implemented as a stateless Streamable HTTP server at `/mcp`. OAuth registration, authorization-code flow with PKCE S256, refresh-token rotation/revocation, consent, and discovery metadata are provided by `/oauth/*` and `/.well-known/oauth-*`. The registered server tools are user-scoped read-only `list_projects` and `get_project_status`.
@@ -27,13 +28,13 @@ Date: 2026-10-15
 - Leo chat has an explicit "Use approved read-only tools" mode. Provider-native tool calls are implemented for OpenAI, Anthropic, and Gemini; local model tool calling returns an explicit unsupported error.
 - The existing Runway Gen-4.5 image-to-video endpoint is now reachable from Studio using an owned private image asset and a short-lived signed URL.
 
-These are code and local validation claims only. The changes have not been pushed or deployed, provider credentials have not been live-tested, and the linked database migration status does not verify production runtime behavior. Do not claim production availability until deployment and endpoint tests pass. Outbound MCP OAuth and autonomous write-capable tools are intentionally not supported.
+These are implementation, CI, and limited unauthenticated endpoint-check claims. The changes are pushed to `main` as commit `4bcf48a6d4aabb763b98624968fceaf9fd98e906`; the exact Vercel deployed commit, authenticated MCP calls, and provider credentials have not been live-tested, and the linked database migration status does not verify production runtime behavior. Do not claim full production functionality until authenticated endpoint and provider tests pass. Outbound MCP OAuth and autonomous write-capable tools are intentionally not supported.
 
 ## Configuration
 
 The Studio reuses existing server configuration: `OPENAI_API_KEY` or `LEO_API_KEY`, Supabase URL/service-role key, the existing generation migration and private `leo-files` bucket. The optional `LEO_IMAGE_MODEL` must name a model supported by the configured Images API. Video additionally uses existing Runway and credit settings.
 
-For the broader AI/MCP implementation, configure the provider credentials in `.env.example` as needed. Set `MCP_PUBLIC_URL` to the production HTTPS origin, `MCP_ALLOWED_ORIGINS` to trusted client origins, `MCP_OUTBOUND_ALLOWED_HOSTS` to exact remote MCP hostnames, and `MCP_CREDENTIAL_ENCRYPTION_KEY` to a stable random 32-byte key (hex or base64). Apply the MCP OAuth/connections migration before using OAuth or remote connections. Provider keys and the encryption key must remain server-side and must not be logged or returned to clients.
+For the broader AI/MCP implementation, configure provider credentials in the deployment environment as needed. Set `MCP_PUBLIC_URL` to the production HTTPS origin, `MCP_ALLOWED_ORIGINS` to trusted client origins, `MCP_OUTBOUND_ALLOWED_HOSTS` to exact remote MCP hostnames, and `MCP_CREDENTIAL_ENCRYPTION_KEY` to a stable random 32-byte key (hex or base64). Verify that the deployed app uses the Supabase project with the MCP OAuth/connections migration applied. Provider keys and the encryption key must remain server-side and must not be logged or returned to clients.
 
 ## Deployment and rollback
 

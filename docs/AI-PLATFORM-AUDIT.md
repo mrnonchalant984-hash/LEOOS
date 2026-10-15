@@ -30,7 +30,7 @@ Audit date: 2026-10-15. This is a focused audit of the AI, data, security, and d
 | Video create | Existing asynchronous Runway Gen-4.5 text-to-video | Implemented, subject to provider config |
 | Image-to-video | `/api/generate-video` now supplies an ownership-checked private asset's short-lived signed URL to Runway | Implemented in working tree; live provider not tested |
 
-The capability changes are implemented in the working tree but are not confirmed deployed. `supabase migration list` reports `20261015120000` applied in the linked Supabase project; this does not prove that the deployed application targets that database. Remote MCP still requires operator hostname allowlisting and optional credential-encryption key configuration. Autonomous orchestration intentionally excludes write-capable remote tools.
+The changes are pushed to `main` as `4bcf48a6d4aabb763b98624968fceaf9fd98e906`, and the public `/mcp` route and OAuth discovery metadata respond. An unauthenticated initialize probe correctly receives `401`; authenticated deployed tool calls and the exact deployed commit remain unverified. `supabase migration list` reports `20261015120000` applied in the linked Supabase project; this does not prove that the deployed application targets that database. Remote MCP still requires operator hostname allowlisting and optional credential-encryption key configuration. Autonomous orchestration intentionally excludes write-capable remote tools.
 
 ## Security and operations observations
 
@@ -53,7 +53,7 @@ The capability changes are implemented in the working tree but are not confirmed
 
 ## Remaining release checks
 
-1. Complete the production build and push the reviewed changes to the intended branch.
+1. Confirm the exact Vercel deployment SHA and environment configuration for the pushed `main` commit.
 2. Verify deployment environment variables, especially provider credentials, `MCP_PUBLIC_URL`, trusted origins, outbound hostname allowlisting, and the stable credential-encryption key when remote bearer credentials are used.
 3. Verify that the deployed application uses the Supabase project where migration `20261015120000` is applied.
 4. Exercise OAuth, inbound MCP initialization/tool discovery/read-only calls, outbound MCP discovery/manual approval, provider routing, and image-to-video using non-production accounts and configured providers.
