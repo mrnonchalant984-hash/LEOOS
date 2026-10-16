@@ -121,7 +121,7 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
             Copy endpoint
           </button>
         </div>
-        <p className="mt-2 text-xs text-zinc-500">The assistant will request account access through LeonardX OAuth. Choose read-only or project write access on the approval screen.</p>
+        <p className="mt-2 text-xs text-zinc-500">New connections request project access so the assistant can create projects, save code, and build/deploy within your plan. Review and approve those permissions on the consent screen. If an existing connection is read-only, remove it from Claude or ChatGPT and connect again to refresh its permissions.</p>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>

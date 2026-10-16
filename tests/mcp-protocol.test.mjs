@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { handleUserMcpRequest } from '../lib/mcp/server.ts';
-import { MCP_READ_SCOPE, MCP_WRITE_SCOPE, parseMcpScopes } from '../lib/mcp/scopes.ts';
+import { MCP_DEFAULT_SCOPE, MCP_READ_SCOPE, MCP_WRITE_SCOPE, parseMcpScopes, parseRequestedMcpScopes } from '../lib/mcp/scopes.ts';
 
 const project = {
   id: 'fb3f9f0d-a96f-4d05-b95f-00683d3ba75d',
@@ -160,4 +160,8 @@ test('OAuth scope parser accepts only read and optional write permissions', () =
   assert.deepEqual(parseMcpScopes('mcp:read mcp:write'), ['mcp:read', 'mcp:write']);
   assert.equal(parseMcpScopes('mcp:write'), null);
   assert.equal(parseMcpScopes('mcp:read admin'), null);
+  assert.equal(MCP_DEFAULT_SCOPE, 'mcp:read mcp:write');
+  assert.deepEqual(parseRequestedMcpScopes(null), ['mcp:read', 'mcp:write']);
+  assert.deepEqual(parseRequestedMcpScopes('mcp:read'), ['mcp:read']);
+  assert.equal(parseRequestedMcpScopes(''), null);
 });

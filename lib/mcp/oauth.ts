@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { adminSupabase } from '@/lib/auth';
-import { MCP_READ_SCOPE, MCP_SCOPES, parseMcpScopes } from './scopes';
-export { MCP_READ_SCOPE, MCP_SCOPES, MCP_WRITE_SCOPE, parseMcpScopes } from './scopes';
-export const MCP_SCOPE = MCP_READ_SCOPE;
+import { MCP_DEFAULT_SCOPE, MCP_READ_SCOPE, MCP_SCOPES, parseMcpScopes } from './scopes';
+export { MCP_DEFAULT_SCOPE, MCP_READ_SCOPE, MCP_SCOPES, MCP_WRITE_SCOPE, parseMcpScopes, parseRequestedMcpScopes } from './scopes';
+export const MCP_SCOPE = MCP_DEFAULT_SCOPE;
 export const MCP_ACCESS_TOKEN_SECONDS = 60 * 60;
 export const MCP_REFRESH_TOKEN_SECONDS = 60 * 60 * 24 * 90;
 

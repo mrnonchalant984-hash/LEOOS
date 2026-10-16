@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
-import { getMcpBaseUrl, MCP_READ_SCOPE, MCP_WRITE_SCOPE, parseMcpScopes, validateRedirectUri } from '@/lib/mcp/oauth';
+import { getMcpBaseUrl, MCP_READ_SCOPE, MCP_WRITE_SCOPE, parseRequestedMcpScopes, validateRedirectUri } from '@/lib/mcp/oauth';
 
 export const runtime = 'nodejs';
 
@@ -12,8 +12,7 @@ export async function GET(request: NextRequest) {
   const challenge = query.get('code_challenge') || '';
   const challengeMethod = query.get('code_challenge_method');
   const state = query.get('state') || '';
-  const requestedScope = query.get('scope')?.trim() || MCP_READ_SCOPE;
-  const scopes = parseMcpScopes(requestedScope);
+  const scopes = parseRequestedMcpScopes(query.get('scope'));
   let baseUrl: string;
   try {
     baseUrl = getMcpBaseUrl(request);
