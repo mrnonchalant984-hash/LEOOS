@@ -66,7 +66,7 @@ console.log(result.content[0]?.text, result.usage);
 
 ## Verification boundaries
 
-The complete repository test suite passes (**167 tests**), and the focused API/billing tests pass (**14 tests**). `npx next typegen` and `npx tsc --noEmit` pass. ESLint reports no errors; the repository-wide run reports one existing warning in `app/meeting-room/page.tsx`. A production build was not run because a live `next dev --turbopack` process is writing to `.next/dev`; this avoids disrupting the running development server. Live provider/payment/webhook integration tests have not been run.
+The complete repository test suite passes (**167 tests**), and the focused API/billing tests pass (**14 tests**). `npx next typegen` and `npx tsc --noEmit` pass. ESLint reports no errors; the repository-wide run reports one existing warning in `app/meeting-room/page.tsx`. I did not run a local production build because a live `next dev --turbopack` process is writing to `.next/dev`; GitHub Actions ran `npm run verify` successfully, including the production build. Live provider/payment/webhook integration tests have not been run.
 
 The Web IDE remains a secure source editor with workspace tools, not a general-purpose shell or isolated runtime. Arbitrary project code must not be executed on the application server. A genuine run/build/debug terminal requires a configured isolated execution provider and end-to-end validation; this package does not claim that capability is live. Streaming is implemented in the API and TypeScript SDK, but still requires a live provider/API-key integration test before production release.
 
