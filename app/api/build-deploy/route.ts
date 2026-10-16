@@ -9,6 +9,7 @@ import { enforceUserRateLimit } from '@/lib/rate-limit';
 import { withOperationalMonitoring } from '@/lib/monitoring';
 import { validateMcpAccessToken, MCP_WRITE_SCOPE } from '@/lib/mcp/oauth';
 import { normalizeIdePath, validateIdeFiles } from '@/lib/ide-files';
+import { normalizeVercelDomain, resolveVerifiedVercelMainUrl, toVercelSubdomain, verifyPublicMainDomain } from '@/lib/vercel-deployment-url';
 
 export const runtime = 'nodejs';
 
@@ -111,6 +112,7 @@ async function recordBuildState(
 export async function POST(req: NextRequest) {
   return withOperationalMonitoring(req, 'project.build_deploy', async ({ reportFailure, requestId }) => {
   let deploymentUrl: string | null = null;
+  let mainDomainFailure: string | null = null;
   let buildContext: (BuildContext & { stage: 'building' | 'testing' | 'deploying' | 'live' }) | null = null;
   let mcpExternalModel = false;
   try {
@@ -166,12 +168,17 @@ export async function POST(req: NextRequest) {
     if (!userPrompt) return NextResponse.json({ error: 'Website request is required' }, { status: 400 });
     const db = adminSupabase();
     const { data: ownedProject, error: projectError } = await db.from('website_projects')
-      .select('id,project_type,website_type,business_name')
+      .select('id,project_type,website_type,business_name,custom_domain')
       .eq('id', customerProjectId)
       .eq('owner_user_id', ctx.user.id)
       .maybeSingle();
     if (projectError) return NextResponse.json({ error: 'Project ownership could not be verified.' }, { status: 500 });
     if (!ownedProject) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
+    const requestedCustomDomain = body.custom_domain || ownedProject.custom_domain;
+    const customDomain = requestedCustomDomain ? normalizeVercelDomain(requestedCustomDomain) : null;
+    if (requestedCustomDomain && !customDomain) {
+      return NextResponse.json({ error: 'The configured main domain must be a valid HTTPS hostname without a path.' }, { status: 400 });
+    }
 
     const owner = isPlatformOwner(ctx.profile);
     const plan = await getEffectiveUserPlan(ctx.user.id, owner);
@@ -271,8 +278,20 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({ key, value, type: publicEnv[key] ? 'plain' : 'secret', target: ['production', 'preview', 'development'] }),
       });
     }
-    if (body.custom_domain) {
-      await vercel(`/v10/projects/${encodeURIComponent(projectId)}/domains`, { method:'POST', body:JSON.stringify({domain:String(body.custom_domain)}) });
+    if (customDomain) {
+      const domainResult = await vercel(`/v9/projects/${encodeURIComponent(projectId)}/domains`);
+      const attachedDomainNames = new Set<string>(
+        (Array.isArray(domainResult.domains) ? domainResult.domains : []).flatMap((entry: { name?: unknown }) => {
+          const domain = normalizeVercelDomain(entry.name);
+          return domain ? [domain] : [];
+        }),
+      );
+      if (!attachedDomainNames.has(customDomain)) {
+        await vercel(`/v10/projects/${encodeURIComponent(projectId)}/domains`, {
+          method: 'POST',
+          body: JSON.stringify({ domain: customDomain }),
+        });
+      }
     }
 
     buildContext.stage = 'deploying';
@@ -288,7 +307,37 @@ export async function POST(req: NextRequest) {
     const readyDeployment = await waitForVercelDeployment(deploymentId, 180000, (state) =>
       recordBuildState(buildContext!, 'deploying', `Vercel build state: ${state}`),
     );
-    const liveUrl = readyDeployment.url || deploy.url ? `https://${readyDeployment.url || deploy.url}` : null;
+    await recordBuildState(buildContext, 'deploying', 'Verifying the project’s main production domain');
+    const projectDomainsResult = await vercel(`/v9/projects/${encodeURIComponent(projectId)}/domains`);
+    const projectDomains = Array.isArray(projectDomainsResult.domains) ? projectDomainsResult.domains : [];
+    const businessSubdomain = toVercelSubdomain(body.client_name || ownedProject.business_name);
+    const compactBusinessSubdomain = businessSubdomain?.replaceAll('-', '');
+    const mainUrl = resolveVerifiedVercelMainUrl(projectDomains, [
+      customDomain,
+      businessSubdomain ? `${businessSubdomain}.vercel.app` : null,
+      compactBusinessSubdomain ? `${compactBusinessSubdomain}.vercel.app` : null,
+      `${String(project.name || repoName)}.vercel.app`,
+    ]);
+    if (!mainUrl) {
+      mainDomainFailure = 'Vercel reports the deployment ready, but no verified main project domain is attached. Add and verify the project’s production domain in Vercel. LeonardX will not return a per-deployment preview URL.';
+      throw new Error(mainDomainFailure);
+    }
+    const verifiedDomainHosts = new Set<string>(
+      projectDomains.flatMap((entry: { name?: unknown; verified?: unknown }) => {
+        if (entry.verified !== true && entry.verified !== 'true') return [];
+        const domain = normalizeVercelDomain(entry.name);
+        return domain ? [domain] : [];
+      }),
+    );
+    try {
+      await verifyPublicMainDomain(mainUrl, verifiedDomainHosts);
+    } catch (error) {
+      mainDomainFailure = error instanceof Error && error.message === 'VERCEL_DEPLOYMENT_PROTECTION'
+        ? 'Vercel is redirecting the main production domain to sign-in. Disable Deployment Protection for the production domain, then retry. LeonardX will not return the protected deployment URL.'
+        : 'Vercel reports the build ready, but the verified main domain is not publicly reachable yet. Check its domain assignment and DNS, then retry.';
+      throw new Error(mainDomainFailure);
+    }
+    const liveUrl = mainUrl;
     deploymentUrl = liveUrl;
     buildContext.stage = 'live';
     await recordBuildState(buildContext, 'live', 'Vercel confirmed deployment READY', {
@@ -308,11 +357,11 @@ export async function POST(req: NextRequest) {
         live_deployment_id: deploymentId || null,
         suspended_deployment_id: null,
         live_url: liveUrl,
-        admin_url: (readyDeployment.url || deploy.url) ? `https://${readyDeployment.url || deploy.url}/admin` : null,
+        admin_url: `${liveUrl}/admin`,
         client_name: body.client_name || null,
         client_email: body.client_email || null,
         client_whatsapp: body.client_whatsapp || null,
-        custom_domain: body.custom_domain || null,
+        custom_domain: customDomain,
         updated_at: now.toISOString(),
       }).eq('id', customerProjectId).eq('owner_user_id', ctx.user.id);
 
@@ -335,8 +384,8 @@ export async function POST(req: NextRequest) {
       message: 'Deployment submitted to Vercel',
       metadata: {
         repo: repo.html_url,
-        vercel: readyDeployment.url || deploy.url,
-        deploymentId: deploy.id || deploy.uid || null,
+        vercel: liveUrl,
+        deploymentId,
         publicKeys: Object.keys(publicEnv),
         secretKeys: Object.keys(secretEnv),
         missingRequirements: json.missingRequirements || [],
@@ -388,7 +437,7 @@ export async function POST(req: NextRequest) {
       status: 'deployed',
       githubUrl: repo.html_url,
       liveUrl,
-      adminUrl: (readyDeployment.url || deploy.url) ? `https://${readyDeployment.url || deploy.url}/admin` : null,
+      adminUrl: `${liveUrl}/admin`,
       missingRequirements: json.missingRequirements || [],
       hostingTrialError,
       reviewUrl: wallOfLoveUrl,
@@ -403,11 +452,13 @@ export async function POST(req: NextRequest) {
     if (buildContext) {
       const status = buildContext.stage === 'deploying' ? 'deploy_failed' : 'build_failed';
       await recordBuildState(buildContext, status, status === 'deploy_failed' ? 'Deployment failed' : 'Build failed', {
-        error: 'Build or deployment operation failed.',
-        message: 'Build or deployment operation failed.',
+        error: mainDomainFailure || 'Build or deployment operation failed.',
+        message: mainDomainFailure || 'Build or deployment operation failed.',
       }).catch(() => console.error(JSON.stringify({ level: 'error', event: 'leo.operation.persistence_failure', operation: 'project.build_deploy', request_id: requestId })));
     }
-    return NextResponse.json({ error: 'Build or deployment could not be completed. Review the project operation status and retry.' }, { status: 500 });
+    return NextResponse.json({
+      error: mainDomainFailure || 'Build or deployment could not be completed. Review the project operation status and retry.',
+    }, { status: mainDomainFailure ? 502 : 500 });
   }
   });
 }

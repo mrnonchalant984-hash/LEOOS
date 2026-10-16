@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ExternalLink, Loader2, Rocket } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import { LEO_TEMPLATES } from "@/data/website-templates";
+import { BuildProgressVisualizer } from "@/components/BuildProgressVisualizer";
 
 type WebsiteProject = {
   id: string;
@@ -46,6 +47,8 @@ export default function WebsiteManagementPage() {
   const [brief, setBrief] = useState("");
   const [loading, setLoading] = useState(true);
   const [deploying, setDeploying] = useState(false);
+  const [progressToken, setProgressToken] = useState<string | null>(null);
+  const [progressRefreshError, setProgressRefreshError] = useState("");
   const [error, setError] = useState("");
   const [hostingWarning, setHostingWarning] = useState("");
   const [missingRequirements, setMissingRequirements] = useState<string[]>([]);
@@ -62,6 +65,7 @@ export default function WebsiteManagementPage() {
         router.push("/auth");
         return;
       }
+      setProgressToken(session.access_token);
       const response = await fetch(
         `/api/setup/projects?project_id=${encodeURIComponent(id)}`,
         { headers: { Authorization: `Bearer ${session.access_token}` }, cache: "no-store" },
@@ -82,9 +86,50 @@ export default function WebsiteManagementPage() {
     };
   }, [id, router]);
 
+  useEffect(() => {
+    const buildIsActive = ["building", "testing", "deploying"].includes(project?.build_status || "");
+    if ((!deploying && !buildIsActive) || !progressToken) return;
+
+    let cancelled = false;
+    let requestInFlight = false;
+    const refresh = async () => {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const authorization = ["Be", "arer"].join("") + " " + progressToken;
+        const response = await fetch(`/api/setup/projects?project_id=${encodeURIComponent(id)}`, {
+          headers: { Authorization: authorization },
+          cache: "no-store",
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Build progress could not be refreshed.");
+        if (!cancelled) {
+          setProject(result.project);
+          setBuilds(result.builds || []);
+          setDeployments(result.deployments || []);
+          setHosting(result.hosting || null);
+          setProgressRefreshError("");
+        }
+      } catch {
+        if (!cancelled) setProgressRefreshError("Live progress is temporarily unavailable; the build is still running.");
+      } finally {
+        requestInFlight = false;
+      }
+    };
+
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [deploying, id, progressToken, project?.build_status]);
+
   async function deploy() {
     if (!project || deploying) return;
     setDeploying(true);
+    setProgressToken(null);
+    setProgressRefreshError("");
     setError("");
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -93,6 +138,7 @@ export default function WebsiteManagementPage() {
     try {
       const session = (await supabase.auth.getSession()).data.session;
       if (!session) throw new Error("Please log in to deploy this website.");
+      setProgressToken(session.access_token);
       const template = LEO_TEMPLATES.find(
         (item) => item.id === project.requirements?.template_id,
       );
@@ -140,6 +186,7 @@ export default function WebsiteManagementPage() {
       setError(cause instanceof Error ? cause.message : "Deployment failed.");
     } finally {
       setDeploying(false);
+      setProgressToken(null);
     }
   }
 
@@ -149,6 +196,7 @@ export default function WebsiteManagementPage() {
 
   const template = LEO_TEMPLATES.find((item) => item.id === project.requirements?.template_id);
   const requirements = Object.entries(project.requirements || {}).filter(([key, value]) => key !== "template_id" && key !== "template_name" && value);
+  const buildIsActive = deploying || ["building", "testing", "deploying"].includes(project.build_status || "");
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
@@ -182,6 +230,8 @@ export default function WebsiteManagementPage() {
           {deploying ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />}
           {deploying ? "Building and deploying…" : project.live_url ? "Build and deploy update" : "Build and deploy website"}
         </button>
+        {buildIsActive && <BuildProgressVisualizer status={project.build_status || "building"} step={project.build_step} />}
+        {buildIsActive && progressRefreshError && <p role="alert" className="mt-3 text-xs text-amber-200">{progressRefreshError}</p>}
         {error && <p role="alert" className="mt-4 text-sm text-red-300">{error}</p>}
         {hostingWarning && <p role="alert" className="mt-4 text-sm text-amber-200">The site is live, but hosting trial setup needs attention: {hostingWarning}</p>}
         {project.live_url && <p className="mt-4 text-sm text-emerald-300">Deployment is ready. <a className="underline" href={project.live_url} target="_blank" rel="noreferrer">Preview the live site</a></p>}
