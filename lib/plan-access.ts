@@ -7,7 +7,7 @@ export async function getEffectiveUserPlan(userId: string, isOwner = false) {
       ...getPlan('unlimited'),
       owner: true,
       limits: {
-        maxProjects: Number.MAX_SAFE_INTEGER,
+        maxProjects: 2_147_483_647,
         monthlyBuilds: 2_147_483_647,
         monthlyImageCredits: Number.MAX_SAFE_INTEGER,
       },

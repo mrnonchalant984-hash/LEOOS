@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFile } from "node:fs/promises";
 import { getBuilderAvailability } from "../lib/builders/providers.ts";
 import { PLAN_CURRENCY, formatNairaKobo, freePlan, getPlan, getPlanDisplayName, getPlanPrice, getPlanPriceNgn, planConfig, resolvePaidPlan } from "../lib/pricing.ts";
 
@@ -20,6 +21,12 @@ test("free and paid plans expose bounded builder and image resources", () => {
     assert.equal(plan.projectTypes.includes("mobile_app"), false);
     assert.equal(plan.projectTypes.includes("game"), false);
   }
+});
+
+test("owner project allowance fits PostgreSQL integer plan-limit parameters", async () => {
+  const source = await readFile(new URL("../lib/plan-access.ts", import.meta.url), "utf8");
+  assert.match(source, /maxProjects:\s*2_147_483_647/);
+  assert.doesNotMatch(source, /maxProjects:\s*Number\.MAX_SAFE_INTEGER/);
 });
 
 test("web provider requires OpenAI, GitHub, and Vercel configuration", () => {
