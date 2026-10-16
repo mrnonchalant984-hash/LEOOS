@@ -38,7 +38,12 @@ export default function AuthCallbackPage() {
         }
         const { error: syncError } = await supabase.auth.setSession(result.session);
         if (syncError) throw syncError;
-        window.location.replace(safeNextPath());
+        const next = safeNextPath();
+        const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (assuranceError) throw assuranceError;
+        window.location.replace(assurance.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2'
+          ? `/auth/mfa?next=${encodeURIComponent(next)}`
+          : next);
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : 'Google sign-in could not be completed.');
       }

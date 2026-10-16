@@ -45,7 +45,7 @@ const groups: { label: string; items: NavItem[] }[] = [
     ['What’s new','/whats-new',Newspaper], ['Blog','/blog',FileText],
   ] },
   { label: 'Account', items: [
-    ['Account settings','/account',UserRound], ['Notifications','/notifications',Bell], ['Pricing & plans','/pricing',Wallet],
+    ['Settings','/settings',Settings], ['Account','/account',UserRound], ['Notifications','/notifications',Bell], ['Pricing & plans','/pricing',Wallet],
     ['Support','/support',LifeBuoy], ['Payment history','/payment/manual',CreditCard], ['Website checkout','/payment/website',Globe2], ['Hosting renewal','/payment/hosting-renewal',Wallet],
   ] },
 ];

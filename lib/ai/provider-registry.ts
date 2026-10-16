@@ -3,7 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
 import { getOpenAI, getTextOpenAI } from '@/lib/openai';
 import { ModelProviderError, isProviderConfigured, resolveModel, type ModelMessage, type ModelProvider } from './model-catalog';
-import type { Content, Part } from '@google/genai';
+import { FunctionCallingConfigMode, type Content, type Part } from '@google/genai';
 
 export { getDefaultTextModel, getModelProviderStatus, ModelProviderError, resolveModel } from './model-catalog';
 export type { ModelMessage, ModelProvider } from './model-catalog';
@@ -73,7 +73,7 @@ function providerTools(tools: AssistantTool[]) {
 }
 
 export async function generateTextWithTools(
-  request: TextGenerationRequest & { tools: AssistantTool[]; executeTool: AssistantToolExecutor; maxToolCalls?: number },
+  request: TextGenerationRequest & { tools: AssistantTool[]; executeTool: AssistantToolExecutor; maxToolCalls?: number; requiredToolName?: string },
 ): Promise<TextGenerationResult> {
   const resolved = resolveModel(request.model);
   if (!isProviderConfigured(resolved.provider)) {
@@ -84,6 +84,9 @@ export async function generateTextWithTools(
   }
   if (resolved.provider === 'local') throw new ModelProviderError('Tool orchestration is not supported by the configured local model endpoint.', 400);
   if (!request.tools.length) return generateText(request);
+  if (request.requiredToolName && !request.tools.some(tool => tool.name === request.requiredToolName)) {
+    throw new ModelProviderError('The selected tool is not available for this request.', 400);
+  }
   const maxCalls = Math.max(1, Math.min(8, Math.trunc(request.maxToolCalls || 6)));
   const maxTurns = 5;
   let callsMade = 0;
@@ -106,7 +109,9 @@ export async function generateTextWithTools(
           model: resolved.model,
           messages,
           tools: definitions,
-          tool_choice: 'auto',
+          tool_choice: request.requiredToolName && callsMade === 0
+            ? { type: 'function', function: { name: request.requiredToolName } }
+            : 'auto',
           temperature,
           max_tokens: maxOutputTokens,
         });
@@ -149,6 +154,7 @@ export async function generateTextWithTools(
           ...(system ? { system } : {}),
           messages,
           tools: definitions,
+          ...(request.requiredToolName && callsMade === 0 ? { tool_choice: { type: 'tool' as const, name: request.requiredToolName } } : {}),
         });
         finalText = response.content.filter(block => block.type === 'text').map(block => block.text).join('');
         usageReported = true;
@@ -188,6 +194,7 @@ export async function generateTextWithTools(
             temperature,
             ...(system ? { systemInstruction: system } : {}),
             tools: [{ functionDeclarations: definitions }],
+            ...(request.requiredToolName && callsMade === 0 ? { toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [request.requiredToolName] } } } : {}),
           },
         });
         const content = response.candidates?.[0]?.content;
@@ -220,6 +227,9 @@ export async function generateTextWithTools(
       }
     }
 
+    if (request.requiredToolName && callsMade === 0) {
+      throw new ModelProviderError('The selected tool was not called. Please retry or choose another approved tool.', 502);
+    }
     return {
       text: finalText || (callsMade ? 'The read-only tools completed, but the model did not provide a final text response.' : 'I could not generate a reply.'),
       model: resolved.model,

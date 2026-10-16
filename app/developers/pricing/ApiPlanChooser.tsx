@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, CreditCard, LoaderCircle } from 'lucide-react';
 import { API_PLAN_CATALOG, type ApiPlanCurrency } from '@/lib/api-plan-catalog';
 
-type BillingStatus = { active: boolean; subscription: null | { plan_key: string; currency: string; current_period_end: string; credits_remaining: number; included_credits: number }; renewalMode?: string };
+type BillingStatus = { active: boolean; owner?: boolean; subscription: null | { plan_key: string; currency: string; current_period_end: string; credits_remaining: number; included_credits: number }; renewalMode?: string };
 const money = (amount: number, currency: ApiPlanCurrency) => new Intl.NumberFormat(currency === 'NGN' ? 'en-NG' : 'en-US', { style: 'currency', currency, maximumFractionDigits: currency === 'NGN' ? 0 : 2 }).format(amount);
 
 export function ApiPlanChooser() {
   const [currency, setCurrency] = useState<ApiPlanCurrency>('NGN');
   const [audience, setAudience] = useState<'developer' | 'business'>('developer');
   const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const [billingLoading, setBillingLoading] = useState(true);
   const [loadingPlan, setLoadingPlan] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -20,7 +21,9 @@ export function ApiPlanChooser() {
     fetch('/api/developers/billing/status', { cache: 'no-store' }).then(async (r) => {
       const data = await r.json().catch(() => null);
       if (live && r.ok) setBilling(data);
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => {
+      if (live) setBillingLoading(false);
+    });
     const noticeTimer = window.setTimeout(() => {
       const params = new URLSearchParams(window.location.search);
       if (params.get('payment') === 'verified') setNotice('Payment verified. Your API plan is active and your included credits are ready.');
@@ -47,13 +50,18 @@ export function ApiPlanChooser() {
       <p className="mt-1 text-zinc-300">{billing.subscription.plan_key.replaceAll('_', ' ')} · {billing.subscription.credits_remaining.toLocaleString()} of {billing.subscription.included_credits.toLocaleString()} included credits remaining.</p>
       <p className="mt-1 text-xs text-zinc-500">Current period ends {new Date(billing.subscription.current_period_end).toLocaleDateString()}.</p>
     </div>}
+    {billing?.owner && <div role="status" className="rounded-2xl border border-emerald-300/20 bg-emerald-300/5 p-4 text-sm text-emerald-100">
+      <div className="flex items-center gap-2 font-semibold"><CheckCircle2 size={16}/> Platform owner access</div>
+      <p className="mt-1 text-zinc-300">Developer API tools and Agent Studio are available without purchasing a Developer API plan or consuming API-plan credits.</p>
+    </div>}
+    {billingLoading && <p role="status" className="text-sm text-zinc-400">Checking account plan access…</p>}
     {notice && <div role="status" className="rounded-xl border border-emerald-300/20 bg-emerald-300/5 p-3 text-sm text-emerald-100">{notice}</div>}
     {error && <div role="alert" className="rounded-xl border border-red-300/20 bg-red-300/5 p-3 text-sm text-red-100">{error}</div>}
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    {!billingLoading && !billing?.owner && <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex gap-2"><button className={`secondary-button ${audience === 'developer' ? 'border-amber-200/50 text-amber-100' : ''}`} onClick={() => setAudience('developer')}>Developers</button><button className={`secondary-button ${audience === 'business' ? 'border-amber-200/50 text-amber-100' : ''}`} onClick={() => setAudience('business')}>Businesses</button></div>
       <div className="flex items-center gap-2 text-xs text-zinc-400"><span>Billing currency</span><select aria-label="Billing currency" className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-white" value={currency} onChange={(e) => setCurrency(e.target.value as ApiPlanCurrency)}><option value="NGN">NGN ₦</option><option value="USD">USD $</option></select></div>
-    </div>
-    <div className="grid gap-3 lg:grid-cols-3">
+    </div>}
+    {!billingLoading && !billing?.owner && <div className="grid gap-3 lg:grid-cols-3">
       {plans.map((plan) => {
         const price = currency === 'NGN' ? plan.monthlyNgn : plan.monthlyUsd;
         return <article key={plan.key} className="flex flex-col rounded-2xl border border-white/10 bg-black/20 p-5">
@@ -65,7 +73,7 @@ export function ApiPlanChooser() {
           <button disabled={Boolean(loadingPlan)} onClick={() => void choosePlan(plan.key)} className="primary-button w-full justify-center disabled:opacity-50">{loadingPlan === plan.key ? <LoaderCircle size={14} className="animate-spin"/> : <CreditCard size={14}/>} Choose plan <ArrowRight size={13}/></button>
         </article>;
       })}
-    </div>
-    <p className="text-xs leading-5 text-zinc-500">API keys can be created for free, but billable API requests require an active paid plan and available credits. If credits run out, requests pause until you renew or add credits. Prices and quotas must be validated against provider costs before being treated as final.</p>
+    </div>}
+    {!billingLoading && !billing?.owner && <p className="text-xs leading-5 text-zinc-500">API keys can be created for free, but billable API requests require an active paid plan and available credits. Usage is reconciled after each request using provider-reported token counts; requests pause when available credits run out.</p>}
   </div>;
 }

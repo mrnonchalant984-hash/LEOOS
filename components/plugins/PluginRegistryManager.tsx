@@ -36,14 +36,17 @@ export function PluginRegistryManager() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(true);
   const [available, setAvailable] = useState(true);
+  const [ownerAccess, setOwnerAccess] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setPlugins(await fetchPluginRegistry());
       setAvailable(true);
+      setOwnerAccess(true);
     } catch (cause) {
       setAvailable(false);
       setError(cause instanceof Error ? cause.message : 'Plugin registry could not be loaded.');
+      setOwnerAccess(cause instanceof Error && /2fa|migration|storage/i.test(cause.message));
     } finally {
       setBusy(false);
     }
@@ -56,11 +59,13 @@ export function PluginRegistryManager() {
         if (!active) return;
         setPlugins(items);
         setAvailable(true);
+        setOwnerAccess(true);
       })
       .catch((cause: unknown) => {
         if (!active) return;
         setAvailable(false);
         setError(cause instanceof Error ? cause.message : 'Plugin registry could not be loaded.');
+        setOwnerAccess(cause instanceof Error && /2fa|migration|storage/i.test(cause.message));
       })
       .finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
@@ -111,14 +116,16 @@ export function PluginRegistryManager() {
     }
   }
 
+  if (!busy && !available && !ownerAccess) return null;
+
   return <section className="mt-3 rounded-2xl border border-white/10 bg-zinc-950 p-5" aria-labelledby="plugin-manager-title">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><div className="flex items-center gap-2"><ShieldCheck size={16} className="text-amber-200"/><h2 id="plugin-manager-title" className="font-semibold">Registry controls</h2></div><p className="mt-1 text-xs leading-5 text-zinc-500">Owner 2FA required. Manifests store permissions and metadata only; they do not install or execute code.</p></div>
+      <div><div className="flex items-center gap-2"><ShieldCheck size={16} className="text-amber-200"/><h2 id="plugin-manager-title" className="font-semibold">Registry controls</h2></div><p className="mt-1 text-xs leading-5 text-zinc-500">These controls manage the platform-wide trusted plugin registry. Only the platform owner can approve or change trusted integrations; manifests do not install or execute uploaded code.</p></div>
       <button type="button" onClick={() => { setError(''); setBusy(true); void load(); }} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300 disabled:opacity-50"><RefreshCw size={13}/> Refresh</button>
     </div>
     {error && <p role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-950/20 p-3 text-sm text-red-200">{error}</p>}
     {notice && <p role="status" className="mt-4 rounded-lg border border-emerald-300/20 bg-emerald-950/20 p-3 text-sm text-emerald-200">{notice}</p>}
-    {!available && <p className="mt-3 text-xs text-zinc-500">If you are the platform owner, sign in and complete owner 2FA. Registry reads also require the pending database migration to be applied.</p>}
+    {!available && <p className="mt-3 text-xs text-zinc-500">{error}</p>}
     {available && <>
       <form onSubmit={register} className="mt-5 space-y-3">
         <label htmlFor="plugin-manifest" className="block text-xs font-medium text-zinc-300">Manifest JSON <span className="font-normal text-zinc-500">(example only; not registered until submitted)</span></label>

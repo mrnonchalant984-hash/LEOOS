@@ -144,7 +144,7 @@ export function PricingPlans() {
         ))}
       </div>
       <p className="mt-5 text-xs text-zinc-600">
-        Prices are read from the server deployment configuration. No feature is
+        Prices are read from LeonardX’s shared pricing configuration. No feature is
         unlocked until Paystack verification succeeds.
       </p>
     </>

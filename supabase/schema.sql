@@ -437,7 +437,9 @@ begin
     where id = p_project_id and owner_user_id = p_owner_user_id for update;
   if not found then raise exception 'Project not found'; end if;
   select count(*) into build_count from project_builds
-    where owner_user_id = p_owner_user_id and created_at >= date_trunc('month', now());
+    where owner_user_id = p_owner_user_id
+      and created_at >= date_trunc('month', now())
+      and status in ('building','testing','deploying','live');
   if build_count >= p_monthly_limit then raise exception 'Monthly build limit reached'; end if;
   insert into project_builds(website_project_id,owner_user_id,project_type,provider,status,step)
     values(p_project_id,p_owner_user_id,project_type_value,p_provider,'building','Generating source')

@@ -15,7 +15,7 @@ async function notifyByEmail(data: LeadPayload): Promise<boolean> {
     try { return await sendSmtpMail({ to: destination, from: process.env.SMTP_FROM, subject: `New lead: ${data.name}`, text: `New LeonardX lead\n\nName: ${data.name}\nService: ${data.service}\nBudget: ${data.budget}\nPhone: ${data.phone}${data.chat_summary ? `\n\nChat summary: ${data.chat_summary}` : ''}\n\nFollow up with the client.` }); } catch { return false; }
   }
   if (!apiKey) return false;
-  const from = process.env.CONTACT_FROM_EMAIL || 'LEO Portfolio <onboarding@resend.dev>';
+  const from = process.env.CONTACT_FROM_EMAIL || 'LeonardX <onboarding@resend.dev>';
   try {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',

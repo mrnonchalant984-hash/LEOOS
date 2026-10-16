@@ -20,6 +20,10 @@ export function validateMcpEndpointUrl(endpoint: string, allowlist = allowedHost
     throw new Error('Enter a valid absolute MCP endpoint URL.');
   }
   const hostname = parsed.hostname.toLowerCase();
+  if (hostname === 'chatgpt.com' || hostname.endsWith('.chatgpt.com') ||
+      hostname === 'claude.ai' || hostname.endsWith('.claude.ai')) {
+    throw new Error('This is an AI assistant website, not an MCP server. To connect LeonardX to ChatGPT or Claude, add LeonardX’s /mcp endpoint in that assistant’s connector settings.');
+  }
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash ||
       parsed.port && parsed.port !== '443' || isIP(hostname.replace(/^\[|\]$/g, '')) ||
       !/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(hostname) ||

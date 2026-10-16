@@ -76,7 +76,7 @@ export default function DeveloperDocsPage() {
 
     <Section id="webhooks" title="Webhooks">
       <p>Add an HTTPS endpoint on the <Link href="/webhooks" className="text-yellow-300">Webhooks page</Link>. LEO OS sends a signed <code>POST</code> with a JSON body when an event occurs. Endpoints must be public HTTPS URLs on the default port. Localhost, private networks, and redirects are not supported.</p>
-      <p><strong>Available event:</strong> <code>webhook.test</code>, sent when you press &quot;Send test&quot;. Other events will be listed here once they are live.</p>
+      <p><strong>Available events:</strong> <code>project.created</code> after a v1 project is created, <code>project.deployed</code> after deployment completes, and <code>api.usage.completed</code> after a metered API request completes. <code>webhook.test</code> is sent only when you press &quot;Send test&quot;.</p>
       <Code>{`POST /your-endpoint\ncontent-type: application/json\nleo-event: webhook.test\nleo-delivery-id: 6f1c...\nleo-signature: t=1790000000,v1=9a3b...\n\n{\n  "id": "6f1c...",\n  "type": "webhook.test",\n  "created": 1790000000,\n  "data": { "message": "This is a test event from LEO OS." }\n}`}</Code>
       <p><strong>Verify the signature.</strong> Compute HMAC-SHA256 of <code>{'{t}.{raw body}'}</code> with your signing secret and compare it to <code>v1</code> using a constant-time comparison. Reject requests whose timestamp is more than 5 minutes old. Use the raw body, not re-serialised JSON.</p>
       <p><strong>Delivery and retries.</strong> Respond with any <code>2xx</code> status within 8 seconds to confirm receipt. Anything else, or a timeout, counts as a failure. The delivery record schedules up to five retries after 1 minute, 5 minutes, 30 minutes, 2 hours, and 6 hours. However, the currently configured Vercel cron invokes the retry worker once daily, so these times are eligibility delays—not a promise that a retry runs at that exact time. Delivery status and errors are shown on the Webhooks page. Because retries can repeat an event, use the <code>id</code> field to ignore duplicates.</p>
@@ -95,7 +95,7 @@ export default function DeveloperDocsPage() {
     </Section>
 
     <Section id="developer-workspaces" title="Workspace and extension guides">
-      <p><Link href="/ide" className="text-yellow-300">Web IDE guide</Link> describes the authenticated editor and non-executing console. <Link href="/plugins" className="text-yellow-300">Plugin registry guide</Link> documents the metadata-only manifest model and its current persistence/runtime limits.</p>
+      <p><Link href="/developers/agents" className="text-yellow-300">Agent &amp; Tool Studio</Link> is available to paid Developer API plans and the platform owner. It stores private agent instructions and permits only existing account-approved read-only MCP tools. <Link href="/ide" className="text-yellow-300">Web IDE guide</Link> describes the separate authenticated editor and non-executing console. <Link href="/plugins" className="text-yellow-300">Plugin registry guide</Link> documents the metadata-only manifest model and its current persistence/runtime limits.</p>
     </Section>
 
     <Section id="versions" title="Versions">
@@ -104,7 +104,7 @@ export default function DeveloperDocsPage() {
 
     <Section id="changelog" title="Changelog">
       <ul className="space-y-3">
-        <li><strong>v1, 2026-10-08.</strong> Added API keys with scopes, expiry, and revocation; project listing, creation, detail/status reads, usage, and account lookup; database-backed per-key rate limits, request IDs, and request outcome logging. Signed webhook delivery currently supports the <code>webhook.test</code> event. The TypeScript SDK and CLI use v1 for new integrations.</li>
+        <li><strong>v1, 2026-10-08.</strong> Added API keys with scopes, expiry, and revocation; project listing, creation, detail/status reads, usage, and account lookup; database-backed per-key rate limits, request IDs, and request outcome logging. Signed webhooks support test delivery plus project-created, project-deployed, and completed API-usage events. The TypeScript SDK and CLI use v1 for new integrations.</li>
       </ul>
     </Section>
   </main>;

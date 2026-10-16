@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Loader2, Plus, RefreshCw, Trash2 } from 'lucide-react';
 
 type McpTool = {
@@ -17,7 +17,11 @@ type McpServer = {
   tools: McpTool[];
 };
 
-export function McpConnectionManager() {
+function subscribeToBrowserOrigin() {
+  return () => {};
+}
+
+export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredLeonardXMcpUrl?: string }) {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [name, setName] = useState('');
   const [endpoint, setEndpoint] = useState('');
@@ -25,6 +29,12 @@ export function McpConnectionManager() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const browserOrigin = useSyncExternalStore(
+    subscribeToBrowserOrigin,
+    () => window.location.origin,
+    () => '',
+  );
+  const leonardXMcpEndpoint = configuredLeonardXMcpUrl || (browserOrigin ? `${browserOrigin}/mcp` : '');
 
   const fetchServers = useCallback(async () => {
     const response = await fetch('/api/mcp/servers', { cache: 'no-store' });
@@ -86,6 +96,33 @@ export function McpConnectionManager() {
 
   return (
     <section className="mt-8 rounded-2xl border border-white/10 bg-white/[.03] p-5">
+      <div className="mb-5 rounded-xl border border-violet-300/20 bg-violet-300/[.05] p-4">
+        <h3 className="font-semibold">Connect LeonardX to ChatGPT or Claude</h3>
+        <p className="mt-1 text-sm leading-6 text-zinc-300">
+          Add this LeonardX MCP endpoint in your AI assistant’s connector settings. Do not enter <code>chatgpt.com</code> or <code>claude.ai</code> in the remote-server form below; those are assistant websites, not MCP servers.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <code className="min-w-0 flex-1 break-all rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100">
+            {leonardXMcpEndpoint || 'https://your-leonardx-domain.example/mcp'}
+          </code>
+          <button
+            type="button"
+            disabled={!leonardXMcpEndpoint}
+            onClick={() => void (async () => {
+              try {
+                await navigator.clipboard.writeText(leonardXMcpEndpoint);
+                setNotice('LeonardX MCP endpoint copied. Add it in ChatGPT or Claude connector settings.');
+              } catch {
+                setError('Copy failed. Select and copy the LeonardX MCP endpoint manually.');
+              }
+            })()}
+            className="rounded-lg border border-white/15 px-3 py-2 text-sm disabled:opacity-50"
+          >
+            Copy endpoint
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-zinc-500">The assistant will request account access through LeonardX OAuth. Choose read-only or project write access on the approval screen.</p>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Remote MCP connections</h2>
@@ -100,9 +137,19 @@ export function McpConnectionManager() {
       </div>
 
       <form onSubmit={addServer} className="mt-5 grid gap-3 md:grid-cols-2">
-        <input required maxLength={80} value={name} onChange={event => setName(event.target.value)} placeholder="Connection name" className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm" />
-        <input required type="url" value={endpoint} onChange={event => setEndpoint(event.target.value)} placeholder="https://mcp.example.com/endpoint" className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm" />
-        <input type="password" autoComplete="new-password" maxLength={8192} value={bearerToken} onChange={event => setBearerToken(event.target.value)} placeholder="Optional bearer credential" className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm md:col-span-2" />
+        <label className="grid gap-1 text-xs text-zinc-400">
+          Connection name
+          <input required maxLength={80} value={name} onChange={event => setName(event.target.value)} placeholder="Connection name" className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" />
+        </label>
+        <label className="grid gap-1 text-xs text-zinc-400">
+          Remote MCP server endpoint
+          <input required type="url" value={endpoint} onChange={event => setEndpoint(event.target.value)} placeholder="https://mcp.example.com/endpoint" aria-describedby="mcp-remote-endpoint-help" className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" />
+          <span id="mcp-remote-endpoint-help" className="text-[11px] leading-5 text-zinc-500">Enter a URL supplied by an MCP server provider. It must use HTTPS and its hostname must be operator-allowlisted.</span>
+        </label>
+        <label className="grid gap-1 text-xs text-zinc-400 md:col-span-2">
+          Optional bearer credential
+          <input type="password" autoComplete="new-password" maxLength={8192} value={bearerToken} onChange={event => setBearerToken(event.target.value)} placeholder="Bearer credential (optional)" className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" />
+        </label>
         <button disabled={busy} className="inline-flex w-fit items-center gap-2 rounded-lg bg-[var(--gold)] px-4 py-2 text-sm font-semibold text-black disabled:opacity-50">
           <Plus size={15} /> Discover and add server
         </button>

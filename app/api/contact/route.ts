@@ -1,32 +1,157 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { validateContactSubmission } from '@/lib/contact-form';
+import { enforceIpRateLimit } from '@/lib/rate-limit';
 import { sendSmtpMail } from '@/lib/smtp';
 
 export const runtime = 'nodejs';
 
+async function readBoundedBody(request: NextRequest, maxBytes: number) {
+  const reader = request.body?.getReader();
+  if (!reader) return '';
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let body = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        body += decoder.decode();
+        return body;
+      }
+      bytesRead += value.byteLength;
+      if (bytesRead > maxBytes) {
+        await reader.cancel();
+        throw new Error('contact_body_too_large');
+      }
+      body += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+async function notifyContact(data: {
+  name: string;
+  email: string;
+  service: string;
+  message: string;
+}): Promise<boolean> {
+  const destination = process.env.CONTACT_EMAIL || process.env.OWNER_EMAIL;
+  if (!destination) return false;
+  const text = [
+    'New LeonardX contact message',
+    '',
+    `Name: ${data.name}`,
+    `Email: ${data.email}`,
+    `Service: ${data.service}`,
+    '',
+    'Message:',
+    data.message,
+  ].join('\n');
+
+  const smtpConfigured = Boolean(
+    process.env.SMTP_HOST &&
+    process.env.SMTP_USER &&
+    process.env.SMTP_PASS &&
+    process.env.SMTP_FROM,
+  );
+  if (smtpConfigured) {
+    try {
+      if (await sendSmtpMail({
+        to: destination,
+        from: process.env.SMTP_FROM,
+        subject: `New LeonardX contact: ${data.name}`,
+        text,
+      })) return true;
+    } catch {
+      console.error('Contact email SMTP delivery failed.');
+    }
+  }
+
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.CONTACT_FROM_EMAIL;
+  if (!apiKey || !from) return false;
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from,
+        to: [destination],
+        reply_to: data.email,
+        subject: `New LeonardX contact: ${data.name}`,
+        text,
+      }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) {
+      console.error(`Contact email Resend delivery failed with status ${response.status}.`);
+      return false;
+    }
+    return true;
+  } catch {
+    console.error('Contact email Resend delivery failed.');
+    return false;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const name = String(body.name || '').trim();
-    const email = String(body.email || '').trim();
-    const phone = String(body.phone || '').trim();
-    const message = String(body.message || '').trim();
-    if (!name || !email || !phone || !message) {
-      return NextResponse.json({ error: 'Name, email, phone and message are required.' }, { status: 400 });
+    if (!request.headers.get('content-type')?.toLowerCase().includes('application/json')) {
+      return NextResponse.json({ error: 'Send the contact form as JSON.' }, { status: 415 });
+    }
+    if (Number(request.headers.get('content-length') || 0) > 16_384) {
+      return NextResponse.json({ error: 'The contact message is too large.' }, { status: 413 });
+    }
+    if (!supabase) {
+      return NextResponse.json({
+        error: 'Contact submissions are unavailable. Configure Supabase before accepting messages.',
+      }, { status: 503 });
     }
 
-    if (supabase) {
-      const { error } = await supabase.from('contacts').insert({ name, email, phone, message });
-      if (error) throw error;
+    const limited = await enforceIpRateLimit(request, 'public-contact', 5, 3600);
+    if (limited) return limited;
+
+    let body: unknown;
+    try {
+      body = JSON.parse(await readBoundedBody(request, 16_384));
+    } catch (error) {
+      if (error instanceof Error && error.message === 'contact_body_too_large') {
+        return NextResponse.json({ error: 'The contact message is too large.' }, { status: 413 });
+      }
+      return NextResponse.json({ error: 'Send a valid contact form submission.' }, { status: 400 });
     }
-    const destination = process.env.CONTACT_EMAIL || process.env.OWNER_EMAIL;
-    let emailSent = false;
-    if (destination && process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.SMTP_FROM) {
-      try { emailSent = await sendSmtpMail({ to: destination, from: process.env.SMTP_FROM, subject: `New website contact: ${name}`, text: `New contact message\n\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\n\nMessage:\n${message.slice(0, 12000)}` }); } catch { emailSent = false; }
+    const validation = validateContactSubmission(body);
+    if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
+
+    const { name, email, service, message } = validation.data;
+    const { error: saveError } = await supabase.from('contacts').insert({
+      name,
+      email,
+      phone: '',
+      message: `Service requested: ${service}\n\n${message}`,
+    });
+    if (saveError) {
+      console.error('Contact message could not be saved.');
+      return NextResponse.json({
+        error: 'Your message could not be saved. Please try again shortly.',
+      }, { status: 503 });
     }
-    return NextResponse.json({ ok: true, saved: Boolean(supabase), emailSent, notification: emailSent ? 'sent' : 'optional_email_not_configured_or_failed' });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Contact submission failed.';
-    return NextResponse.json({ error: message }, { status: 500 });
+
+    const emailSent = await notifyContact({ name, email, service, message });
+    return NextResponse.json({
+      ok: true,
+      saved: true,
+      emailSent,
+      notification: emailSent ? 'sent' : 'not_configured_or_failed',
+    }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
+  } catch {
+    return NextResponse.json({
+      error: 'Contact submission could not be completed. Please try again.',
+    }, { status: 503 });
   }
 }

@@ -1,11 +1,11 @@
 import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { adminSupabase } from '@/lib/auth';
+import { adminSupabase, isPlatformOwner } from '@/lib/auth';
 import { hashSecret } from '@/lib/api-security';
 import { hasScope, type ApiScope } from '@/lib/api-keys-core';
 import { getApiPlan } from '@/lib/api-plan-catalog';
 
-export type ApiContext = { userId: string; keyId: string; scopes: string[]; requestId: string; usageId?: string; reservedCredits?: number };
+export type ApiContext = { userId: string; keyId: string; scopes: string[]; requestId: string; owner: boolean; usageId?: string; reservedCredits?: number };
 
 const fail = (requestId: string, code: string, message: string, status: number, retryAfter?: number) => {
   const headers: Record<string, string> = { 'X-Request-ID': requestId, 'Cache-Control': 'no-store' };
@@ -27,22 +27,28 @@ export async function authenticateApiKey(req: NextRequest, requiredScope: ApiSco
   // Credential, project, usage, and model-execution access are separate concerns.
   // An unpaid key may inspect account metadata and choose a plan; only billable
   // inference calls reserve credits through authorizeBillableUsage below.
-  const { data: subscription } = await db.from('api_plan_subscriptions')
-    .select('plan_key,status,current_period_end')
-    .eq('user_id', data.user_id).eq('status', 'active').gt('current_period_end', new Date().toISOString())
-    .order('current_period_end', { ascending: false }).limit(1).maybeSingle();
-  const plan = subscription ? getApiPlan(subscription.plan_key) : getApiPlan('developer');
-  const planRpm = plan && 'rpm' in plan ? plan.rpm : 5;
+  const { data: profile } = await db.from('profiles').select('role,email').eq('id', data.user_id).maybeSingle();
+  const owner = isPlatformOwner(profile);
+  let planRpm = 2_147_483_647;
+  if (!owner) {
+    const { data: subscription } = await db.from('api_plan_subscriptions')
+      .select('plan_key,status,current_period_end')
+      .eq('user_id', data.user_id).eq('status', 'active').gt('current_period_end', new Date().toISOString())
+      .order('current_period_end', { ascending: false }).limit(1).maybeSingle();
+    const plan = subscription ? getApiPlan(subscription.plan_key) : getApiPlan('developer');
+    planRpm = plan && 'rpm' in plan ? plan.rpm : 5;
+  }
   const { data: rl, error: rlError } = await db.rpc('consume_api_rate_limit', { p_key_id: data.id, p_limit: planRpm, p_window_seconds: 60 });
   if (rlError) return fail(requestId, 'RATE_LIMIT_UNAVAILABLE', 'API rate limiting is temporarily unavailable.', 503, 5);
   if (rl === false) return fail(requestId, 'RATE_LIMITED', 'API rate limit exceeded. Try again later.', 429, 60);
 
   await db.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', data.id);
-  return { userId: data.user_id, keyId: data.id, scopes, requestId };
+  return { userId: data.user_id, keyId: data.id, scopes, requestId, owner };
 }
 
 /** Atomically reserves credits only for billable model operations. */
 export async function authorizeBillableUsage(ctx: ApiContext, credits: number) {
+  if (ctx.owner) return { ok: true as const, ownerBypass: true as const };
   const requestId = ctx.requestId;
   const safeCredits = Math.max(1, Math.min(100, Math.ceil(credits)));
   const db = adminSupabase();

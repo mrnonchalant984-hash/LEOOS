@@ -9,9 +9,8 @@ export async function GET(req: NextRequest) {
   const includeAll = req.nextUrl.searchParams.get('include') === 'all';
   if (includeAll) {
     const context = await getProfile(req);
-    if (!context || !isPlatformOwner(context.profile) || !context.profile.twofa_verified) {
-      return NextResponse.json({ error: 'Platform owner 2FA access required.' }, { status: 403 });
-    }
+    if (!context || !isPlatformOwner(context.profile)) return NextResponse.json({ error: 'Trusted-registry administration is only available to the platform owner.' }, { status: 403 });
+    if (!context.profile.twofa_verified) return NextResponse.json({ error: 'Complete platform-owner 2FA before accessing trusted-registry administration.' }, { status: 403 });
   }
 
   try {

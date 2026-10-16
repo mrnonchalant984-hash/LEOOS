@@ -20,7 +20,7 @@ const systemSections = [
   { name: 'Visual meeting room', detail: 'Create meetings with real AI responses, transcripts, decisions and action items.', href: '/meeting-room', icon: Video, state: 'Implemented with provider configuration' },
   { name: 'Workflow studio', detail: 'Persistent workflow definitions and run requests.', href: '/workflows', icon: Workflow, state: 'Existing service; worker requires configuration' },
   { name: 'Project management', detail: 'Existing projects, setup flows and project delivery.', href: '/projects', icon: FolderKanban, state: 'Existing service' },
-  { name: 'Developer workspace', detail: 'Open the existing IDE and file workspace.', href: '/ide', icon: Code2, state: 'Existing service' },
+  { name: 'Developer Agent Studio', detail: 'Create private agents with approved read-only MCP tools on a paid Developer API plan.', href: '/developers/agents', icon: Code2, state: 'Paid Developer plan' },
   { name: 'Observability', detail: 'Existing health, logs and service monitoring surfaces.', href: '/observability', icon: Activity, state: 'Existing service' },
   { name: 'Audit logs', detail: 'Review the platform audit view.', href: '/audit', icon: LockKeyhole, state: 'Existing service' },
   { name: 'Integration registry', detail: 'Inspect configured integrations and their connection status.', href: '/integrations', icon: GitBranch, state: 'Existing service' },

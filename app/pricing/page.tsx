@@ -1,33 +1,58 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { formatNairaKobo, freePlan, planConfig, type PaidPlanKey } from "@/lib/pricing";
-const plans = [freePlan, ...Object.values(planConfig)];
+import { createBrowserClient } from "@supabase/ssr";
+import { ArrowRight, Check, ShieldCheck } from "lucide-react";
+import {
+  BILLING_PERIODS,
+  formatNairaKobo,
+  freePlan,
+  planConfig,
+  PUBLIC_PAID_PLAN_KEYS,
+  publicPlanToInternal,
+  type BillingPeriod,
+  type PublicPaidPlanKey,
+} from "@/lib/pricing";
+
 const featureLabels: Record<string, string> = {
-  chat: "Leo AI",
+  chat: "Leo AI workspace",
   "file-review": "Project file review",
-  "image-generation": "Image and visual generation",
+  "image-generation": "Image generation",
   "code-review": "Code review",
-  "website-builder": "Website building",
-  "web-app-builder": "Web app building",
-  "saas-builder": "SaaS building",
-  voice: "Leo voice",
-  "agent-access": "Manual AI agent selection",
-  "video-generation": "AI video generation (credit-priced)",
-  "browser-automation": "Leo Workspace browser automation",
+  "website-builder": "Website builder",
+  "web-app-builder": "Web app builder",
+  "saas-builder": "SaaS builder",
+  voice: "Voice interaction",
+  "agent-access": "AI agent access",
+  "video-generation": "AI video generation",
+  "browser-automation": "Browser automation",
   "advertising-studio": "Advertising Studio",
 };
+
+const periodLabels: Record<BillingPeriod, string> = {
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  yearly: "Yearly",
+};
+
+const periodMonths: Record<BillingPeriod, number> = {
+  monthly: 1,
+  quarterly: 3,
+  yearly: 12,
+};
+
 export default function Pricing() {
   const router = useRouter();
-  const [period, setPeriod] = useState<"monthly" | "quarterly" | "yearly">(
-    "monthly",
-  );
+  const [period, setPeriod] = useState<BillingPeriod>("monthly");
   const [prices, setPrices] = useState<Record<string, number | null>>({});
   const [priceState, setPriceState] = useState<"loading" | "ready" | "error">("loading");
-  const [loading, setLoading] = useState("");
+  const [authenticated, setAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [loading, setLoading] = useState<PublicPaidPlanKey | "free" | "">("");
   const [purchaseError, setPurchaseError] = useState("");
+
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/pricing", { cache: "no-store", signal: controller.signal })
@@ -49,124 +74,260 @@ export default function Pricing() {
           setPriceState("error");
         }
       });
+
+    fetch("/api/auth/me", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Account state could not be checked.");
+        return response.json();
+      })
+      .then((data) => setAuthenticated(data.authenticated === true))
+      .catch(() => {
+        if (!controller.signal.aborted) setAuthenticated(false);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setAuthChecked(true);
+      });
+
     return () => controller.abort();
   }, []);
-  async function pay(plan: PaidPlanKey) {
+
+  async function pay(plan: PublicPaidPlanKey) {
     setLoading(plan);
     setPurchaseError("");
     try {
-      const supa = (await import("@supabase/ssr")).createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      );
-      const { data } = await supa.auth.getSession();
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error("Authentication is not configured. Please contact support.");
+      }
+      const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
       if (!data.session) {
-        router.push("/auth");
+        router.push(`/auth?next=${encodeURIComponent("/pricing")}`);
         return;
       }
-      const r = await fetch("/api/payment/initialize", {
+      const response = await fetch("/api/payment/initialize", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${data.session.access_token}`,
         },
-        body: JSON.stringify({
-          plan,
-          billing_period: period,
-          callback_url: `${location.origin}/payment/callback`,
-        }),
+        body: JSON.stringify({ plan, billing_period: period }),
       });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || typeof d.authorization_url !== "string") {
-        throw new Error(d.error || "Payment could not be started. Please try again.");
+      const result = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        router.push(`/auth?next=${encodeURIComponent("/pricing")}`);
+        return;
       }
-      window.location.assign(d.authorization_url);
+      if (!response.ok || typeof result.authorization_url !== "string") {
+        throw new Error(result.error || "Payment could not be started. Please try again.");
+      }
+      window.location.assign(result.authorization_url);
     } catch (error) {
-      setPurchaseError(error instanceof Error ? error.message : "Payment could not be started. Please try again.");
+      setPurchaseError(error instanceof Error
+        ? error.message
+        : "Payment could not be started. Please try again.");
     } finally {
       setLoading("");
     }
   }
+
+  const displayedPeriod = period === "monthly"
+    ? "Billed monthly"
+    : period === "quarterly" ? "Billed every 3 months" : "Billed yearly";
+
   return (
-    <main className="pricing-page mx-auto max-w-6xl px-4 py-16">
-      <div className="pricing-intro max-w-3xl">
-        <p className="text-sm font-bold text-yellow-300">LEO PLANS <span>· SIMPLE, TRANSPARENT, PREPAID</span></p>
-        <h1 className="mt-3 text-4xl font-black sm:text-6xl">
-          Simple plans that grow with you.
+    <main className="pricing-page mx-auto max-w-7xl px-4 py-14 sm:py-20">
+      <header className="mx-auto max-w-3xl text-center">
+        <p className="text-xs font-bold uppercase tracking-[.2em] text-zinc-400">
+          LeonardX plans <span aria-hidden="true">·</span> prepaid, transparent pricing
+        </p>
+        <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-6xl">
+          Build at your pace.
         </h1>
-        <p className="mt-4 text-zinc-400">
-          Your plan controls project types and build capacity. Hosting is separate after each project’s 90-day trial.
+        <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-zinc-300 sm:text-lg">
+          Choose the project capacity and tools that fit your work. Your plan is prepaid for the selected period and never auto-renews.
         </p>
-        <p className="mt-3 text-sm text-zinc-500">
-          Plans are prepaid for the selected period and do not automatically renew. Choose the period that works for you.
-        </p>
-        <p className="mt-3 text-sm text-amber-200/80">
-          Websites, web apps, and SaaS projects are available according to each plan’s listed limits.
-        </p>
-        <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 text-sm text-zinc-300">
-          <p className="font-semibold text-white">50 welcome credits for new accounts</p>
-          <p className="mt-1">Receive this one-time welcome bonus when you join. Your plan’s included image allowance is shown on each plan card.</p>
+        <div className="mt-6 inline-flex items-center gap-2 text-sm text-zinc-400">
+          <ShieldCheck aria-hidden="true" size={16} />
+          Secure checkout with Paystack. Plan access follows verified payment.
         </div>
-      </div>
-      <div className="pricing-toggle mt-8 inline-flex rounded-xl border border-zinc-800 bg-zinc-950 p-1" aria-label="Billing period">
-        {(["monthly", "quarterly", "yearly"] as const).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            aria-pressed={period === p}
-            className={`rounded-lg px-4 py-2 text-sm ${period === p ? "active" : ""}`}
-          >
-            {p}
-          </button>
-        ))}
-      </div>
-      {priceState === "loading" && <p className="mt-3 text-xs text-zinc-500" aria-live="polite">Loading current prices…</p>}
-      {priceState === "error" && <p className="mt-3 text-sm text-amber-200" role="alert">We couldn’t load the latest prices. Please refresh the page or contact support.</p>}
-      {purchaseError && <p className="mt-3 text-sm text-red-300" role="alert">{purchaseError}</p>}
-      <p className="mt-3 text-xs text-zinc-500">Quarterly and yearly prices are undiscounted totals. The full amount is charged for the selected period; plans do not auto-renew.</p>
-      <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[.03] p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-white">Developer API billing is separate</p>
-          <p className="mt-1 text-xs leading-5 text-zinc-400">These prices cover Leo AI and project-building subscriptions. API keys, API usage limits, and any future paid API tiers are managed separately.</p>
+
+        <div
+          className="pricing-toggle mx-auto mt-8 inline-flex w-full max-w-md rounded-xl border border-white/10 bg-white/[.03] p-1"
+          role="group"
+          aria-label="Billing period"
+        >
+          {BILLING_PERIODS.map((billingPeriod) => (
+            <button
+              key={billingPeriod}
+              type="button"
+              onClick={() => setPeriod(billingPeriod)}
+              aria-pressed={period === billingPeriod}
+              className={`min-h-11 flex-1 rounded-lg px-3 text-sm font-semibold capitalize transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+                period === billingPeriod
+                  ? "active"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              {periodLabels[billingPeriod]}
+            </button>
+          ))}
         </div>
-        <Link href="/developers/pricing" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-white hover:bg-white/[.06]">Request API access <span aria-hidden="true">→</span></Link>
-      </div>
-      <div className="pricing-grid mt-8 grid gap-5 md:grid-cols-3">
-        {plans.map((p) => {
-          const publicKey = p.key === "unlimited" ? "business" : p.key;
-          const amount = p.key === "free" ? 0 : prices[`${publicKey}_${period}`] ?? prices[`${p.key}_${period}`];
-          const priceAvailable = p.key === "free" || (typeof amount === "number" && Number.isSafeInteger(amount) && amount > 0);
+        <p className="mt-3 text-xs text-zinc-500" aria-live="polite">
+          {displayedPeriod}. The full selected-period amount is charged at checkout.
+        </p>
+      </header>
+
+      {priceState === "loading" && (
+        <p className="mt-8 text-center text-sm text-zinc-400" role="status">
+          Loading current prices…
+        </p>
+      )}
+      {priceState === "error" && (
+        <p className="mx-auto mt-8 max-w-2xl text-center text-sm text-amber-200" role="alert">
+          We couldn’t load current prices. Please refresh the page or contact support.
+        </p>
+      )}
+      {purchaseError && (
+        <p className="mx-auto mt-6 max-w-2xl text-center text-sm text-red-300" role="alert">
+          {purchaseError}
+        </p>
+      )}
+
+      <div className="pricing-grid mx-auto mt-9 grid max-w-6xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {PUBLIC_PAID_PLAN_KEYS.map((publicKey) => {
+          const plan = planConfig[publicPlanToInternal[publicKey]];
+          const amount = prices[`${publicKey}_${period}`];
+          const monthlyAmount = prices[`${publicKey}_monthly`];
+          const priceAvailable = typeof amount === "number" &&
+            Number.isSafeInteger(amount) && amount > 0;
+          const expectedTotal = typeof monthlyAmount === "number"
+            ? monthlyAmount * periodMonths[period]
+            : null;
+          const savings = expectedTotal !== null && priceAvailable
+            ? expectedTotal - amount
+            : 0;
+          const savingsPercent = savings > 0 && expectedTotal
+            ? Math.round((savings / expectedTotal) * 100)
+            : 0;
+          const recommended = publicKey === "standard";
+
           return (
-          <div
-            key={p.key}
-            className={`pricing-card rounded-3xl border border-zinc-800 bg-zinc-950 p-6 ${p.key === "standard" ? "featured" : ""}`}
-          >
-            <div className="pricing-card-top"><span>{p.key === "standard" ? "MOST POPULAR" : p.key === "free" ? "START HERE" : p.key === "unlimited" ? "FOR TEAMS" : "FOR PROFESSIONALS"}</span></div><h2 className="text-xl font-black">{p.name}</h2>
-            <div className="mt-3 text-3xl font-black text-yellow-300">
-              {p.key === "free"
-                ? "\u20A60"
-                : !priceAvailable ? "Price unavailable" : formatNairaKobo(amount as number)}
-            </div>
-            <p className="mt-1 text-xs text-zinc-500">{p.key === "free" ? "Free website tier" : period === "monthly" ? "per month · billed monthly" : `total billed ${period}`}</p>
-            <p className="mt-3 text-sm text-zinc-400">{p.description}</p>
-            <p className="mt-4 text-xs text-zinc-500">{p.limits.maxProjects} projects · {p.limits.monthlyBuilds} builds/month · {p.limits.monthlyImageCredits} image credits/month</p>
-            <ul className="mt-6 space-y-3 text-sm text-zinc-300">
-              {p.features.map((feature) => (
-                <li key={feature}>✓ {featureLabels[feature] || feature}</li>
-              ))}
-              {p.projectTypes.map((type) => <li key={type}>✓ {type.replaceAll("_", " ")} projects</li>)}
-            </ul>
-            {p.key === "free" ? (
-              <Link href="/auth?next=%2Fdashboard" className="mt-7 block rounded-xl bg-yellow-400 px-4 py-3 text-center font-bold text-black">Create free account</Link>
-            ) : (
-              <Button disabled={!priceAvailable || !!loading || priceState !== "ready"} onClick={() => pay(p.key as PaidPlanKey)} className="mt-7 w-full">
-                {loading === p.key ? "Opening payment…" : "Choose " + p.name}
-              </Button>
-            )}
-          </div>
+            <article
+              key={publicKey}
+              className={`pricing-card flex flex-col rounded-2xl border p-6 sm:p-7 ${
+                recommended ? "featured" : ""
+              }`}
+            >
+              <div className="pricing-card-top flex items-center justify-between gap-3">
+                <span>{recommended ? "RECOMMENDED" : "LEONARDX PLAN"}</span>
+                {savingsPercent > 0 && (
+                  <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold tracking-normal text-emerald-200">
+                    Save {savingsPercent}%
+                  </span>
+                )}
+              </div>
+              <h2 className="mt-3 text-2xl font-bold tracking-tight">{plan.name}</h2>
+              <p className="mt-2 min-h-14 text-sm leading-6 text-zinc-400">{plan.description}</p>
+
+              <div className="mt-6">
+                <p className="text-4xl font-black tracking-tight text-white">
+                  {priceState === "loading"
+                    ? "—"
+                    : priceAvailable ? formatNairaKobo(amount) : "Price unavailable"}
+                </p>
+                <p className="mt-2 text-sm text-zinc-400">
+                  {period === "monthly" ? "for 1 month" : `total for ${periodMonths[period]} months`}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">{displayedPeriod}</p>
+              </div>
+
+              <div className="mt-5 grid grid-cols-3 gap-2 border-y border-white/10 py-4 text-center">
+                <div>
+                  <p className="text-lg font-bold text-white">{plan.limits.maxProjects}</p>
+                  <p className="mt-1 text-[11px] text-zinc-500">Projects</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-white">{plan.limits.monthlyBuilds}</p>
+                  <p className="mt-1 text-[11px] text-zinc-500">Builds / mo</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-white">{plan.limits.monthlyImageCredits}</p>
+                  <p className="mt-1 text-[11px] text-zinc-500">Image credits / mo</p>
+                </div>
+              </div>
+
+              <ul className="mt-5 grid flex-1 content-start gap-3 text-sm text-zinc-300">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-2.5">
+                    <Check aria-hidden="true" size={16} className="mt-0.5 shrink-0 text-zinc-100" />
+                    <span>{featureLabels[feature] || feature}</span>
+                  </li>
+                ))}
+                <li className="flex items-start gap-2.5 border-t border-white/10 pt-3 text-zinc-400">
+                  <Check aria-hidden="true" size={16} className="mt-0.5 shrink-0 text-zinc-500" />
+                  <span>{plan.projectTypes.map((type) => type.replaceAll("_", " ")).join(", ")} projects</span>
+                </li>
+              </ul>
+
+              <button
+                type="button"
+                disabled={!priceAvailable || priceState !== "ready" || !!loading || !authChecked}
+                onClick={() => void pay(publicKey)}
+                className="mt-7 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-black transition-colors hover:bg-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading === publicKey
+                  ? "Opening secure checkout…"
+                  : authChecked && !authenticated
+                    ? `Sign in to choose ${plan.name}`
+                    : `Choose ${plan.name}`}
+                {loading !== publicKey && <ArrowRight aria-hidden="true" size={16} />}
+              </button>
+              <p className="mt-3 text-center text-xs text-zinc-500">
+                {authChecked && !authenticated
+                  ? "You’ll sign in before checkout."
+                  : "Payment is verified before plan access is updated."}
+              </p>
+            </article>
           );
         })}
       </div>
+
+      <section className="mx-auto mt-8 max-w-6xl rounded-2xl border border-white/10 bg-white/[.025] p-5 sm:flex sm:items-center sm:justify-between sm:gap-8 sm:p-6">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.16em] text-zinc-400">Start free</p>
+          <h2 className="mt-2 text-xl font-bold">{freePlan.name} plan</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
+            {freePlan.description} Includes {freePlan.limits.maxProjects} project, {freePlan.limits.monthlyBuilds} build per month, and {freePlan.limits.monthlyImageCredits} image credit per month.
+          </p>
+        </div>
+        <Link
+          href="/auth?next=%2Fdashboard"
+          className="mt-5 inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/[.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:mt-0 sm:w-auto"
+        >
+          Create free account <ArrowRight aria-hidden="true" size={16} />
+        </Link>
+      </section>
+
+      <div className="mx-auto mt-7 flex max-w-6xl flex-col gap-4 rounded-2xl border border-white/10 bg-white/[.02] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div>
+          <p className="text-sm font-semibold text-white">Developer API billing is separate</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">
+            These prices cover Leo AI and project-building subscriptions. API keys and API usage are managed separately.
+          </p>
+        </div>
+        <Link
+          href="/developers/pricing"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-white hover:bg-white/[.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          Developer API plans <ArrowRight aria-hidden="true" size={15} />
+        </Link>
+      </div>
+      <p className="mx-auto mt-5 max-w-6xl text-xs leading-5 text-zinc-500">
+        Quarterly and yearly totals are calculated against the configured monthly prices. Any displayed savings are calculated from those current prices. Plans are prepaid, do not auto-renew, and unlock only after Paystack confirms payment. Hosting is separate after each eligible project’s 90-day trial.
+      </p>
     </main>
   );
 }

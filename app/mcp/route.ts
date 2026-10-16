@@ -56,26 +56,44 @@ export async function POST(request: NextRequest) {
     const db = adminSupabase();
     const projects = {
       async getAccountPlan(userId: string) {
-        const [{ data: profile, error: profileError }, { count: projectCount, error: projectError }, { count: buildsUsed, error: buildsError }] = await Promise.all([
+        const [
+          { data: profile, error: profileError },
+          { count: projectCount, error: projectError },
+          { count: buildsUsed, error: buildsError },
+          { count: buildsPending, error: pendingError },
+        ] = await Promise.all([
           db.from('profiles').select('role,email').eq('id', userId).maybeSingle(),
           db.from('website_projects').select('id', { count: 'exact', head: true }).eq('owner_user_id', userId),
           db.from('project_builds').select('id', { count: 'exact', head: true })
             .eq('owner_user_id', userId)
+            .eq('status', 'live')
+            .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+          db.from('project_builds').select('id', { count: 'exact', head: true })
+            .eq('owner_user_id', userId)
+            .in('status', ['building', 'testing', 'deploying'])
             .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
         ]);
-        if (profileError || projectError || buildsError || !profile) {
-          return { data: null, error: profileError || projectError || buildsError || new Error('Account profile is unavailable.') };
+        if (profileError || projectError || buildsError || pendingError || !profile) {
+          return { data: null, error: profileError || projectError || buildsError || pendingError || new Error('Account profile is unavailable.') };
         }
         const plan = await getEffectiveUserPlan(userId, isPlatformOwner(profile));
+        const used = buildsUsed || 0;
+        const pending = buildsPending || 0;
         return {
           data: {
             plan: plan.key,
             project_types: plan.projectTypes,
             projects: { used: projectCount || 0, limit: plan.limits.maxProjects },
-            monthly_builds: { used: buildsUsed || 0, limit: plan.limits.monthlyBuilds },
-            monthly_image_credit_allowance: plan.limits.monthlyImageCredits,
+            monthly_builds: {
+              used,
+              pending,
+              remaining: Math.max(0, plan.limits.monthlyBuilds - used - pending),
+              limit: plan.limits.monthlyBuilds,
+            },
+            model_generation: 'performed by the connected MCP client; no LeonardX model or image-generation credits are used',
             uses_leonardx_ai_credits: false,
-            note: 'Claude or ChatGPT provides model inference. LeonardX MCP tools do not call Leo AI or consume Leo AI credits.',
+            hosting_trial: 'starts after a successful deployment is verified live',
+            note: 'The connected Claude, ChatGPT, or other MCP client provides model inference. LeonardX charges one monthly build allowance only after a successful live deployment.',
           },
           error: null,
         };
@@ -95,6 +113,44 @@ export async function POST(request: NextRequest) {
           .eq('user_id', userId)
           .maybeSingle();
         return { data, error };
+      },
+      async getHostingStatus(userId: string, projectId: string) {
+        const { data: project, error: projectError } = await db.from('website_projects')
+          .select('id,status,live_url')
+          .eq('source_project_id', projectId)
+          .eq('owner_user_id', userId)
+          .maybeSingle();
+        if (projectError || !project) return { data: null, error: projectError || new Error('Project not found.') };
+        const { data: hosting, error: hostingError } = await db.from('hosting_subscriptions')
+          .select('plan,status,starts_at,ends_at,next_renewal_at')
+          .eq('website_project_id', project.id)
+          .maybeSingle();
+        if (hostingError) return { data: null, error: hostingError };
+        if (!hosting) {
+          return {
+            data: {
+              deployment_status: project.status,
+              live_url: project.live_url,
+              trial_started: false,
+              message: 'The hosting trial starts after Vercel confirms a successful live deployment.',
+            },
+            error: null,
+          };
+        }
+        return {
+          data: {
+            deployment_status: project.status,
+            live_url: project.live_url,
+            hosting_plan: hosting.plan,
+            hosting_status: hosting.status,
+            trial_started: hosting.status === 'trial',
+            starts_at: hosting.starts_at,
+            ends_at: hosting.ends_at,
+            next_renewal_at: hosting.next_renewal_at,
+            days_remaining: Math.max(0, Math.ceil((new Date(hosting.ends_at).getTime() - Date.now()) / 86_400_000)),
+          },
+          error: null,
+        };
       },
       async createProject(userId: string, name: string, projectType: ProjectType) {
         const [{ data: profile, error: profileError }, plan] = await Promise.all([

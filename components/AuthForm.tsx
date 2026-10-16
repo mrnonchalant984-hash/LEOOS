@@ -68,9 +68,15 @@ export function AuthForm() {
       if (result.session) {
         const { error } = await supabase.auth.setSession(result.session);
         if (error) throw error;
+        const requestedNext = new URLSearchParams(window.location.search).get('next');
+        const next = requestedNext?.startsWith('/') && !requestedNext.startsWith('//') && !requestedNext.includes('\\') ? requestedNext : '/dashboard';
+        const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (assuranceError) throw assuranceError;
+        const destination = assurance.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2'
+          ? `/auth/mfa?next=${encodeURIComponent(next)}`
+          : next;
         setStatus(mode === 'login' ? 'Signed in successfully. Redirecting to your workspace…' : 'Account created. Redirecting to your workspace…');
-        const next = new URLSearchParams(window.location.search).get('next');
-        window.location.assign(next?.startsWith('/') && !next.startsWith('//') && !next.includes('\\') ? next : '/dashboard');
+        window.location.assign(destination);
       } else {
         setStatus(result.message || 'Your account request was received. Check your email for any required confirmation steps.');
       }

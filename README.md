@@ -1,6 +1,6 @@
-# LEO Portfolio OS — Leo OS upgrade
+# LeonardX — LeoOS platform
 
-This project uses the existing LEO Portfolio OS as its base and adds account-aware Leo OS functionality without replacing the existing portfolio pages or pricing page.
+LeonardX is a software-services and LeoOS product platform with project demos, authenticated workspaces, developer APIs, billing, and integrations.
 
 ## Added/connected
 - Owner/founder enforcement for `leonardudoh5@gmail.com` on the backend.
@@ -18,7 +18,7 @@ This project uses the existing LEO Portfolio OS as its base and adds account-awa
 ## Setup
 1. `npm install`
 2. Copy `.env.example` to `.env.local` and fill the required values.
-3. Run `supabase/schema.sql` in the Supabase SQL editor. It is designed as an additive upgrade and does not intentionally drop existing portfolio tables.
+3. Run `supabase/schema.sql` and the required migrations in the Supabase SQL editor. The schema is additive and does not intentionally drop existing tables.
 4. Configure Paystack webhook to `/api/payment/webhook`.
 5. `npm run build`
 6. Deploy to Vercel with the same environment variables.
@@ -67,7 +67,7 @@ Configure only the credentials you actually use. Google credentials must be a se
 - `/privacy`, `/terms` and `/refund-policy` are linked from the global footer and included in the sitemap.
 - The Privacy and Terms pages describe account data, Leo chat/memory, payments, website services, security and user responsibilities. They should receive a jurisdiction-specific legal review before launch.
 - A global Leo launcher is available on public pages and opens a compact chat panel; `/app` remains the full Leo workspace.
-- The portfolio contains the 12 named demo projects from the Big 12 set with curated Unsplash image URLs. Real project/live URLs can be supplied later without replacing the preview images.
+- The project library presents the 12 named LeoOS demo projects from the Big 12 set with curated Unsplash image URLs. A real project is labelled live only when its deployed URL is configured.
 - Signed-in Leo chats are persisted per user in `chats_v2`. User-approved memories are stored separately in `leo_memories` and can be listed or removed through `/api/memory`.
 - Owner admin 2FA now supports trusted-device cookies. After a successful authenticator verification, the current browser is trusted for up to 365 days for up to 365 days; a new/unrecognized browser must provide the authenticator code.
 
@@ -79,7 +79,7 @@ Configure only the credentials you actually use. Google credentials must be a se
 - Chat history and user-approved Leo memories are stored per authenticated user.
 
 ## Project URL configuration
-The 12 portfolio entries are portfolio records in this LEO OS ZIP, not twelve separate application codebases. Their real source projects are not embedded in this ZIP. A project is only labelled `live` when its real URL is configured. Set the corresponding `NEXT_PUBLIC_PROJECT_*_URL` variable in the deployment environment to connect each real deployed project. Until then the entry is labelled `awaiting URL` rather than being presented as a fake live site.
+The 12 project entries are demo records in this LeoOS application, not twelve separate application codebases. Their real source projects are not embedded in this ZIP. A project is only labelled `live` when its real URL is configured. Set the corresponding `NEXT_PUBLIC_PROJECT_*_URL` variable in the deployment environment to connect each real deployed project. Until then the entry is labelled as a demo or awaiting a live URL, not presented as a real deployment.
 
 Live projects use:
 - `NEXT_PUBLIC_LIVE_QVELI_URL`
@@ -109,6 +109,10 @@ The Video Agent is not available to normal users.
 
 ## Google sign-in and MCP
 
+### Developer Agent Studio
+
+Paid Developer API plans (Builder, Growth, Scale, and contracted Enterprise) include a private Agent Studio at `/developers/agents`. Custom agents store user-authored instructions and may only use tools already connected to that account and approved as read-only. Custom URLs, credentials, write-capable tools, and executable uploads are not supported. Apply `supabase/migrations/20261014120000_developer_custom_agents.sql` before enabling this feature.
+
 ### Google sign-in
 
 Google sign-in is initiated from `/auth` and returns through `/auth/callback`. To enable it:
@@ -127,3 +131,15 @@ The deployed Streamable HTTP endpoint is `https://leoos-omega.vercel.app/mcp`. C
 Claude, ChatGPT, or another connected model supplies its own model inference; these MCP tools do not call Leo AI or consume Leo AI credits. Every write tool requires `confirm: true` and client-side user approval. Build/deploy starts the existing no-cost hosting trial; after the trial, the site may be suspended unless hosting is renewed through the LeonardX account flow. MCP cannot make payments or renew hosting. Project deletion is not available.
 
 For production, configure `MCP_PUBLIC_URL` to the HTTPS origin only, such as `https://leoos-omega.vercel.app` (no `/mcp` path). Leave `MCP_ALLOWED_ORIGINS` blank for server-to-server clients; browser MCP clients that send an `Origin` header need their exact HTTPS origins, comma-separated. External-model project deployments require `GITHUB_TOKEN` and `VERCEL_TOKEN`; they do not require `OPENAI_API_KEY` for inference. Apply the MCP OAuth and rate-limit Supabase migrations before enabling the endpoint, and verify the deployment's OAuth metadata at `/.well-known/oauth-authorization-server`.
+
+### Contact requests
+
+The `/contact` form saves requests to the existing Supabase `contacts` table through `/api/contact`. Configure Supabase and apply the contacts table/policies in `supabase/schema.sql` before accepting production submissions. Email notifications are optional; configure authenticated SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`) or Resend (`RESEND_API_KEY`, `CONTACT_FROM_EMAIL`), plus `CONTACT_EMAIL` or `OWNER_EMAIL` as the destination. If database persistence is unavailable, the form reports an error rather than showing a false success.
+
+### Website audits
+
+The audit page runs Google PageSpeed Insights Lighthouse reports for both mobile and desktop. Configure `PAGESPEED_INSIGHTS_API_KEY` as a server-only deployment variable, with the PageSpeed Insights API enabled in Google Cloud, to improve production quota reliability. Do not use a `NEXT_PUBLIC_` variable for this key.
+
+### Platform owner Developer API access
+
+The configured platform owner (`OWNER_EMAIL` plus the matching owner role in the user's profile) can use product features and Developer API access without a paid subscription, project/build/image plan quotas, or Developer API credits. Owner API requests still pass API-key authentication, tool scopes, audit logging, and the API rate-limit service; no payment or subscription record is fabricated.

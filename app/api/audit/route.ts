@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getProfile } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 import { fetchPublicHtml, PublicSiteFetchError } from '@/lib/public-site-fetch';
+import { PageSpeedInsightsError, runPageSpeedAudit } from '@/lib/page-speed-insights';
 
 export const runtime = 'nodejs';
+export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   const ctx = await getProfile(req);
@@ -23,6 +25,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await fetchPublicHtml(rawUrl);
+    const [mobile, desktop] = await Promise.all([
+      runPageSpeedAudit(result.url, 'mobile', process.env.PAGESPEED_INSIGHTS_API_KEY),
+      runPageSpeedAudit(result.url, 'desktop', process.env.PAGESPEED_INSIGHTS_API_KEY),
+    ]);
     const { html, headers } = result;
     const findings: string[] = [];
     const headerChecks: Array<[string, string]> = [
@@ -49,9 +55,13 @@ export async function POST(req: NextRequest) {
       title,
       metrics: { scripts, images, forms, insecureReferences: insecure },
       security: { https: new URL(result.url).protocol === 'https:', riskyPatterns: risky, findings },
-      note: 'This is a website safety/security heuristic audit, not a full penetration test or malware scan.',
+      lighthouse: { provider: 'Google PageSpeed Insights', mobile, desktop },
+      note: 'Performance, accessibility, best-practices, and SEO scores are from Google Lighthouse. Security checks are heuristics, not a penetration test or malware scan.',
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
+    if (error instanceof PageSpeedInsightsError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode, headers: { 'Cache-Control': 'no-store' } });
+    }
     const status = error instanceof PublicSiteFetchError ? error.statusCode : 502;
     const message = error instanceof PublicSiteFetchError ? error.message : 'The website could not be audited.';
     return NextResponse.json({ error: message }, { status, headers: { 'Cache-Control': 'no-store' } });

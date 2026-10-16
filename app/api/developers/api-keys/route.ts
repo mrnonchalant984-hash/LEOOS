@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminSupabase, getProfile } from '@/lib/auth';
+import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { generateApiKey, parseScopes } from '@/lib/api-keys-core';
 import { hashSecret } from '@/lib/api-security';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
@@ -31,12 +31,16 @@ export async function POST(req: NextRequest) {
   const expiresAt = typeof body.expires_at === 'string' && !Number.isNaN(Date.parse(body.expires_at)) ? new Date(body.expires_at).toISOString() : null;
   // Free accounts can prepare credentials before paying; paid plans raise the key quota.
   const db = adminSupabase();
-  const { data: activePlan, error: planError } = await db.from('api_plan_subscriptions')
-    .select('plan_key').eq('user_id', ctx.user.id).eq('status', 'active').gt('current_period_end', new Date().toISOString())
-    .order('current_period_end', { ascending: false }).limit(1).maybeSingle();
-  if (planError) return NextResponse.json({ error: 'API plan status could not be checked. Please try again.' }, { status: 503 });
-  const entitlements = activePlan ? getApiPlan(activePlan.plan_key) : null;
-  const maxKeys = entitlements && 'maxKeys' in entitlements ? entitlements.maxKeys : 2;
+  const owner = isPlatformOwner(ctx.profile);
+  let maxKeys = Number.MAX_SAFE_INTEGER;
+  if (!owner) {
+    const { data: activePlan, error: planError } = await db.from('api_plan_subscriptions')
+      .select('plan_key').eq('user_id', ctx.user.id).eq('status', 'active').gt('current_period_end', new Date().toISOString())
+      .order('current_period_end', { ascending: false }).limit(1).maybeSingle();
+    if (planError) return NextResponse.json({ error: 'API plan status could not be checked. Please try again.' }, { status: 503 });
+    const entitlements = activePlan ? getApiPlan(activePlan.plan_key) : null;
+    maxKeys = entitlements && 'maxKeys' in entitlements ? entitlements.maxKeys : 2;
+  }
   const { count: activeKeyCount, error: countError } = await db.from('api_keys').select('id', { count: 'exact', head: true }).eq('user_id', ctx.user.id).eq('revoked', false);
   if (countError) return NextResponse.json({ error: 'API key limits could not be checked. Please try again.' }, { status: 503 });
   const isRotatingActiveKey = Boolean(rotateId);

@@ -54,6 +54,7 @@ type ProjectBuilderAction = {
 type Msg = {
   role: "user" | "assistant";
   content: string;
+  selectedToolLabel?: string;
   image?: string;
   video?: string;
   assetId?: string;
@@ -73,7 +74,9 @@ type VoiceStatus =
   | "Reconnecting"
   | "Error"
   | "Ended";
-type OfflineDraft = { text: string; mode: "normal" | "deep" | "tools"; savedAt: string };
+type ToolOption = { name: string; description: string };
+type CustomAgentOption = { id: string; name: string; description: string; allowed_tools: string[] };
+type OfflineDraft = { text: string; mode: "normal" | "deep" | "tools"; selectedToolName?: string; selectedAgentId?: string; savedAt: string };
 const OFFLINE_DRAFT_KEY = "leo_offline_chat_draft_v1";
 const actions = [
   {
@@ -121,6 +124,12 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     [muted, setMuted] = useState(false),
     [voiceLocked, setVoiceLocked] = useState(false);
   const [platformCredits, setPlatformCredits] = useState<number | null>(null);
+  const [toolOptions, setToolOptions] = useState<ToolOption[]>([]);
+  const [customAgentOptions, setCustomAgentOptions] = useState<CustomAgentOption[]>([]);
+  const [selectedTool, setSelectedTool] = useState<ToolOption | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<CustomAgentOption | null>(null);
+  const [toolOptionsError, setToolOptionsError] = useState("");
+  const [loadingToolOptions, setLoadingToolOptions] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memories, setMemories] = useState<MemoryItem[]>([]);
@@ -420,11 +429,12 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     return () => { cancelled = true; controller.abort(); };
   }, [remoteOpen, remoteSessionId, remoteCursor]);
 
-  async function send(text = input, mode: "normal" | "deep" | "tools" = "normal") {
+  async function send(text = input, mode: "normal" | "deep" | "tools" = "normal", attachedTool = selectedTool, attachedAgent = selectedAgent) {
     if (!text.trim() || loading) return;
     const next = text.trim();
+    const effectiveMode = attachedTool || attachedAgent?.allowed_tools.length ? "tools" : mode;
     if (!navigator.onLine) {
-      const draft: OfflineDraft = { text: next, mode, savedAt: new Date().toISOString() };
+      const draft: OfflineDraft = { text: next, mode: effectiveMode, ...(attachedTool ? { selectedToolName: attachedTool.name } : {}), ...(attachedAgent ? { selectedAgentId: attachedAgent.id } : {}), savedAt: new Date().toISOString() };
       try {
         window.localStorage.setItem(OFFLINE_DRAFT_KEY, JSON.stringify(draft));
         setOfflineDraft(draft);
@@ -438,7 +448,9 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     }
     setInput("");
     setMenu(false);
-    setMessages((m) => [...m, { role: "user", content: next }]);
+    setMessages((m) => [...m, { role: "user", content: next, ...((attachedTool || attachedAgent) ? { selectedToolLabel: attachedTool?.name || attachedAgent?.name } : {}) }]);
+    setSelectedTool(null);
+    setSelectedAgent(null);
     setLoading(true);
     setError("");
     try {
@@ -452,13 +464,15 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
         body: JSON.stringify({
           session_id: sidRef.current,
           message: next,
-          mode,
+          mode: effectiveMode,
+          ...(attachedTool ? { tool_name: attachedTool.name } : {}),
+          ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}),
         }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Leo is unavailable");
       setMessages((m) => [...m, { role: "assistant", content: d.reply, projectBuilder: d.projectBuilder }]);
-      if (offlineDraft?.text === next && offlineDraft.mode === mode) {
+      if (offlineDraft?.text === next && offlineDraft.mode === effectiveMode) {
         setOfflineDraft(null);
         window.localStorage.removeItem(OFFLINE_DRAFT_KEY);
       }
@@ -468,6 +482,25 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       );
     } finally {
       setLoading(false);
+    }
+  }
+  async function loadToolOptions() {
+    setLoadingToolOptions(true);
+    setToolOptionsError("");
+    try {
+      const t = await token();
+      const response = await fetch("/api/chat/tools", {
+        headers: { ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+        cache: "no-store",
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Your tools could not be loaded.");
+      setToolOptions(Array.isArray(data.tools) ? data.tools : []);
+      setCustomAgentOptions(Array.isArray(data.agents) ? data.agents : []);
+    } catch (cause) {
+      setToolOptionsError(cause instanceof Error ? cause.message : "Your tools could not be loaded.");
+    } finally {
+      setLoadingToolOptions(false);
     }
   }
   async function generateImage() {
@@ -732,7 +765,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       },
     ],
     [Brain, "Think deeper", () => send(input, "deep")],
-    [Wrench, "Use approved read-only tools", () => send(input, "tools")],
+    [Wrench, "Choose an approved read-only tool", () => { void loadToolOptions(); }],
     [ImageIcon, "Generate image · 1 credit", generateImage],
     [Video, "Generate video", prepareVideo],
     [Sparkles, "Generate 3D visual", () => generateVisual("3d")],
@@ -760,6 +793,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
         >
           <Plus size={20} />
         </button>
+        {(selectedTool || selectedAgent) && <button type="button" onClick={() => { setSelectedTool(null); setSelectedAgent(null); }} aria-label="Remove selected tool or agent" className="flex max-w-[35%] shrink-0 items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-[10px] text-zinc-300"><Wrench size={11}/><span className="truncate">{selectedAgent ? `Agent: ${selectedAgent.name}` : selectedTool?.name}</span><X size={11}/></button>}
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -816,6 +850,24 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
                 <span>{label}</span>
               </button>
             ))}
+          </div>
+          <div className="mt-2 border-t border-white/10 pt-2">
+            {loadingToolOptions ? <p role="status" className="px-3 py-2 text-xs text-zinc-400">Loading your approved tools…</p>
+              : toolOptionsError ? <p role="alert" className="px-3 py-2 text-xs text-red-300">{toolOptionsError}</p>
+                : <div className="max-h-56 space-y-2 overflow-y-auto">
+                  <div>
+                    <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Custom agents</p>
+                    {customAgentOptions.length ? customAgentOptions.map((agent) => <button key={agent.id} type="button" onClick={() => { setSelectedAgent(agent); setSelectedTool(null); setMenu(false); }} className="block w-full rounded-xl px-3 py-2 text-left hover:bg-white/[.07]">
+                      <span className="block text-xs font-semibold text-zinc-200">{agent.name}</span><span className="mt-0.5 block text-[10px] text-zinc-500">{agent.description} · {agent.allowed_tools.length} approved tools</span>
+                    </button>) : <p className="px-3 py-1 text-[10px] text-zinc-600">Paid Developer plan agents appear here.</p>}
+                  </div>
+                  <div className="border-t border-white/10 pt-1">
+                    <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Read-only tools</p>
+                    {toolOptions.length ? toolOptions.map((tool) => <button key={tool.name} type="button" onClick={() => { setSelectedTool(tool); setSelectedAgent(null); setMenu(false); }} className="block w-full rounded-xl px-3 py-2 text-left hover:bg-white/[.07]">
+                      <span className="block text-xs font-semibold text-zinc-200">{tool.name}</span><span className="mt-0.5 block text-[10px] text-zinc-500">{tool.description}</span>
+                    </button>) : <p className="px-3 py-1 text-[10px] text-zinc-600">No approved tools are connected.</p>}
+                  </div>
+                </div>}
           </div>
           <p className="px-3 pb-2 pt-2 text-[10px] text-zinc-600">
             Only capabilities connected to LEO OS are shown.
@@ -962,6 +1014,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
               : "max-w-[92%] rounded-3xl border border-white/10 bg-black/40 p-3"
           }
         >
+          {m.role === "user" && m.selectedToolLabel && <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-black/20 bg-black/10 px-2.5 py-1 text-[11px] font-semibold"><Wrench size={12}/> {m.selectedToolLabel}</p>}
           <div className="whitespace-pre-wrap text-sm leading-6">
             {m.content}
           </div>
@@ -1005,7 +1058,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
         <div className="mx-3 mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100" role="status">
           <div className="min-w-0"><p className="font-semibold">Saved offline — not submitted</p><p className="mt-1 break-words text-xs text-amber-100/70">{offlineDraft.text}</p></div>
           <div className="flex shrink-0 gap-2">
-            <button type="button" disabled={!networkOnline || loading} onClick={() => { const draft = offlineDraft; void send(draft.text, draft.mode); }} className="rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-bold text-black disabled:opacity-40">Send now</button>
+            <button type="button" disabled={!networkOnline || loading} onClick={() => { const draft = offlineDraft; const tool = toolOptions.find((item) => item.name === draft.selectedToolName); const agent = customAgentOptions.find((item) => item.id === draft.selectedAgentId); void send(draft.text, draft.mode, tool || null, agent || null); }} className="rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-bold text-black disabled:opacity-40">Send now</button>
             <button type="button" onClick={() => { setOfflineDraft(null); window.localStorage.removeItem(OFFLINE_DRAFT_KEY); }} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300">Discard</button>
           </div>
         </div>
@@ -1045,7 +1098,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
               <Link href="/templates" title="Explore" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><Compass size={17}/>{sidebarOpen && "Explore"}</Link>
               <Link href="/account" title="Account" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><UserCircle size={17}/>{sidebarOpen && "Account"}</Link>
               <Link href="/pricing" title="Upgrade plan" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><CreditCard size={17}/>{sidebarOpen && "Upgrade plan"}</Link>
-              <Link href="/ide" title="Developer workspace" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>{sidebarOpen && "Developer workspace"}</Link>
+              <Link href="/developers/agents" title="Developer Agent Studio" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>{sidebarOpen && "Agent & Tool Studio"}</Link>
               <button type="button" onClick={() => { setRemoteOpen(true); setMemoryOpen(false); setRemoteStatus(""); }} title="Pair and connect devices" className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>{sidebarOpen && "Remote devices"}</button>
               {sidebarOpen && <p className="px-3 pb-1 pt-2 text-[10px] leading-4 text-zinc-600">Pair your devices securely and exchange workspace messages.</p>}
             </div>
@@ -1073,7 +1126,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
                   <Link href="/templates" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Compass size={17}/>Explore</Link>
                   <Link href="/account" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><UserCircle size={17}/>Account</Link>
                   <Link href="/pricing" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><CreditCard size={17}/>Upgrade plan</Link>
-                  <Link href="/ide" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>Developer workspace</Link>
+                  <Link href="/developers/agents" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>Agent & Tool Studio</Link>
                   <button type="button" onClick={() => { setRemoteOpen(true); setMemoryOpen(false); setRemoteStatus(""); setMobileSidebarOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>Remote devices</button>
                 </div>
               </aside>

@@ -28,6 +28,10 @@ function createReader(overrides = {}) {
       assert.equal(userId, 'authenticated-user');
       return { data: projectId === project.id ? project : null, error: null };
     },
+    async getHostingStatus(userId, projectId) {
+      assert.equal(userId, 'authenticated-user');
+      return { data: projectId === project.id ? { trial_started: true, days_remaining: 90 } : null, error: null };
+    },
     async createProject() { return { data: null, error: null }; },
     async renameProject() { return { data: null, error: null }; },
     async saveProjectFiles() { return { data: null, error: null }; },
@@ -44,7 +48,7 @@ test('Streamable HTTP MCP server initializes, lists tools, and calls a harmless 
   try {
     await client.connect(transport);
     const { tools } = await client.listTools();
-    assert.deepEqual(tools.map(tool => tool.name).sort(), ['get_account_plan', 'get_project_status', 'list_projects']);
+    assert.deepEqual(tools.map(tool => tool.name).sort(), ['get_account_plan', 'get_project_hosting_status', 'get_project_status', 'list_projects']);
     assert.ok(tools.every(tool => tool.annotations?.readOnlyHint === true));
 
     const result = await client.callTool({ name: 'list_projects', arguments: { limit: 10 } });
@@ -65,6 +69,9 @@ test('MCP project status lookup returns only the authenticated user-owned projec
     const result = await client.callTool({ name: 'get_project_status', arguments: { project_id: project.id } });
     assert.equal(result.isError, undefined);
     assert.deepEqual(JSON.parse(result.content[0].text), project);
+    const hosting = await client.callTool({ name: 'get_project_hosting_status', arguments: { project_id: project.id } });
+    assert.equal(hosting.isError, undefined);
+    assert.deepEqual(JSON.parse(hosting.content[0].text), { trial_started: true, days_remaining: 90 });
   } finally {
     await client.close();
   }
@@ -98,6 +105,7 @@ test('MCP write tools require the write scope and explicit confirmation input', 
       'build_and_deploy_project',
       'create_project',
       'get_account_plan',
+      'get_project_hosting_status',
       'get_project_status',
       'list_projects',
       'rename_project',

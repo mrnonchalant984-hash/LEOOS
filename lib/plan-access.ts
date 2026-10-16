@@ -2,7 +2,17 @@ import { adminSupabase } from '@/lib/auth';
 import { getPlan, type PlanKey } from '@/lib/pricing';
 
 export async function getEffectiveUserPlan(userId: string, isOwner = false) {
-  if (isOwner) return { ...getPlan('unlimited'), owner: true };
+  if (isOwner) {
+    return {
+      ...getPlan('unlimited'),
+      owner: true,
+      limits: {
+        maxProjects: Number.MAX_SAFE_INTEGER,
+        monthlyBuilds: 2_147_483_647,
+        monthlyImageCredits: Number.MAX_SAFE_INTEGER,
+      },
+    };
+  }
   const db = adminSupabase();
   const { data } = await db.from('subscriptions')
     .select('plan,status,current_period_end,ends_at')

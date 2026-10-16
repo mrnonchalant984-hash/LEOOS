@@ -21,6 +21,7 @@ export type McpProjectReader = {
   getAccountPlan(userId: string): Promise<{ data: unknown; error: unknown }>;
   createProject(userId: string, name: string, projectType: 'website' | 'web_app' | 'saas'): Promise<{ data: unknown; error: unknown }>;
   renameProject(userId: string, projectId: string, name: string): Promise<{ data: unknown; error: unknown }>;
+  getHostingStatus(userId: string, projectId: string): Promise<{ data: unknown; error: unknown }>;
   saveProjectFiles(userId: string, projectId: string, files: Record<string, string>): Promise<{ data: unknown; error: unknown }>;
   buildAndDeploy(userId: string, projectId: string, brief: string, files: Array<{ path: string; content: string }>): Promise<{ data: unknown; error: unknown }>;
 };
@@ -57,6 +58,17 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
   }, async ({ project_id }) => {
     const { data, error } = await projects.getProject(userId, project_id);
     if (error) return toolError('Project status could not be loaded.');
+    if (!data) return toolError('Project not found.');
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+  });
+  server.registerTool('get_project_hosting_status', {
+    title: 'Check hosting and trial status',
+    description: 'Read the hosting state for a project owned by the authenticated user, including when its hosting trial started and ends. Hosting trials begin only after a deployment is verified live. This tool does not create a trial or make a payment.',
+    inputSchema: { project_id: z.string().uuid() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ project_id }) => {
+    const { data, error } = await projects.getHostingStatus(userId, project_id);
+    if (error) return toolError('Project hosting status could not be loaded.');
     if (!data) return toolError('Project not found.');
     return { content: [{ type: 'text', text: JSON.stringify(data) }] };
   });

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { getProfile, adminSupabase } from '@/lib/auth';
+import { getProfile, adminSupabase, isPlatformOwner } from '@/lib/auth';
 import { getApiPlan, getApiPlanPriceMinor, type ApiPlanCurrency } from '@/lib/api-plan-catalog';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 
@@ -16,6 +16,9 @@ function callbackUrl(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in to purchase an API plan.' }, { status: 401 });
+  if (isPlatformOwner(ctx.profile)) {
+    return NextResponse.json({ owner: true, checkout_required: false, message: 'Platform owner access does not require a paid Developer API plan.' });
+  }
   if (!ctx.user.email) return NextResponse.json({ error: 'An account email is required for checkout.' }, { status: 400 });
   if (!process.env.PAYSTACK_SECRET_KEY) return NextResponse.json({ error: 'API checkout is not configured yet.' }, { status: 503 });
   const limited = await enforceUserRateLimit(ctx.user.id, 'api-plan-checkout', 5, 60);

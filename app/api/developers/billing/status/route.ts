@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProfile, adminSupabase } from '@/lib/auth';
+import { getProfile, adminSupabase, isPlatformOwner } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+  if (isPlatformOwner(ctx.profile)) {
+    return NextResponse.json({ active: true, owner: true, subscription: null, renewalMode: 'none' }, { headers: { 'Cache-Control': 'no-store' } });
+  }
   const { data, error } = await adminSupabase().from('api_plan_subscriptions')
     .select('plan_key,status,currency,monthly_amount_minor,current_period_start,current_period_end,included_credits,credits_remaining')
     .eq('user_id', ctx.user.id).eq('status', 'active').gt('current_period_end', new Date().toISOString())

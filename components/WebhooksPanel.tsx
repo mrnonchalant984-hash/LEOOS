@@ -4,6 +4,12 @@ import { Button } from '@/components/ui/button';
 
 type Endpoint = { id: string; url: string; description: string | null; events: string[]; created_at: string };
 type Delivery = { id: string; event: string; status: string; attempts: number; response_status: number | null; last_error: string | null; created_at: string; next_attempt_at: string | null };
+const EVENT_LABELS: Record<string, string> = {
+  'webhook.test': 'Test delivery',
+  'project.created': 'Project created',
+  'project.deployed': 'Project deployed',
+  'api.usage.completed': 'API usage completed',
+};
 
 export function WebhooksPanel() {
   const [endpoints, setEndpoints] = useState<Endpoint[] | null>(null);
@@ -14,16 +20,21 @@ export function WebhooksPanel() {
   const [note, setNote] = useState('');
   const [open, setOpen] = useState('');
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [availableEvents, setAvailableEvents] = useState<string[]>([]);
+  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
 
   const fetchEndpoints = useCallback(async () => {
     const res = await fetch('/api/developers/webhooks', { cache: 'no-store' });
-    if (!res.ok) return { error: (await res.json().catch(() => ({}))).error || 'Could not load webhooks.', endpoints: [] as Endpoint[] };
-    return { error: '', endpoints: (await res.json()).endpoints || [] };
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: body.error || 'Could not load webhooks.', endpoints: [] as Endpoint[], availableEvents: [] as string[] };
+    return { error: '', endpoints: body.endpoints || [], availableEvents: Array.isArray(body.availableEvents) ? body.availableEvents : [] };
   }, []);
   const load = useCallback(async () => {
     const result = await fetchEndpoints();
     setError(result.error);
     setEndpoints(result.endpoints);
+    setAvailableEvents(result.availableEvents);
+    setSelectedEvents(current => current.length ? current.filter(event => result.availableEvents.includes(event)) : result.availableEvents);
   }, [fetchEndpoints]);
   useEffect(() => {
     let active = true;
@@ -31,6 +42,8 @@ export function WebhooksPanel() {
       if (!active) return;
       setError(result.error);
       setEndpoints(result.endpoints);
+      setAvailableEvents(result.availableEvents);
+      setSelectedEvents(current => current.length ? current.filter(event => result.availableEvents.includes(event)) : result.availableEvents);
     });
     return () => { active = false; };
   }, [fetchEndpoints]);
@@ -41,7 +54,7 @@ export function WebhooksPanel() {
   }
   async function create() {
     setBusy('create'); setError(''); setSecret(''); setNote('');
-    const res = await fetch('/api/developers/webhooks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) });
+    const res = await fetch('/api/developers/webhooks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url, events: selectedEvents }) });
     const body = await res.json().catch(() => ({}));
     setBusy('');
     if (!res.ok) { setError(body.error || 'Could not create the webhook.'); return; }
@@ -75,9 +88,18 @@ export function WebhooksPanel() {
     </div>}
     <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
       <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://example.com/leo-webhook" aria-label="Webhook URL" className="rounded-xl border border-zinc-700 bg-black px-3 py-2 text-sm" />
-      <Button onClick={create} disabled={busy === 'create' || !url.trim()}>{busy === 'create' ? 'Adding…' : 'Add endpoint'}</Button>
+      <Button onClick={create} disabled={busy === 'create' || !url.trim() || !selectedEvents.length}>{busy === 'create' ? 'Adding…' : 'Add endpoint'}</Button>
     </div>
-    <p className="mt-2 text-xs text-zinc-500">HTTPS only, public hosts only. Up to 5 endpoints. Currently available event: <code>webhook.test</code>.</p>
+    <fieldset className="mt-4">
+      <legend className="text-sm font-semibold text-zinc-300">Subscribe to events</legend>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {availableEvents.map(event => <label key={event} className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-300">
+          <input type="checkbox" checked={selectedEvents.includes(event)} onChange={e => setSelectedEvents(current => e.target.checked ? [...current, event] : current.filter(item => item !== event))} />
+          {EVENT_LABELS[event] || event} <code className="text-zinc-500">{event}</code>
+        </label>)}
+      </div>
+    </fieldset>
+    <p className="mt-2 text-xs text-zinc-500">HTTPS only, public hosts only. Up to 5 endpoints. Project and API events are sent when their real operations complete; test delivery is sent only when you request it.</p>
 
     {endpoints === null ? <p className="mt-4 text-zinc-400">Loading…</p> : endpoints.length === 0 ? <p className="mt-4 text-zinc-400">No webhook endpoints yet.</p> : <ul className="mt-4 divide-y divide-zinc-800">
       {endpoints.map(e => <li key={e.id} className="py-3">
