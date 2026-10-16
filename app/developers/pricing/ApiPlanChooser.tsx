@@ -74,6 +74,6 @@ export function ApiPlanChooser() {
         </article>;
       })}
     </div>}
-    {!billingLoading && !billing?.owner && <p className="text-xs leading-5 text-zinc-500">API keys can be created for free, but billable API requests require an active paid plan and available credits. Usage is reconciled after each request using provider-reported token counts; requests pause when available credits run out.</p>}
+    {!billingLoading && !billing?.owner && <p className="text-xs leading-5 text-zinc-500">API keys can be created for free, but billable API requests require an active paid plan and available credits. Credits are reconciled from actual input and output tokens using the published model rates; requests pause when the available balance runs out.</p>}
   </div>;
 }

@@ -17,6 +17,8 @@ test('public model and message endpoints enforce scope, bounded input, active bi
   assert.match(messages, /text\/event-stream/);
   assert.match(messages, /stream_options: \{ include_usage: true \}/);
   assert.match(messages, /completion\.usage/);
+  assert.match(messages, /providerStreamAccepted && auth\.reservedCredits/);
+  assert.match(auth, /!ctx\.providerUsageMeasured/);
   assert.match(auth, /consume_api_request_credit/);
   assert.match(auth, /settle_api_request_credit/);
   const sdk = await read('packages/sdk/src/index.ts');
@@ -29,10 +31,15 @@ test('public model and message endpoints enforce scope, bounded input, active bi
 test('API usage ledger can reconcile reservations and credit metadata endpoints are free', async () => {
   const migration = await read('supabase/migrations/20261013160000_api_inference_metering.sql');
   const catalog = await read('lib/api-plan-catalog.ts');
+  const chat = await read('app/api/chat/route.ts');
   assert.match(migration, /create or replace function public\.settle_api_request_credit/);
   assert.match(migration, /for update/);
-  assert.match(catalog, /API_CREDITS_PER_1000_TOKENS = 1/);
+  assert.match(catalog, /calculateApiCredits/);
   assert.match(catalog, /metadata endpoints do not consume usage credits/i);
+  assert.match(chat, /calculateApiCredits\(customAgentBillingModel, usage\.inputTokens, usage\.outputTokens\)/);
+  assert.match(chat, /if \(!owner\) \{/);
+  assert.match(chat, /isProviderConfigured\('openai'\)/);
+  assert.doesNotMatch(chat, /API_CREDITS_PER_1000_TOKENS/);
 });
 
 test('CLI exposes the public model, chat, and usage commands without a self dependency', async () => {

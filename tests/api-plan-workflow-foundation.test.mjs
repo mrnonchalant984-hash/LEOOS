@@ -1,7 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { API_PLAN_CATALOG, ENTERPRISE_API_PLAN, API_PLAN_CHECKOUT_ENABLED } from '../lib/api-plan-catalog.ts';
+import {
+  API_CREDIT_PROVIDER_COST_USD,
+  API_MODEL_PRICING,
+  API_MODEL_PRICING_REVIEWED_ON,
+  API_PLAN_CATALOG,
+  ENTERPRISE_API_PLAN,
+  API_PLAN_CHECKOUT_ENABLED,
+  calculateApiCredits,
+  getSupportedApiModels,
+  isApiModel,
+} from '../lib/api-plan-catalog.ts';
 
 test('API plans have separate paid tiers and enterprise custom pricing', () => {
   assert.deepEqual(API_PLAN_CATALOG.map(p => p.key), ['developer','builder','growth','scale','business_starter','business_pro','business_scale']);
@@ -15,6 +25,33 @@ test('API plans have separate paid tiers and enterprise custom pricing', () => {
 test('API checkout is enabled and all non-free tiers use monthly subscriptions with included credits', () => {
   assert.equal(API_PLAN_CHECKOUT_ENABLED, true);
   assert.ok(API_PLAN_CATALOG.slice(1).every(p => p.includedCredits > 0));
+});
+
+test('published model prices are costed from official OpenAI standard input/output rates', () => {
+  assert.equal(API_MODEL_PRICING_REVIEWED_ON, '2026-10-16');
+  assert.deepEqual(API_MODEL_PRICING['gpt-4o-mini'], {
+    inputUsdPerMillionTokens: 0.15,
+    outputUsdPerMillionTokens: 0.6,
+  });
+  assert.equal(API_CREDIT_PROVIDER_COST_USD, 0.0006);
+  assert.equal(calculateApiCredits('gpt-4o-mini', 1_000_000, 0), 250);
+  assert.equal(calculateApiCredits('gpt-4o-mini', 0, 1_000_000), 1_000);
+  assert.equal(calculateApiCredits('gpt-4o-mini', 1_000_000, 1_000_000), 1_250);
+  assert.equal(calculateApiCredits('unpriced-model', 1_000_000, 1_000_000), null);
+  assert.deepEqual(getSupportedApiModels('gpt-4o-mini,unpriced-model'), ['gpt-4o-mini']);
+  assert.deepEqual(getSupportedApiModels('unpriced-model'), []);
+  assert.equal(isApiModel('gpt-4o-mini'), true);
+  assert.equal(isApiModel('gpt-4o'), false);
+  assert.ok(calculateApiCredits('gpt-4o-mini', 160_000 + 50 * 16, 4096) <= 100);
+});
+
+test('provider-priced monthly usage remains below each plan price under a conservative NGN FX stress rate', () => {
+  const ngnPerUsdStressRate = 2_500;
+  for (const plan of API_PLAN_CATALOG.slice(1)) {
+    const maximumProviderCostUsd = plan.includedCredits * API_CREDIT_PROVIDER_COST_USD;
+    assert.ok(maximumProviderCostUsd < plan.monthlyUsd, `${plan.key} USD price must exceed its provider cost ceiling`);
+    assert.ok(maximumProviderCostUsd < plan.monthlyNgn / ngnPerUsdStressRate, `${plan.key} NGN price must exceed its provider cost ceiling`);
+  }
 });
 
 test('workflow migration has durable queue leases, idempotency, RLS, and bounded claims', async () => {
@@ -46,9 +83,21 @@ test('customer-facing pages do not expose internal worker or checkout implementa
 test('public API plan endpoint publishes the supported catalog and free-key billing gate', async () => {
   const route = await readFile(new URL('../app/api/v1/billing/plans/route.ts', import.meta.url), 'utf8');
   assert.match(route, /API_PLAN_CATALOG/);
-  assert.match(route, /credits_per_1000_tokens/);
+  assert.match(route, /provider_rates_usd_per_million_tokens/);
+  assert.match(route, /credit_provider_cost_usd/);
   assert.match(route, /active paid plan and available credits/);
   assert.doesNotMatch(route, /checkout_enabled|intended quotas/i);
+});
+
+test('Developer API only exposes models with a reviewed provider rate and charges actual input/output usage', async () => {
+  const models = await readFile(new URL('../app/api/v1/models/route.ts', import.meta.url), 'utf8');
+  const messages = await readFile(new URL('../app/api/v1/messages/route.ts', import.meta.url), 'utf8');
+  const catalog = await readFile(new URL('../lib/api-plan-catalog.ts', import.meta.url), 'utf8');
+  assert.match(models, /getSupportedApiModels/);
+  assert.match(messages, /calculateApiCredits\(model, inputTokenCeiling, maxTokensRaw\)/);
+  assert.match(messages, /inputTokenCeiling = inputBytes \+ messages\.length \* 16/);
+  assert.match(messages, /calculateApiCredits\(model, inputTokens, outputTokens\)/);
+  assert.match(catalog, /requested\.filter\(isApiModel\)/);
 });
 
 test('API key journey keeps free key creation separate from paid execution and offers pricing after copying', async () => {

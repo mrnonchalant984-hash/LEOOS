@@ -1,4 +1,4 @@
-/** Public API plans. Prices and credit conversion must be validated against live provider costs before production launch. */
+/** Developer API tiers; metadata endpoints do not consume usage credits. Provider-cost rates are maintained below. */
 export const API_PLAN_CATALOG = [
   { key: 'developer', audience: 'developer', name: 'Free Developer', monthlyNgn: 0, monthlyUsd: 0, includedCredits: 0, rpm: 5, concurrency: 1, maxKeys: 2, maxProjects: 1, features: ['Create and manage API keys', 'Read documentation and SDK examples', 'No billable API execution until a paid plan is active'] },
   { key: 'builder', audience: 'developer', name: 'Builder', monthlyNgn: 9_900, monthlyUsd: 9, includedCredits: 2_000, rpm: 30, concurrency: 3, maxKeys: 5, maxProjects: 3, features: ['API execution and usage dashboard', '2,000 usage credits each month', 'Custom agents with approved read-only tools', 'Standard support'] },
@@ -17,9 +17,38 @@ export const ENTERPRISE_API_PLAN = {
 export const API_PLAN_CURRENCIES = ['NGN', 'USD'] as const;
 export type ApiPlanCurrency = typeof API_PLAN_CURRENCIES[number];
 export const API_PLAN_BILLING_PERIOD = 'monthly' as const;
-// Model inference is metered from measured provider token usage. Metadata endpoints do not consume usage credits.
-export const API_CREDITS_PER_1000_TOKENS = 1;
 export const API_PLAN_CHECKOUT_ENABLED = true;
+
+export const API_MODEL_PRICING_SOURCE = 'https://developers.openai.com/api/docs/pricing';
+export const API_MODEL_PRICING_REVIEWED_ON = '2026-10-16';
+export const API_CREDIT_PROVIDER_COST_USD = 0.0006;
+export const API_MODEL_PRICING = {
+  'gpt-4o-mini': { inputUsdPerMillionTokens: 0.15, outputUsdPerMillionTokens: 0.6 },
+} as const;
+
+export type ApiModel = keyof typeof API_MODEL_PRICING;
+
+export function isApiModel(model: string): model is ApiModel {
+  return Object.hasOwn(API_MODEL_PRICING, model);
+}
+
+export function getSupportedApiModels(configured = process.env.LEONARDX_API_MODELS): ApiModel[] {
+  const requested = configured === undefined ? ['gpt-4o-mini'] : configured.split(',').map(model => model.trim()).filter(Boolean);
+  return [...new Set(requested.filter(isApiModel))];
+}
+
+export function getApiProviderCostUsd(model: string, inputTokens: number, outputTokens: number) {
+  if (!isApiModel(model)) return null;
+  const pricing = API_MODEL_PRICING[model];
+  const input = Math.max(0, Math.ceil(inputTokens));
+  const output = Math.max(0, Math.ceil(outputTokens));
+  return (input * pricing.inputUsdPerMillionTokens + output * pricing.outputUsdPerMillionTokens) / 1_000_000;
+}
+
+export function calculateApiCredits(model: string, inputTokens: number, outputTokens: number) {
+  const providerCostUsd = getApiProviderCostUsd(model, inputTokens, outputTokens);
+  return providerCostUsd === null ? null : Math.max(1, Math.ceil(providerCostUsd / API_CREDIT_PROVIDER_COST_USD));
+}
 
 export function getApiPlan(key: string) {
   if (key === 'enterprise') return ENTERPRISE_API_PLAN;

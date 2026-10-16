@@ -5,7 +5,16 @@ import { hashSecret } from '@/lib/api-security';
 import { hasScope, type ApiScope } from '@/lib/api-keys-core';
 import { getApiPlan } from '@/lib/api-plan-catalog';
 
-export type ApiContext = { userId: string; keyId: string; scopes: string[]; requestId: string; owner: boolean; usageId?: string; reservedCredits?: number };
+export type ApiContext = {
+  userId: string;
+  keyId: string;
+  scopes: string[];
+  requestId: string;
+  owner: boolean;
+  providerUsageMeasured?: boolean;
+  usageId?: string;
+  reservedCredits?: number;
+};
 
 const fail = (requestId: string, code: string, message: string, status: number, retryAfter?: number) => {
   const headers: Record<string, string> = { 'X-Request-ID': requestId, 'Cache-Control': 'no-store' };
@@ -27,7 +36,8 @@ export async function authenticateApiKey(req: NextRequest, requiredScope: ApiSco
   // Credential, project, usage, and model-execution access are separate concerns.
   // An unpaid key may inspect account metadata and choose a plan; only billable
   // inference calls reserve credits through authorizeBillableUsage below.
-  const { data: profile } = await db.from('profiles').select('role,email').eq('id', data.user_id).maybeSingle();
+  const { data: profile, error: profileError } = await db.from('profiles').select('role,email').eq('id', data.user_id).maybeSingle();
+  if (profileError) return fail(requestId, 'ACCOUNT_STATUS_UNAVAILABLE', 'Account access could not be checked. Please try again shortly.', 503, 5);
   const owner = isPlatformOwner(profile);
   let planRpm = 2_147_483_647;
   if (!owner) {
@@ -50,7 +60,7 @@ export async function authenticateApiKey(req: NextRequest, requiredScope: ApiSco
 export async function authorizeBillableUsage(ctx: ApiContext, credits: number) {
   if (ctx.owner) return { ok: true as const, ownerBypass: true as const };
   const requestId = ctx.requestId;
-  const safeCredits = Math.max(1, Math.min(100, Math.ceil(credits)));
+  const safeCredits = Math.max(1, Math.ceil(credits));
   const db = adminSupabase();
   const { data: subscription, error } = await db.from('api_plan_subscriptions')
     .select('id,plan_key,status,current_period_end,credits_remaining')
@@ -74,12 +84,11 @@ export async function settleBillableUsage(ctx: ApiContext, actualCredits: number
   const db = adminSupabase();
   const { data, error } = await db.rpc('settle_api_request_credit', { p_usage_id: ctx.usageId, p_actual_credits: Math.max(1, Math.ceil(actualCredits)) });
   if (error || data !== true) throw new Error('API usage could not be reconciled.');
-  ctx.reservedCredits = Math.max(1, Math.ceil(actualCredits));
 }
 
 export async function recordApiRequest(ctx: ApiContext, req: NextRequest, statusCode: number, startedAt: number) {
   const db = adminSupabase();
-  if (statusCode >= 500 && ctx.usageId) {
+  if (statusCode >= 500 && ctx.usageId && !ctx.providerUsageMeasured) {
     try { await db.rpc('refund_api_request_credit', { p_usage_id: ctx.usageId }); } catch { /* preserve the original API response */ }
   }
   const route = new URL(req.url).pathname.replace(/\/projects\/[A-Za-z0-9_-]+(?=\/|$)/g, '/projects/:id');

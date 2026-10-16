@@ -14,7 +14,8 @@ import { getEffectiveUserPlan, planAllows } from "@/lib/plan-access";
 import { withOperationalMonitoring } from '@/lib/monitoring';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 import { getActiveDeveloperPlan, getUserDeveloperAgent } from '@/lib/developer-agents';
-import { API_CREDITS_PER_1000_TOKENS } from '@/lib/api-plan-catalog';
+import { calculateApiCredits, isApiModel, type ApiModel } from '@/lib/api-plan-catalog';
+import { isProviderConfigured } from '@/lib/ai/model-catalog';
 export const runtime = "nodejs";
 const PROJECT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -60,12 +61,37 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   return withOperationalMonitoring(req, 'leo.ai.request', async ({ reportFailure }) => {
   let customAgentUsageId: string | null = null;
+  let customAgentReservedCredits: number | null = null;
+  let customAgentBillingModel: ApiModel | null = null;
+  let customAgentProviderStarted = false;
   async function refundCustomAgentUsage() {
     if (!customAgentUsageId) return;
     const usageId = customAgentUsageId;
     customAgentUsageId = null;
     const { error } = await adminSupabase().rpc('refund_api_request_credit', { p_usage_id: usageId });
     if (error) console.error('Custom agent credit refund failed', { usageId });
+  }
+  async function settleCustomAgentUsage(credits: number) {
+    if (!customAgentUsageId) return false;
+    const usageId = customAgentUsageId;
+    try {
+      const { data, error } = await adminSupabase().rpc('settle_api_request_credit', {
+        p_usage_id: usageId,
+        p_actual_credits: credits,
+      });
+      if (error || data !== true) {
+        console.error('Custom agent credit settlement failed; reservation remains held', { usageId, error: error?.message });
+        return false;
+      }
+      customAgentUsageId = null;
+      return true;
+    } catch (error) {
+      console.error('Custom agent credit settlement failed; reservation remains held', {
+        usageId,
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+      return false;
+    }
   }
   try {
     const { session_id, message, mode = "normal", project_id = null, model: requestedModel, tool_name: requestedToolName, custom_agent_id: requestedCustomAgentId } = await req.json();
@@ -87,11 +113,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Choose a valid model from the available model list." }, { status: 400 });
     }
     const ctx = await getProfile(req);
+    const owner = isPlatformOwner(ctx?.profile);
     let customAgent: Awaited<ReturnType<typeof getUserDeveloperAgent>> = null;
     if (requestedCustomAgentId) {
       if (!ctx) return NextResponse.json({ error: "Sign in to use a custom agent." }, { status: 401 });
       try {
-        if (!await getActiveDeveloperPlan(ctx.user.id)) return NextResponse.json({ error: "An active paid Developer API plan is required to use custom agents." }, { status: 403 });
+        if (!owner && !await getActiveDeveloperPlan(ctx.user.id)) return NextResponse.json({ error: "An active paid Developer API plan is required to use custom agents." }, { status: 403 });
         customAgent = await getUserDeveloperAgent(ctx.user.id, requestedCustomAgentId);
       } catch (cause) {
         console.error('Custom agent access check failed', cause instanceof Error ? cause.message : 'Unknown error');
@@ -147,7 +174,6 @@ export async function POST(req: NextRequest) {
       if (memoryError) return NextResponse.json({ error: "Memory is temporarily unavailable. Apply the project-memory migration if needed." }, { status: 503 });
       memories = data || [];
     }
-    const owner = isPlatformOwner(ctx?.profile);
     const requestedProjectType = customAgent ? null : inferProjectType(message);
     let projectBuilder: { projectType: ProjectType; status: string; message: string; href?: string; provider?: string } | undefined;
     let builderContext = "";
@@ -222,6 +248,13 @@ export async function POST(req: NextRequest) {
     let selectedModel = typeof requestedModel === 'string' && requestedModel.trim()
       ? requestedModel.trim()
       : getDefaultTextModel(mode === "deep" ? "reasoning" : "chat");
+    if (customAgent && !owner) {
+      const modelId = selectedModel.startsWith('openai/') ? selectedModel.slice('openai/'.length) : selectedModel;
+      if (!isApiModel(modelId)) {
+        return NextResponse.json({ error: "Custom-agent usage is currently enabled only for OpenAI gpt-4o-mini, the model with verified provider-cost rates." }, { status: 400 });
+      }
+      customAgentBillingModel = modelId;
+    }
     try {
     if (requestedProjectType && projectBuilder) {
       reply = `I can help with a ${requestedProjectType.replaceAll("_", " ")} project. ${projectBuilder.message} I have not created or deployed a project yet.`;
@@ -242,16 +275,23 @@ export async function POST(req: NextRequest) {
         if (!ctx) return NextResponse.json({ error: "Sign in to use a custom agent." }, { status: 401 });
         const inputChars = request.messages.reduce((total, item) => total + item.content.length, 0);
         if (inputChars > 40_000) return NextResponse.json({ error: "Custom-agent requests are limited to 40,000 input characters." }, { status: 413 });
-        const reservedCredits = Math.max(1, Math.min(100, Math.ceil((inputChars + request.maxOutputTokens) / 1000)));
-        const usageId = randomUUID();
-        const { data: reserved, error: reservationError } = await adminSupabase().rpc('consume_api_request_credit', {
-          p_user_id: ctx.user.id,
-          p_usage_id: usageId,
-          p_credits: reservedCredits,
-        });
-        if (reservationError) return NextResponse.json({ error: "Developer-plan usage could not be reserved. Check that API billing migrations are applied." }, { status: 503 });
-        if (reserved !== true) return NextResponse.json({ error: "Your Developer API plan has insufficient usage credits for this agent request." }, { status: 402 });
-        customAgentUsageId = usageId;
+        if (!owner) {
+          if (!customAgentBillingModel) return NextResponse.json({ error: "A provider-priced model is required for custom-agent usage." }, { status: 400 });
+          if (!isProviderConfigured('openai')) return NextResponse.json({ error: "The rated OpenAI provider is not configured for custom-agent usage." }, { status: 503 });
+          const inputTokenCeiling = request.messages.reduce((total, item) => total + new TextEncoder().encode(item.content).byteLength + 16, 0);
+          const reservedCredits = calculateApiCredits(customAgentBillingModel, inputTokenCeiling, request.maxOutputTokens);
+          if (reservedCredits === null) return NextResponse.json({ error: "The selected custom-agent model does not have a verified provider rate." }, { status: 400 });
+          customAgentReservedCredits = reservedCredits;
+          const usageId = randomUUID();
+          const { data: reserved, error: reservationError } = await adminSupabase().rpc('consume_api_request_credit', {
+            p_user_id: ctx.user.id,
+            p_usage_id: usageId,
+            p_credits: reservedCredits,
+          });
+          if (reservationError) return NextResponse.json({ error: "Developer-plan usage could not be reserved. Check that API billing migrations are applied." }, { status: 503 });
+          if (reserved !== true) return NextResponse.json({ error: "Your Developer API plan has insufficient usage credits for this agent request." }, { status: 402 });
+          customAgentUsageId = usageId;
+        }
       }
       if (mode === "tools") {
         if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });
@@ -259,12 +299,19 @@ export async function POST(req: NextRequest) {
         const agentTools = customAgent
           ? available.tools.filter(tool => customAgent.allowed_tools.includes(tool.name))
           : available.tools;
-        if (customAgent?.allowed_tools.length && !agentTools.length) return NextResponse.json({ error: "This agent's approved tools are no longer connected. Update the agent's tool selection." }, { status: 409 });
+        if (customAgent?.allowed_tools.length && !agentTools.length) {
+          await refundCustomAgentUsage();
+          return NextResponse.json({ error: "This agent's approved tools are no longer connected. Update the agent's tool selection." }, { status: 409 });
+        }
         const selectedTool = requestedToolName
           ? agentTools.find(tool => tool.name === requestedToolName)
           : undefined;
-        if (requestedToolName && !selectedTool) return NextResponse.json({ error: "That tool is not available or approved for this account." }, { status: 403 });
+        if (requestedToolName && !selectedTool) {
+          await refundCustomAgentUsage();
+          return NextResponse.json({ error: "That tool is not available or approved for this account." }, { status: 403 });
+        }
         const selectedTools = selectedTool ? [selectedTool] : agentTools;
+        if (customAgent) customAgentProviderStarted = true;
         const response = await generateTextWithTools({
           ...request,
           tools: selectedTools,
@@ -276,6 +323,7 @@ export async function POST(req: NextRequest) {
         usage = response.usage;
         selectedModel = `${response.provider}/${response.model}`;
       } else {
+        if (customAgent) customAgentProviderStarted = true;
         const response = await generateText(request);
         reply = response.text || "I could not generate a reply.";
         usage = response.usage;
@@ -283,7 +331,16 @@ export async function POST(req: NextRequest) {
       }
     }
     } catch (error) {
-      await refundCustomAgentUsage();
+      const providerStatus = error instanceof ModelProviderError
+        ? error.statusCode
+        : typeof error === 'object' && error !== null && 'status' in error && typeof error.status === 'number'
+          ? error.status
+          : null;
+      if (customAgentProviderStarted && customAgentReservedCredits !== null && !(providerStatus !== null && providerStatus >= 400 && providerStatus < 500)) {
+        await settleCustomAgentUsage(customAgentReservedCredits);
+      } else {
+        await refundCustomAgentUsage();
+      }
       reportFailure(error);
       if (error instanceof ModelProviderError) {
         return NextResponse.json({ error: error.message }, { status: error.statusCode });
@@ -291,22 +348,20 @@ export async function POST(req: NextRequest) {
       throw error;
     }
     let customAgentCreditsUsed = 0;
-    if (customAgent) {
-      if (!usage || !customAgentUsageId) {
-        await refundCustomAgentUsage();
-        return NextResponse.json({ error: "The provider did not return measurable token usage. The request was not charged; retry after checking provider configuration." }, { status: 502 });
+    if (customAgent && !owner) {
+      if (!usage || !customAgentBillingModel) {
+        if (!owner && customAgentReservedCredits !== null) await settleCustomAgentUsage(customAgentReservedCredits);
+        return NextResponse.json({ error: "The provider did not return measurable token usage. The request reservation was retained at its maximum amount; retry after checking provider configuration." }, { status: 502 });
       }
-      customAgentCreditsUsed = Math.max(1, Math.ceil(usage.totalTokens / 1000)) * API_CREDITS_PER_1000_TOKENS;
-      const usageId = customAgentUsageId;
-      const { data: settled, error: settlementError } = await adminSupabase().rpc('settle_api_request_credit', {
-        p_usage_id: usageId,
-        p_actual_credits: customAgentCreditsUsed,
-      });
-      if (settlementError || settled !== true) {
-        await refundCustomAgentUsage();
-        return NextResponse.json({ error: "Provider usage could not be reconciled with your Developer plan. The reservation was released; retry after checking account usage." }, { status: 503 });
+      const actualCredits = calculateApiCredits(customAgentBillingModel, usage.inputTokens, usage.outputTokens);
+      if (actualCredits === null) {
+        if (!owner && customAgentReservedCredits !== null) await settleCustomAgentUsage(customAgentReservedCredits);
+        return NextResponse.json({ error: "The provider returned usage without a verified model rate. The request reservation was retained." }, { status: 502 });
       }
-      customAgentUsageId = null;
+      customAgentCreditsUsed = owner ? 0 : actualCredits;
+      if (!owner && !await settleCustomAgentUsage(actualCredits)) {
+        return NextResponse.json({ error: "Provider usage could not be reconciled with your Developer plan. The request reservation remains held pending reconciliation." }, { status: 503 });
+      }
     }
     if (ctx && db && usage) {
       await db
