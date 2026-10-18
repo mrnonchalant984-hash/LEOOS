@@ -11,3 +11,4 @@ packages/sdk/dist/
 
 .vercel
 .env*
+!services/godot-build-service/.env.example

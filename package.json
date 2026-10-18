@@ -33,6 +33,7 @@
     "@vercel/speed-insights": "^2.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "eas-cli": "25.2.0",
     "framer-motion": "^11.18.2",
     "googleapis": "^164.1.0",
     "ipaddr.js": "^2.5.0",

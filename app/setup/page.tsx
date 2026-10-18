@@ -144,11 +144,12 @@ export default function Setup() {
             const provider = providers[value];
             const available = allowedProjectTypes.includes(value);
             const inPlan = planProjectTypes.includes(value);
-            const reason = provider?.status === "not_integrated"
-              ? provider.message
-              : provider?.status === "not_configured"
+            const cloudProject = value === "mobile_app" || value === "game";
+            const reason = !inPlan
+              ? "Not included in this plan"
+              : provider?.status === "not_integrated" || provider?.status === "not_configured"
                 ? provider.message
-                : !inPlan ? "Upgrade plan" : undefined;
+                : undefined;
             return (
               <button
                 key={value}
@@ -158,7 +159,7 @@ export default function Setup() {
                 className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold ${projectType === value ? "border-orange-400 bg-orange-500/10" : "border-white/10 bg-white/[.03]"} disabled:cursor-not-allowed disabled:opacity-40`}
               >
                 <span>{label}</span>
-                {!available && reason && <span className="mt-1 block text-xs font-normal text-zinc-500">{reason}</span>}
+                {((!available && reason) || (available && cloudProject && reason)) && <span className="mt-1 block text-xs font-normal text-zinc-500">{available ? `Drafts are available; ${reason}` : reason}</span>}
               </button>
             );
           })}

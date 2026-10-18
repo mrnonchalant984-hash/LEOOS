@@ -48,11 +48,21 @@ test("web provider requires OpenAI, GitHub, and Vercel configuration", () => {
   }
 });
 
-test("mobile and game providers remain unavailable until adapters exist", () => {
-  assert.equal(getBuilderAvailability("mobile_app").status, "not_integrated");
-  assert.equal(getBuilderAvailability("mobile_app").id, "expo-eas");
-  assert.equal(getBuilderAvailability("game").status, "not_integrated");
-  assert.equal(getBuilderAvailability("game").id, "godot-build-service");
+test("mobile and game providers report not_configured until their credentials exist", () => {
+  const keys = ["EXPO_TOKEN", "GODOT_BUILD_SERVICE_URL", "GODOT_BUILD_SERVICE_TOKEN"];
+  const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    for (const key of keys) delete process.env[key];
+    assert.equal(getBuilderAvailability("mobile_app").status, "not_configured");
+    assert.equal(getBuilderAvailability("mobile_app").id, "expo-eas");
+    assert.equal(getBuilderAvailability("game").status, "not_configured");
+    assert.equal(getBuilderAvailability("game").id, "godot-build-service");
+  } finally {
+    for (const key of keys) {
+      if (original[key] === undefined) delete process.env[key];
+      else process.env[key] = original[key];
+    }
+  }
 });
 
 test("central NGN pricing uses exact undiscounted interval totals and kobo integers", () => {

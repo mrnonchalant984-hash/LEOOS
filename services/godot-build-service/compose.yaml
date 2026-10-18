@@ -1,0 +1,33 @@
+services:
+  godot-build-service:
+    build:
+      context: .
+      args:
+        GODOT_VERSION: 4.7.2
+        GODOT_ENGINE_SHA256: ${GODOT_ENGINE_SHA256:?Set official Godot engine archive checksum}
+        GODOT_TEMPLATES_SHA256: ${GODOT_TEMPLATES_SHA256:?Set SHA-256 of the Windows template range listed in the service README}
+    image: leonardx-godot-build-service:4.7.2
+    restart: unless-stopped
+    init: true
+    mem_limit: 4g
+    cpus: 2
+    pids_limit: 256
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp:unconfined
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    environment:
+      GODOT_BUILD_SERVICE_TOKEN: ${GODOT_BUILD_SERVICE_TOKEN:?Set a random 32+ character service token}
+      GODOT_EXPORT_PRESETS: ${GODOT_EXPORT_PRESETS:-Windows Desktop}
+      GODOT_BUILD_TIMEOUT_SECONDS: 1800
+      GODOT_ARTIFACT_TTL_DAYS: 7
+    volumes:
+      - godot_data:/var/lib/leonardx-godot
+    ports:
+      - "127.0.0.1:8788:8788"
+
+volumes:
+  godot_data:

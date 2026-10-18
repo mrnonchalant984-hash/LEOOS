@@ -1,6 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
+import { buildEngineeringOrchestrationPlan } from './orchestration.ts';
+import { WORKFLOW_STAGE_IDS, type WorkflowStageId, type WorkflowStatus } from '../engineering-workflow.ts';
 
 function toolError(message: string) {
   return { content: [{ type: 'text' as const, text: message }], isError: true };
@@ -18,12 +20,43 @@ export type McpProject = {
 export type McpProjectReader = {
   listProjects(userId: string, limit: number): Promise<{ data: McpProject[] | null; error: unknown }>;
   getProject(userId: string, projectId: string): Promise<{ data: McpProject | null; error: unknown }>;
+  getProjectFiles?(userId: string, projectId: string, paths?: string[]): Promise<{ data: Record<string, string> | null; error: unknown }>;
   getAccountPlan(userId: string): Promise<{ data: unknown; error: unknown }>;
   createProject(userId: string, name: string, projectType: 'website' | 'web_app' | 'saas'): Promise<{ data: unknown; error: unknown }>;
   renameProject(userId: string, projectId: string, name: string): Promise<{ data: unknown; error: unknown }>;
   getHostingStatus(userId: string, projectId: string): Promise<{ data: unknown; error: unknown }>;
   saveProjectFiles(userId: string, projectId: string, files: Record<string, string>): Promise<{ data: unknown; error: unknown }>;
   buildAndDeploy(userId: string, projectId: string, brief: string, files: Array<{ path: string; content: string }>): Promise<{ data: unknown; error: unknown }>;
+  getConfigurationStatus?(userId: string, target?: 'development' | 'preview' | 'production'): Promise<{ data: unknown; error: unknown }>;
+  getEngineeringWorkflowStatus?(userId: string, workflowId?: string): Promise<{ data: unknown; error: unknown }>;
+  getCapabilityAlternatives?(userId: string, budget?: string): Promise<{ data: unknown; error: unknown }>;
+  planEngineeringWorkflow?(userId: string, input: Parameters<typeof buildEngineeringOrchestrationPlan>[0]): Promise<{ data: unknown; error: unknown }>;
+  createEngineeringWorkflow?(userId: string, input: {
+    title: string;
+    mode: 'discovery' | 'autonomous';
+    applicability: Parameters<typeof buildEngineeringOrchestrationPlan>[0];
+    project_id?: string;
+    budget_tier?: string;
+  }): Promise<{ data: unknown; error: unknown }>;
+  advanceEngineeringWorkflow?(userId: string, input: {
+    workflow_id: string;
+    stage_id: WorkflowStageId;
+    status: WorkflowStatus;
+    progress_message?: string;
+    artifacts?: Record<string, unknown>;
+    error?: { code: string; message: string };
+    confirm?: true;
+  }): Promise<{ data: unknown; error: unknown }>;
+  cancelEngineeringWorkflow?(userId: string, workflowId: string): Promise<{ data: unknown; error: unknown }>;
+  submitCloudBuild?(userId: string, input: {
+    project_id: string;
+    provider: 'expo-eas' | 'godot-build-service';
+    platform?: 'android' | 'ios';
+    profile?: 'preview' | 'production';
+    preset?: string;
+    idempotency_key: string;
+  }): Promise<{ data: unknown; error: unknown }>;
+  getCloudBuildStatus?(userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string): Promise<{ data: unknown; error: unknown }>;
 };
 
 export function createUserMcpServer(userId: string, scopes: string[], projects: McpProjectReader) {
@@ -61,6 +94,29 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     if (!data) return toolError('Project not found.');
     return { content: [{ type: 'text', text: JSON.stringify(data) }] };
   });
+  server.registerTool('read_project_files', {
+    title: 'Read files from my project workspace',
+    description: 'Read source files from a project owned by the authenticated account so the connected model can continue editing it. Environment, key, dependency, and generated files are excluded. Use the optional paths filter to request only files relevant to the change.',
+    inputSchema: { project_id: z.string().uuid(), paths: z.array(z.string().min(1).max(240)).max(100).optional() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ project_id, paths }) => {
+    if (!projects.getProjectFiles) return toolError('Project file reading is unavailable in this MCP deployment.');
+    const { data, error } = await projects.getProjectFiles(userId, project_id, paths);
+    if (error) return toolError('Project files could not be loaded. Check that the project belongs to this account.');
+    if (!data) return toolError('Project not found.');
+    return { content: [{ type: 'text', text: JSON.stringify({ project_id, files: data }) }] };
+  });
+  server.registerTool('get_cloud_build_status', {
+    title: 'Get mobile or game build status',
+    description: 'Read a cloud build owned by the authenticated account. Returns provider status and an owner-authorized artifact URL when one is available; does not expose credentials.',
+    inputSchema: { provider: z.enum(['expo-eas', 'godot-build-service']), job_id: z.string().uuid() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ provider, job_id }) => {
+    if (!projects.getCloudBuildStatus) return toolError('Cloud build status is unavailable in this MCP deployment.');
+    const { data, error } = await projects.getCloudBuildStatus(userId, provider, job_id);
+    if (error) return toolError(typeof error === 'string' ? error : 'Cloud build status could not be loaded.');
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+  });
   server.registerTool('get_project_hosting_status', {
     title: 'Check hosting and trial status',
     description: 'Read the hosting state for a project owned by the authenticated user, including when its hosting trial started and ends. Hosting trials begin only after a deployment is verified live. This tool does not create a trial or make a payment.',
@@ -72,8 +128,161 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     if (!data) return toolError('Project not found.');
     return { content: [{ type: 'text', text: JSON.stringify(data) }] };
   });
+  server.registerTool('get_configuration_status', {
+    title: 'Get secure configuration status',
+    description: 'Read whether LeonardX catalog environment variables are configured for a target environment. Returns names and metadata only — never secret values. Prefer the secure configuration UI for credential submission.',
+    inputSchema: { target: z.enum(['development', 'preview', 'production']).optional() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ target }) => {
+    if (!projects.getConfigurationStatus) return toolError('Configuration status is unavailable in this MCP deployment.');
+    const { data, error } = await projects.getConfigurationStatus(userId, target);
+    if (error) return toolError('Configuration status could not be loaded.');
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+  });
+  server.registerTool('get_engineering_workflow_status', {
+    title: 'Get engineering workflow status',
+    description: 'Read the durable autonomous engineering workflow status for the authenticated user, including stage progress backed by persisted events. Does not invent progress percentages.',
+    inputSchema: { workflow_id: z.string().uuid().optional() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ workflow_id }) => {
+    if (!projects.getEngineeringWorkflowStatus) return toolError('Engineering workflow status is unavailable in this MCP deployment.');
+    const { data, error } = await projects.getEngineeringWorkflowStatus(userId, workflow_id);
+    if (error) return toolError('Engineering workflow status could not be loaded.');
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+  });
+  server.registerTool('get_capability_alternatives', {
+    title: 'Explore budget-aware capability alternatives',
+    description: 'List free and paid alternatives for LeonardX capabilities such as contact forms, AI inference, payments, and hosting. Does not purchase services or expose credentials.',
+    inputSchema: { budget: z.enum(['free', 'low', 'moderate', 'professional', 'custom']).optional() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ budget }) => {
+    if (!projects.getCapabilityAlternatives) return toolError('Capability alternatives are unavailable in this MCP deployment.');
+    const { data, error } = await projects.getCapabilityAlternatives(userId, budget);
+    if (error) return toolError('Capability alternatives could not be loaded.');
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+  });
+  server.registerTool('plan_engineering_workflow', {
+    title: 'Plan an ordered engineering workflow',
+    description: 'Read-only orchestration planning for web, SaaS, mobile, game, API, database, testing, and deployment work. Returns applicable stages, the existing LeonardX tools that can perform each stage, provider selection, approval boundaries, and retry rules. It does not modify files, call providers, or claim that work is complete.',
+    inputSchema: {
+      project_type: z.enum(['website', 'web_app', 'saas', 'mobile_app', 'game', 'api']),
+      mode: z.enum(['discovery', 'autonomous']).default('autonomous'),
+      has_repository: z.boolean().default(false),
+      needs_database: z.boolean().default(false),
+      needs_migrations: z.boolean().default(false),
+      needs_deployment: z.boolean().default(false),
+      needs_environment_config: z.boolean().default(false),
+      needs_integrations: z.boolean().default(false),
+      requires_user_approval: z.boolean().default(true),
+      budget_tier: z.enum(['free', 'low', 'moderate', 'professional', 'custom']).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async (input) => {
+    const orchestrationInput = {
+      projectType: input.project_type,
+      mode: input.mode,
+      hasRepository: input.has_repository,
+      needsDatabase: input.needs_database,
+      needsMigrations: input.needs_migrations,
+      needsDeployment: input.needs_deployment,
+      needsEnvironmentConfig: input.needs_environment_config,
+      needsIntegrations: input.needs_integrations,
+      requiresUserApproval: input.requires_user_approval,
+      budgetTier: input.budget_tier,
+    } as const;
+    if (projects.planEngineeringWorkflow) {
+      const result = await projects.planEngineeringWorkflow(userId, orchestrationInput);
+      if (result.error) return toolError('Engineering workflow plan could not be created.');
+      return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
+    }
+    return { content: [{ type: 'text', text: JSON.stringify(buildEngineeringOrchestrationPlan(orchestrationInput)) }] };
+  });
 
   if (writeAccess) {
+    server.registerTool('create_engineering_workflow', {
+      title: 'Create a durable engineering workflow',
+      description: 'Persist an ordered LeonardX engineering workflow for the authenticated account. This creates state only; it does not edit files, apply migrations, spend provider credits, or deploy. Requires explicit user approval and confirm=true.',
+      inputSchema: {
+        title: z.string().trim().min(2).max(160),
+        project_id: z.string().uuid().optional(),
+        mode: z.enum(['discovery', 'autonomous']),
+        applicability: z.object({
+          projectType: z.enum(['website', 'web_app', 'saas', 'mobile_app', 'game', 'api']),
+          mode: z.enum(['discovery', 'autonomous']),
+          hasRepository: z.boolean(),
+          needsDatabase: z.boolean(),
+          needsMigrations: z.boolean(),
+          needsDeployment: z.boolean(),
+          needsEnvironmentConfig: z.boolean(),
+          needsIntegrations: z.boolean(),
+          requiresUserApproval: z.boolean(),
+          budgetTier: z.enum(['free', 'low', 'moderate', 'professional', 'custom']).optional(),
+        }),
+        budget_tier: z.string().trim().max(32).optional(),
+        confirm: z.literal(true),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    }, async ({ title, project_id, mode, applicability, budget_tier }) => {
+      if (!projects.createEngineeringWorkflow) return toolError('Engineering workflow creation is unavailable in this MCP deployment.');
+      const result = await projects.createEngineeringWorkflow(userId, { title, project_id, mode, applicability, budget_tier });
+      if (result.error) return toolError(typeof result.error === 'string' ? result.error : 'Engineering workflow could not be created.');
+      return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
+    });
+
+    server.registerTool('advance_engineering_workflow', {
+      title: 'Advance one engineering workflow stage',
+      description: 'Persist the real result of exactly one current workflow stage. The server rejects skipped or out-of-order stages. Migration and deployment completion require confirm=true and a real external result; reuse the same workflow and stage when safely retrying.',
+      inputSchema: {
+        workflow_id: z.string().uuid(),
+        stage_id: z.string().refine((value): value is WorkflowStageId => WORKFLOW_STAGE_IDS.includes(value as WorkflowStageId)),
+        status: z.enum(['RUNNING', 'WAITING_FOR_USER', 'COMPLETED', 'FAILED', 'BLOCKED']),
+        progress_message: z.string().trim().max(1000).optional(),
+        artifacts: z.record(z.string(), z.unknown()).optional(),
+        error: z.object({ code: z.string().trim().min(1).max(80), message: z.string().trim().min(1).max(1000) }).optional(),
+        confirm: z.literal(true).optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    }, async ({ workflow_id, stage_id, status, progress_message, artifacts, error, confirm }) => {
+      if (!projects.advanceEngineeringWorkflow) return toolError('Engineering workflow advancement is unavailable in this MCP deployment.');
+      const result = await projects.advanceEngineeringWorkflow(userId, {
+        workflow_id, stage_id, status, progress_message, artifacts, error, confirm,
+      });
+      if (result.error) return toolError(typeof result.error === 'string' ? result.error : 'Engineering workflow stage could not be advanced.');
+      return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
+    });
+
+    server.registerTool('cancel_engineering_workflow', {
+      title: 'Cancel an engineering workflow',
+      description: 'Cancel a persisted workflow owned by the authenticated account. Completed stages are retained for audit; no external provider operation is reversed. Requires explicit user approval and confirm=true.',
+      inputSchema: { workflow_id: z.string().uuid(), confirm: z.literal(true) },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    }, async ({ workflow_id }) => {
+      if (!projects.cancelEngineeringWorkflow) return toolError('Engineering workflow cancellation is unavailable in this MCP deployment.');
+      const result = await projects.cancelEngineeringWorkflow(userId, workflow_id);
+      if (result.error) return toolError(typeof result.error === 'string' ? result.error : 'Engineering workflow could not be cancelled.');
+      return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
+    });
+
+    server.registerTool('start_cloud_build', {
+      title: 'Start a mobile or Godot cloud build',
+      description: 'Submit an existing, owned mobile_app or game project to its configured provider. This consumes one existing monthly build allowance and may incur separate Expo/provider fees. Requires explicit user approval and confirm=true. Reuse the same idempotency_key when retrying an uncertain request.',
+      inputSchema: {
+        project_id: z.string().uuid(),
+        provider: z.enum(['expo-eas', 'godot-build-service']),
+        platform: z.enum(['android', 'ios']).optional(),
+        profile: z.enum(['preview', 'production']).optional(),
+        preset: z.string().trim().min(1).max(80).optional(),
+        idempotency_key: z.string().uuid(),
+        confirm: z.literal(true).describe('Set true only after the user explicitly approves using a monthly build and the external provider.'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    }, async ({ project_id, provider, platform, profile, preset, idempotency_key }) => {
+      if (!projects.submitCloudBuild) return toolError('Cloud build submission is unavailable in this MCP deployment.');
+      const { data, error } = await projects.submitCloudBuild(userId, { project_id, provider, platform, profile, preset, idempotency_key });
+      if (error) return toolError(typeof error === 'string' ? error : 'Cloud build could not be submitted.');
+      return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+    });
+
     server.registerTool('create_project', {
       title: 'Create a plan-authorized project',
       description: 'Create a website, web app, or SaaS project under the authenticated user account. Enforces the current LeonardX plan project-type and project-count limits. Requires the user to approve the write and confirm=true. Does not call Leo AI or use Leo AI credits.',

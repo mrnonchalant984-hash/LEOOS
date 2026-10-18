@@ -31,3 +31,17 @@ export async function getEffectiveUserPlan(userId: string, isOwner = false) {
 export function planAllows(plan: ReturnType<typeof getPlan>, feature: string) {
   return plan.features.includes(feature) || plan.features.includes('advanced-coding') && feature === 'coding';
 }
+
+/** Mobile and game plans remain disabled until an operator explicitly opts higher tiers in. */
+export function planAllowsCloudProject(
+  plan: Awaited<ReturnType<typeof getEffectiveUserPlan>>,
+  projectType: 'mobile_app' | 'game',
+  isOwner = false,
+) {
+  if (isOwner) return true;
+  if (plan.key === 'standard' || plan.key === 'free') return false;
+  const variable = projectType === 'mobile_app' ? 'LEONARDX_MOBILE_APP_PLANS' : 'LEONARDX_GAME_PLANS';
+  const configuredPlans = new Set((process.env[variable] || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean));
+  const publicKey = plan.key === 'unlimited' ? 'business' : plan.key;
+  return configuredPlans.has(publicKey);
+}

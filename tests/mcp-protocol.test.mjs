@@ -36,6 +36,21 @@ function createReader(overrides = {}) {
     async renameProject() { return { data: null, error: null }; },
     async saveProjectFiles() { return { data: null, error: null }; },
     async buildAndDeploy() { return { data: null, error: null }; },
+    async getConfigurationStatus() {
+      return { data: { target: 'production', variables: [], missingRequired: [], note: 'Secret values are never returned by MCP tools.' }, error: null };
+    },
+    async getEngineeringWorkflowStatus() {
+      return { data: { workflows: [] }, error: null };
+    },
+    async getCapabilityAlternatives() {
+      return { data: { budget: 'free', requirements: [] }, error: null };
+    },
+    async planEngineeringWorkflow(_userId, input) {
+      return { data: { orderedStages: ['REQUEST_RECEIVED'], projectType: input.projectType }, error: null };
+    },
+    async createEngineeringWorkflow() { return { data: { id: 'workflow' }, error: null }; },
+    async advanceEngineeringWorkflow() { return { data: { status: 'RUNNING' }, error: null }; },
+    async cancelEngineeringWorkflow() { return { data: { status: 'CANCELLED' }, error: null }; },
     ...overrides,
   };
 }
@@ -48,7 +63,18 @@ test('Streamable HTTP MCP server initializes, lists tools, and calls a harmless 
   try {
     await client.connect(transport);
     const { tools } = await client.listTools();
-    assert.deepEqual(tools.map(tool => tool.name).sort(), ['get_account_plan', 'get_project_hosting_status', 'get_project_status', 'list_projects']);
+    assert.deepEqual(tools.map(tool => tool.name).sort(), [
+      'get_account_plan',
+      'get_capability_alternatives',
+      'get_cloud_build_status',
+      'get_configuration_status',
+      'get_engineering_workflow_status',
+      'get_project_hosting_status',
+      'get_project_status',
+      'list_projects',
+      'plan_engineering_workflow',
+      'read_project_files',
+    ]);
     assert.ok(tools.every(tool => tool.annotations?.readOnlyHint === true));
 
     const result = await client.callTool({ name: 'list_projects', arguments: { limit: 10 } });
@@ -88,6 +114,7 @@ test('MCP write tools require the write scope and explicit confirmation input', 
     assert.equal(tools.some(tool => tool.name === 'create_project'), false);
     assert.equal(tools.some(tool => tool.name === 'save_project_files'), false);
     assert.equal(tools.some(tool => tool.name === 'build_and_deploy_project'), false);
+    assert.equal(tools.some(tool => tool.name === 'start_cloud_build'), false);
   } finally {
     await readClient.close();
   }
@@ -101,20 +128,33 @@ test('MCP write tools require the write scope and explicit confirmation input', 
     const { tools } = await writeClient.listTools();
     const create = tools.find(tool => tool.name === 'create_project');
     const deploy = tools.find(tool => tool.name === 'build_and_deploy_project');
+    const cloudBuild = tools.find(tool => tool.name === 'start_cloud_build');
     assert.deepEqual(tools.map(tool => tool.name).sort(), [
+      'advance_engineering_workflow',
       'build_and_deploy_project',
+      'cancel_engineering_workflow',
+      'create_engineering_workflow',
       'create_project',
       'get_account_plan',
+      'get_capability_alternatives',
+      'get_cloud_build_status',
+      'get_configuration_status',
+      'get_engineering_workflow_status',
       'get_project_hosting_status',
       'get_project_status',
       'list_projects',
+      'plan_engineering_workflow',
+      'read_project_files',
       'rename_project',
       'save_project_files',
+      'start_cloud_build',
     ]);
     assert.ok(create);
     assert.ok(deploy);
+    assert.ok(cloudBuild);
     assert.equal(create.inputSchema.properties.confirm.const, true);
     assert.equal(deploy.annotations?.destructiveHint, true);
+    assert.equal(cloudBuild.inputSchema.properties.confirm.const, true);
   } finally {
     await writeClient.close();
   }
@@ -127,6 +167,8 @@ test('MCP write tools dispatch approved project actions to their account-scoped 
     async renameProject(...args) { calls.push(['rename_project', ...args]); return { data: { id: project.id }, error: null }; },
     async saveProjectFiles(...args) { calls.push(['save_project_files', ...args]); return { data: { files_saved: 1 }, error: null }; },
     async buildAndDeploy(...args) { calls.push(['build_and_deploy_project', ...args]); return { data: { status: 'deployed' }, error: null }; },
+    async submitCloudBuild(...args) { calls.push(['start_cloud_build', ...args]); return { data: { status: 'queued' }, error: null }; },
+    async getCloudBuildStatus(...args) { calls.push(['get_cloud_build_status', ...args]); return { data: { status: 'completed' }, error: null }; },
   });
   const transport = new StreamableHTTPClientTransport(new URL('https://mcp.test/mcp'), {
     fetch: async (input, init) => handleUserMcpRequest(new Request(input, init), 'authenticated-user', [MCP_READ_SCOPE, MCP_WRITE_SCOPE], reader),
@@ -139,6 +181,8 @@ test('MCP write tools dispatch approved project actions to their account-scoped 
       ['rename_project', { project_id: project.id, name: 'Renamed workspace', confirm: true }],
       ['save_project_files', { project_id: project.id, files: { 'app/page.tsx': 'export default function Page() {}' }, confirm: true }],
       ['build_and_deploy_project', { project_id: project.id, brief: 'Deploy this site', files: [{ path: 'app/page.tsx', content: 'export default function Page() {}' }], confirm: true }],
+      ['start_cloud_build', { project_id: project.id, provider: 'godot-build-service', preset: 'Linux/X11', idempotency_key: '55555555-5555-4555-8555-555555555555', confirm: true }],
+      ['get_cloud_build_status', { provider: 'godot-build-service', job_id: project.id }],
     ];
     for (const [name, arguments_] of actions) {
       const result = await client.callTool({ name, arguments: arguments_ });
@@ -149,6 +193,8 @@ test('MCP write tools dispatch approved project actions to their account-scoped 
       ['rename_project', 'authenticated-user', project.id, 'Renamed workspace'],
       ['save_project_files', 'authenticated-user', project.id, { 'app/page.tsx': 'export default function Page() {}' }],
       ['build_and_deploy_project', 'authenticated-user', project.id, 'Deploy this site', [{ path: 'app/page.tsx', content: 'export default function Page() {}' }]],
+      ['start_cloud_build', 'authenticated-user', { project_id: project.id, provider: 'godot-build-service', platform: undefined, profile: undefined, preset: 'Linux/X11', idempotency_key: '55555555-5555-4555-8555-555555555555' }],
+      ['get_cloud_build_status', 'authenticated-user', 'godot-build-service', project.id],
     ]);
   } finally {
     await client.close();

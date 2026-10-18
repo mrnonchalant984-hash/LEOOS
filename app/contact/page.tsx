@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight, CheckCircle2, Send } from 'lucide-react';
-import { CONTACT_SERVICES } from '@/lib/contact-form';
+import { CONTACT_DELIVERY_STRATEGIES, CONTACT_SERVICES } from '@/lib/contact-form';
 import { siteData } from '@/data/site';
 
 type SubmissionStatus = { type: 'success' | 'error'; message: string };
@@ -21,28 +21,60 @@ export default function ContactPage() {
     setStatus(null);
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const submission = {
+      name: String(form.get('name') ?? ''),
+      email: String(form.get('email') ?? ''),
+      service: String(form.get('service') ?? ''),
+      message: String(form.get('message') ?? ''),
+    };
 
     try {
       const response = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.get('name'),
-          email: form.get('email'),
-          service: form.get('service'),
-          message: form.get('message'),
-        }),
+        body: JSON.stringify(submission),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || result.ok !== true || result.saved !== true) {
         throw new Error(result.error || 'Your message could not be submitted. Please try again.');
       }
 
+      let emailSent = false;
+      let notificationError = 'Web3Forms is not configured for this deployment.';
+      const accessKey = process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY;
+      if (accessKey) {
+        try {
+          const emailResponse = await fetch('https://api.web3forms.com/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({
+              access_key: accessKey,
+              name: submission.name,
+              email: submission.email,
+              replyto: submission.email,
+              subject: `New LeonardX contact: ${submission.service}`,
+              from_name: 'LeonardX Contact Form',
+              message: `Service requested: ${submission.service}\n\n${submission.message}`,
+            }),
+            signal: AbortSignal.timeout(8_000),
+          });
+          const emailResult = await emailResponse.json().catch(() => ({}));
+          emailSent = emailResponse.ok && emailResult.success === true;
+          if (!emailSent) {
+            notificationError = emailResponse.status === 429
+              ? 'Web3Forms rate-limited the email. Wait one hour before trying again; your message is already saved.'
+              : emailResult.message || `Web3Forms could not send the email (HTTP ${emailResponse.status}).`;
+          }
+        } catch {
+          notificationError = 'Web3Forms could not be reached. Your message is already saved.';
+        }
+      }
+
       setStatus({
         type: 'success',
-        message: result.emailSent === true
+        message: emailSent
           ? 'Your message has been received and LeonardX has been notified by email.'
-          : 'Your message has been saved. Email notification is not available right now.',
+          : `Your message was saved, but the email was not sent. ${notificationError}`,
       });
       formElement.reset();
     } catch (error) {
@@ -69,6 +101,19 @@ export default function ContactPage() {
         <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-zinc-300 sm:text-lg">
           Tell us what you’re working on. We’ll review your message and follow up about the right next step.
         </p>
+        <div className="mx-auto mt-6 max-w-xl rounded-xl border border-white/10 bg-white/[.03] p-4 text-left text-xs leading-5 text-zinc-400">
+          <p className="font-semibold text-zinc-200">Delivery strategies currently supported</p>
+          <ul className="mt-2 list-disc space-y-1 pl-4">
+            {CONTACT_DELIVERY_STRATEGIES.map((strategy) => (
+              <li key={strategy.id}>
+                <span className="text-zinc-200">{strategy.label}.</span> {strategy.limitation}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2">
+            This form saves to the database first. Email notification uses Web3Forms when configured, otherwise SMTP/Resend on the server when available. Saving a message is not the same as verifying email delivery.
+          </p>
+        </div>
       </header>
 
       <form

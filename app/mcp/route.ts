@@ -5,8 +5,36 @@ import { handleUserMcpRequest } from '@/lib/mcp/server';
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import { isPlatformOwner } from '@/lib/auth';
 import type { ProjectType } from '@/lib/pricing';
-import { validateIdeFiles } from '@/lib/ide-files';
+import { normalizeIdePath, validateIdeFiles } from '@/lib/ide-files';
 import { POST as buildDeploy } from '@/app/api/build-deploy/route';
+
+async function invokeCloudBuildRoute(
+  request: NextRequest,
+  provider: 'expo-eas' | 'godot-build-service',
+  method: 'GET' | 'POST',
+  body?: Record<string, unknown>,
+  jobId?: string,
+) {
+  const authorization = request.headers.get('authorization');
+  if (!authorization) return { data: null, error: 'MCP authorization is missing.' };
+  const apiUrl = new URL(`/api/builds/${provider === 'expo-eas' ? 'expo' : 'godot'}${jobId ? `/${encodeURIComponent(jobId)}` : ''}`, request.url);
+  const apiRequest = new NextRequest(apiUrl, {
+    method,
+    headers: { Authorization: authorization, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const response = provider === 'expo-eas'
+    ? await (method === 'POST'
+      ? (await import('@/app/api/builds/expo/route')).POST(apiRequest)
+      : (await import('@/app/api/builds/expo/[id]/route')).GET(apiRequest, { params: Promise.resolve({ id: jobId || '' }) }))
+    : await (method === 'POST'
+      ? (await import('@/app/api/builds/godot/route')).POST(apiRequest)
+      : (await import('@/app/api/builds/godot/[id]/route')).GET(apiRequest, { params: Promise.resolve({ id: jobId || '' }) }));
+  const data = await response.json().catch(() => null);
+  return response.ok
+    ? { data, error: null }
+    : { data: null, error: typeof data?.error === 'string' ? data.error : `Cloud build request failed (${response.status}).` };
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -113,6 +141,39 @@ export async function POST(request: NextRequest) {
           .eq('user_id', userId)
           .maybeSingle();
         return { data, error };
+      },
+      async getProjectFiles(userId: string, projectId: string, requestedPaths?: string[]) {
+        const { data: project, error } = await db.from('projects').select('files')
+          .eq('id', projectId).eq('user_id', userId).maybeSingle();
+        if (error || !project) return { data: null, error: error || new Error('Project not found.') };
+        const files = project.files;
+        if (!validateIdeFiles(files)) return { data: null, error: new Error('Project workspace files are invalid.') };
+        const wanted = requestedPaths ? new Set(requestedPaths) : null;
+        const safeFiles = Object.fromEntries(Object.entries(files).filter(([file]) => {
+          const lower = file.toLowerCase();
+          return (!wanted || wanted.has(file)) && normalizeIdePath(file) === file &&
+            !/(^|\/)\.env(?:\.|$)/i.test(file) &&
+            !/(^|\/)(?:\.git|node_modules|\.next|\.godot)(\/|$)/i.test(file) &&
+            !/\.(?:pem|key|p12|pfx|keystore)$/i.test(lower) &&
+            !/(^|\/)(?:credentials|secrets?)\.(?:json|ya?ml)$/i.test(file);
+        }));
+        return { data: safeFiles, error: null };
+      },
+      async submitCloudBuild(_userId: string, input: {
+        project_id: string;
+        provider: 'expo-eas' | 'godot-build-service';
+        platform?: 'android' | 'ios';
+        profile?: 'preview' | 'production';
+        preset?: string;
+        idempotency_key: string;
+      }) {
+        const body = input.provider === 'expo-eas'
+          ? { project_id: input.project_id, platform: input.platform, profile: input.profile, idempotency_key: input.idempotency_key }
+          : { project_id: input.project_id, preset: input.preset, idempotency_key: input.idempotency_key };
+        return invokeCloudBuildRoute(request, input.provider, 'POST', body);
+      },
+      async getCloudBuildStatus(_userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string) {
+        return invokeCloudBuildRoute(request, provider, 'GET', undefined, jobId);
       },
       async getHostingStatus(userId: string, projectId: string) {
         const { data: project, error: projectError } = await db.from('website_projects')
@@ -248,6 +309,112 @@ export async function POST(request: NextRequest) {
         const resultBody = await result.json().catch(() => null);
         if (!result.ok) return { data: resultBody, error: resultBody?.error || `Deployment request failed with status ${result.status}.` };
         return { data: resultBody, error: null };
+      },
+      async getConfigurationStatus(_userId: string, target: 'development' | 'preview' | 'production' = 'production') {
+        const { buildEnvStatusReport, missingRequiredEnvNames } = await import('@/lib/env-config-catalog');
+        return {
+          data: {
+            target,
+            variables: buildEnvStatusReport(target).map((item) => ({
+              name: item.name,
+              service: item.service,
+              required: item.required,
+              configured: item.configured,
+              validationStatus: item.validationStatus,
+              message: item.message,
+            })),
+            missingRequired: missingRequiredEnvNames(target),
+            note: 'Secret values are never returned by MCP tools.',
+          },
+          error: null,
+        };
+      },
+      async getEngineeringWorkflowStatus(userId: string, workflowId?: string) {
+        const { listEngineeringWorkflows, getEngineeringWorkflow, serializeWorkflow, listWorkflowEvents } = await import('@/lib/engineering-workflow-store');
+        if (workflowId) {
+          const { data, error } = await getEngineeringWorkflow(userId, workflowId);
+          if (error || !data) return { data: null, error: error || 'Workflow not found.' };
+          const events = await listWorkflowEvents(userId, workflowId, 20);
+          return { data: { workflow: serializeWorkflow(data), events: events.data }, error: null };
+        }
+        const { data, error } = await listEngineeringWorkflows(userId, 5);
+        if (error) return { data: null, error };
+        return { data: { workflows: data.map(serializeWorkflow) }, error: null };
+      },
+      async planEngineeringWorkflow(_userId: string, input: Parameters<typeof import('@/lib/mcp/orchestration').buildEngineeringOrchestrationPlan>[0]) {
+        const { buildEngineeringOrchestrationPlan } = await import('@/lib/mcp/orchestration');
+        return { data: buildEngineeringOrchestrationPlan(input), error: null };
+      },
+      async createEngineeringWorkflow(userId: string, input: {
+        title: string;
+        mode: 'discovery' | 'autonomous';
+        applicability: Parameters<typeof import('@/lib/mcp/orchestration').buildEngineeringOrchestrationPlan>[0];
+        project_id?: string;
+        budget_tier?: string;
+      }) {
+        const { insertEngineeringWorkflow, serializeWorkflow } = await import('@/lib/engineering-workflow-store');
+        const result = await insertEngineeringWorkflow({
+          ownerUserId: userId,
+          websiteProjectId: input.project_id || null,
+          mode: input.mode,
+          title: input.title,
+          applicability: input.applicability,
+          budgetTier: input.budget_tier || input.applicability.budgetTier || null,
+        });
+        return { data: result.data ? serializeWorkflow(result.data) : null, error: result.error };
+      },
+      async advanceEngineeringWorkflow(userId: string, input: {
+        workflow_id: string;
+        stage_id: import('@/lib/engineering-workflow').WorkflowStageId;
+        status: import('@/lib/engineering-workflow').WorkflowStatus;
+        progress_message?: string;
+        artifacts?: Record<string, unknown>;
+        error?: { code: string; message: string };
+        confirm?: true;
+      }) {
+        const { advanceEngineeringWorkflowStage, serializeWorkflow } = await import('@/lib/engineering-workflow-store');
+        const destructive = input.stage_id === 'MIGRATION_EXECUTION' || input.stage_id === 'DEPLOYMENT';
+        if (destructive && input.status === 'COMPLETED' && input.confirm !== true) {
+          return { data: null, error: 'Explicit confirmation is required for migration or deployment completion.' };
+        }
+        const result = await advanceEngineeringWorkflowStage(userId, input.workflow_id, input.stage_id, input.status, {
+          progressMessage: input.progress_message,
+          artifacts: input.artifacts,
+          error: input.error,
+        });
+        return { data: result.data ? serializeWorkflow(result.data) : null, error: result.error };
+      },
+      async cancelEngineeringWorkflow(userId: string, workflowId: string) {
+        const { cancelEngineeringWorkflow, serializeWorkflow } = await import('@/lib/engineering-workflow-store');
+        const result = await cancelEngineeringWorkflow(userId, workflowId);
+        return { data: result.data ? serializeWorkflow(result.data) : null, error: result.error };
+      },
+      async getCapabilityAlternatives(_userId: string, budget = 'free') {
+        const {
+          capabilityCatalog,
+          detectExistingCapabilities,
+          recommendOption,
+        } = await import('@/lib/capability-alternatives');
+        const existing = detectExistingCapabilities();
+        const catalog = capabilityCatalog(existing);
+        const tier = ['free', 'low', 'moderate', 'professional', 'custom'].includes(budget) ? budget : 'free';
+        return {
+          data: {
+            budget: tier,
+            requirements: catalog.map((requirement) => {
+              const recommendation = recommendOption(requirement, tier as 'free' | 'low' | 'moderate' | 'professional' | 'custom');
+              return {
+                capability: requirement.capability,
+                label: requirement.label,
+                recommendation: recommendation.option
+                  ? { id: recommendation.option.id, title: recommendation.option.title }
+                  : null,
+                reason: recommendation.reason,
+              };
+            }),
+          },
+          error: null,
+        };
       },
     };
     const response = await handleUserMcpRequest(request, token.userId, token.scopes, projects);

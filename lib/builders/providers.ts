@@ -35,21 +35,25 @@ export function getBuilderAvailability(projectType: ProjectType): BuilderAvailab
   }
 
   if (projectType === "mobile_app") {
+    const requiredEnvironment = ["EXPO_TOKEN"];
+    const missing = requiredEnvironment.filter((key) => !process.env[key]?.trim());
     return {
       id: "expo-eas",
       label: "Expo / EAS",
-      status: "not_integrated",
-      requiredEnvironment: ["EXPO_TOKEN"],
-      message: "Mobile builds are unavailable until an Expo/EAS build adapter is implemented and configured.",
+      status: missing.length ? "not_configured" : "ready",
+      requiredEnvironment,
+      ...(missing.length ? { message: `Configure ${missing.join(", ")} on the server to enable Expo builds.` } : {}),
     };
   }
 
+  const requiredEnvironment = ["GODOT_BUILD_SERVICE_URL", "GODOT_BUILD_SERVICE_TOKEN"];
+  const missing = requiredEnvironment.filter((key) => !process.env[key]?.trim());
   return {
     id: "godot-build-service",
     label: "Godot build service",
-    status: "not_integrated",
-    requiredEnvironment: ["GODOT_BUILD_SERVICE_URL", "GODOT_BUILD_SERVICE_TOKEN"],
-    message: "Game builds are unavailable until a Godot build adapter is implemented and configured.",
+    status: missing.length ? "not_configured" : "ready",
+    requiredEnvironment,
+    ...(missing.length ? { message: `Configure ${missing.join(", ")} on the server to enable Godot builds.` } : {}),
   };
 }
 

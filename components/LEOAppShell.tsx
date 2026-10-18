@@ -30,7 +30,7 @@ function getServerSidebarCollapsed() { return false; }
 type NavItem = readonly [string, string, typeof LayoutDashboard];
 const groups: { label: string; items: NavItem[] }[] = [
   { label: 'Workspace', items: [
-    ['Overview','/dashboard',LayoutDashboard], ['Projects','/projects',FolderKanban], ['AI Studio','/studio',Image], ['Leo workspace','/app',Bot],
+    ['Overview','/dashboard',LayoutDashboard], ['Projects','/projects',FolderKanban], ['Engineering','/engineering',Workflow], ['AI Studio','/studio',Image], ['Leo workspace','/app',Bot],
     ['Agents','/agents',Boxes], ['Workflow studio','/workflows',GitBranch], ['Deployments','/deployments',GitBranch], ['Analytics','/analytics',BarChart3],
     ['Observability','/observability',Activity], ['System status','/status',Gauge],
   ] },

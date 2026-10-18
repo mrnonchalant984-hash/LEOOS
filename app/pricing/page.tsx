@@ -52,6 +52,10 @@ export default function Pricing() {
   const [authChecked, setAuthChecked] = useState(false);
   const [loading, setLoading] = useState<PublicPaidPlanKey | "free" | "">("");
   const [purchaseError, setPurchaseError] = useState("");
+  const [buildCapabilities, setBuildCapabilities] = useState<{
+    mobileApp: { eligiblePlans: string[]; configured: boolean; projectLinkRequired: boolean };
+    game: { eligiblePlans: string[]; configured: boolean };
+  } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -87,6 +91,14 @@ export default function Pricing() {
       .finally(() => {
         if (!controller.signal.aborted) setAuthChecked(true);
       });
+
+    fetch("/api/builds/capabilities", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Build capabilities could not be loaded.");
+        return response.json();
+      })
+      .then((data) => setBuildCapabilities(data))
+      .catch(() => { if (!controller.signal.aborted) setBuildCapabilities(null); });
 
     return () => controller.abort();
   }, []);
@@ -294,6 +306,17 @@ export default function Pricing() {
           );
         })}
       </div>
+
+      <section aria-labelledby="mobile-game-entitlements" className="mx-auto mt-8 max-w-6xl rounded-2xl border border-amber-300/20 bg-amber-300/[.04] p-5 sm:p-6">
+        <h2 id="mobile-game-entitlements" className="text-base font-semibold text-white">Mobile apps and games</h2>
+        <p className="mt-2 text-sm leading-6 text-zinc-300">
+          {buildCapabilities ? (
+            <>
+              Standard Monthly excludes mobile apps and games. Mobile-app access is {buildCapabilities.mobileApp.eligiblePlans.length ? `enabled for ${buildCapabilities.mobileApp.eligiblePlans.join(", ")}` : "not enabled for any listed plan"}; game access is {buildCapabilities.game.eligiblePlans.length ? `enabled for ${buildCapabilities.game.eligiblePlans.join(", ")}` : "not enabled for any listed plan"}. Expo/EAS is {buildCapabilities.mobileApp.configured ? "configured; each app still needs its linked Expo project" : "setup required, including a server-side token and linked Expo project"}. Godot is {buildCapabilities.game.configured ? "configured and responding" : "setup required; its build worker is not currently verified"}.
+            </>
+          ) : "Mobile-app and game capability status is temporarily unavailable. Check with the platform owner before choosing a plan."} No separate LeonardX credit price is configured; enabled cloud builds use the plan’s existing monthly build allowance. Expo, Apple, Google Play, and worker-hosting accounts may have separate provider fees.
+        </p>
+      </section>
 
       <section className="mx-auto mt-8 max-w-6xl rounded-2xl border border-white/10 bg-white/[.025] p-5 sm:flex sm:items-center sm:justify-between sm:gap-8 sm:p-6">
         <div>

@@ -5,6 +5,30 @@ export const CONTACT_SERVICES = [
   "Other",
 ] as const;
 
+/** Supported contact delivery strategies — choose explicitly; do not silently downgrade. */
+export const CONTACT_DELIVERY_STRATEGIES = [
+  {
+    id: 'existing_email',
+    label: 'Existing email provider (Resend or SMTP)',
+    limitation: 'Requires configured SMTP or Resend credentials. Delivery must be verified separately from form save.',
+  },
+  {
+    id: 'web3forms',
+    label: 'Web3Forms',
+    limitation: 'Uses a public access key. Form save can succeed while email delivery fails or is rate-limited.',
+  },
+  {
+    id: 'database_only',
+    label: 'Secure database-backed submission',
+    limitation: 'Persists to Supabase contacts; does not guarantee email delivery.',
+  },
+  {
+    id: 'temporary_no_email',
+    label: 'Temporary form without email delivery',
+    limitation: 'Acceptable only when the user approves that email notification is unavailable.',
+  },
+] as const;
+
 export type ContactService = typeof CONTACT_SERVICES[number];
 
 export type ContactSubmission = {

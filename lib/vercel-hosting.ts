@@ -28,6 +28,59 @@ export async function promoteVercelDeployment(projectIdOrName: string, deploymen
   return vercel(`/v10/projects/${encodeURIComponent(projectIdOrName)}/promote/${encodeURIComponent(deploymentId)}`, { method: 'POST' });
 }
 
+/** List Vercel projects by stable id/name metadata only — never select deploy targets by ambiguous name alone. */
+export async function listVercelProjects(limit = 20): Promise<Array<{ id: string; name: string; framework: string | null; link: unknown; accountId: string | null }>> {
+  const data = await vercel(`/v9/projects?limit=${Math.min(Math.max(limit, 1), 100)}`);
+  const projects = Array.isArray((data as { projects?: unknown }).projects)
+    ? (data as { projects: Array<Record<string, unknown>> }).projects
+    : [];
+  return projects.map((project) => ({
+    id: String(project.id || ''),
+    name: String(project.name || ''),
+    framework: project.framework ? String(project.framework) : null,
+    link: project.link || null,
+    accountId: project.accountId ? String(project.accountId) : null,
+  })).filter((project) => project.id);
+}
+
+export async function getVercelProject(projectId: string): Promise<{
+  id: string;
+  name: string;
+  framework: string | null;
+  link: unknown;
+  targets: unknown;
+}> {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(projectId)) {
+    throw new Error('Vercel project id is invalid.');
+  }
+  const data = await vercel(`/v9/projects/${encodeURIComponent(projectId)}`);
+  return {
+    id: String(data.id || projectId),
+    name: String(data.name || ''),
+    framework: data.framework ? String(data.framework) : null,
+    link: data.link || null,
+    targets: data.targets || null,
+  };
+}
+
+export async function getVercelDeployment(deploymentId: string): Promise<{
+  id: string;
+  readyState: string;
+  url: string | null;
+  inspectorUrl: string | null;
+}> {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(deploymentId)) {
+    throw new Error('Vercel deployment id is invalid.');
+  }
+  const data = await vercel(`/v13/deployments/${encodeURIComponent(deploymentId)}`);
+  return {
+    id: String(data.id || deploymentId),
+    readyState: String(data.readyState || data.status || ''),
+    url: data.url ? `https://${String(data.url)}` : null,
+    inspectorUrl: data.inspectorUrl ? String(data.inspectorUrl) : null,
+  };
+}
+
 export async function createHostingExpiredDeployment(projectIdOrName: string, businessName: string, renewUrl: string) {
   const safeName = businessName.replace(/[<>&"']/g, '').slice(0, 120) || 'Website';
   const safeRenew = renewUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
