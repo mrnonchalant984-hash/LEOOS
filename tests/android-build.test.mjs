@@ -17,7 +17,9 @@ test('calculator starter is a real Android project with required operations', ()
   assert.match(files['app/build.gradle'], /assemble|com\.android\.application/);
   assert.match(files['app/src/main/AndroidManifest.xml'], /MAIN/);
   for (const digit of '0123456789') assert.match(files['app/src/main/java/com/leonardx/calculator/MainActivity.java'], new RegExp(`"${digit}"`));
-  assert.match(files['app/src/main/java/com/leonardx/calculator/MainActivity.java'], /÷|division|ArithmeticException/);
+  assert.match(files['app/src/main/java/com/leonardx/calculator/MainActivity.java'], /ArithmeticException/);
+  assert.match(files['app/src/main/java/com/leonardx/calculator/MainActivity.java'], /"\/".*"\*".*"-".*"\+"/);
+  assert.match(files['app/src/main/java/com/leonardx/calculator/MainActivity.java'], /Cannot divide by zero/);
   assert.match(files['app/src/main/java/com/leonardx/calculator/MainActivity.java'], /Double|decimal|\./);
 });
 
