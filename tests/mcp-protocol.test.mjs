@@ -46,6 +46,7 @@ function createReader(overrides = {}) {
       return { data: { budget: 'free', requirements: [] }, error: null };
     },
     async getAndroidBuildCapabilities() { return { data: { java: false, gradle: false, androidSdk: false, artifactStorageCredentialsPresent: false, buildable: false }, error: null }; },
+    async getCloudBuildLogs(_userId, provider, jobId) { return { data: { provider, job_id: jobId, logs: 'build log' }, error: null }; },
     async buildAndroidCalculator(_userId, key) { return { data: { job_id: 'android-job', status: 'completed', idempotency_key: key, download_url: 'https://mcp.test/api/builds/android/android-job/artifact' }, error: null }; },
     async getAndroidBuildStatus(_userId, jobId) { return { data: { id: jobId, status: 'completed' }, error: null }; },
     async planEngineeringWorkflow(_userId, input) {
@@ -74,6 +75,7 @@ test('Streamable HTTP MCP server initializes, lists tools, and calls a harmless 
       'get_android_build_capabilities',
       'get_android_build_status',
       'get_capability_alternatives',
+      'get_cloud_build_logs',
       'get_cloud_build_status',
       'get_configuration_status',
       'get_engineering_workflow_status',
@@ -94,6 +96,8 @@ test('Streamable HTTP MCP server initializes, lists tools, and calls a harmless 
     const result = await client.callTool({ name: 'list_projects', arguments: { limit: 10 } });
     assert.equal(result.isError, undefined);
     assert.deepEqual(JSON.parse(result.content[0].text), [project]);
+    const logs = await client.callTool({ name: 'get_cloud_build_logs', arguments: { provider: 'expo-eas', job_id: '88888888-8888-4888-8888-888888888888' } });
+    assert.equal(JSON.parse(logs.content[0].text).logs, 'build log');
   } finally {
     await client.close();
   }
@@ -155,6 +159,7 @@ test('MCP write tools require the write scope and explicit confirmation input', 
       'get_android_build_capabilities',
       'get_android_build_status',
       'get_capability_alternatives',
+      'get_cloud_build_logs',
       'get_cloud_build_status',
       'get_configuration_status',
       'get_engineering_workflow_status',
@@ -200,10 +205,12 @@ test('MCP write tools dispatch approved project actions to their account-scoped 
     await client.connect(transport);
     const actions = [
       ['create_project', { name: 'New workspace', project_type: 'website', confirm: true }],
+      ['create_project', { name: 'Shopping app', project_type: 'mobile_app', confirm: true }],
       ['rename_project', { project_id: project.id, name: 'Renamed workspace', confirm: true }],
       ['save_project_files', { project_id: project.id, files: { 'app/page.tsx': 'export default function Page() {}' }, confirm: true }],
       ['build_and_deploy_project', { project_id: project.id, brief: 'Deploy this site', files: [{ path: 'app/page.tsx', content: 'export default function Page() {}' }], idempotency_key: '11111111-1111-4111-8111-111111111111', confirm: true }],
       ['start_cloud_build', { project_id: project.id, provider: 'godot-build-service', preset: 'Linux/X11', idempotency_key: '55555555-5555-4555-8555-555555555555', confirm: true }],
+      ['start_cloud_build', { project_id: project.id, provider: 'expo-eas', idempotency_key: '77777777-7777-4777-8777-777777777777', confirm: true }],
       ['get_cloud_build_status', { provider: 'godot-build-service', job_id: project.id }],
       ['run_project_operation', { project_id: project.id, operation: 'test', confirm: true }],
       ['retry_cloud_build', { provider: 'godot-build-service', job_id: project.id, confirm: true }],
@@ -214,10 +221,12 @@ test('MCP write tools dispatch approved project actions to their account-scoped 
     }
     assert.deepEqual(calls, [
       ['create_project', 'authenticated-user', 'New workspace', 'website'],
+      ['create_project', 'authenticated-user', 'Shopping app', 'mobile_app'],
       ['rename_project', 'authenticated-user', project.id, 'Renamed workspace'],
       ['save_project_files', 'authenticated-user', project.id, { 'app/page.tsx': 'export default function Page() {}' }],
       ['build_and_deploy_project', 'authenticated-user', project.id, 'Deploy this site', [{ path: 'app/page.tsx', content: 'export default function Page() {}' }], '11111111-1111-4111-8111-111111111111'],
       ['start_cloud_build', 'authenticated-user', { project_id: project.id, provider: 'godot-build-service', platform: undefined, profile: undefined, preset: 'Linux/X11', idempotency_key: '55555555-5555-4555-8555-555555555555' }],
+      ['start_cloud_build', 'authenticated-user', { project_id: project.id, provider: 'expo-eas', platform: 'android', profile: 'preview', preset: undefined, idempotency_key: '77777777-7777-4777-8777-777777777777' }],
       ['get_cloud_build_status', 'authenticated-user', 'godot-build-service', project.id],
     ]);
   } finally {

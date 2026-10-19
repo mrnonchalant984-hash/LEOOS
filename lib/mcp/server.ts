@@ -72,6 +72,7 @@ export type McpProjectReader = {
     idempotency_key: string;
   }): Promise<{ data: unknown; error: unknown }>;
   getCloudBuildStatus?(userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string): Promise<{ data: unknown; error: unknown }>;
+  getCloudBuildLogs?(userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string): Promise<{ data: unknown; error: unknown }>;
   getAndroidBuildCapabilities?(): Promise<{ data: unknown; error: unknown }>;
   buildAndroidCalculator?(userId: string, idempotencyKey: string): Promise<{ data: unknown; error: unknown }>;
   getAndroidBuildStatus?(userId: string, jobId: string): Promise<{ data: unknown; error: unknown }>;
@@ -133,6 +134,17 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     if (!projects.getCloudBuildStatus) return toolError('Cloud build status is unavailable in this MCP deployment.');
     const { data, error } = await projects.getCloudBuildStatus(userId, provider, job_id);
     if (error) return toolError(typeof error === 'string' ? error : 'Cloud build status could not be loaded.');
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+  });
+  server.registerTool('get_cloud_build_logs', {
+    title: 'Get mobile or game build logs',
+    description: 'Retrieve bounded, redacted logs for a provider build owned by the authenticated account. Logs are read-only and may not be available until the provider publishes them.',
+    inputSchema: { provider: z.enum(['expo-eas', 'godot-build-service']), job_id: z.string().uuid() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ provider, job_id }) => {
+    if (!projects.getCloudBuildLogs) return toolError('Cloud build logs are unavailable in this MCP deployment.');
+    const { data, error } = await projects.getCloudBuildLogs(userId, provider, job_id);
+    if (error) return toolError(typeof error === 'string' ? error : 'Cloud build logs could not be loaded.');
     return { content: [{ type: 'text', text: JSON.stringify(data) }] };
   });
   server.registerTool('get_project_hosting_status', {
@@ -338,12 +350,12 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
 
     server.registerTool('start_cloud_build', {
       title: 'Start a mobile or Godot cloud build',
-      description: 'Submit an existing, owned mobile_app or game project to its configured provider. This consumes one existing monthly build allowance and may incur separate Expo/provider fees. Requires explicit user approval and confirm=true. Reuse the same idempotency_key when retrying an uncertain request.',
+      description: 'Submit an owned mobile_app or game project to its configured provider. Expo automatically creates or reuses and verifies the EAS project from the server credential; callers never supply an Expo UUID. This consumes an existing monthly build allowance and may incur provider fees. Requires explicit approval and confirm=true. Reuse the same idempotency_key when retrying an uncertain request.',
       inputSchema: {
         project_id: z.string().uuid(),
         provider: z.enum(['expo-eas', 'godot-build-service']),
-        platform: z.enum(['android', 'ios']).optional(),
-        profile: z.enum(['preview', 'production']).optional(),
+        platform: z.enum(['android', 'ios']).optional().describe('Expo platform; defaults to android when omitted.'),
+        profile: z.enum(['preview', 'production']).optional().describe('Expo profile; defaults to preview (APK) when omitted.'),
         preset: z.string().trim().min(1).max(80).optional(),
         idempotency_key: z.string().uuid(),
         confirm: z.literal(true).describe('Set true only after the user explicitly approves using a monthly build and the external provider.'),
@@ -351,7 +363,14 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     }, async ({ project_id, provider, platform, profile, preset, idempotency_key }) => {
       if (!projects.submitCloudBuild) return toolError('Cloud build submission is unavailable in this MCP deployment.');
-      const { data, error } = await projects.submitCloudBuild(userId, { project_id, provider, platform, profile, preset, idempotency_key });
+      const { data, error } = await projects.submitCloudBuild(userId, {
+        project_id,
+        provider,
+        platform: provider === 'expo-eas' ? platform || 'android' : platform,
+        profile: provider === 'expo-eas' ? profile || 'preview' : profile,
+        preset,
+        idempotency_key,
+      });
       if (error) return toolError(typeof error === 'string' ? error : 'Cloud build could not be submitted.');
       return { content: [{ type: 'text', text: JSON.stringify(data) }] };
     });
@@ -374,7 +393,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
 
     server.registerTool('create_project', {
       title: 'Create a plan-authorized project',
-      description: 'Create a website, web app, or SaaS project under the authenticated user account. Enforces the current LeonardX plan project-type and project-count limits. Requires the user to approve the write and confirm=true. Does not call Leo AI or use Leo AI credits.',
+      description: 'Create a typed project workspace under the authenticated account, including mobile_app Expo/React Native and game starters. The requested project_type is preserved; a mobile app is never created as web_app. Enforces project-type and project-count limits. Requires approval and confirm=true. Does not call Leo AI or use its credits.',
       inputSchema: {
         name: z.string().trim().min(2).max(120),
         project_type: z.enum(['website', 'web_app', 'saas', 'mobile_app', 'game']),

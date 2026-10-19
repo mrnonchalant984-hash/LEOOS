@@ -11,8 +11,13 @@ export type EasProfile = 'preview' | 'production';
 
 export function validateExpoProject(files: unknown, platform: ExpoPlatform, profile: EasProfile) {
   if (!validateIdeFiles(files)) return { ok: false as const, error: 'Project files have unsafe paths or exceed the workspace size limit.' };
-  if (Object.keys(files).some((file) => /^\.env(?:\.|$)/i.test(file) || /\.(?:pem|key)$/i.test(file) || /^app\.config\.(?:[cm]?js|ts)$/i.test(file))) {
-    return { ok: false as const, error: 'Remove environment files and private signing keys from the project before building.' };
+  if (Object.keys(files).some((file) => /(^|\/)\.env(?:\.|$)/i.test(file) ||
+      /\.(?:pem|key|p12|pfx|keystore|jks)$/i.test(file) ||
+      /(^|\/)(?:credentials|secrets?)(?:\.[^/]+)?$/i.test(file) ||
+      /(^|\/)\.npmrc$/i.test(file) ||
+      /(^|\/)(?:\.git|node_modules|\.expo|\.eas)(\/|$)/i.test(file) ||
+      /^app\.config\.(?:[cm]?js|ts)$/i.test(file))) {
+    return { ok: false as const, error: 'Remove environment files, registry credentials, private signing material, dynamic Expo config, and generated dependency directories before building.' };
   }
   if (!files['package.json'] || !files['app.json'] || !files['eas.json']) {
     return { ok: false as const, error: 'Expo builds require package.json, static app.json, and eas.json.' };
@@ -30,12 +35,13 @@ export function validateExpoProject(files: unknown, platform: ExpoPlatform, prof
   if (!packageJson.name || !packageJson.dependencies || typeof packageJson.dependencies !== 'object') {
     return { ok: false as const, error: 'package.json must include an app name and dependencies.' };
   }
+  const dependencies = packageJson.dependencies as Record<string, unknown>;
+  if (!['expo', 'react', 'react-native'].every(name => typeof dependencies[name] === 'string' && dependencies[name])) {
+    return { ok: false as const, error: 'package.json must include Expo, React, and React Native dependencies.' };
+  }
   const expo = app.expo && typeof app.expo === 'object' ? app.expo as Record<string, unknown> : app;
   const extra = expo.extra && typeof expo.extra === 'object' ? expo.extra as Record<string, unknown> : {};
   const easLink = extra.eas && typeof extra.eas === 'object' ? extra.eas as Record<string, unknown> : {};
-  if (typeof easLink.projectId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(easLink.projectId)) {
-    return { ok: false as const, error: 'This Expo project is not linked. Set expo.extra.eas.projectId to the existing Expo project UUID.' };
-  }
   if (!expo.name || !expo.slug) return { ok: false as const, error: 'app.json must include Expo name and slug.' };
   const profiles = eas.build && typeof eas.build === 'object' ? eas.build as Record<string, unknown> : {};
   const selected = profiles[profile];
@@ -44,6 +50,9 @@ export function validateExpoProject(files: unknown, platform: ExpoPlatform, prof
     const selectedProfile = selected as Record<string, unknown>;
     const android = selectedProfile.android && typeof selectedProfile.android === 'object' ? selectedProfile.android as Record<string, unknown> : {};
     if (android.buildType !== 'apk') return { ok: false as const, error: 'The Android preview profile must set android.buildType to apk.' };
+  }
+  if (typeof easLink.projectId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(easLink.projectId)) {
+    return { ok: false as const, error: 'This Expo project is not linked. LeonardX will provision and link an EAS project when the build starts.' };
   }
   return { ok: true as const, projectId: easLink.projectId };
 }
@@ -69,7 +78,15 @@ export async function runEasCommand(files: Record<string, string>, args: string[
     const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
       const child = spawn(process.execPath, [cli, ...args], {
         cwd: temporary,
-        env: { ...process.env, EXPO_TOKEN: token, CI: '1', NO_COLOR: '1' },
+        env: {
+          NODE_ENV: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' ? process.env.NODE_ENV : 'production',
+          ...Object.fromEntries(['PATH', 'HOME', 'USERPROFILE', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA', 'PATHEXT', 'COMSPEC']
+            .filter(name => process.env[name])
+            .map(name => [name, process.env[name]!])),
+          EXPO_TOKEN: token,
+          CI: '1',
+          NO_COLOR: '1',
+        },
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       });

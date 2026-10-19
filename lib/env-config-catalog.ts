@@ -107,7 +107,16 @@ export const LEONARDX_ENV_CATALOG: EnvVariableDefinition[] = [
   },
   {
     name: 'EXPO_TOKEN',
-    purpose: 'Server-side EAS CLI authentication token. Never expose it to browser code.',
+    purpose: 'Server-side EAS CLI token with permission to create projects and submit builds. Never expose it to browser code.',
+    required: false,
+    service: 'expo-eas',
+    public: false,
+    targets: ['preview', 'production'],
+    restartRequired: true,
+  },
+  {
+    name: 'EXPO_ACCOUNT_NAME',
+    purpose: 'Optional Expo account selected for automatic project provisioning when the token can manage multiple accounts.',
     required: false,
     service: 'expo-eas',
     public: false,

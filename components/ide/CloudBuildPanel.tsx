@@ -99,6 +99,7 @@ export default function CloudBuildPanel({ projectId, projectType }: { projectId:
         const verify = await fetch(`/api/builds/expo?project_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' });
         const link = await verify.json().catch(() => null);
         if (!verify.ok) throw new Error(link?.error || 'Expo project access could not be verified.');
+        if (link?.will_provision) setNotice('Provisioning the Expo project and dependency lockfile…');
       }
       const response = await fetch(`/api/builds/${provider === 'expo-eas' ? 'expo' : 'godot'}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

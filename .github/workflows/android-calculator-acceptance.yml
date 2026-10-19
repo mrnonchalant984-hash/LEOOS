@@ -67,12 +67,17 @@ jobs:
           echo "apk_path=$apk" >> "$GITHUB_OUTPUT"
           echo "apk_size=$(stat -c '%s' "$apk")" >> "$GITHUB_OUTPUT"
           echo "apk_sha256=$(sha256sum "$apk" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+          echo "${GITHUB_OUTPUT}" >/dev/null
+          sha256sum "$apk" > "$apk.sha256"
+          echo "checksum_path=$apk.sha256" >> "$GITHUB_OUTPUT"
 
       - name: Upload downloadable APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: leonardx-calculator-debug-${{ github.sha }}
-          path: ${{ steps.verify.outputs.apk_path }}
+          path: |
+            ${{ steps.verify.outputs.apk_path }}
+            ${{ steps.verify.outputs.checksum_path }}
           if-no-files-found: error
           retention-days: 14
 

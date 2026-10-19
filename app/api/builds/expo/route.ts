@@ -4,9 +4,13 @@ import { getBuildActor } from '@/lib/builds/request-auth';
 import { getEffectiveUserPlan, planAllowsCloudProject } from '@/lib/plan-access';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 import { expoMetadataFiles, parseEasJson, runEasCommand, validateExpoProject, type EasProfile, type ExpoPlatform } from '@/lib/builders/expo-eas';
+import { provisionExpoProject } from '@/lib/builders/expo-provisioning';
+import { expectedExpoArtifactType } from '@/lib/builders/expo-artifact';
+import { ensureExpoLockfile } from '@/lib/builders/expo-lockfile';
+import { withExpoProjectId } from '@/lib/builders/expo-provisioning';
 
 export const runtime = 'nodejs';
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const platforms = new Set<ExpoPlatform>(['android', 'ios']);
 const profiles = new Set<EasProfile>(['preview', 'production']);
@@ -51,20 +55,46 @@ export async function POST(req: NextRequest) {
   if (projectError) return response(503, 'Project ownership could not be checked.');
   if (!project) return response(404, 'Project not found.');
   if (project.type !== 'mobile_app') return response(400, 'Only a saved mobile app project can be built with Expo.');
-  const files = project.files;
+  if (!project.files || typeof project.files !== 'object' || Array.isArray(project.files) ||
+      !Object.values(project.files).every(value => typeof value === 'string')) {
+    return response(422, 'The mobile app source files are invalid. Save a valid Expo workspace before building.');
+  }
+  let files = project.files as Record<string, string>;
+  const sourceCheck = validateExpoProject(files, platform, profile);
+  if (!sourceCheck.ok && !sourceCheck.error.startsWith('This Expo project is not linked.')) return response(422, sourceCheck.error);
+  const { data: knownMapping, error: mappingError } = await db.from('cloud_build_jobs')
+    .select('provider_project_id')
+    .eq('owner_user_id', ctx.user.id)
+    .eq('project_id', projectId)
+    .eq('provider', 'expo-eas')
+    .not('provider_project_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (mappingError) return response(503, 'Expo build project mapping is unavailable. Apply the Expo cloud-build artifact migration before building.');
+  let expoProjectId: string;
+  try {
+    const locked = await ensureExpoLockfile(files);
+    files = locked.files;
+    const provisioned = await provisionExpoProject(files, project.id, runEasCommand, process.env.EXPO_ACCOUNT_NAME, knownMapping?.provider_project_id || undefined);
+    files = provisioned.files;
+    expoProjectId = provisioned.expoProjectId;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const clientError = /requires a valid|needs a valid|does not match|could not be verified|not linked/i.test(message);
+    return response(clientError ? 422 : 502, message || 'Expo project provisioning failed. Verify EXPO_TOKEN and Expo project-creation access, then retry.');
+  }
+  if (files['app.json'] !== project.files['app.json'] || files['package-lock.json'] !== project.files['package-lock.json']) {
+    const { data: updated, error: updateError } = await db.from('projects').update({ files })
+      .eq('id', projectId).eq('user_id', ctx.user.id).select('id').maybeSingle();
+    if (updateError || !updated) return response(503, 'The verified Expo project link and generated Android identifiers could not be saved. No build was submitted.');
+  }
   const checked = validateExpoProject(files, platform, profile);
   if (!checked.ok) return response(422, checked.error);
   const appJson = JSON.parse(files['app.json']);
   const expo = appJson.expo || appJson;
   if (platform === 'ios' && !expo.ios?.bundleIdentifier) return response(422, 'Set ios.bundleIdentifier in app.json before building for iOS.');
   if (platform === 'android' && !expo.android?.package) return response(422, 'Set android.package in app.json before building for Android.');
-
-  try {
-    const linkedProject = await runEasCommand(expoMetadataFiles(files), ['project:info', '--json', '--non-interactive'], 30_000);
-    if (linkedProject.code !== 0) return response(422, 'EXPO_TOKEN is invalid or does not have access to the linked EAS project. Check Expo account access and app.json projectId.');
-  } catch {
-    return response(502, 'Expo authentication and project-link verification could not be completed.');
-  }
 
   const started = await db.rpc('start_cloud_build_job', {
     p_owner_user_id: ctx.user.id,
@@ -80,11 +110,17 @@ export async function POST(req: NextRequest) {
   }
   const jobId = String(started.data?.[0]?.job_id || '');
   if (!jobId) return response(503, 'Build job was not persisted.');
-  const { data: job } = await db.from('cloud_build_jobs').select('id,provider_job_id,status')
+  const { data: job } = await db.from('cloud_build_jobs').select('id,provider_job_id,provider_project_id,status')
     .eq('id', jobId).eq('owner_user_id', ctx.user.id).maybeSingle();
   if (!job) return response(503, 'Build job record could not be loaded.');
   if (job.provider_job_id) return NextResponse.json({ job_id: jobId, build_id: job.provider_job_id, status: job.status, deduplicated: true });
   if (started.data?.[0]?.created === false) return response(409, 'This idempotent build request has an unresolved result. Review the Expo dashboard before submitting a new build request.');
+  const { error: mappingSaveError } = await db.from('cloud_build_jobs').update({
+    provider_project_id: expoProjectId,
+    artifact_expected_type: expectedExpoArtifactType(platform, profile, files),
+    updated_at: new Date().toISOString(),
+  }).eq('id', jobId).eq('owner_user_id', ctx.user.id);
+  if (mappingSaveError) return response(503, 'The verified Expo project mapping could not be persisted. No provider build was submitted. Apply the Expo artifact migration and retry with the same idempotency key.');
 
   try {
     const result = await runEasCommand(files, ['build', '--platform', platform, '--profile', profile, '--json', '--non-interactive', '--no-wait']);
@@ -96,10 +132,14 @@ export async function POST(req: NextRequest) {
       await db.from('cloud_build_jobs').update({ status: 'failed', error: message, completed_at: new Date().toISOString() }).eq('id', jobId).eq('owner_user_id', ctx.user.id);
       return response(502, message);
     }
-    const { error: updateError } = await db.from('cloud_build_jobs').update({ provider_job_id: buildId, status: 'building', updated_at: new Date().toISOString() })
+    const { error: updateError } = await db.from('cloud_build_jobs').update({
+      provider_job_id: buildId,
+      status: 'building',
+      updated_at: new Date().toISOString(),
+    })
       .eq('id', jobId).eq('owner_user_id', ctx.user.id);
     if (updateError) return response(503, 'Expo accepted a build, but LeonardX could not save its build ID. Contact the platform owner before retrying.');
-    return NextResponse.json({ job_id: jobId, build_id: buildId, status: 'building', expo_project_id: checked.projectId }, { status: 202, headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ job_id: jobId, build_id: buildId, status: 'building' }, { status: 202, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error && error.message.includes('EXPO_TOKEN')
       ? 'Expo cloud builds are not configured. Set EXPO_TOKEN as a server-side secret.'
@@ -124,10 +164,21 @@ export async function GET(req: NextRequest) {
   const files = project.files;
   if (!files || typeof files !== 'object' || Array.isArray(files) || !Object.values(files).every(value => typeof value === 'string')) return response(422, 'Project source files are invalid.');
   const checked = validateExpoProject(files, 'android', 'production');
-  if (!checked.ok) return response(422, checked.error);
+  if (!checked.ok && !checked.error.startsWith('This Expo project is not linked.')) return response(422, checked.error);
   try {
-    const result = await runEasCommand(expoMetadataFiles(files), ['project:info', '--json', '--non-interactive'], 30_000);
-    if (result.code !== 0) return response(401, 'Expo token authentication or linked-project access failed.');
-    return NextResponse.json({ configured: true, authenticated: true, linked: true, expo_project_id: checked.projectId }, { headers: { 'Cache-Control': 'no-store' } });
+    const db = adminSupabase();
+    const { data: mapping, error: mappingError } = await db.from('cloud_build_jobs').select('provider_project_id')
+      .eq('owner_user_id', ctx.user.id).eq('project_id', projectId).eq('provider', 'expo-eas')
+      .not('provider_project_id', 'is', null).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (mappingError) return response(503, 'Expo project mapping is unavailable. Apply the Expo cloud-build artifact migration before building.');
+    if (!mapping?.provider_project_id) {
+      const identity = await runEasCommand(expoMetadataFiles(files), ['whoami', '--json', '--non-interactive'], 30_000);
+      if (identity.code !== 0) return response(401, 'EXPO_TOKEN authentication failed. Configure a valid server-side Expo token.');
+      return NextResponse.json({ configured: true, authenticated: true, linked: false, will_provision: true }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+    const linkedFiles = withExpoProjectId(files, mapping.provider_project_id);
+    const result = await runEasCommand(expoMetadataFiles(linkedFiles), ['project:info', '--json', '--non-interactive'], 30_000);
+    if (result.code !== 0) return response(401, 'Expo token authentication or persisted project access failed. Check the server-selected Expo account.');
+    return NextResponse.json({ configured: true, authenticated: true, linked: true }, { headers: { 'Cache-Control': 'no-store' } });
   } catch { return response(502, 'Expo project authentication check could not be completed.'); }
 }

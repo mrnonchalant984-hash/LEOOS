@@ -6,6 +6,9 @@ out
 !.env.example
 .vercel
 .leo/
+.runtime/
+/godot-project/.godot/
+/.cursor/mcp.json
 packages/sdk/dist/
 .DS_Store
 

@@ -10,7 +10,7 @@ test('Expo builds use server-only EAS authentication and require a linked static
   assert.match(adapter, /import 'server-only'/);
   assert.match(adapter, /process\.env\.EXPO_TOKEN/);
   assert.match(adapter, /EXPO_TOKEN: token/);
-  assert.match(adapter, /extra\.eas\.projectId/);
+  assert.match(adapter, /easLink\.projectId/);
   assert.match(route, /project:info/);
   assert.match(route, /\.eq\('id', projectId\)\.eq\('user_id', ctx\.user\.id\)/);
   assert.doesNotMatch(route, /NEXT_PUBLIC_EXPO_TOKEN/);
@@ -46,13 +46,22 @@ test('Godot build proxy authenticates LeonardX owners and never returns its serv
 test('MCP cloud build tools reuse scoped build APIs and the IDE exposes real job controls', async () => {
   const auth = await source('lib/builds/request-auth.ts');
   const mcp = await source('app/mcp/route.ts');
+  const route = await source('app/api/builds/expo/route.ts');
   const tools = await source('lib/mcp/server.ts');
   const panel = await source('components/ide/CloudBuildPanel.tsx');
   assert.match(auth, /validateMcpAccessToken/);
   assert.match(auth, /token\.scopes\.includes\(requiredScope\)/);
   assert.match(mcp, /app\/api\/builds\/expo\/route/);
   assert.match(mcp, /app\/api\/builds\/godot\/route/);
+  assert.match(mcp, /new URL\(payload\[key\], request\.url\)/);
+  assert.match(mcp, /'download_url', 'status_url', 'artifact_url'/);
   assert.match(tools, /start_cloud_build/);
+  assert.match(tools, /callers never supply an Expo UUID/);
+  assert.match(route, /provisionExpoProject/);
+  assert.match(route, /will_provision: true/);
+  assert.match(panel, /if \(link\?\.will_provision\) setNotice/);
+  assert.match(route, /will_provision: true/);
+  assert.match(route, /eq\('owner_user_id', ctx\.user\.id\)/);
   assert.match(tools, /get_cloud_build_status/);
   assert.match(tools, /confirm: z\.literal\(true\)/);
   assert.match(panel, /api\/builds\/\$\{provider/);

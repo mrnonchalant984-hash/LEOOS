@@ -33,6 +33,12 @@ async function invokeCloudBuildRoute(
       ? (await import('@/app/api/builds/godot/route')).POST(apiRequest)
       : (await import('@/app/api/builds/godot/[id]/route')).GET(apiRequest, { params: Promise.resolve({ id: jobId || '' }) }));
   const data = await response.json().catch(() => null);
+  if (response.ok && data && typeof data === 'object') {
+    const payload = data as Record<string, unknown>;
+    for (const key of ['download_url', 'status_url', 'artifact_url']) {
+      if (typeof payload[key] === 'string' && payload[key].startsWith('/')) payload[key] = new URL(payload[key], request.url).toString();
+    }
+  }
   return response.ok
     ? { data, error: null }
     : { data: null, error: typeof data?.error === 'string' ? data.error : `Cloud build request failed (${response.status}).` };
@@ -53,7 +59,7 @@ async function invokeAndroidBuildRoute(request: NextRequest, method: 'GET' | 'PO
   const data = await response.json().catch(() => null);
   if (data && typeof data === 'object') {
     const payload = data as Record<string, unknown>;
-    for (const key of ['download_url', 'status_url']) {
+    for (const key of ['download_url', 'status_url', 'artifact_url']) {
       if (typeof payload[key] === 'string' && payload[key].startsWith('/')) payload[key] = new URL(payload[key], request.url).toString();
     }
   }
@@ -216,6 +222,23 @@ export async function POST(request: NextRequest) {
       },
       async getCloudBuildStatus(_userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string) {
         return invokeCloudBuildRoute(request, provider, 'GET', undefined, jobId);
+      },
+      async getCloudBuildLogs(_userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string) {
+        if (provider === 'godot-build-service') {
+          const result = await invokeCloudBuildRoute(request, provider, 'GET', undefined, jobId);
+          if (result.error || !result.data) return result;
+          const payload = result.data as Record<string, unknown>;
+          return { data: { job_id: jobId, logs: payload.logs || null, error: payload.error || null }, error: null };
+        }
+        const authorization = request.headers.get('authorization');
+        if (!authorization) return { data: null, error: 'MCP authorization is missing.' };
+        const target = new URL(`/api/builds/expo/${encodeURIComponent(jobId)}/logs`, request.url);
+        const apiRequest = new NextRequest(target, { method: 'GET', headers: { Authorization: authorization } });
+        const response = await (await import('@/app/api/builds/expo/[id]/logs/route')).GET(apiRequest, { params: Promise.resolve({ id: jobId }) });
+        const data = await response.json().catch(() => null);
+        return response.ok
+          ? { data, error: null }
+          : { data: null, error: typeof data?.error === 'string' ? data.error : `Build logs request failed (${response.status}).` };
       },
       async getHostingStatus(userId: string, projectId: string) {
         const { data: project, error: projectError } = await db.from('website_projects')

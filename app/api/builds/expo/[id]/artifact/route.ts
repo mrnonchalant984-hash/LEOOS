@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
 import { getBuildActor } from '@/lib/builds/request-auth';
-import { expoMetadataFiles, parseEasJson, runEasCommand } from '@/lib/builders/expo-eas';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { verifyExpoArtifact, type ExpoArtifactType } from '@/lib/builders/expo-artifact';
+import { createHash } from 'node:crypto';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
-
-function artifactUrl(value: unknown): string | null {
-  if (!value || typeof value !== 'object') return null;
-  const root = value as Record<string, unknown>;
-  const build = root.build && typeof root.build === 'object' ? root.build as Record<string, unknown> : root;
-  const artifacts = build.artifacts && typeof build.artifacts === 'object' ? build.artifacts as Record<string, unknown> : {};
-  const candidates = [artifacts.buildUrl, artifacts.applicationArchiveUrl, build.artifactUrl];
-  return candidates.find((item) => typeof item === 'string' && item.startsWith('https://')) as string || null;
-}
+export const maxDuration = 300;
+const BUCKET = 'leo-files';
+const expectedContentTypes: Record<ExpoArtifactType, string> = {
+  apk: 'application/vnd.android.package-archive',
+  aab: 'application/octet-stream',
+  ipa: 'application/octet-stream',
+};
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await getBuildActor(req, 'mcp:read');
@@ -24,28 +22,33 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const db = adminSupabase();
   const { data: job, error } = await db.from('cloud_build_jobs')
-    .select('id,project_id,provider_job_id,status').eq('id', id).eq('owner_user_id', ctx.user.id)
+    .select('id,project_id,provider_job_id,status,artifact_storage_path,artifact_size_bytes,artifact_sha256,artifact_content_type,artifact_file_name,artifact_expires_at').eq('id', id).eq('owner_user_id', ctx.user.id)
     .eq('provider', 'expo-eas').maybeSingle();
   if (error) return NextResponse.json({ error: 'Build ownership could not be checked.' }, { status: 503 });
   if (!job) return NextResponse.json({ error: 'Build job not found.' }, { status: 404 });
-  if (job.status !== 'completed' || !job.provider_job_id) return NextResponse.json({ error: 'Build artifact is not available.' }, { status: 409 });
-  const { data: project, error: projectError } = await db.from('projects').select('files')
-    .eq('id', job.project_id).eq('user_id', ctx.user.id).maybeSingle();
-  if (projectError || !project?.files) return NextResponse.json({ error: 'Owned Expo project files could not be loaded.' }, { status: 503 });
-  let result;
-  try { result = await runEasCommand(expoMetadataFiles(project.files), ['build:view', job.provider_job_id, '--json', '--non-interactive'], 30_000); }
-  catch { return NextResponse.json({ error: 'Expo artifact status is temporarily unavailable.' }, { status: 502 }); }
-  if (result.code !== 0) return NextResponse.json({ error: 'Expo could not verify this build artifact.' }, { status: 502 });
-  const url = artifactUrl(parseEasJson(result.stdout));
-  if (!url) return NextResponse.json({ error: 'Expo did not return a verified artifact URL.' }, { status: 409 });
-  let upstream: Response;
-  try { upstream = await fetch(url, { signal: AbortSignal.timeout(60_000), cache: 'no-store' }); }
-  catch { return NextResponse.json({ error: 'Expo artifact download is temporarily unavailable.' }, { status: 502 }); }
-  if (!upstream.ok || !upstream.body) return NextResponse.json({ error: 'Expo artifact could not be downloaded.' }, { status: 502 });
-  return new Response(upstream.body, { status: 200, headers: {
-    'Content-Type': upstream.headers.get('content-type') || 'application/octet-stream',
-    'Content-Disposition': upstream.headers.get('content-disposition') || `attachment; filename="android-build-${id}.apk"`,
-    ...(upstream.headers.get('content-length') ? { 'Content-Length': upstream.headers.get('content-length')! } : {}),
+  if (job.status !== 'completed' || !job.provider_job_id || !job.artifact_storage_path || !job.artifact_size_bytes || !job.artifact_sha256 || !job.artifact_file_name || !job.artifact_expires_at) {
+    return NextResponse.json({ error: 'A verified artifact is not available for this build.' }, { status: 409 });
+  }
+  if (new Date(job.artifact_expires_at).getTime() <= Date.now()) return NextResponse.json({ error: 'This build artifact has expired. Start a new build to create another download.' }, { status: 410 });
+  const extension = /\.(apk|aab|ipa)$/.exec(job.artifact_file_name)?.[1] as ExpoArtifactType | undefined;
+  const expectedPath = extension ? `expo-artifacts/${ctx.user.id}/leonardx-${id}.${extension}` : '';
+  if (!extension || job.artifact_storage_path !== expectedPath || job.artifact_content_type !== expectedContentTypes[extension]) {
+    return NextResponse.json({ error: 'Stored artifact metadata failed its ownership or type check.' }, { status: 503 });
+  }
+  const { data: blob, error: downloadError } = await db.storage.from(BUCKET).download(job.artifact_storage_path);
+  if (downloadError || !blob) return NextResponse.json({ error: 'The verified artifact could not be retrieved from private storage.' }, { status: 502 });
+  const bytes = Buffer.from(await blob.arrayBuffer());
+  const verified = await verifyExpoArtifact(bytes, extension);
+  const checksum = createHash('sha256').update(bytes).digest('hex');
+  if (!verified || bytes.length !== Number(job.artifact_size_bytes) || verified.sha256 !== job.artifact_sha256 || checksum !== job.artifact_sha256) {
+    return NextResponse.json({ error: 'Stored artifact failed package type, byte count, or SHA-256 verification.' }, { status: 502 });
+  }
+  return new Response(bytes, { status: 200, headers: {
+    'Content-Type': expectedContentTypes[extension],
+    'Content-Disposition': `attachment; filename="${job.artifact_file_name}"`,
+    'Content-Length': String(bytes.length),
+    'Content-SHA256': checksum,
+    ETag: `"${checksum}"`,
     'Cache-Control': 'private, no-store',
     'X-Content-Type-Options': 'nosniff',
   } });

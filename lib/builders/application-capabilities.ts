@@ -47,8 +47,8 @@ export function getApplicationCapabilities(env: NodeJS.ProcessEnv = process.env)
       id: 'mobile-expo-eas', category: 'mobile_application', projectType: 'mobile_app', frameworks: ['Expo', 'React Native'],
       generator: 'registered_starter', buildAdapter: 'Expo EAS', buildMode: 'provider_async',
       status: 'partially_available', configured: expoConfigured,
-      requirements: ['MCP write scope', 'EXPO_TOKEN', 'linked Expo project', 'Android package or iOS bundle identifier', 'eligible plan'],
-      limitations: ['No native Kotlin or Java generator.', 'Project-specific Expo linking and provider account access are required.', 'Artifacts are provided by EAS; LeonardX does not claim independent persistent artifact storage.'],
+      requirements: ['MCP write scope', 'EXPO_TOKEN with EAS project-creation permission', 'eligible mobile-app plan'],
+      limitations: ['No native Kotlin or Java generator.', 'Expo account access and signing credentials remain provider-managed.', 'Verified artifacts are owner-scoped in private storage for 30 days.'],
     },
     {
       id: 'game-godot', category: 'game', projectType: 'game', frameworks: ['Godot 4'],
