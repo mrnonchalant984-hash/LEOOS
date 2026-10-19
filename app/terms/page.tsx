@@ -1,7 +1,3 @@
-export const metadata = {
-  title: "Terms of Service — LEO OS",
-  description: "Terms for the LEO OS development platform, plans, builds, and hosting.",
-};
 export default function Terms() {
   return (
     <main className="mx-auto max-w-4xl px-4 py-16">

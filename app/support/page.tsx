@@ -1,2 +1,9 @@
+import { createPublicMetadata } from '@/lib/seo';
 import Link from 'next/link'; import {BookOpen,LifeBuoy,Mail,MessageSquare} from 'lucide-react'; import {LEOAppShell,Panel} from '@/components/LEOAppShell';
+export const metadata = createPublicMetadata({
+  title: 'Support',
+  description: "Find documentation-first help for LeonardX, with guidance on reporting reproducible product and project issues.",
+  path: "/support",
+  type: "website",
+});
 export default function Support(){return <LEOAppShell title="Support" subtitle="Documentation-first support for the LEO OS platform."><div className="page-hero"><span className="mini-label">Support center</span><h2>Get unstuck without pretending something works.</h2><p>Start with documentation and Leo. For implementation issues, provide the project, route, error and relevant logs so the problem can be reproduced from evidence.</p><div className="hero-actions"><Link href="/docs" className="primary-button"><BookOpen size={13}/> Documentation</Link><Link href="/app" className="secondary-button"><MessageSquare size={13}/> Ask Leo</Link></div></div><div className="two-grid"><Panel><LifeBuoy size={18}/><h3 className="mt-3 text-sm font-bold">Troubleshooting</h3><p className="mt-2 text-[10px] leading-5 text-zinc-500">Check deployment logs, agent runs, integrations and account state before retrying an operation.</p></Panel><Panel><Mail size={18}/><h3 className="mt-3 text-sm font-bold">Contact</h3><p className="mt-2 text-[10px] leading-5 text-zinc-500">Use the existing contact workflow for issues that cannot be resolved from the product or documentation.</p></Panel></div></LEOAppShell>}

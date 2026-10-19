@@ -1,19 +1,14 @@
-import type { Metadata } from 'next';
+import { createPublicMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { ArrowRight, Check, Sparkles } from 'lucide-react';
 import { siteData } from '@/data/site';
 
-export const metadata: Metadata = {
-  title: 'Website, Software & AI Services',
-  description: 'Explore LeonardX services for website concepts, AI-assisted software builds, and practical code reviews.',
-  alternates: { canonical: '/services' },
-  openGraph: {
-    title: 'Website, Software & AI Services | LeonardX',
-    description: 'Website concepts, software builds, and practical code reviews for businesses and creators.',
-    url: '/services',
-    type: 'website',
-  },
-};
+export const metadata = createPublicMetadata({
+  title: "Website and Software Services",
+  description: "Explore LeonardX website concept, software development and code review services, with scope agreed before work begins.",
+  path: "/services",
+  type: "website",
+});
 
 const process = [
   'Share your goal, audience, and any existing materials.',

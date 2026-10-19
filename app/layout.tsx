@@ -7,10 +7,15 @@ import { Providers } from './providers';
 import VisualBackground from '@/components/VisualBackground';
 import { GlobalLEOWidget } from '@/components/GlobalLEOWidget';
 import { ObservabilityScripts } from './observability-scripts';
-
-const siteUrl = 'https://leoos-omega.vercel.app';
-const siteName = 'LeonardX';
-const siteDescription = 'Build websites, web apps and software with AI-assisted coding, project workspaces, specialized agents, developer APIs and deployment workflows in LeonardX.';
+import {
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_ORIGIN,
+  SITE_TITLE,
+  SOCIAL_IMAGE_ALT,
+  SOCIAL_IMAGE_PATH,
+  serializeJsonLd,
+} from '@/lib/seo';
 
 export const viewport: Viewport = {
   themeColor: '#08090d',
@@ -20,23 +25,17 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  applicationName: siteName,
+  metadataBase: new URL(SITE_ORIGIN),
+  applicationName: SITE_NAME,
   title: {
-    default: 'LeonardX — AI Website Builder, Coding Agents & Software Workspace',
+    default: SITE_TITLE,
     template: '%s | LeonardX',
   },
-  description: siteDescription,
+  description: SITE_DESCRIPTION,
   category: 'technology',
-  keywords: [
-    'LeonardX', 'LEO OS', 'AI website builder', 'AI app builder', 'AI coding assistant',
-    'AI software development', 'AI coding agents', 'build websites with AI',
-    'web app development', 'SaaS development', 'developer API', 'AI workflow automation',
-    'website builder for businesses', 'AI tools for developers',
-  ],
-  authors: [{ name: 'LeonardX' }, { name: 'Leonard Udoh' }],
-  creator: 'LeonardX',
-  publisher: 'LeonardX',
+  authors: [{ name: SITE_NAME }, { name: 'Leonard Udoh' }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
   robots: {
     index: true,
     follow: true,
@@ -56,18 +55,18 @@ export const metadata: Metadata = {
   manifest: '/manifest.webmanifest',
   openGraph: {
     type: 'website',
-    siteName,
-    title: 'LeonardX — Build Software with AI',
-    description: siteDescription,
-    url: siteUrl,
+    siteName: SITE_NAME,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: SITE_ORIGIN + '/',
     locale: 'en_US',
-    images: [{ url: '/qevli-landing.jpg', width: 960, height: 1346, alt: 'LeonardX AI software creation platform' }],
+    images: [{ url: SOCIAL_IMAGE_PATH, width: 1200, height: 630, alt: SOCIAL_IMAGE_ALT }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'LeonardX — Build Software with AI',
-    description: siteDescription,
-    images: ['/qevli-landing.jpg'],
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [SOCIAL_IMAGE_PATH],
   },
   other: {
     'format-detection': 'telephone=no',
@@ -78,43 +77,42 @@ export const metadata: Metadata = {
 const organizationSchema = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
-  '@id': `${siteUrl}/#organization`,
-  name: 'LeonardX',
+  '@id': SITE_ORIGIN + '/#organization',
+  name: SITE_NAME,
   alternateName: ['LEO OS', 'Leonard X'],
-  url: siteUrl,
-  logo: `${siteUrl}/leonardx-logo.svg`,
+  url: SITE_ORIGIN + '/',
+  logo: SITE_ORIGIN + '/leonardx-logo.svg',
   founder: { '@type': 'Person', name: 'Leonard Udoh' },
-  sameAs: [],
 };
 
 const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
-  '@id': `${siteUrl}/#website`,
-  name: 'LeonardX',
-  url: siteUrl,
-  description: siteDescription,
-  publisher: { '@id': `${siteUrl}/#organization` },
+  '@id': SITE_ORIGIN + '/#website',
+  name: SITE_NAME,
+  url: SITE_ORIGIN + '/',
+  description: SITE_DESCRIPTION,
+  publisher: { '@id': SITE_ORIGIN + '/#organization' },
   inLanguage: 'en',
 };
 
-const softwareSchema = {
-  '@context': 'https://schema.org',
-  '@type': 'SoftwareApplication',
-  '@id': `${siteUrl}/#software`,
-  name: 'LeonardX',
-  applicationCategory: 'DeveloperApplication',
-  operatingSystem: 'Web',
-  url: siteUrl,
-  description: siteDescription,
-  image: `${siteUrl}/qevli-landing.jpg`,
-  publisher: { '@id': `${siteUrl}/#organization` },
-};
-
 export default function Layout({ children }: { children: React.ReactNode }) {
-  return <html lang="en" data-scroll-behavior="smooth"><head>
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema).replace(/</g, '\\u003c') }} />
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema).replace(/</g, '\\u003c') }} />
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareSchema).replace(/</g, '\\u003c') }} />
-  </head><body className="min-h-screen bg-black text-white"><VisualBackground/><Providers><Header/>{children}<GlobalLEOWidget/><Footer/></Providers><ObservabilityScripts/></body></html>;
+  return (
+    <html lang="en" data-scroll-behavior="smooth">
+      <head>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(organizationSchema) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(websiteSchema) }} />
+      </head>
+      <body className="min-h-screen bg-black text-white">
+        <VisualBackground />
+        <Providers>
+          <Header />
+          {children}
+          <GlobalLEOWidget />
+          <Footer />
+        </Providers>
+        <ObservabilityScripts />
+      </body>
+    </html>
+  );
 }

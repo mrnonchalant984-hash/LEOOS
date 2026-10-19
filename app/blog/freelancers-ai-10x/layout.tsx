@@ -1,3 +1,8 @@
-import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'How Freelancers Can Work Smarter with AI in 2026', description: 'Practical ways freelancers can use AI for planning, website work, coding, content and repeatable business workflows.', alternates: { canonical: '/blog/freelancers-ai-10x' }, openGraph: { type: 'article', title: 'How Freelancers Can Work Smarter with AI in 2026', description: 'Practical ways freelancers can use AI for planning, website work, coding, content and repeatable business workflows.', url: '/blog/freelancers-ai-10x' }, twitter: { card: 'summary_large_image', title: 'How Freelancers Can Work Smarter with AI in 2026', description: 'Practical ways freelancers can use AI for planning, website work, coding, content and repeatable business workflows.' } };
+import { createPublicMetadata } from '@/lib/seo';
+export const metadata = createPublicMetadata({
+  title: "How Freelancers Can Work Smarter with AI",
+  description: "Explore practical ways freelancers can use AI to plan website projects, review code, prepare content and organize repeatable work.",
+  path: "/blog/freelancers-ai-10x",
+  type: "article",
+});
 export default function ArticleLayout({ children }: Readonly<{ children: React.ReactNode }>) { return children; }

@@ -1,11 +1,12 @@
-import type { Metadata } from 'next';
+import { createPublicMetadata } from '@/lib/seo';
 import Link from 'next/link';
 
-export const metadata: Metadata = {
-  title: 'LEO OS API Documentation',
-  description: 'Authenticate with API keys, call supported LEO OS API routes, receive signed webhooks, and use the TypeScript SDK.',
-  alternates: { canonical: '/developers/docs' },
-};
+export const metadata = createPublicMetadata({
+  title: "Developer Documentation",
+  description: "Explore LeonardX API endpoints, authentication scopes, request identifiers, SDK usage, webhook events and agent boundaries.",
+  path: "/developers/docs",
+  type: "website",
+});
 
 const BASE = 'https://leoos-omega.vercel.app';
 

@@ -1,11 +1,9 @@
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = {
+import { createPublicMetadata } from '@/lib/seo';
+export const metadata = createPublicMetadata({
   title: 'Refund Policy',
-  description: 'Review LeonardX refund policy and applicable billing terms.',
-  alternates: { canonical: '/refund-policy' },
-  openGraph: { title: 'Refund Policy', description: 'Review LeonardX refund policy and applicable billing terms.', url: '/refund-policy', type: 'website' },
-  twitter: { card: 'summary_large_image', title: 'Refund Policy', description: 'Review LeonardX refund policy and applicable billing terms.' },
-};
+  description: "Review refund terms for LeonardX subscriptions, digital services and separately paid hosting.",
+  path: "/refund-policy",
+  type: "website",
+});
 
 export default function PublicPageLayout({ children }: Readonly<{ children: React.ReactNode }>) { return children; }

@@ -1,8 +1,15 @@
+import { createPublicMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { ArrowRight, KeyRound } from 'lucide-react';
 import { LEOAppShell, Panel } from '@/components/LEOAppShell';
 import { IntegrationStudio } from '@/components/IntegrationStudio';
 
+export const metadata = createPublicMetadata({
+  title: 'API Reference',
+  description: "Reference for LeonardX API authentication, supported project endpoints, usage records and response behavior.",
+  path: "/docs/api",
+  type: "website",
+});
 export default function API() {
   return <LEOAppShell title="API v1" subtitle="Authenticated programmatic access to LEO OS resources.">
     <div className="page-hero">

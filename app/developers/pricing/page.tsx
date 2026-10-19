@@ -1,14 +1,15 @@
+import { createPublicMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { ArrowRight, Code2, KeyRound } from 'lucide-react';
 import { LEOAppShell, Panel } from '@/components/LEOAppShell';
 import { ApiPlanChooser } from './ApiPlanChooser';
 
-export const metadata = {
-  title: 'Developer API pricing | LeonardX',
-  description: 'Choose a LeonardX Developer or Business API plan in NGN or USD.',
-  alternates: { canonical: '/developers/pricing' },
-  openGraph: { title: 'Developer API Pricing | LeonardX', description: 'Choose API capacity and included usage for your LeonardX application.', url: '/developers/pricing', type: 'website' },
-};
+export const metadata = createPublicMetadata({
+  title: "Developer API Pricing",
+  description: "Review Developer API plan options, usage limits and billing terms for the LeonardX developer platform.",
+  path: "/developers/pricing",
+  type: "website",
+});
 
 export default function DeveloperPricingPage() {
   return <LEOAppShell title="Developer API pricing" subtitle="Choose the API capacity that fits your application.">

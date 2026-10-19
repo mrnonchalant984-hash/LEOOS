@@ -2,8 +2,21 @@ import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { big12Projects } from '@/data/site';
+import { createPublicMetadata } from '@/lib/seo';
 
 export function generateStaticParams(){ return big12Projects.map(p=>({slug:p.id})); }
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const project = big12Projects.find((item) => item.id === slug);
+  if (!project) return { title: 'Project preview not found', robots: { index: false, follow: false } };
+
+  return createPublicMetadata({
+    title: `${project.name} Project Preview`,
+    description: `${project.description} View this public Leo OS project preview and its current status.`,
+    path: `/projects/${slug}`,
+  });
+}
 
 export default async function ProjectPreview({params}:{params:Promise<{slug:string}>}){
   const {slug}=await params;

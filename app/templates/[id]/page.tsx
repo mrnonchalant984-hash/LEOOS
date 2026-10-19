@@ -3,6 +3,23 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowUpRight, Layers3 } from 'lucide-react';
 import { LEO_TEMPLATES } from '@/data/website-templates';
 import { LEOAppShell, Panel } from '@/components/LEOAppShell';
+import { createPublicMetadata } from '@/lib/seo';
+
+export function generateStaticParams() {
+  return LEO_TEMPLATES.map(({ id }) => ({ id }));
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const template = LEO_TEMPLATES.find((item) => item.id === id);
+  if (!template) return { title: 'Template not found', robots: { index: false, follow: false } };
+
+  return createPublicMetadata({
+    title: `${template.name} Website Template`,
+    description: `${template.description} Explore its included pages and intended project types.`,
+    path: `/templates/${id}`,
+  });
+}
 
 export default async function TemplateDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

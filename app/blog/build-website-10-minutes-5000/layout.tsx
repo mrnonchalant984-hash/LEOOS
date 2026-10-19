@@ -1,3 +1,8 @@
-import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'How to Build a Professional Website on a Lean Budget', description: 'A practical guide to planning a professional website, prioritizing essential pages and using AI tools responsibly on a lean budget.', alternates: { canonical: '/blog/build-website-10-minutes-5000' }, openGraph: { type: 'article', title: 'How to Build a Professional Website on a Lean Budget', description: 'A practical guide to planning a professional website, prioritizing essential pages and using AI tools responsibly on a lean budget.', url: '/blog/build-website-10-minutes-5000' }, twitter: { card: 'summary_large_image', title: 'How to Build a Professional Website on a Lean Budget', description: 'A practical guide to planning a professional website, prioritizing essential pages and using AI tools responsibly on a lean budget.' } };
+import { createPublicMetadata } from '@/lib/seo';
+export const metadata = createPublicMetadata({
+  title: "Build a Professional Website on a Lean Budget",
+  description: "A brief guide to planning a professional website on a lean budget, from choosing essential pages to reviewing AI-assisted work.",
+  path: "/blog/build-website-10-minutes-5000",
+  type: "article",
+});
 export default function ArticleLayout({ children }: Readonly<{ children: React.ReactNode }>) { return children; }

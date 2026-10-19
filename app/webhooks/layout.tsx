@@ -1,11 +1,9 @@
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = {
-  title: 'Webhooks — Developer Integration Guide',
-  description: 'Learn about LeonardX webhook events, delivery behavior and integration patterns for developer workflows.',
-  alternates: { canonical: '/webhooks' },
-  openGraph: { title: 'Webhooks — Developer Integration Guide', description: 'Learn about LeonardX webhook events, delivery behavior and integration patterns for developer workflows.', url: '/webhooks', type: 'website' },
-  twitter: { card: 'summary_large_image', title: 'Webhooks — Developer Integration Guide', description: 'Learn about LeonardX webhook events, delivery behavior and integration patterns for developer workflows.' },
-};
+import { createPublicMetadata } from '@/lib/seo';
+export const metadata = createPublicMetadata({
+  title: "LeonardX Webhooks",
+  description: "Learn how LeonardX webhooks report supported project, deployment and API usage events to connected applications.",
+  path: "/webhooks",
+  type: "website",
+});
 
 export default function PublicPageLayout({ children }: Readonly<{ children: React.ReactNode }>) { return children; }

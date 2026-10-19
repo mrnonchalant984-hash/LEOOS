@@ -1,9 +1,5 @@
 import { siteData } from "@/data/site";
 
-export const metadata = {
-  title: "Privacy Policy — LEO OS",
-  description: "How LEO OS processes account, project, build, and hosting information.",
-};
 export default function Privacy() {
   return (
     <main className="mx-auto max-w-4xl px-4 py-16">

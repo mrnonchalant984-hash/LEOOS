@@ -1,8 +1,15 @@
+import { createPublicMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { ArrowRight, BookOpen } from 'lucide-react';
 import { LEOAppShell, Panel } from '@/components/LEOAppShell';
 import { IntegrationStudio } from '@/components/IntegrationStudio';
 
+export const metadata = createPublicMetadata({
+  title: 'TypeScript SDK',
+  description: "Install and use the LeonardX TypeScript SDK to authenticate and work with supported API projects and usage.",
+  path: "/docs/sdk",
+  type: "website",
+});
 export default function SDK() {
   return <LEOAppShell title="SDK" subtitle="Typed client for supported LeonardX API operations.">
     <div className="page-hero">

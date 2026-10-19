@@ -2,8 +2,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { profileImage, siteData } from '@/data/site';
-export const metadata = { title: 'About Leonard Udoh — LeonardX Services' };
-
 const notes = [
   'I am Leonard Udoh, founder of LeonardX. I help businesses and creators turn digital ideas into clear, useful websites and software.',
   'My work combines thoughtful design, responsive development, and practical AI-assisted tools to solve real project needs.',
@@ -17,7 +15,7 @@ export default function AboutPage() {
         <div className="about-portrait mx-auto w-full max-w-md [perspective:1200px]">
           <div className="group relative overflow-hidden rounded-[2rem] border border-yellow-500/30 bg-zinc-950 p-3 shadow-2xl transition-transform duration-700 hover:rotate-y-3 hover:rotate-x-2">
             <div className="relative aspect-[4/5] overflow-hidden rounded-[1.5rem]">
-              <Image src={profileImage} alt="Leonard Udoh" fill priority unoptimized className="object-cover object-top transition duration-700 group-hover:scale-105" />
+              <Image src={profileImage} alt="Leonard Udoh" fill priority className="object-cover object-top transition duration-700 group-hover:scale-105" />
             </div>
             <div className="absolute inset-x-8 bottom-8 rounded-2xl border border-white/10 bg-black/70 p-4 backdrop-blur-xl">
               <p className="font-bold">{siteData.owner}</p>

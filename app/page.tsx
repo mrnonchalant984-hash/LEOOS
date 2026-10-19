@@ -5,13 +5,27 @@ import { ArrowDown, ArrowRight, Bot, Boxes, Check, Code2, GitBranch, Globe2, Pla
 import { Reveal } from '@/components/Reveal';
 import LeonardXEditorialHero from '@/components/LeonardXEditorialHero';
 import { siteData } from '@/data/site';
+import { JsonLd } from '@/components/JsonLd';
+import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, SITE_TITLE, SOCIAL_IMAGE_ALT, SOCIAL_IMAGE_PATH } from '@/lib/seo';
 
 export const metadata: Metadata = {
-  title: 'Website, Software & AI Services',
-  description: 'Explore website concepts, AI-assisted software builds, and practical code review services from LeonardX.',
+  title: { absolute: SITE_TITLE },
+  description: SITE_DESCRIPTION,
   alternates: { canonical: '/' },
-  openGraph: { title: 'LeonardX — Website, Software & AI Services', description: 'Website concepts, software builds, and code reviews for businesses and creators.', url: '/', type: 'website' },
-  twitter: { card: 'summary_large_image', title: 'LeonardX — Website, Software & AI Services', description: 'Practical digital services for businesses and creators.' },
+  openGraph: {
+    type: 'website',
+    siteName: SITE_NAME,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: SITE_ORIGIN + '/',
+    images: [{ url: SOCIAL_IMAGE_PATH, width: 1200, height: 630, alt: SOCIAL_IMAGE_ALT }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [SOCIAL_IMAGE_PATH],
+  },
 };
 
 const stages = [
@@ -37,12 +51,25 @@ export default function Home(){
   { '@type': 'Question', name: 'Can LeonardX deploy my project?', acceptedAnswer: { '@type': 'Answer', text: 'Deployment depends on the project, account permissions and configured hosting provider. Always review the deployment result from the connected service.' } },
   { '@type': 'Question', name: 'Can I try LeonardX before choosing a plan?', acceptedAnswer: { '@type': 'Answer', text: 'Visit the workspace and pricing pages to review the current access and plan options available to your account.' } },
  ] };
- return <main className="landing-page"><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema).replace(/</g, '\\u003c') }} />
+ return <main className="landing-page">
+  <JsonLd data={{
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    '@id': SITE_ORIGIN + '/#software',
+    name: SITE_NAME,
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'Web',
+    url: SITE_ORIGIN + '/',
+    description: 'An AI-assisted workspace for planning and developing websites, web apps and software projects.',
+    image: SITE_ORIGIN + SOCIAL_IMAGE_PATH,
+    publisher: { '@id': SITE_ORIGIN + '/#organization' },
+  }} />
+  <JsonLd data={faqSchema} />
   <LeonardXEditorialHero />
   <section className="landing-legacy-hero">
     <div className="landing-hero-content">
       <div className="landing-eyebrow"><span/> LEONARD X <span className="slash">/</span> AI SOFTWARE CREATION</div>
-      <h1>Turn bold ideas into <em>working software.</em></h1>
+      <h2>Turn bold ideas into <em>working software.</em></h2>
       <p className="landing-lead">Get help shaping a website concept, building a digital product, or improving your code. LeonardX combines practical services with AI-assisted development.</p>
       <div className="landing-actions"><Link href="/services" className="landing-primary">Explore services <ArrowRight size={16}/></Link><Link href="/app" className="landing-secondary"><Bot size={16}/> Open workspace</Link></div>
       <div className="landing-proof"><span>IDEA</span><i>→</i><span>LEO</span><i>→</i><span>BUILD</span><i>→</i><span>TEST</span><i>→</i><span>DEPLOY</span></div>

@@ -1,13 +1,13 @@
-import type { Metadata } from 'next';
+import { createPublicMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { ArrowRight, Bot, Code2, Globe, Workflow, ShieldCheck } from 'lucide-react';
 
-export const metadata: Metadata = {
-  title: 'Leo AI — AI Coding Assistant and Software Builder',
-  description: 'Meet Leo AI inside LeonardX: plan software, work with coding agents, organize projects, and move from idea to website or web app with a connected development workspace.',
-  alternates: { canonical: '/leo-ai' },
-  openGraph: { title: 'Leo AI — AI Coding Assistant and Software Builder', description: 'Explore Leo AI for software planning, coding assistance, project workflows and web app creation.', url: '/leo-ai', type: 'website' },
-};
+export const metadata = createPublicMetadata({
+  title: "Meet Leo AI",
+  description: "Learn how Leo AI helps organize software ideas, project context and development work inside the LeonardX workspace.",
+  path: "/leo-ai",
+  type: "website",
+});
 
 const features = [
   { icon: Code2, title: 'Build with project context', text: 'Keep your development work connected to project files, requirements and next steps instead of treating every task as a disconnected chat.' },

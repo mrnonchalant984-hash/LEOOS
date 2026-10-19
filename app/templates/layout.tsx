@@ -1,11 +1,9 @@
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = {
-  title: 'Website and App Templates',
-  description: 'Explore project templates and starting points for building websites and web applications with LeonardX.',
-  alternates: { canonical: '/templates' },
-  openGraph: { title: 'Website and App Templates', description: 'Explore project templates and starting points for building websites and web applications with LeonardX.', url: '/templates', type: 'website' },
-  twitter: { card: 'summary_large_image', title: 'Website and App Templates', description: 'Explore project templates and starting points for building websites and web applications with LeonardX.' },
-};
+import { createPublicMetadata } from '@/lib/seo';
+export const metadata = createPublicMetadata({
+  title: "Website and App Templates",
+  description: "Explore website and web app starting points for company, portfolio, store, booking, blog and other project types.",
+  path: "/templates",
+  type: "website",
+});
 
 export default function PublicPageLayout({ children }: Readonly<{ children: React.ReactNode }>) { return children; }

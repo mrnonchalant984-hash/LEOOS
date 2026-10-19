@@ -2,10 +2,6 @@ import { LEO_TEMPLATES } from '@/data/website-templates';
 import Link from 'next/link';
 import { ArrowUpRight, Layers3 } from 'lucide-react';
 import { LEOAppShell, Panel } from '@/components/LEOAppShell';
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = { title: 'Templates | LeonardX', description: 'Explore website design starting points for LeonardX projects.' };
-
 export default function Templates() {
   return <LEOAppShell title="Templates" subtitle="A curated set of starting points for your next project.">
     <section className="page-hero">

@@ -1,3 +1,8 @@
-import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Leo OS vs ChatGPT: Choosing an AI Workflow', description: 'Compare a project-centered AI software workflow with a general-purpose AI chat and understand when each approach fits.', alternates: { canonical: '/blog/leo-vs-chatgpt' }, openGraph: { type: 'article', title: 'Leo OS vs ChatGPT: Choosing an AI Workflow', description: 'Compare a project-centered AI software workflow with a general-purpose AI chat and understand when each approach fits.', url: '/blog/leo-vs-chatgpt' }, twitter: { card: 'summary_large_image', title: 'Leo OS vs ChatGPT: Choosing an AI Workflow', description: 'Compare a project-centered AI software workflow with a general-purpose AI chat and understand when each approach fits.' } };
+import { createPublicMetadata } from '@/lib/seo';
+export const metadata = createPublicMetadata({
+  title: "Leo OS vs ChatGPT: Choosing an AI Workflow",
+  description: "Compare project-centered AI software work in Leo OS with general-purpose chat and consider which workflow fits a software project.",
+  path: "/blog/leo-vs-chatgpt",
+  type: "article",
+});
 export default function ArticleLayout({ children }: Readonly<{ children: React.ReactNode }>) { return children; }

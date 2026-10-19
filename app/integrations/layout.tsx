@@ -1,11 +1,9 @@
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = {
-  title: 'Integrations — Connect Your Development Tools',
-  description: 'Explore LeonardX integration paths for software development, project delivery, APIs and connected services.',
-  alternates: { canonical: '/integrations' },
-  openGraph: { title: 'Integrations — Connect Your Development Tools', description: 'Explore LeonardX integration paths for software development, project delivery, APIs and connected services.', url: '/integrations', type: 'website' },
-  twitter: { card: 'summary_large_image', title: 'Integrations — Connect Your Development Tools', description: 'Explore LeonardX integration paths for software development, project delivery, APIs and connected services.' },
-};
+import { createPublicMetadata } from '@/lib/seo';
+export const metadata = createPublicMetadata({
+  title: 'Integrations',
+  description: "Review integration paths for AI providers, data, hosting, payments and source control used by LeonardX.",
+  path: "/integrations",
+  type: "website",
+});
 
 export default function PublicPageLayout({ children }: Readonly<{ children: React.ReactNode }>) { return children; }

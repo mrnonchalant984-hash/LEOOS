@@ -3,8 +3,13 @@ import { redirect } from 'next/navigation';
 import { AccountSecuritySettings } from '@/components/AccountSecuritySettings';
 import { LEOAppShell } from '@/components/LEOAppShell';
 import { getUserAccess } from '@/lib/auth';
+import { createNoIndexMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = { title: 'Account settings | LeonardX' };
+export const metadata: Metadata = {
+  ...createNoIndexMetadata(),
+  title: 'Account settings',
+  description: 'Manage your private LeonardX account and security settings.',
+};
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage() {

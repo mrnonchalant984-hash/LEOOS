@@ -1,9 +1,3 @@
-export const metadata = {
-  title: "Refund Policy — Leonard Udoh",
-  description:
-    "Refund and cancellation terms for LEO OS subscriptions and hosting.",
-};
-
 export default function RefundPolicyPage() {
   return (
     <main className="mx-auto max-w-4xl px-4 py-16">
