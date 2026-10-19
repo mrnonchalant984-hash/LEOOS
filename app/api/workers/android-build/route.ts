@@ -4,7 +4,7 @@ import { runAndroidBuildWorker } from '@/lib/android-build-worker';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 600;
+export const maxDuration = 300;
 
 function authorized(request: NextRequest) {
   const secret = process.env.ANDROID_BUILD_WORKER_SECRET || '';

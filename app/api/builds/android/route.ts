@@ -6,7 +6,7 @@ import { getEffectiveUserPlan, planAllowsCloudProject } from '@/lib/plan-access'
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
-export const maxDuration = 600;
+export const maxDuration = 300;
 
 function reply(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
