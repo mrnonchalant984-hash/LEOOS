@@ -5,6 +5,7 @@ import { buildEngineeringOrchestrationPlan } from './orchestration.ts';
 import { WORKFLOW_STAGE_IDS, type WorkflowStageId, type WorkflowStatus } from '../engineering-workflow.ts';
 import { PROJECT_RUNNER_OPERATIONS, type ProjectRunnerOperation } from '../project-runner.ts';
 import { getApplicationCapabilities } from '../builders/application-capabilities.ts';
+import { getModelProviderStatus } from '../ai/model-catalog.ts';
 
 function toolError(message: string) {
   return { content: [{ type: 'text' as const, text: message }], isError: true };
@@ -31,6 +32,7 @@ export type McpProject = {
 };
 
 export type McpProjectReader = {
+  isPlatformOwner?: boolean;
   listProjects(userId: string, limit: number): Promise<{ data: McpProject[] | null; error: unknown }>;
   getProject(userId: string, projectId: string): Promise<{ data: McpProject | null; error: unknown }>;
   getProjectFiles?(userId: string, projectId: string, paths?: string[]): Promise<{ data: Record<string, string> | null; error: unknown }>;
@@ -76,6 +78,17 @@ export type McpProjectReader = {
   getAndroidBuildCapabilities?(): Promise<{ data: unknown; error: unknown }>;
   buildAndroidCalculator?(userId: string, idempotencyKey: string): Promise<{ data: unknown; error: unknown }>;
   getAndroidBuildStatus?(userId: string, jobId: string): Promise<{ data: unknown; error: unknown }>;
+  leoAiChat?(userId: string, input: { message: string; session_id?: string; project_id?: string; model?: string; idempotency_key: string }): Promise<{ data: unknown; error: unknown }>;
+  leoAiGetExecutionStatus?(userId: string, requestId: string): Promise<{ data: unknown; error: unknown }>;
+  listAvailableAgents?(userId: string): Promise<{ data: unknown; error: unknown }>;
+  invokeAgent?(userId: string, input: { agent_id: string; task: string; context?: string; idempotency_key: string }): Promise<{ data: unknown; error: unknown }>;
+  getAgentExecutionStatus?(userId: string, runId: string): Promise<{ data: unknown; error: unknown }>;
+  listAgentExecutions?(userId: string, limit: number): Promise<{ data: unknown; error: unknown }>;
+  cancelAgentExecution?(userId: string, runId: string): Promise<{ data: unknown; error: unknown }>;
+  approveAgentExecution?(userId: string, approvalId: string): Promise<{ data: unknown; error: unknown }>;
+  createRegisteredAgent?(userId: string, input: { name: string; category: string; description: string; instructions: string }): Promise<{ data: unknown; error: unknown }>;
+  updateRegisteredAgent?(userId: string, input: { agent_id: string; name: string; category: string; description: string; instructions: string }): Promise<{ data: unknown; error: unknown }>;
+  setRegisteredAgentEnabled?(userId: string, agentId: string, enabled: boolean): Promise<{ data: unknown; error: unknown }>;
 };
 
 export function createUserMcpServer(userId: string, scopes: string[], projects: McpProjectReader) {
@@ -83,6 +96,80 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     maxToolInputElements: 2048,
   });
   const writeAccess = scopes.includes('mcp:write');
+  server.registerTool('list_ai_providers', {
+    title: 'List configured AI providers',
+    description: 'Report only provider/model identifiers and whether each integration is configured. This never returns credentials and does not invoke a provider.',
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async () => {
+    const providers = getModelProviderStatus();
+    const localModelUrl = process.env.LEO_LOCAL_MODEL_URL?.trim();
+    if (localModelUrl) providers.push({
+      id: `local/${process.env.LEO_LOCAL_MODEL_NAME?.trim() || 'local-model'}`,
+      provider: 'local',
+      model: process.env.LEO_LOCAL_MODEL_NAME?.trim() || 'local-model',
+      capabilities: ['text'],
+      configured: true,
+    });
+    return { content: [{ type: 'text', text: JSON.stringify(providers) }] };
+  });
+  server.registerTool('leo_ai_get_execution_status', {
+    title: 'Get Leo AI request status',
+    description: 'Read the status of a Leo AI request owned by the authenticated user. Completed responses are returned only to that same user.',
+    inputSchema: { request_id: z.string().uuid() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ request_id }) => {
+    if (!projects.leoAiGetExecutionStatus) return toolError('Leo AI request status is unavailable in this MCP deployment.');
+    const { data, error } = await projects.leoAiGetExecutionStatus(userId, request_id);
+    if (error) return toolError(typeof error === 'string' ? error : 'Leo AI request status could not be loaded.');
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+  });
+  server.registerTool('list_available_agents', {
+    title: 'Discover available agents',
+    description: 'List executable LeonardX agents authorized for this account, including capabilities, approval requirements, and availability. Owner-only agents and user-owned agents are filtered by the server.',
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async () => {
+    if (!projects.listAvailableAgents) return toolError('Agent discovery is unavailable in this MCP deployment.');
+    const { data, error } = await projects.listAvailableAgents(userId);
+    if (error) return toolError(typeof error === 'string' ? error : 'Available agents could not be loaded.');
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+  });
+  server.registerTool('get_agent_details', {
+    title: 'Get available agent details',
+    description: 'Return metadata for one agent only if it is present in this authenticated account’s currently authorized agent catalog.',
+    inputSchema: { agent_id: z.string().trim().min(1).max(96) },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ agent_id }) => {
+    if (!projects.listAvailableAgents) return toolError('Agent discovery is unavailable in this MCP deployment.');
+    const { data, error } = await projects.listAvailableAgents(userId);
+    if (error) return toolError(typeof error === 'string' ? error : 'Available agents could not be loaded.');
+    const catalog = data && typeof data === 'object' ? data as Record<string, unknown> : {};
+    const agents = Array.isArray(catalog.agents) ? catalog.agents : [];
+    const agent = agents.find(item => item && typeof item === 'object' && (item as Record<string, unknown>).id === agent_id);
+    if (!agent) return toolError('Agent not found or not available to this account.');
+    return { content: [{ type: 'text', text: JSON.stringify(agent) }] };
+  });
+  server.registerTool('get_agent_execution_status', {
+    title: 'Get agent execution status',
+    description: 'Read one persisted agent run owned by the authenticated account. Results from other users are not visible.',
+    inputSchema: { run_id: z.string().uuid() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ run_id }) => {
+    if (!projects.getAgentExecutionStatus) return toolError('Agent execution status is unavailable in this MCP deployment.');
+    const { data, error } = await projects.getAgentExecutionStatus(userId, run_id);
+    if (error) return toolError(typeof error === 'string' ? error : 'Agent execution status could not be loaded.');
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+  });
+  server.registerTool('list_agent_executions', {
+    title: 'List my agent executions',
+    description: 'List recent agent runs belonging to the authenticated account, with durable status and safe error summaries.',
+    inputSchema: { limit: z.number().int().min(1).max(50).optional() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ limit }) => {
+    if (!projects.listAgentExecutions) return toolError('Agent execution history is unavailable in this MCP deployment.');
+    const { data, error } = await projects.listAgentExecutions(userId, limit || 20);
+    if (error) return toolError(typeof error === 'string' ? error : 'Agent execution history could not be loaded.');
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+  });
   server.registerTool('get_account_plan', {
     title: 'Get my plan and usage limits',
     description: 'Read the authenticated LeonardX account plan, project capacity, supported project types, and monthly build allowance. Does not expose AI-credit balances or call Leo AI.',
@@ -254,6 +341,113 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     return { content: [{ type: 'text', text: JSON.stringify(buildEngineeringOrchestrationPlan(orchestrationInput)) }] };
   });
   if (writeAccess) {
+    server.registerTool('leo_ai_chat', {
+      title: 'Chat with Leo AI',
+      description: 'Send a real request to LeonardX’s configured text-model router. Conversation history is scoped to this authenticated user. This provider call may incur platform/provider cost; supply confirm=true and reuse the idempotency key for uncertain retries. The connected client model is not used for this operation.',
+      inputSchema: {
+        message: z.string().trim().min(1).max(12000),
+        session_id: z.string().uuid().optional(),
+        project_id: z.string().uuid().optional(),
+        model: z.string().trim().min(1).max(160).optional().describe('Optional exact model/preset from list_ai_providers. No silent fallback is performed.'),
+        idempotency_key: z.string().uuid(),
+        confirm: z.literal(true),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    }, async ({ message, session_id, project_id, model, idempotency_key }) => {
+      if (!projects.leoAiChat) return toolError('Leo AI is unavailable in this MCP deployment.');
+      const { data, error } = await projects.leoAiChat(userId, { message, session_id, project_id, model, idempotency_key });
+      if (error) return toolError(typeof error === 'string' ? error : 'Leo AI could not complete the request.');
+      return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+    });
+    server.registerTool('invoke_agent', {
+      title: 'Invoke an authorized agent',
+      description: 'Run an enabled, account-authorized LeonardX specialist. Queued runs use the existing durable worker; owner-created text agents use only the configured LLM and no tools. Image/video generation and approval-gated agents must use their dedicated authorized flows. Requires confirmation and an idempotency key.',
+      inputSchema: {
+        agent_id: z.string().trim().min(1).max(96),
+        task: z.string().trim().min(1).max(8000),
+        context: z.string().max(18000).optional(),
+        idempotency_key: z.string().uuid(),
+        confirm: z.literal(true),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    }, async ({ agent_id, task, context, idempotency_key }) => {
+      if (!projects.invokeAgent) return toolError('Agent invocation is unavailable in this MCP deployment.');
+      const { data, error } = await projects.invokeAgent(userId, { agent_id, task, context, idempotency_key });
+      if (error) return toolError(typeof error === 'string' ? error : 'Agent execution could not be started.');
+      return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+    });
+    server.registerTool('cancel_agent_execution', {
+      title: 'Cancel a queued agent execution',
+      description: 'Atomically cancel an agent run only while it remains queued. A running or completed provider operation cannot be cancelled through this tool. Requires explicit confirmation.',
+      inputSchema: { run_id: z.string().uuid(), confirm: z.literal(true) },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    }, async ({ run_id }) => {
+      if (!projects.cancelAgentExecution) return toolError('Agent cancellation is unavailable in this MCP deployment.');
+      const { data, error } = await projects.cancelAgentExecution(userId, run_id);
+      if (error) return toolError(typeof error === 'string' ? error : 'Agent execution could not be cancelled.');
+      return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+    });
+    server.registerTool('approve_agent_execution', {
+      title: 'Approve an agent execution',
+      description: 'Approve a pending agent run owned by the authenticated account. The server rechecks the current plan and owner-only access, and refuses dedicated image/video generation agents. Requires explicit confirmation.',
+      inputSchema: { approval_id: z.string().uuid(), confirm: z.literal(true) },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    }, async ({ approval_id }) => {
+      if (!projects.approveAgentExecution) return toolError('Agent approval is unavailable in this MCP deployment.');
+      const { data, error } = await projects.approveAgentExecution(userId, approval_id);
+      if (error) return toolError(typeof error === 'string' ? error : 'Agent execution could not be approved.');
+      return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+    });
+    if (projects.isPlatformOwner) {
+      server.registerTool('create_agent', {
+        title: 'Register a safe text agent',
+        description: 'Create a disabled owner-managed text-only agent record. It receives no tools, shell access, database permissions, deployment privileges, or credentials. Enable it explicitly after review.',
+        inputSchema: {
+          name: z.string().trim().min(3).max(50),
+          category: z.enum(['core', 'development', 'website', 'creative', 'knowledge', 'productivity', 'business', 'computer']),
+          description: z.string().trim().min(1).max(200),
+          instructions: z.string().trim().min(30).max(4000),
+          confirm: z.literal(true),
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      }, async ({ name, category, description, instructions }) => {
+        if (!projects.createRegisteredAgent) return toolError('Owner agent registration is unavailable in this deployment.');
+        const { data, error } = await projects.createRegisteredAgent(userId, { name, category, description, instructions });
+        if (error) return toolError(typeof error === 'string' ? error : 'Owner agent could not be registered.');
+        return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+      });
+      server.registerTool('update_agent', {
+        title: 'Update an owner-managed text agent',
+        description: 'Update the prompt and metadata for an owner-managed text-only agent. Tool grants and executable code are not supported.',
+        inputSchema: {
+          agent_id: z.string().trim().min(1).max(96),
+          name: z.string().trim().min(3).max(50),
+          category: z.enum(['core', 'development', 'website', 'creative', 'knowledge', 'productivity', 'business', 'computer']),
+          description: z.string().trim().min(1).max(200),
+          instructions: z.string().trim().min(30).max(4000),
+          confirm: z.literal(true),
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      }, async ({ agent_id, name, category, description, instructions }) => {
+        if (!projects.updateRegisteredAgent) return toolError('Owner agent management is unavailable in this deployment.');
+        const { data, error } = await projects.updateRegisteredAgent(userId, { agent_id, name, category, description, instructions });
+        if (error) return toolError(typeof error === 'string' ? error : 'Owner agent could not be updated.');
+        return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+      });
+      for (const [name, enabled] of [['enable_agent', true], ['disable_agent', false]] as const) {
+        server.registerTool(name, {
+          title: enabled ? 'Enable an owner-managed agent' : 'Disable an owner-managed agent',
+          description: enabled ? 'Enable a registered owner-managed text-only agent for owner MCP invocation.' : 'Disable an owner-managed agent immediately; existing execution records remain available.',
+          inputSchema: { agent_id: z.string().trim().min(1).max(96), confirm: z.literal(true) },
+          annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+        }, async ({ agent_id }) => {
+          if (!projects.setRegisteredAgentEnabled) return toolError('Owner agent management is unavailable in this deployment.');
+          const result = await projects.setRegisteredAgentEnabled(userId, agent_id, enabled);
+          if (result.error) return toolError(typeof result.error === 'string' ? result.error : 'Owner agent status could not be changed.');
+          return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
+        });
+      }
+    }
     server.registerTool('build_android_calculator', {
       title: 'Create and build the Android calculator APK',
         description: 'Create a functional Java calculator project and enqueue a durable Android debug build. A separately scheduled, authenticated worker runs Gradle, validates and stores the APK privately, then status reports its owner-authorized download URL and SHA-256. Requires the Android worker, toolchain, private Supabase storage, and migration configured on the LeonardX server. Reuse idempotency_key for retries. Requires explicit user approval and confirm=true.',
