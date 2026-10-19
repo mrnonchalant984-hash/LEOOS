@@ -78,7 +78,7 @@ export type McpProjectReader = {
   getAndroidBuildCapabilities?(): Promise<{ data: unknown; error: unknown }>;
   buildAndroidCalculator?(userId: string, idempotencyKey: string): Promise<{ data: unknown; error: unknown }>;
   getAndroidBuildStatus?(userId: string, jobId: string): Promise<{ data: unknown; error: unknown }>;
-  leoAiChat?(userId: string, input: { message: string; session_id?: string; project_id?: string; model?: string; idempotency_key: string }): Promise<{ data: unknown; error: unknown }>;
+  leoAiChat?(userId: string, input: { message: string; session_id?: string; project_id?: string; model?: string; fallback_model?: string; idempotency_key: string }): Promise<{ data: unknown; error: unknown }>;
   leoAiGetExecutionStatus?(userId: string, requestId: string): Promise<{ data: unknown; error: unknown }>;
   listAvailableAgents?(userId: string): Promise<{ data: unknown; error: unknown }>;
   invokeAgent?(userId: string, input: { agent_id: string; task: string; context?: string; idempotency_key: string }): Promise<{ data: unknown; error: unknown }>;
@@ -348,14 +348,15 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
         message: z.string().trim().min(1).max(12000),
         session_id: z.string().uuid().optional(),
         project_id: z.string().uuid().optional(),
-        model: z.string().trim().min(1).max(160).optional().describe('Optional exact model/preset from list_ai_providers. No silent fallback is performed.'),
+        model: z.string().trim().min(1).max(160).optional().describe('Optional primary model/preset from list_ai_providers.'),
+        fallback_model: z.string().trim().min(1).max(160).optional().describe('Optional explicit fallback model. Used only after rate-limit, transient server, or network errors; never after authentication or request errors.'),
         idempotency_key: z.string().uuid(),
         confirm: z.literal(true),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-    }, async ({ message, session_id, project_id, model, idempotency_key }) => {
+    }, async ({ message, session_id, project_id, model, fallback_model, idempotency_key }) => {
       if (!projects.leoAiChat) return toolError('Leo AI is unavailable in this MCP deployment.');
-      const { data, error } = await projects.leoAiChat(userId, { message, session_id, project_id, model, idempotency_key });
+      const { data, error } = await projects.leoAiChat(userId, { message, session_id, project_id, model, fallback_model, idempotency_key });
       if (error) return toolError(typeof error === 'string' ? error : 'Leo AI could not complete the request.');
       return { content: [{ type: 'text', text: JSON.stringify(data) }] };
     });

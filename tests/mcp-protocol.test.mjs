@@ -169,6 +169,7 @@ test('MCP write tools require the write scope and explicit confirmation input', 
     const create = tools.find(tool => tool.name === 'create_project');
     const deploy = tools.find(tool => tool.name === 'build_and_deploy_project');
     const cloudBuild = tools.find(tool => tool.name === 'start_cloud_build');
+    const leoChat = tools.find(tool => tool.name === 'leo_ai_chat');
     assert.deepEqual(tools.map(tool => tool.name).sort(), [
       'advance_engineering_workflow',
       'approve_agent_execution',
@@ -209,6 +210,9 @@ test('MCP write tools require the write scope and explicit confirmation input', 
     assert.ok(create);
     assert.ok(deploy);
     assert.ok(cloudBuild);
+    assert.ok(leoChat);
+    assert.equal(leoChat.inputSchema.properties.confirm.const, true);
+    assert.ok(leoChat.inputSchema.properties.fallback_model);
     assert.equal(create.inputSchema.properties.confirm.const, true);
     assert.equal(deploy.annotations?.destructiveHint, true);
     assert.equal(cloudBuild.inputSchema.properties.confirm.const, true);
@@ -286,7 +290,7 @@ test('MCP write tools dispatch approved project actions to their account-scoped 
       ['build_and_deploy_project', { project_id: project.id, brief: 'Deploy this site', files: [{ path: 'app/page.tsx', content: 'export default function Page() {}' }], idempotency_key: '11111111-1111-4111-8111-111111111111', confirm: true }],
       ['start_cloud_build', { project_id: project.id, provider: 'godot-build-service', preset: 'Linux/X11', idempotency_key: '55555555-5555-4555-8555-555555555555', confirm: true }],
       ['start_cloud_build', { project_id: project.id, provider: 'expo-eas', idempotency_key: '77777777-7777-4777-8777-777777777777', confirm: true }],
-      ['leo_ai_chat', { message: 'Explain this project', project_id: project.id, idempotency_key: '99999999-9999-4999-8999-999999999999', confirm: true }],
+      ['leo_ai_chat', { message: 'Explain this project', project_id: project.id, fallback_model: 'anthropic/claude-3-5-haiku-latest', idempotency_key: '99999999-9999-4999-8999-999999999999', confirm: true }],
       ['invoke_agent', { agent_id: 'code-review', task: 'Review my code', idempotency_key: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', confirm: true }],
       ['cancel_agent_execution', { run_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', confirm: true }],
       ['approve_agent_execution', { approval_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', confirm: true }],
@@ -306,7 +310,7 @@ test('MCP write tools dispatch approved project actions to their account-scoped 
       ['build_and_deploy_project', 'authenticated-user', project.id, 'Deploy this site', [{ path: 'app/page.tsx', content: 'export default function Page() {}' }], '11111111-1111-4111-8111-111111111111'],
       ['start_cloud_build', 'authenticated-user', { project_id: project.id, provider: 'godot-build-service', platform: undefined, profile: undefined, preset: 'Linux/X11', idempotency_key: '55555555-5555-4555-8555-555555555555' }],
       ['start_cloud_build', 'authenticated-user', { project_id: project.id, provider: 'expo-eas', platform: 'android', profile: 'preview', preset: undefined, idempotency_key: '77777777-7777-4777-8777-777777777777' }],
-      ['leo_ai_chat', 'authenticated-user', { message: 'Explain this project', project_id: project.id, session_id: undefined, model: undefined, idempotency_key: '99999999-9999-4999-8999-999999999999' }],
+      ['leo_ai_chat', 'authenticated-user', { message: 'Explain this project', project_id: project.id, session_id: undefined, model: undefined, fallback_model: 'anthropic/claude-3-5-haiku-latest', idempotency_key: '99999999-9999-4999-8999-999999999999' }],
       ['invoke_agent', 'authenticated-user', { agent_id: 'code-review', task: 'Review my code', context: undefined, idempotency_key: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
       ['approve_agent_execution', 'authenticated-user', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'],
       ['get_cloud_build_status', 'authenticated-user', 'godot-build-service', project.id],
