@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight, CheckCircle2, Send } from 'lucide-react';
-import { CONTACT_DELIVERY_STRATEGIES, CONTACT_SERVICES } from '@/lib/contact-form';
+import { CONTACT_SERVICES } from '@/lib/contact-form';
 import { siteData } from '@/data/site';
 
 type SubmissionStatus = { type: 'success' | 'error'; message: string };
@@ -101,19 +101,6 @@ export default function ContactPage() {
         <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-zinc-300 sm:text-lg">
           Tell us what you’re working on. We’ll review your message and follow up about the right next step.
         </p>
-        <div className="mx-auto mt-6 max-w-xl rounded-xl border border-white/10 bg-white/[.03] p-4 text-left text-xs leading-5 text-zinc-400">
-          <p className="font-semibold text-zinc-200">Delivery strategies currently supported</p>
-          <ul className="mt-2 list-disc space-y-1 pl-4">
-            {CONTACT_DELIVERY_STRATEGIES.map((strategy) => (
-              <li key={strategy.id}>
-                <span className="text-zinc-200">{strategy.label}.</span> {strategy.limitation}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2">
-            This form saves to the database first. Email notification uses Web3Forms when configured, otherwise SMTP/Resend on the server when available. Saving a message is not the same as verifying email delivery.
-          </p>
-        </div>
       </header>
 
       <form
