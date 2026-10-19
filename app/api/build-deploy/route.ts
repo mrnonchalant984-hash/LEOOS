@@ -5,11 +5,13 @@ import { getTextOpenAI as getOpenAI, getConfiguredModel } from '@/lib/openai';
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import type { ProjectType } from '@/lib/pricing';
 import { getBuilderAvailability, getExternalModelBuilderAvailability } from '@/lib/builders/providers';
-import { enforceUserRateLimit } from '@/lib/rate-limit';
 import { withOperationalMonitoring } from '@/lib/monitoring';
 import { validateMcpAccessToken, MCP_WRITE_SCOPE } from '@/lib/mcp/oauth';
 import { normalizeIdePath, validateIdeFiles } from '@/lib/ide-files';
 import { normalizeVercelDomain, resolveVerifiedVercelMainUrl, toVercelSubdomain, verifyPublicMainDomain } from '@/lib/vercel-deployment-url';
+import { buildDeployRequestHash, getBuildDeployRateLimitPerHour, resolveBuildDeployIdempotencyKey } from '@/lib/build-deploy-idempotency';
+import { ProviderHttpError, requestProviderJson } from '@/lib/provider-http';
+import type { DeploymentProvider } from '@/lib/provider-http';
 
 export const runtime = 'nodejs';
 
@@ -42,7 +44,7 @@ function validateGeneratedSite(site: GeneratedSite, chatbot: boolean) {
 }
 
 async function gh(path: string, opts: RequestInit = {}) {
-  const r = await fetch(`https://api.github.com${path}`, {
+  return requestProviderJson<Record<string, any>>('github', `https://api.github.com${path}`, {
     ...opts,
     headers: {
       Accept: 'application/vnd.github+json',
@@ -52,13 +54,11 @@ async function gh(path: string, opts: RequestInit = {}) {
       ...(opts.headers || {}),
     },
   });
-  if (!r.ok) throw new Error(`GitHub API ${r.status}: ${await r.text()}`);
-  return r.json();
 }
 
 async function vercel(path: string, opts: RequestInit = {}) {
   const query = process.env.VERCEL_TEAM_ID ? `?teamId=${encodeURIComponent(process.env.VERCEL_TEAM_ID)}` : '';
-  const r = await fetch(`https://api.vercel.com${path}${query}`, {
+  return requestProviderJson<Record<string, any>>('vercel', `https://api.vercel.com${path}${query}`, {
     ...opts,
     headers: {
       Authorization: `Bearer ${process.env.VERCEL_TOKEN}`,
@@ -66,11 +66,9 @@ async function vercel(path: string, opts: RequestInit = {}) {
       ...(opts.headers || {}),
     },
   });
-  if (!r.ok) throw new Error(`Vercel API ${r.status}: ${await r.text()}`);
-  return r.json();
 }
 
-type BuildContext = { id: string; projectId: string; userId: string };
+type BuildContext = { id: string; projectId: string; userId: string; deploymentId?: string | null };
 type BuildStatus = 'building' | 'testing' | 'deploying' | 'live' | 'build_failed' | 'deploy_failed';
 
 async function recordBuildState(
@@ -89,15 +87,17 @@ async function recordBuildState(
   if (readError) throw readError;
   const logs = Array.isArray(current?.logs) ? current.logs : [];
   const completed = ['live', 'build_failed', 'deploy_failed'].includes(status);
-  const { error: buildError } = await db.from('project_builds').update({
+  const buildUpdate: Record<string, unknown> = {
     status,
     step,
     logs: [...logs, { at: now, status, step, message: details.message || step }].slice(-100),
     error: details.error || null,
-    deployment_id: details.deploymentId,
-    deployment_url: details.deploymentUrl,
     completed_at: completed ? now : null,
-  }).eq('id', context.id).eq('owner_user_id', context.userId);
+  };
+  if (details.deploymentId !== undefined) buildUpdate.deployment_id = details.deploymentId;
+  if (details.deploymentUrl !== undefined) buildUpdate.deployment_url = details.deploymentUrl;
+  const { error: buildError } = await db.from('project_builds').update(buildUpdate)
+    .eq('id', context.id).eq('owner_user_id', context.userId);
   if (buildError) throw buildError;
   const { error: projectError } = await db.from('website_projects').update({
     status: status === 'live' ? 'deployed' : status,
@@ -143,9 +143,11 @@ export async function POST(req: NextRequest) {
       if (!apiProfile) return NextResponse.json({ error: 'Account profile could not be loaded.' }, { status: 403 });
       ctx = { user: { id: apiContext.userId, email: apiProfile.email }, profile: apiProfile };
     }
-    const limited = await enforceUserRateLimit(ctx.user.id, 'project-build-deploy', 3, 3600);
-    if (limited) return limited;
-    const body = await req.json();
+    const parsedBody: unknown = await req.json().catch(() => null);
+    if (!parsedBody || typeof parsedBody !== 'object' || Array.isArray(parsedBody)) {
+      return NextResponse.json({ error: 'A deployment request body is required.' }, { status: 400 });
+    }
+    const body = parsedBody as Record<string, any>;
     const userPrompt = String(body.prompt || '').trim();
     const customerProjectId = String(body.project_id || '');
     let suppliedMcpFiles: GeneratedFile[] | null = null;
@@ -191,17 +193,89 @@ export async function POST(req: NextRequest) {
       ? getExternalModelBuilderAvailability(projectType)
       : getBuilderAvailability(projectType);
     if (provider.status !== 'ready') return NextResponse.json({ error: provider.message || 'Build provider is not configured.', provider: provider.id, requiredEnvironment: provider.requiredEnvironment }, { status: 503 });
-    const { data: startedBuild, error: startError } = await db.rpc('start_customer_project_build', {
+    const requestHash = buildDeployRequestHash(ctx.user.id, customerProjectId, body);
+    const idempotency = resolveBuildDeployIdempotencyKey(req.headers.get('idempotency-key'), body.idempotency_key, requestHash);
+    if (idempotency.error) return NextResponse.json({ error: idempotency.error }, { status: 400 });
+    const { data: startedResult, error: startError } = await db.rpc('start_customer_project_build_idempotent', {
       p_project_id: customerProjectId,
       p_owner_user_id: ctx.user.id,
       p_provider: provider.id,
       p_monthly_limit: plan.limits.monthlyBuilds,
+      p_idempotency_key: idempotency.key,
+      p_request_hash: requestHash,
+      p_request_limit: getBuildDeployRateLimitPerHour(),
+      p_window_seconds: 3600,
     });
     if (startError) {
       const limited = startError.message?.includes('Monthly build limit reached');
-      return NextResponse.json({ error: startError.message || 'Build could not be started.', upgrade_url: limited ? '/pricing' : undefined }, { status: limited ? 429 : 500 });
+      const idempotencyConflict = startError.message?.includes('Idempotency key is already associated');
+      return NextResponse.json({
+        error: limited
+          ? 'The monthly build allowance for this plan has been reached.'
+          : idempotencyConflict
+            ? 'This idempotency key was already used for a different deployment request.'
+            : 'Build could not be started.',
+        code: limited ? 'MONTHLY_BUILD_LIMIT_REACHED' : idempotencyConflict ? 'IDEMPOTENCY_KEY_REUSED' : 'BUILD_START_FAILED',
+        retryable: false,
+        requestId,
+        ...(limited ? { upgrade_url: '/pricing' } : {}),
+      }, { status: limited ? 429 : idempotencyConflict ? 409 : 500, headers: { 'Cache-Control': 'no-store' } });
     }
-    buildContext = { id: String(startedBuild), projectId: customerProjectId, userId: ctx.user.id, stage: 'building' };
+    const admission = Array.isArray(startedResult) ? startedResult[0] : startedResult;
+    if (!admission?.disposition) {
+      return NextResponse.json({ error: 'Build admission could not be confirmed.', code: 'BUILD_START_FAILED', retryable: true, requestId }, { status: 503 });
+    }
+    if (admission.disposition === 'rate_limited') {
+      const retryAfterSeconds = Number(admission.retry_after_seconds);
+      const headers = new Headers({ 'Cache-Control': 'no-store' });
+      if (Number.isInteger(retryAfterSeconds) && retryAfterSeconds > 0) headers.set('Retry-After', String(retryAfterSeconds));
+      return NextResponse.json({
+        error: 'The deployment service is protecting this account from too many new builds.',
+        code: 'RATE_LIMITED',
+        retryable: true,
+        ...(Number.isInteger(retryAfterSeconds) && retryAfterSeconds > 0 ? { retryAfterSeconds } : {}),
+        provider: 'leonardx',
+        requestId,
+      }, { status: 429, headers });
+    }
+    if (admission.disposition === 'in_progress') {
+      return NextResponse.json({
+        error: 'A different build is already running for this project. Check its status before starting another version.',
+        code: 'BUILD_ALREADY_RUNNING',
+        retryable: true,
+        jobId: admission.build_id,
+        status: admission.build_status,
+        requestId,
+      }, { status: 409, headers: { 'Cache-Control': 'no-store' } });
+    }
+    if (admission.disposition === 'duplicate') {
+      const { data: existingBuild, error: existingError } = await db.from('project_builds')
+        .select('id,status,step,error,deployment_id,deployment_url,created_at,started_at,completed_at')
+        .eq('id', admission.build_id)
+        .eq('owner_user_id', ctx.user.id)
+        .eq('website_project_id', customerProjectId)
+        .maybeSingle();
+      if (existingError || !existingBuild) {
+        return NextResponse.json({ error: 'The existing build status could not be loaded.', code: 'BUILD_STATUS_UNAVAILABLE', retryable: true, requestId }, { status: 503 });
+      }
+      const responseBody = { jobId: existingBuild.id, status: existingBuild.status, step: existingBuild.step, duplicate: true, requestId };
+      if (['building', 'testing', 'deploying'].includes(existingBuild.status)) {
+        return NextResponse.json({ ...responseBody, success: true }, { status: 202, headers: { 'Cache-Control': 'no-store' } });
+      }
+      if (existingBuild.status === 'live') {
+        return NextResponse.json({ ...responseBody, status: 'deployed', liveUrl: existingBuild.deployment_url, success: true }, { headers: { 'Cache-Control': 'no-store' } });
+      }
+      return NextResponse.json({
+        ...responseBody,
+        error: 'The earlier build for this idempotency key failed. Check its status before explicitly starting a new deployment.',
+        code: 'PREVIOUS_BUILD_FAILED',
+        retryable: false,
+      }, { status: 409, headers: { 'Cache-Control': 'no-store' } });
+    }
+    if (admission.disposition !== 'started' || !admission.build_id) {
+      return NextResponse.json({ error: 'Build admission returned an unknown status.', code: 'BUILD_START_FAILED', retryable: true, requestId }, { status: 503 });
+    }
+    buildContext = { id: String(admission.build_id), projectId: customerProjectId, userId: ctx.user.id, stage: 'building' };
     const prompt = `Build a production-ready ${projectType.replaceAll('_', ' ')} named ${ownedProject.business_name || 'Customer Project'}.\n\n${userPrompt}`;
 
     let json: GeneratedSite;
@@ -304,8 +378,13 @@ export async function POST(req: NextRequest) {
 
     const deploymentId = String(deploy.id || deploy.uid || '');
     if (!deploymentId) throw new Error('Vercel did not return a deployment ID.');
-    const readyDeployment = await waitForVercelDeployment(deploymentId, 180000, (state) =>
-      recordBuildState(buildContext!, 'deploying', `Vercel build state: ${state}`),
+    buildContext.deploymentId = deploymentId;
+    await recordBuildState(buildContext, 'deploying', 'Vercel accepted the production deployment', {
+      deploymentId,
+      message: 'Vercel accepted the production deployment and returned a deployment ID.',
+    });
+    await waitForVercelDeployment(deploymentId, 180000, (state) =>
+      recordBuildState(buildContext!, 'deploying', `Vercel build state: ${state}`, { deploymentId }),
     );
     await recordBuildState(buildContext, 'deploying', 'Verifying the project’s main production domain');
     const projectDomainsResult = await vercel(`/v9/projects/${encodeURIComponent(projectId)}/domains`);
@@ -434,7 +513,9 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
+      success: true,
       status: 'deployed',
+      jobId: buildContext.id,
       githubUrl: repo.html_url,
       liveUrl,
       adminUrl: `${liveUrl}/admin`,
@@ -443,22 +524,60 @@ export async function POST(req: NextRequest) {
       reviewUrl: wallOfLoveUrl,
     });
   } catch (e) {
-    reportFailure(e, buildContext?.stage === 'deploying' || buildContext?.stage === 'live'
+    const providerError = e instanceof ProviderHttpError ? e : null;
+    const failureProvider: DeploymentProvider | 'openai' = providerError?.provider || (buildContext?.stage === 'deploying' || buildContext?.stage === 'live'
       ? 'vercel'
       : mcpExternalModel ? 'github' : 'openai');
+    reportFailure(e, failureProvider === 'openai' ? undefined : failureProvider);
+    if (providerError) {
+      console.warn(JSON.stringify({
+        level: 'warn',
+        event: providerError.code === 'RATE_LIMITED' ? 'leo.provider.rate_limited' : 'leo.provider.request_failed',
+        provider: providerError.provider,
+        provider_status: providerError.status,
+        error_code: providerError.code,
+        retry_after_seconds: providerError.retryAfterSeconds,
+        provider_request_id: providerError.providerRequestId,
+        request_id: requestId,
+        job_id: buildContext?.id,
+      }));
+    }
     if (buildContext?.stage === 'live') {
       return NextResponse.json({ status: 'deployed', liveUrl: deploymentUrl, warning: 'Deployment is live, but project status could not be fully recorded.' });
     }
     if (buildContext) {
       const status = buildContext.stage === 'deploying' ? 'deploy_failed' : 'build_failed';
       await recordBuildState(buildContext, status, status === 'deploy_failed' ? 'Deployment failed' : 'Build failed', {
-        error: mainDomainFailure || 'Build or deployment operation failed.',
-        message: mainDomainFailure || 'Build or deployment operation failed.',
+        error: mainDomainFailure || providerError?.message || 'Build or deployment operation failed.',
+        message: mainDomainFailure || providerError?.message || 'Build or deployment operation failed.',
+        deploymentId: buildContext.deploymentId,
       }).catch(() => console.error(JSON.stringify({ level: 'error', event: 'leo.operation.persistence_failure', operation: 'project.build_deploy', request_id: requestId })));
+    }
+    if (providerError) {
+      const responseStatus = providerError.code === 'RATE_LIMITED' || providerError.code === 'QUOTA_EXHAUSTED'
+        ? 429
+        : providerError.retryable ? 503 : 502;
+      const headers = new Headers({ 'Cache-Control': 'no-store', 'X-Request-ID': requestId });
+      if (providerError.retryAfterSeconds !== null && providerError.retryAfterSeconds > 0) {
+        headers.set('Retry-After', String(providerError.retryAfterSeconds));
+      }
+      return NextResponse.json({
+        error: providerError.message,
+        code: providerError.code,
+        retryable: providerError.retryable,
+        ...(providerError.retryAfterSeconds !== null ? { retryAfterSeconds: providerError.retryAfterSeconds } : {}),
+        provider: providerError.provider,
+        requestId,
+        ...(buildContext ? { jobId: buildContext.id } : {}),
+      }, { status: responseStatus, headers });
     }
     return NextResponse.json({
       error: mainDomainFailure || 'Build or deployment could not be completed. Review the project operation status and retry.',
-    }, { status: mainDomainFailure ? 502 : 500 });
+      code: mainDomainFailure ? 'DEPLOYMENT_DOMAIN_UNAVAILABLE' : 'BUILD_DEPLOY_FAILED',
+      retryable: false,
+      requestId,
+      ...(buildContext ? { jobId: buildContext.id } : {}),
+    }, { status: mainDomainFailure ? 502 : 500, headers: { 'Cache-Control': 'no-store', 'X-Request-ID': requestId } });
   }
   });
 }

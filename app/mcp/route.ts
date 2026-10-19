@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'node:crypto';
 import { adminSupabase } from '@/lib/auth';
 import { getMcpBaseUrl, isAllowedMcpOrigin, MCP_SCOPE, validateMcpAccessToken } from '@/lib/mcp/oauth';
 import { handleUserMcpRequest } from '@/lib/mcp/server';
@@ -7,6 +8,7 @@ import { isPlatformOwner } from '@/lib/auth';
 import type { ProjectType } from '@/lib/pricing';
 import { normalizeIdePath, validateIdeFiles } from '@/lib/ide-files';
 import { POST as buildDeploy } from '@/app/api/build-deploy/route';
+import type { ProjectRunnerOperation } from '@/lib/project-runner';
 
 async function invokeCloudBuildRoute(
   request: NextRequest,
@@ -36,8 +38,33 @@ async function invokeCloudBuildRoute(
     : { data: null, error: typeof data?.error === 'string' ? data.error : `Cloud build request failed (${response.status}).` };
 }
 
+async function invokeAndroidBuildRoute(request: NextRequest, method: 'GET' | 'POST', jobId?: string, idempotencyKey?: string) {
+  const authorization = request.headers.get('authorization');
+  if (!authorization) return { data: null, error: 'MCP authorization is missing.' };
+  const target = new URL(`/api/builds/android${jobId ? `/${encodeURIComponent(jobId)}` : ''}`, request.url);
+  const apiRequest = new NextRequest(target, {
+    method,
+    headers: { Authorization: authorization, ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
+    ...(method === 'POST' ? { body: JSON.stringify({ idempotency_key: idempotencyKey }) } : {}),
+  });
+  const response = method === 'POST'
+    ? await (await import('@/app/api/builds/android/route')).POST(apiRequest)
+    : await (await import('@/app/api/builds/android/[id]/route')).GET(apiRequest, { params: Promise.resolve({ id: jobId || '' }) });
+  const data = await response.json().catch(() => null);
+  if (data && typeof data === 'object') {
+    const payload = data as Record<string, unknown>;
+    for (const key of ['download_url', 'status_url']) {
+      if (typeof payload[key] === 'string' && payload[key].startsWith('/')) payload[key] = new URL(payload[key], request.url).toString();
+    }
+  }
+  return response.ok || response.status === 202
+    ? { data, error: null }
+    : { data: null, error: typeof data?.error === 'string' ? data.error : `Android build request failed (${response.status}).` };
+}
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 600;
 
 function corsHeaders(request: NextRequest) {
   const origin = request.headers.get('origin');
@@ -140,7 +167,22 @@ export async function POST(request: NextRequest) {
           .eq('id', projectId)
           .eq('user_id', userId)
           .maybeSingle();
-        return { data, error };
+        if (error || !data) return { data, error };
+        const { data: websiteProject, error: websiteError } = await db.from('website_projects')
+          .select('id')
+          .eq('source_project_id', projectId)
+          .eq('owner_user_id', userId)
+          .maybeSingle();
+        if (websiteError) return { data: null, error: websiteError };
+        if (!websiteProject) return { data, error: null };
+        const { data: builds, error: buildError } = await db.from('project_builds')
+          .select('id,provider,status,step,deployment_id,deployment_url,created_at,started_at,completed_at')
+          .eq('website_project_id', websiteProject.id)
+          .eq('owner_user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (buildError) return { data: null, error: buildError };
+        return { data: { ...data, build: builds?.[0] || null }, error: null };
       },
       async getProjectFiles(userId: string, projectId: string, requestedPaths?: string[]) {
         const { data: project, error } = await db.from('projects').select('files')
@@ -220,6 +262,19 @@ export async function POST(request: NextRequest) {
         ]);
         if (profileError || !profile) return { data: null, error: profileError || new Error('Account profile is unavailable.') };
         const effectivePlan = isPlatformOwner(profile) ? await getEffectiveUserPlan(userId, true) : plan;
+        if (projectType === 'mobile_app' || projectType === 'game') {
+          const { planAllowsCloudProject } = await import('@/lib/plan-access');
+          if (!planAllowsCloudProject(effectivePlan, projectType, isPlatformOwner(profile))) {
+            return { data: null, error: `The ${projectType === 'mobile_app' ? 'mobile app' : 'game'} builder is not enabled for this account. Configure the server-side plan entitlement before retrying.` };
+          }
+          const starterFiles = projectType === 'game'
+            ? (await import('@/lib/builders/godot-starter')).createGodot3dStarter(name, { source: 'mcp_project_creation' })
+            : (await import('@/lib/builders/expo-starter')).createExpoMobileStarter(name, { source: 'mcp_project_creation' });
+          const { data, error } = await db.from('projects').insert({ user_id: userId, project_name: name, type: projectType, status: 'draft', progress: 0, files: starterFiles })
+            .select('id,project_name,type,status,progress,created_at').single();
+          if (error || !data) return { data: null, error: error || 'The project workspace could not be created.' };
+          return { data, error: null };
+        }
         const requiredFeature = projectType === 'saas' ? 'saas-builder' : projectType === 'web_app' ? 'web-app-builder' : 'website-builder';
         if (!effectivePlan.projectTypes.includes(projectType) || !planAllows(effectivePlan, requiredFeature)) {
           return { data: null, error: 'This project type is not included in your current plan. Review your plan at /pricing.' };
@@ -281,7 +336,7 @@ export async function POST(request: NextRequest) {
         if (websiteError) return { data: null, error: 'The project was renamed, but its plan-managed build record could not be synchronized.' };
         return { data, error: null };
       },
-      async buildAndDeploy(userId: string, projectId: string, brief: string, files: Array<{ path: string; content: string }>) {
+      async buildAndDeploy(userId: string, projectId: string, brief: string, files: Array<{ path: string; content: string }>, idempotencyKey?: string) {
         const fileMap = Object.fromEntries(files.map(file => [file.path, file.content]));
         if (Object.keys(fileMap).length !== files.length || !validateIdeFiles(fileMap)) {
           return { data: null, error: 'Deployment files contain duplicate/unsafe paths or exceed workspace file/size limits.' };
@@ -296,6 +351,7 @@ export async function POST(request: NextRequest) {
         if (websiteError || !websiteProject) return { data: null, error: websiteError || 'The project has no plan-managed build workspace.' };
         const headers = new Headers(request.headers);
         headers.delete('content-length');
+        if (idempotencyKey) headers.set('Idempotency-Key', idempotencyKey);
         const result = await buildDeploy(new NextRequest(new URL('/api/build-deploy', request.url), {
           method: 'POST',
           headers,
@@ -304,6 +360,7 @@ export async function POST(request: NextRequest) {
             prompt: brief,
             generated_files: files,
             source: 'mcp_external_model',
+            ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
           }),
         }));
         const resultBody = await result.json().catch(() => null);
@@ -329,6 +386,16 @@ export async function POST(request: NextRequest) {
           error: null,
         };
       },
+      async getAndroidBuildCapabilities() {
+        const { getAndroidBuildCapabilities } = await import('@/lib/android-build');
+        return { data: getAndroidBuildCapabilities(), error: null };
+      },
+      async buildAndroidCalculator(_userId: string, idempotencyKey: string) {
+        return invokeAndroidBuildRoute(request, 'POST', undefined, idempotencyKey);
+      },
+      async getAndroidBuildStatus(_userId: string, jobId: string) {
+        return invokeAndroidBuildRoute(request, 'GET', jobId);
+      },
       async getEngineeringWorkflowStatus(userId: string, workflowId?: string) {
         const { listEngineeringWorkflows, getEngineeringWorkflow, serializeWorkflow, listWorkflowEvents } = await import('@/lib/engineering-workflow-store');
         if (workflowId) {
@@ -340,6 +407,31 @@ export async function POST(request: NextRequest) {
         const { data, error } = await listEngineeringWorkflows(userId, 5);
         if (error) return { data: null, error };
         return { data: { workflows: data.map(serializeWorkflow) }, error: null };
+      },
+      async runProjectOperation(userId: string, projectId: string, operation: ProjectRunnerOperation) {
+        const { data: project, error } = await db.from('projects').select('files')
+          .eq('id', projectId).eq('user_id', userId).maybeSingle();
+        if (error || !project) return { data: null, error: error || 'Project not found.' };
+        const { runProjectRunnerOperation } = await import('@/lib/project-runner');
+        return runProjectRunnerOperation({ ownerId: userId, files: project.files, operation });
+      },
+      async retryCloudBuild(userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string) {
+        const { data: job, error } = await db.from('cloud_build_jobs')
+          .select('id,project_id,provider,provider_job_id,status,profile')
+          .eq('id', jobId).eq('owner_user_id', userId).eq('provider', provider).maybeSingle();
+        if (error || !job) return { data: null, error: error || 'Build job not found.' };
+        if (!['failed', 'cancelled'].includes(job.status)) return { data: null, error: 'Only failed or cancelled builds can be retried.' };
+        if (job.provider_job_id) return { data: null, error: 'This build has a provider job ID. Check provider history before retrying to avoid duplicate charges.' };
+        const body = provider === 'expo-eas'
+          ? { project_id: job.project_id, platform: String(job.profile).split(':')[0], profile: String(job.profile).split(':')[1] || 'preview', idempotency_key: randomUUID() }
+          : { project_id: job.project_id, preset: job.profile, idempotency_key: randomUUID() };
+        const target = new URL(`/api/builds/${provider === 'expo-eas' ? 'expo' : 'godot'}`, request.url);
+        const retryRequest = new NextRequest(target, { method: 'POST', headers: request.headers, body: JSON.stringify(body) });
+        const response = provider === 'expo-eas'
+          ? await (await import('@/app/api/builds/expo/route')).POST(retryRequest)
+          : await (await import('@/app/api/builds/godot/route')).POST(retryRequest);
+        const data = await response.json().catch(() => null);
+        return response.ok ? { data, error: null } : { data, error: data?.error || 'Cloud build retry failed.' };
       },
       async planEngineeringWorkflow(_userId: string, input: Parameters<typeof import('@/lib/mcp/orchestration').buildEngineeringOrchestrationPlan>[0]) {
         const { buildEngineeringOrchestrationPlan } = await import('@/lib/mcp/orchestration');

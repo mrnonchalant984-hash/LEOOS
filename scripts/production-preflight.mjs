@@ -4,12 +4,14 @@ const required = [
   'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY',
   'OWNER_EMAIL', 'CRON_SECRET', 'OPENAI_API_KEY',
   'AGENT_WORKER_ENABLED', 'WORKFORCE_WORKER_ENABLED', 'WORKFLOW_WORKER_ENABLED',
+  'ANDROID_BUILD_WORKER_ENABLED', 'ANDROID_BUILD_WORKER_SECRET',
   'GITHUB_TOKEN', 'VERCEL_TOKEN',
 ];
 const missing = required.filter((key) => {
   const value = process.env[key]?.trim();
   if (key === 'OPENAI_API_KEY') return !value && !process.env.LEO_API_KEY?.trim() && !process.env.LEO_LOCAL_MODEL_URL?.trim();
   if (key === 'CRON_SECRET') return !value || value.length < 32;
+  if (key === 'ANDROID_BUILD_WORKER_SECRET') return !value || value.length < 32;
   if (key.endsWith('_ENABLED')) return value !== 'true';
   return !value;
 });
@@ -21,6 +23,9 @@ const migrations = [
   'supabase/migrations/20261014110000_project_memory_dependencies.sql',
   'supabase/migrations/20261014120000_production_workforce_hardening.sql',
   'supabase/migrations/20261014130000_durable_workforce_role_jobs.sql',
+  'supabase/migrations/20261018150000_cloud_build_jobs.sql',
+  'supabase/migrations/20261019100000_android_build_artifacts.sql',
+  'supabase/migrations/20261019120000_android_build_worker_queue.sql',
 ];
 const missingMigrations = migrations.filter((path) => !existsSync(path));
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));

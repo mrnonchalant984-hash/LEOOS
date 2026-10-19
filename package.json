@@ -17,7 +17,8 @@
     "clean": "node scripts/clean-next.mjs",
     "preflight:production": "node scripts/production-preflight.mjs",
     "load:workforce": "node scripts/workforce-load-smoke.mjs",
-    "test:staging": "node scripts/staging-integration-smoke.mjs"
+    "test:staging": "node scripts/staging-integration-smoke.mjs",
+    "test:mcp:external": "node scripts/mcp-external-smoke.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.134.0",

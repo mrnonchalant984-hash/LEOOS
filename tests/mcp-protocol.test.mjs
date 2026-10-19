@@ -45,12 +45,17 @@ function createReader(overrides = {}) {
     async getCapabilityAlternatives() {
       return { data: { budget: 'free', requirements: [] }, error: null };
     },
+    async getAndroidBuildCapabilities() { return { data: { java: false, gradle: false, androidSdk: false, artifactStorageCredentialsPresent: false, buildable: false }, error: null }; },
+    async buildAndroidCalculator(_userId, key) { return { data: { job_id: 'android-job', status: 'completed', idempotency_key: key, download_url: 'https://mcp.test/api/builds/android/android-job/artifact' }, error: null }; },
+    async getAndroidBuildStatus(_userId, jobId) { return { data: { id: jobId, status: 'completed' }, error: null }; },
     async planEngineeringWorkflow(_userId, input) {
       return { data: { orderedStages: ['REQUEST_RECEIVED'], projectType: input.projectType }, error: null };
     },
     async createEngineeringWorkflow() { return { data: { id: 'workflow' }, error: null }; },
     async advanceEngineeringWorkflow() { return { data: { status: 'RUNNING' }, error: null }; },
     async cancelEngineeringWorkflow() { return { data: { status: 'CANCELLED' }, error: null }; },
+    async runProjectOperation(_userId, projectId, operation) { return { data: { job_id: projectId, status: 'completed', operation }, error: null }; },
+    async retryCloudBuild(_userId, provider, jobId) { return { data: { job_id: jobId, provider, status: 'queued' }, error: null }; },
     ...overrides,
   };
 }
@@ -64,7 +69,10 @@ test('Streamable HTTP MCP server initializes, lists tools, and calls a harmless 
     await client.connect(transport);
     const { tools } = await client.listTools();
     assert.deepEqual(tools.map(tool => tool.name).sort(), [
+      'discover_application_capabilities',
       'get_account_plan',
+      'get_android_build_capabilities',
+      'get_android_build_status',
       'get_capability_alternatives',
       'get_cloud_build_status',
       'get_configuration_status',
@@ -76,6 +84,12 @@ test('Streamable HTTP MCP server initializes, lists tools, and calls a harmless 
       'read_project_files',
     ]);
     assert.ok(tools.every(tool => tool.annotations?.readOnlyHint === true));
+
+    const capabilities = await client.callTool({ name: 'discover_application_capabilities', arguments: {} });
+    assert.equal(capabilities.isError, undefined);
+    const catalog = JSON.parse(capabilities.content[0].text).capabilities;
+    assert.ok(catalog.some(item => item.id === 'mobile-expo-eas' && item.buildMode === 'provider_async'));
+    assert.ok(catalog.some(item => item.id === 'android-native' && item.status === 'unavailable'));
 
     const result = await client.callTool({ name: 'list_projects', arguments: { limit: 10 } });
     assert.equal(result.isError, undefined);
@@ -132,10 +146,14 @@ test('MCP write tools require the write scope and explicit confirmation input', 
     assert.deepEqual(tools.map(tool => tool.name).sort(), [
       'advance_engineering_workflow',
       'build_and_deploy_project',
+      'build_android_calculator',
       'cancel_engineering_workflow',
       'create_engineering_workflow',
       'create_project',
+      'discover_application_capabilities',
       'get_account_plan',
+      'get_android_build_capabilities',
+      'get_android_build_status',
       'get_capability_alternatives',
       'get_cloud_build_status',
       'get_configuration_status',
@@ -146,6 +164,8 @@ test('MCP write tools require the write scope and explicit confirmation input', 
       'plan_engineering_workflow',
       'read_project_files',
       'rename_project',
+      'retry_cloud_build',
+      'run_project_operation',
       'save_project_files',
       'start_cloud_build',
     ]);
@@ -155,6 +175,8 @@ test('MCP write tools require the write scope and explicit confirmation input', 
     assert.equal(create.inputSchema.properties.confirm.const, true);
     assert.equal(deploy.annotations?.destructiveHint, true);
     assert.equal(cloudBuild.inputSchema.properties.confirm.const, true);
+    assert.equal(tools.find(tool => tool.name === 'run_project_operation').inputSchema.properties.confirm.const, true);
+    assert.equal(tools.find(tool => tool.name === 'retry_cloud_build').inputSchema.properties.confirm.const, true);
   } finally {
     await writeClient.close();
   }
@@ -180,9 +202,11 @@ test('MCP write tools dispatch approved project actions to their account-scoped 
       ['create_project', { name: 'New workspace', project_type: 'website', confirm: true }],
       ['rename_project', { project_id: project.id, name: 'Renamed workspace', confirm: true }],
       ['save_project_files', { project_id: project.id, files: { 'app/page.tsx': 'export default function Page() {}' }, confirm: true }],
-      ['build_and_deploy_project', { project_id: project.id, brief: 'Deploy this site', files: [{ path: 'app/page.tsx', content: 'export default function Page() {}' }], confirm: true }],
+      ['build_and_deploy_project', { project_id: project.id, brief: 'Deploy this site', files: [{ path: 'app/page.tsx', content: 'export default function Page() {}' }], idempotency_key: '11111111-1111-4111-8111-111111111111', confirm: true }],
       ['start_cloud_build', { project_id: project.id, provider: 'godot-build-service', preset: 'Linux/X11', idempotency_key: '55555555-5555-4555-8555-555555555555', confirm: true }],
       ['get_cloud_build_status', { provider: 'godot-build-service', job_id: project.id }],
+      ['run_project_operation', { project_id: project.id, operation: 'test', confirm: true }],
+      ['retry_cloud_build', { provider: 'godot-build-service', job_id: project.id, confirm: true }],
     ];
     for (const [name, arguments_] of actions) {
       const result = await client.callTool({ name, arguments: arguments_ });
@@ -192,13 +216,37 @@ test('MCP write tools dispatch approved project actions to their account-scoped 
       ['create_project', 'authenticated-user', 'New workspace', 'website'],
       ['rename_project', 'authenticated-user', project.id, 'Renamed workspace'],
       ['save_project_files', 'authenticated-user', project.id, { 'app/page.tsx': 'export default function Page() {}' }],
-      ['build_and_deploy_project', 'authenticated-user', project.id, 'Deploy this site', [{ path: 'app/page.tsx', content: 'export default function Page() {}' }]],
+      ['build_and_deploy_project', 'authenticated-user', project.id, 'Deploy this site', [{ path: 'app/page.tsx', content: 'export default function Page() {}' }], '11111111-1111-4111-8111-111111111111'],
       ['start_cloud_build', 'authenticated-user', { project_id: project.id, provider: 'godot-build-service', platform: undefined, profile: undefined, preset: 'Linux/X11', idempotency_key: '55555555-5555-4555-8555-555555555555' }],
       ['get_cloud_build_status', 'authenticated-user', 'godot-build-service', project.id],
     ]);
   } finally {
     await client.close();
   }
+});
+
+test('MCP calculator build requires write scope and dispatches idempotently with resumable status', async () => {
+  const calls = [];
+  const reader = createReader({
+    async buildAndroidCalculator(...args) { calls.push(['build', ...args]); return { data: { job_id: 'android-job', status: 'completed', download_url: '/api/builds/android/android-job/artifact' }, error: null }; },
+    async getAndroidBuildStatus(...args) { calls.push(['status', ...args]); return { data: { id: args[1], status: 'completed' }, error: null }; },
+  });
+  const transport = new StreamableHTTPClientTransport(new URL('https://mcp.test/mcp'), {
+    fetch: async (input, init) => handleUserMcpRequest(new Request(input, init), 'authenticated-user', [MCP_READ_SCOPE, MCP_WRITE_SCOPE], reader),
+  });
+  const client = new Client({ name: 'android-mcp-test', version: '1.0.0' }, { capabilities: {} });
+  try {
+    await client.connect(transport);
+    const result = await client.callTool({ name: 'build_android_calculator', arguments: { idempotency_key: '33333333-3333-4333-8333-333333333333', confirm: true } });
+    assert.equal(result.isError, undefined);
+    assert.equal(JSON.parse(result.content[0].text).job_id, 'android-job');
+    const status = await client.callTool({ name: 'get_android_build_status', arguments: { job_id: '44444444-4444-4444-8444-444444444444' } });
+    assert.equal(JSON.parse(status.content[0].text).status, 'completed');
+    assert.deepEqual(calls, [
+      ['build', 'authenticated-user', '33333333-3333-4333-8333-333333333333'],
+      ['status', 'authenticated-user', '44444444-4444-4444-8444-444444444444'],
+    ]);
+  } finally { await client.close(); }
 });
 
 test('OAuth scope parser accepts only read and optional write permissions', () => {

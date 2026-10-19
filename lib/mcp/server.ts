@@ -3,6 +3,8 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { z } from 'zod';
 import { buildEngineeringOrchestrationPlan } from './orchestration.ts';
 import { WORKFLOW_STAGE_IDS, type WorkflowStageId, type WorkflowStatus } from '../engineering-workflow.ts';
+import { PROJECT_RUNNER_OPERATIONS, type ProjectRunnerOperation } from '../project-runner.ts';
+import { getApplicationCapabilities } from '../builders/application-capabilities.ts';
 
 function toolError(message: string) {
   return { content: [{ type: 'text' as const, text: message }], isError: true };
@@ -15,6 +17,17 @@ export type McpProject = {
   status: string;
   progress: number;
   created_at: string;
+  build?: {
+    id: string;
+    provider: string;
+    status: string;
+    step: string;
+    deployment_id: string | null;
+    deployment_url: string | null;
+    created_at: string;
+    started_at: string;
+    completed_at: string | null;
+  } | null;
 };
 
 export type McpProjectReader = {
@@ -22,11 +35,11 @@ export type McpProjectReader = {
   getProject(userId: string, projectId: string): Promise<{ data: McpProject | null; error: unknown }>;
   getProjectFiles?(userId: string, projectId: string, paths?: string[]): Promise<{ data: Record<string, string> | null; error: unknown }>;
   getAccountPlan(userId: string): Promise<{ data: unknown; error: unknown }>;
-  createProject(userId: string, name: string, projectType: 'website' | 'web_app' | 'saas'): Promise<{ data: unknown; error: unknown }>;
+  createProject(userId: string, name: string, projectType: 'website' | 'web_app' | 'saas' | 'mobile_app' | 'game'): Promise<{ data: unknown; error: unknown }>;
   renameProject(userId: string, projectId: string, name: string): Promise<{ data: unknown; error: unknown }>;
   getHostingStatus(userId: string, projectId: string): Promise<{ data: unknown; error: unknown }>;
   saveProjectFiles(userId: string, projectId: string, files: Record<string, string>): Promise<{ data: unknown; error: unknown }>;
-  buildAndDeploy(userId: string, projectId: string, brief: string, files: Array<{ path: string; content: string }>): Promise<{ data: unknown; error: unknown }>;
+  buildAndDeploy(userId: string, projectId: string, brief: string, files: Array<{ path: string; content: string }>, idempotencyKey?: string): Promise<{ data: unknown; error: unknown }>;
   getConfigurationStatus?(userId: string, target?: 'development' | 'preview' | 'production'): Promise<{ data: unknown; error: unknown }>;
   getEngineeringWorkflowStatus?(userId: string, workflowId?: string): Promise<{ data: unknown; error: unknown }>;
   getCapabilityAlternatives?(userId: string, budget?: string): Promise<{ data: unknown; error: unknown }>;
@@ -48,6 +61,8 @@ export type McpProjectReader = {
     confirm?: true;
   }): Promise<{ data: unknown; error: unknown }>;
   cancelEngineeringWorkflow?(userId: string, workflowId: string): Promise<{ data: unknown; error: unknown }>;
+  runProjectOperation?(userId: string, projectId: string, operation: ProjectRunnerOperation): Promise<{ data: unknown; error: unknown }>;
+  retryCloudBuild?(userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string): Promise<{ data: unknown; error: unknown }>;
   submitCloudBuild?(userId: string, input: {
     project_id: string;
     provider: 'expo-eas' | 'godot-build-service';
@@ -57,6 +72,9 @@ export type McpProjectReader = {
     idempotency_key: string;
   }): Promise<{ data: unknown; error: unknown }>;
   getCloudBuildStatus?(userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string): Promise<{ data: unknown; error: unknown }>;
+  getAndroidBuildCapabilities?(): Promise<{ data: unknown; error: unknown }>;
+  buildAndroidCalculator?(userId: string, idempotencyKey: string): Promise<{ data: unknown; error: unknown }>;
+  getAndroidBuildStatus?(userId: string, jobId: string): Promise<{ data: unknown; error: unknown }>;
 };
 
 export function createUserMcpServer(userId: string, scopes: string[], projects: McpProjectReader) {
@@ -161,6 +179,32 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     if (error) return toolError('Capability alternatives could not be loaded.');
     return { content: [{ type: 'text', text: JSON.stringify(data) }] };
   });
+  server.registerTool('discover_application_capabilities', {
+    title: 'Discover supported application generators and build adapters',
+    description: 'Read the application categories, registered starter generators, build adapters, configuration requirements, and known limitations available in this LeonardX deployment. Partial or unavailable support is reported explicitly; discovery does not create a project or claim a build is verified.',
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async () => ({ content: [{ type: 'text', text: JSON.stringify({ capabilities: getApplicationCapabilities() }) }] }));
+  server.registerTool('get_android_build_capabilities', {
+    title: 'Check local Android APK build readiness',
+    description: 'Read whether this LeonardX deployment has Java, Gradle, and the Android SDK needed for a real debug APK. This never claims a build succeeded and never exposes secrets.',
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async () => {
+    if (!projects.getAndroidBuildCapabilities) return toolError('Android build capability reporting is unavailable in this deployment.');
+    const result = await projects.getAndroidBuildCapabilities();
+    if (result.error) return toolError('Android build capability check failed.');
+    return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
+  });
+  server.registerTool('get_android_build_status', {
+    title: 'Get Android APK build status',
+      description: 'Read the persisted status, progress, and retry attempt of an Android calculator build owned by the authenticated account. Returns a download endpoint only for a completed artifact.',
+    inputSchema: { job_id: z.string().uuid() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ job_id }) => {
+    if (!projects.getAndroidBuildStatus) return toolError('Android build status is unavailable in this deployment.');
+    const result = await projects.getAndroidBuildStatus(userId, job_id);
+    if (result.error) return toolError(typeof result.error === 'string' ? result.error : 'Android build status could not be loaded.');
+    return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
+  });
   server.registerTool('plan_engineering_workflow', {
     title: 'Plan an ordered engineering workflow',
     description: 'Read-only orchestration planning for web, SaaS, mobile, game, API, database, testing, and deployment work. Returns applicable stages, the existing LeonardX tools that can perform each stage, provider selection, approval boundaries, and retry rules. It does not modify files, call providers, or claim that work is complete.',
@@ -197,8 +241,37 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     }
     return { content: [{ type: 'text', text: JSON.stringify(buildEngineeringOrchestrationPlan(orchestrationInput)) }] };
   });
-
   if (writeAccess) {
+    server.registerTool('build_android_calculator', {
+      title: 'Create and build the Android calculator APK',
+        description: 'Create a functional Java calculator project and enqueue a durable Android debug build. A separately scheduled, authenticated worker runs Gradle, validates and stores the APK privately, then status reports its owner-authorized download URL and SHA-256. Requires the Android worker, toolchain, private Supabase storage, and migration configured on the LeonardX server. Reuse idempotency_key for retries. Requires explicit user approval and confirm=true.',
+      inputSchema: {
+        idempotency_key: z.string().uuid(),
+        confirm: z.literal(true).describe('Set true only after the user explicitly approves creating a project and starting an Android build.'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    }, async ({ idempotency_key }) => {
+      if (!projects.buildAndroidCalculator) return toolError('Android calculator builds are unavailable in this deployment.');
+      const result = await projects.buildAndroidCalculator(userId, idempotency_key);
+      if (result.error) return toolError(typeof result.error === 'string' ? result.error : 'Android calculator build failed.');
+      return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
+    });
+    server.registerTool('run_project_operation', {
+      title: 'Install dependencies or run project validation',
+      description: 'Run one bounded operation in the authenticated project workspace using the isolated no-network runner: install, test, typecheck, lint, or build. Returns the real runner result and job ID; it never reports success when the runner is unavailable. Requires write scope and confirm=true.',
+      inputSchema: {
+        project_id: z.string().uuid(),
+        operation: z.enum(PROJECT_RUNNER_OPERATIONS),
+        confirm: z.literal(true),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    }, async ({ project_id, operation }) => {
+      if (!projects.runProjectOperation) return toolError('Project operations are unavailable in this MCP deployment.');
+      const result = await projects.runProjectOperation(userId, project_id, operation);
+      if (result.error) return toolError(typeof result.error === 'string' ? result.error : 'The project operation failed.');
+      return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
+    });
+
     server.registerTool('create_engineering_workflow', {
       title: 'Create a durable engineering workflow',
       description: 'Persist an ordered LeonardX engineering workflow for the authenticated account. This creates state only; it does not edit files, apply migrations, spend provider credits, or deploy. Requires explicit user approval and confirm=true.',
@@ -283,12 +356,28 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
       return { content: [{ type: 'text', text: JSON.stringify(data) }] };
     });
 
+    server.registerTool('retry_cloud_build', {
+      title: 'Retry a failed cloud build safely',
+      description: 'Retry a failed Expo or Godot cloud build only when LeonardX can verify the previous job has no unresolved provider job. Creates a new idempotent build request and preserves the original job for audit. Requires explicit approval and confirm=true.',
+      inputSchema: {
+        provider: z.enum(['expo-eas', 'godot-build-service']),
+        job_id: z.string().uuid(),
+        confirm: z.literal(true),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    }, async ({ provider, job_id }) => {
+      if (!projects.retryCloudBuild) return toolError('Cloud build retry is unavailable in this MCP deployment.');
+      const result = await projects.retryCloudBuild(userId, provider, job_id);
+      if (result.error) return toolError(typeof result.error === 'string' ? result.error : 'Cloud build retry failed.');
+      return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
+    });
+
     server.registerTool('create_project', {
       title: 'Create a plan-authorized project',
       description: 'Create a website, web app, or SaaS project under the authenticated user account. Enforces the current LeonardX plan project-type and project-count limits. Requires the user to approve the write and confirm=true. Does not call Leo AI or use Leo AI credits.',
       inputSchema: {
         name: z.string().trim().min(2).max(120),
-        project_type: z.enum(['website', 'web_app', 'saas']),
+        project_type: z.enum(['website', 'web_app', 'saas', 'mobile_app', 'game']),
         confirm: z.literal(true).describe('Set true only after the user explicitly approves creating this project.'),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -328,19 +417,22 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
       return { content: [{ type: 'text', text: JSON.stringify(data) }] };
     });
 
-    server.registerTool('build_and_deploy_project', {
+  server.registerTool('build_and_deploy_project', {
       title: 'Build and deploy supplied project code',
-      description: 'Deploy code files generated by the connected AI model to LeonardX’s configured GitHub/Vercel infrastructure. Does not invoke Leo AI or consume Leo AI credits. Enforces LeonardX project-type access and monthly build limits. Deployment starts the existing free hosting trial; the site may be suspended after it expires unless renewed through the account flow. No payment or renewal is performed by this tool. Deployment is a production change: call only after explicit user approval and set confirm=true. Return the liveUrl from the result only after this tool confirms success; it is the verified, publicly reachable main project domain. Never substitute a Vercel deployment-specific preview URL. If no public main domain is verified, report the tool error instead of inventing or returning a fallback link.',
+    description: 'Deploy code files generated by the connected AI model to LeonardX’s configured GitHub/Vercel infrastructure. Does not invoke Leo AI or consume Leo AI credits. Enforces LeonardX project-type access and monthly build limits. Deployment starts the existing free hosting trial; the site may be suspended after it expires unless renewed through the account flow. No payment or renewal is performed by this tool. Deployment is a production change: call only after explicit user approval and set confirm=true. Reuse the same idempotency_key when retrying an uncertain request; use a new key only after checking the earlier job status. Without a key, identical project requests are deduplicated by request content. Return the liveUrl only after the tool confirms success; it must be the verified, publicly reachable main project domain. Never substitute a Vercel deployment-specific preview URL. If no public main domain is verified, report the tool error instead of inventing or returning a fallback link.',
       inputSchema: {
         project_id: z.string().uuid(),
         brief: z.string().trim().min(1).max(6000),
         files: z.array(z.object({ path: z.string().min(1).max(240), content: z.string().max(256_000) })).min(1).max(250),
+        idempotency_key: z.string().uuid().optional().describe('Reuse this UUID to safely identify retries of the same deployment request.'),
         confirm: z.literal(true).describe('Set true only after the user explicitly approves production deployment.'),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-    }, async ({ project_id, brief, files }) => {
-      const { data, error } = await projects.buildAndDeploy(userId, project_id, brief, files);
-      if (error) return toolError(typeof error === 'string' ? error : 'Build/deployment failed or is not permitted by the current plan.');
+    }, async ({ project_id, brief, files, idempotency_key }) => {
+      const { data, error } = idempotency_key
+        ? await projects.buildAndDeploy(userId, project_id, brief, files, idempotency_key)
+        : await projects.buildAndDeploy(userId, project_id, brief, files);
+      if (error) return toolError(typeof error === 'string' ? error : JSON.stringify(error));
       return { content: [{ type: 'text', text: JSON.stringify(data) }] };
     });
   }

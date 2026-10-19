@@ -1,0 +1,36 @@
+FROM node:22-bookworm
+
+ENV ANDROID_HOME=/opt/android-sdk \
+    ANDROID_SDK_ROOT=/opt/android-sdk \
+    GRADLE_HOME=/opt/gradle/gradle-8.9 \
+    PATH=/opt/gradle/gradle-8.9/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:${PATH} \
+    NEXT_TELEMETRY_DISABLED=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl openjdk-17-jdk unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    curl -fsSLo /tmp/gradle.zip 'https://services.gradle.org/distributions/gradle-8.9-bin.zip'; \
+    echo 'd725d707bfabd4dfdc958c624003b3c80accc03f7037b5122c4b1d0ef15cecab  /tmp/gradle.zip' | sha256sum -c -; \
+    mkdir -p /opt/gradle; unzip -q /tmp/gradle.zip -d /opt/gradle; rm /tmp/gradle.zip; \
+    curl -fsSLo /tmp/android-tools.zip 'https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip'; \
+    echo '4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583  /tmp/android-tools.zip' | sha256sum -c -; \
+    mkdir -p /opt/android-sdk/cmdline-tools/latest; \
+    unzip -q /tmp/android-tools.zip -d /tmp/android-tools; \
+    mv /tmp/android-tools/cmdline-tools/* /opt/android-sdk/cmdline-tools/latest/; \
+    rm -rf /tmp/android-tools /tmp/android-tools.zip; \
+    yes | sdkmanager --licenses >/dev/null; \
+    sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'; \
+    chmod -R a+rX /opt/android-sdk /opt/gradle
+
+WORKDIR /app
+COPY --chown=node:node package.json package-lock.json ./
+RUN npm ci
+COPY --chown=node:node . .
+RUN npm run build
+
+ENV NODE_ENV=production
+EXPOSE 3000
+USER node
+CMD ["npm", "run", "start", "--", "--hostname", "0.0.0.0"]

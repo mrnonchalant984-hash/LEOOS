@@ -1,0 +1,23 @@
+# Android builds through MCP
+
+`build_android_calculator` creates and persists a real Java Android calculator project, then returns a queued job ID. A separate authenticated worker claims the job from Supabase, invokes `gradle :app:assembleDebug`, validates APK signature/size/SHA-256, and uploads it to the existing private `leo-files` bucket. `get_android_build_status` returns persisted progress and an authenticated download endpoint only after completion. The artifact endpoint re-downloads from private storage and re-verifies byte count and checksum before returning bytes.
+
+## Server requirements
+
+- Node.js runtime with Java 17 or newer available as `JAVA_HOME`/`PATH`.
+- Gradle 8.9 or compatible Gradle 8.x available as `GRADLE_HOME`/`PATH`.
+- Android SDK platform 35 installed and discoverable as `ANDROID_HOME` or `ANDROID_SDK_ROOT`.
+- The base artifact migration `supabase/migrations/20261019100000_android_build_artifacts.sql` is already recorded in the linked database. Apply the forward worker migration `supabase/migrations/20261019120000_android_build_worker_queue.sql`; it fails if `leo-files` is absent, sets the bucket private, and raises its per-file limit to at least 150 MiB. Supabase project-level quota and remaining capacity must still be checked in the project dashboard.
+- The worker migration creates a single-concurrency, lease-based queue. A worker restart is recovered when its 15-minute lease expires. Caught failures retry with backoff up to three attempts; expired leases are reclaimed up to three times.
+- Configure `ANDROID_BUILD_WORKER_ENABLED=true` and a random `ANDROID_BUILD_WORKER_SECRET` of at least 32 characters on the server. Keep the secret only in the scheduler and server environment.
+- Configure a trusted scheduler to send `POST https://<LeonardX-origin>/api/workers/android-build` with `Authorization: Bearer <ANDROID_BUILD_WORKER_SECRET>` at least once per minute. Each invocation claims at most one job and runs for at most ten minutes. The scheduler is intentionally not bundled/provisioned by this repository; use an always-on worker host or an authenticated scheduler with a request duration compatible with Gradle. If the process is killed, the database lease enables a future invocation to retry from saved source files; Gradle internals themselves are not resumed.
+- `Dockerfile.android` provides a reproducible Node 22 + JDK 17 + Gradle 8.9 + Android API 35 image. It pins official download checksums. Building that image invokes `sdkmanager --licenses`; an operator must review and accept Google's Android SDK terms for their deployment. Do not pass Supabase keys or worker secrets as Docker build arguments; supply them only as runtime secrets. Configure CPU, memory, disk, and request timeout limits in the selected container host.
+- The enqueue API returns `202` promptly; clients poll `get_android_build_status` with the returned job ID. The existing authenticated MCP user token is required for owner-scoped status and downloads.
+
+The enqueue endpoint is authenticated with a LeonardX session or MCP OAuth token. MCP callers need `mcp:write` to start a build and `mcp:read` to inspect/download it. Build attempts are owner-scoped and deduplicated by UUID idempotency key; each account is additionally limited to one start per hour. The calculator project is only created once a build request passes authentication and mobile-plan entitlement. The artifact bucket must remain private; the download route authorizes ownership and checks the stored checksum for each request.
+
+## Connecting an MCP client
+
+Deploy LeonardX at a stable public HTTPS origin, configure `MCP_PUBLIC_URL` (or the supported site-origin setting) to that origin, apply the MCP OAuth migrations, and verify the OAuth discovery/protected-resource endpoints are reachable. Add `https://<your-origin>/mcp` as a remote MCP server in the client and complete LeonardX sign-in/consent. Grant `mcp:write` only when project creation/build tools are wanted; read-only connections can use `mcp:read`. The client must support Streamable HTTP MCP and OAuth. After deployment, an operator with a short-lived read token can run `npm run test:mcp:external` with `LEONARDX_MCP_URL=https://<your-origin>/mcp` and `LEONARDX_MCP_ACCESS_TOKEN` set in the environment. This checks external discovery and an actual read-only invocation; it does not test ChatGPT. ChatGPT account/workspace connector availability and UI may depend on the active ChatGPT plan and admin settings.
+
+Do not paste access tokens or secret values into prompts. The download endpoint requires the authenticated owner context; it is not a public bearerless URL.
