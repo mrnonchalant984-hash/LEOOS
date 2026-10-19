@@ -155,6 +155,8 @@ test('MCP write tools require the write scope and explicit confirmation input', 
     assert.equal(tools.some(tool => tool.name === 'save_project_files'), false);
     assert.equal(tools.some(tool => tool.name === 'build_and_deploy_project'), false);
     assert.equal(tools.some(tool => tool.name === 'start_cloud_build'), false);
+    assert.equal(tools.some(tool => tool.name === 'leo_ai_external_assist'), false);
+    assert.equal(tools.some(tool => tool.name === 'leo_ai_external_assist_complete'), false);
   } finally {
     await readClient.close();
   }
@@ -194,6 +196,8 @@ test('MCP write tools require the write scope and explicit confirmation input', 
       'get_project_status',
       'invoke_agent',
       'leo_ai_chat',
+      'leo_ai_external_assist',
+      'leo_ai_external_assist_complete',
       'leo_ai_get_execution_status',
       'list_agent_executions',
       'list_ai_providers',
@@ -213,6 +217,8 @@ test('MCP write tools require the write scope and explicit confirmation input', 
     assert.ok(leoChat);
     assert.equal(leoChat.inputSchema.properties.confirm.const, true);
     assert.ok(leoChat.inputSchema.properties.fallback_model);
+    assert.equal(tools.find(tool => tool.name === 'leo_ai_external_assist').inputSchema.properties.confirm.const, true);
+    assert.equal(tools.find(tool => tool.name === 'leo_ai_external_assist_complete').inputSchema.properties.confirm.const, true);
     assert.equal(create.inputSchema.properties.confirm.const, true);
     assert.equal(deploy.annotations?.destructiveHint, true);
     assert.equal(cloudBuild.inputSchema.properties.confirm.const, true);
@@ -223,6 +229,44 @@ test('MCP write tools require the write scope and explicit confirmation input', 
   } finally {
     await writeClient.close();
   }
+});
+
+test('external-assist writes require explicit confirmation and persist under the authenticated account', async () => {
+  const calls = [];
+  const reader = createReader({
+    async leoExternalAssistStart(...args) {
+      calls.push(['start', ...args]);
+      return { data: { session_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', conversation_persisted: true }, error: null };
+    },
+    async leoExternalAssistComplete(...args) {
+      calls.push(['complete', ...args]);
+      return { data: { session_id: args[1].session_id, status: 'completed', inference_provider: 'connected_mcp_client_claim_not_independently_verified' }, error: null };
+    },
+  });
+  const transport = new StreamableHTTPClientTransport(new URL('https://mcp.test/mcp'), {
+    fetch: async (input, init) => handleUserMcpRequest(new Request(input, init), 'authenticated-user', [MCP_READ_SCOPE, MCP_WRITE_SCOPE], reader),
+  });
+  const client = new Client({ name: 'external-assist-confirmation-test', version: '1.0.0' }, { capabilities: {} });
+  try {
+    await client.connect(transport);
+    const startWithoutConfirm = await client.callTool({ name: 'leo_ai_external_assist', arguments: { message: 'Help me inspect my project' } });
+    assert.equal(startWithoutConfirm.isError, true);
+    const start = await client.callTool({ name: 'leo_ai_external_assist', arguments: { message: 'Help me inspect my project', confirm: true } });
+    assert.equal(start.isError, undefined);
+    const startData = JSON.parse(start.content[0].text);
+    assert.equal(startData.leonardx_model_provider_called, false);
+    assert.equal(startData.inference_performed_by, 'connected_mcp_client');
+    const sessionId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const completeWithoutConfirm = await client.callTool({ name: 'leo_ai_external_assist_complete', arguments: { session_id: sessionId, assistant_response: 'Here is the result.' } });
+    assert.equal(completeWithoutConfirm.isError, true);
+    const complete = await client.callTool({ name: 'leo_ai_external_assist_complete', arguments: { session_id: sessionId, assistant_response: 'Here is the result.', confirm: true } });
+    assert.equal(complete.isError, undefined);
+    assert.match(JSON.parse(complete.content[0].text).inference_provider, /not_independently_verified/);
+    assert.deepEqual(calls, [
+      ['start', 'authenticated-user', { message: 'Help me inspect my project', session_id: undefined, project_id: undefined, context: undefined }],
+      ['complete', 'authenticated-user', { session_id: sessionId, assistant_response: 'Here is the result.' }],
+    ]);
+  } finally { await client.close(); }
 });
 
 test('owner-managed text-agent tools are exposed only when the backend marks the account owner', async () => {

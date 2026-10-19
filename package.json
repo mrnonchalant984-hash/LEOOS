@@ -18,7 +18,9 @@
     "preflight:production": "node scripts/production-preflight.mjs",
     "load:workforce": "node scripts/workforce-load-smoke.mjs",
     "test:staging": "node scripts/staging-integration-smoke.mjs",
-    "test:mcp:external": "node scripts/mcp-external-smoke.mjs"
+    "test:mcp:external": "node scripts/mcp-external-smoke.mjs",
+    "test:live:services": "node scripts/verify-live-services.mjs",
+    "verify:release": "npm run verify && npm run preflight:production && npm run db:dry-run && npm run test:staging && npm run test:mcp:external && npm run test:live:services"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.134.0",

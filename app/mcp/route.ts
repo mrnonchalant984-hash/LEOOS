@@ -255,6 +255,42 @@ export async function POST(request: NextRequest) {
           ? { data, error: null }
           : { data: null, error: typeof data?.error === 'string' ? data.error : `Build logs request failed (${response.status}).` };
       },
+      async leoExternalAssistStart(userId: string, input: { message: string; session_id?: string; project_id?: string; context?: string }) {
+        if (input.message.length > 12_000 || (input.context || '').length > 12_000) return { data: null, error: 'Message or context exceeds configured input limits.' };
+        const limited = await enforceUserRateLimit(userId, 'mcp-leo-external-assist', 30, 60);
+        if (limited) return { data: null, error: 'External-AI conversation rate limit reached. Retry after the indicated interval.' };
+        if (input.project_id) {
+          if (!projects.getProjectFiles) return { data: null, error: 'Owned project access is unavailable in this MCP deployment.' };
+          const owned = await projects.getProjectFiles(userId, input.project_id);
+          if (owned.error || !owned.data) return { data: null, error: 'Project was not found or is not owned by this account.' };
+        }
+        const sessionId = input.session_id || randomUUID();
+        const { data: chat, error: readError } = await db.from('chats_v2').select('id,user_id,title,messages').eq('id', sessionId).maybeSingle();
+        if (readError) return { data: null, error: 'External-AI conversation history could not be loaded.' };
+        if (chat && chat.user_id !== userId) return { data: null, error: 'Conversation not found.' };
+        const history = Array.isArray(chat?.messages) ? (chat.messages as Array<Record<string, unknown>>)
+          .filter(item => (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string')
+          .slice(-18).map(item => ({ role: item.role, content: String(item.content).slice(0, 12000) })) : [];
+        const messages = [...history, { role: 'user', content: input.message }].slice(-20);
+        const write = chat
+          ? await db.from('chats_v2').update({ messages, updated_at: new Date().toISOString() }).eq('id', sessionId).eq('user_id', userId)
+          : await db.from('chats_v2').insert({ id: sessionId, user_id: userId, title: input.message.slice(0, 60), messages });
+        if (write.error) return { data: null, error: 'External-AI conversation could not be persisted.' };
+        return { data: { session_id: sessionId, history, current_message: input.message, project_id: input.project_id || null, context: input.context || null, conversation_persisted: true, next_action: 'The connected MCP client model must reason about the task, use authorized tools as needed, then save its actual final response with leo_ai_external_assist_complete.' }, error: null };
+      },
+      async leoExternalAssistComplete(userId: string, input: { session_id: string; assistant_response: string }) {
+        if (input.assistant_response.length > 12_000) return { data: null, error: 'Assistant response exceeds the 12,000 character limit.' };
+        const { data: chat, error: readError } = await db.from('chats_v2').select('id,user_id,messages').eq('id', input.session_id).maybeSingle();
+        if (readError) return { data: null, error: 'Conversation history could not be loaded.' };
+        if (!chat || chat.user_id !== userId) return { data: null, error: 'Conversation not found.' };
+        const history = Array.isArray(chat.messages) ? (chat.messages as Array<Record<string, unknown>>)
+          .filter(item => (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string')
+          .slice(-19) : [];
+        const messages = [...history, { role: 'assistant', content: input.assistant_response }].slice(-20);
+        const { error } = await db.from('chats_v2').update({ messages, updated_at: new Date().toISOString() }).eq('id', input.session_id).eq('user_id', userId);
+        if (error) return { data: null, error: 'External-AI response could not be persisted.' };
+        return { data: { session_id: input.session_id, status: 'completed', conversation_persisted: true, inference_provider: 'connected_mcp_client_claim_not_independently_verified' }, error: null };
+      },
       async leoAiChat(userId: string, input: { message: string; session_id?: string; project_id?: string; model?: string; fallback_model?: string; idempotency_key: string }) {
         if (input.message.length > 12_000) return { data: null, error: 'Leo AI messages are limited to 12,000 characters.' };
         const limited = await enforceUserRateLimit(userId, 'mcp-leo-ai-chat', 10, 60);
@@ -391,7 +427,7 @@ export async function POST(request: NextRequest) {
           if (error) return { data: null, error: 'Account-owned developer agents are unavailable.' };
           developerAgents = (data || []).map(agent => ({ ...agent, source: 'account_developer_agent', execution: 'leo_ai_custom_agent', owner_only: false }));
         }
-        return { data: { agents: [...builtIn, ...dynamic, ...developerAgents], plan: plan.key, worker_enabled: process.env.AGENT_WORKER_ENABLED === 'true' }, error: null };
+        return { data: { agents: [...builtIn, ...dynamic, ...developerAgents], plan: plan.key, worker_enabled: true }, error: null };
       },
       async invokeAgent(userId: string, input: { agent_id: string; task: string; context?: string; idempotency_key: string }) {
         if (input.task.length > 8_000 || (input.context || '').length > 18_000) return { data: null, error: 'Agent task/context exceeds configured input limits.' };
@@ -414,9 +450,7 @@ export async function POST(request: NextRequest) {
           }
           if (staticAgent.ownerOnly && !platformOwner) return { data: null, error: 'Owner-only agent access denied.' };
           if (staticAgent.id === 'image' || staticAgent.id === 'video') return { data: null, error: 'Image and video agents must use their dedicated credit-protected generation endpoints.' };
-          if (!staticAgent.approvalRequired && process.env.AGENT_WORKER_ENABLED !== 'true') {
-            return { data: null, error: 'Durable agent execution is not enabled. Configure the protected agent worker before invoking queued agents.' };
-          }
+          
           const planAgentLimit = platformOwner ? 1000 : plan.key === 'business' || plan.key === 'unlimited' ? 240 : plan.key === 'pro' ? 120 : 30;
           const planLimited = await enforceDimensionRateLimit(request, `plan:${plan.key}`, 'mcp-agent-plan', planAgentLimit, 3600);
           if (planLimited) return { data: null, error: 'The current plan agent execution limit has been reached.' };

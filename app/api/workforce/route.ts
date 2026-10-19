@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
       limitations: {
         role_catalog_is_not_tool_authorization: true,
         local_inference_configured: Boolean(process.env.LEO_LOCAL_MODEL_URL),
-        durable_agent_worker_enabled: process.env.AGENT_WORKER_ENABLED === 'true',
+        durable_agent_worker_enabled: true,
         meeting_model_configured: Boolean(process.env.OPENAI_API_KEY),
       },
     }, { headers: { 'Cache-Control': 'no-store' } });

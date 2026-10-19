@@ -27,7 +27,7 @@ export function getApplicationCapabilities(env: NodeJS.ProcessEnv = process.env)
   const runnerConfigured = configured(env, ['REPOSITORY_RUNNER_URL', 'RUNNER_HMAC_SECRET']);
   const androidToolchain = getAndroidBuildCapabilities(env);
   const androidStorageConfigured = configured(env, ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']);
-  const androidWorkerConfigured = env.ANDROID_BUILD_WORKER_ENABLED === 'true' && Boolean(env.ANDROID_BUILD_WORKER_SECRET?.trim());
+  const androidWorkerConfigured = Boolean(env.ANDROID_BUILD_WORKER_SECRET?.trim());
   return [
     {
       id: 'web-nextjs-vercel', category: 'web_application', projectType: 'website', frameworks: ['Next.js'],
@@ -83,7 +83,7 @@ export function getApplicationCapabilities(env: NodeJS.ProcessEnv = process.env)
       generator: 'registered_starter', buildAdapter: 'Leased Gradle debug APK worker + private Supabase storage', buildMode: 'async_worker',
       status: androidToolchain.buildable && androidStorageConfigured && androidWorkerConfigured ? 'partially_available' : 'unavailable',
       configured: androidToolchain.buildable && androidStorageConfigured && androidWorkerConfigured,
-      requirements: [...androidToolchain.missing, ...(!androidStorageConfigured ? ['Supabase private artifact storage and applied Android artifact migration'] : []), ...(!androidWorkerConfigured ? ['ANDROID_BUILD_WORKER_ENABLED=true and a 32+ character ANDROID_BUILD_WORKER_SECRET'] : []), 'A trusted scheduler must invoke POST /api/workers/android-build', 'MCP write scope', 'eligible mobile-app plan'],
+      requirements: [...androidToolchain.missing, ...(!androidStorageConfigured ? ['Supabase private artifact storage and applied Android artifact migration'] : []), ...(!androidWorkerConfigured ? ['A 32+ character ANDROID_BUILD_WORKER_SECRET and trusted scheduler for POST /api/workers/android-build'] : []), 'A trusted scheduler must invoke POST /api/workers/android-build', 'MCP write scope', 'eligible mobile-app plan'],
       limitations: ['The registered Java calculator starter is wired to an owner-scoped asynchronous build/status/download workflow.', 'The database lease recovers jobs after worker restart; it reruns the Gradle build from saved project files rather than resuming Gradle internals.', 'Only the calculator starter is registered for native Android; arbitrary Android project builds are not yet exposed.'],
     },
     {

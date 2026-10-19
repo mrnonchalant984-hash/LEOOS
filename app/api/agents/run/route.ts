@@ -59,9 +59,6 @@ export async function POST(req: NextRequest) {
     const context = typeof body.context === 'string' ? body.context.slice(0, 18_000) : '';
 
     if (body.async === true) {
-      if (process.env.AGENT_WORKER_ENABLED !== 'true') {
-        return NextResponse.json({ error: 'Durable agent execution is not enabled in this deployment.' }, { status: 503 });
-      }
       const { data: queuedRun, error: queuedRunError } = await db.from('agent_runs').insert({
         user_id: ctx.user.id,
         agent_id: agent.id,

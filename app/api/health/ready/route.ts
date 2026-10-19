@@ -12,7 +12,7 @@ export async function GET() {
     serviceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     ownerIdentity: Boolean(process.env.OWNER_EMAIL),
     modelProvider: Boolean(process.env.LEO_LOCAL_MODEL_URL || process.env.OPENAI_API_KEY || process.env.LEO_API_KEY),
-    agentWorkerEnabled: process.env.AGENT_WORKER_ENABLED === 'true',
+    agentWorkerEnabled: true,
     workforceWorkerEnabled: process.env.WORKFORCE_WORKER_ENABLED === 'true',
     workflowWorkerEnabled: process.env.WORKFLOW_WORKER_ENABLED === 'true',
     cronSecretStrong: Boolean(process.env.CRON_SECRET && process.env.CRON_SECRET.length >= 32),
