@@ -1,0 +1,64 @@
+name: LeonardX Durable Agent Queue Worker
+
+on:
+  schedule:
+    # Vercel Hobby cron is daily-only; this trusted external scheduler polls every 5 minutes.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leonardx-durable-agent-queue-worker
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Validate protected worker configuration
+        env:
+          LEONARDX_BASE_URL: ${{ secrets.LEONARDX_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$LEONARDX_BASE_URL" ]]; then
+            echo "Missing repository Actions secret: LEONARDX_BASE_URL" >&2
+            exit 1
+          fi
+          if [[ "$LEONARDX_BASE_URL" != https://* ]]; then
+            echo "LEONARDX_BASE_URL must use HTTPS." >&2
+            exit 1
+          fi
+          if [[ -z "$CRON_SECRET" || ${#CRON_SECRET} -lt 32 ]]; then
+            echo "Missing or too-short repository Actions secret: CRON_SECRET (minimum 32 characters)." >&2
+            exit 1
+          fi
+      - name: Poll one durable agent job
+        env:
+          LEONARDX_BASE_URL: ${{ secrets.LEONARDX_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_url="${LEONARDX_BASE_URL%/}"
+          response_file="$RUNNER_TEMP/leonardx-agent-worker-response.json"
+          http_code="$(curl --silent --show-error \
+            --connect-timeout 10 --max-time 55 \
+            --output "$response_file" --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --header 'Cache-Control: no-store' \
+            "${base_url}/api/internal/agents/worker")"
+          printf 'LeonardX agent worker HTTP status: %s\n' "$http_code"
+          if [[ -f "$response_file" ]]; then
+            # The endpoint returns aggregate claim counts and safe status codes, not prompts or credentials.
+            cat "$response_file"
+            printf '\n'
+          fi
+          if [[ ! "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+            echo "Agent worker poll failed; inspect the redacted response above and deployment logs." >&2
+            exit 1
+          fi

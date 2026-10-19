@@ -46,3 +46,16 @@ test('MCP creates real Expo and Godot starter source for mobile and game workspa
   assert.match(route, /createGodot3dStarter\(name, \{ source: 'mcp_project_creation' \}\)/);
   assert.match(route, /files: starterFiles/);
 });
+
+
+test('Android hosted worker declaration does not require the Vercel runtime to contain Java or the Android SDK', () => {
+  const catalog = getApplicationCapabilities({
+    NEXT_PUBLIC_SUPABASE_URL: 'https://project.example.test',
+    SUPABASE_SERVICE_ROLE_KEY: 'server-only-placeholder',
+    ANDROID_HOSTED_WORKER_ENABLED: 'true',
+  });
+  const android = catalog.find((item) => item.id === 'android-native');
+  assert.equal(android.configured, true);
+  assert.equal(android.status, 'partially_available');
+  assert.ok(android.limitations.some((item) => item.includes('not a live GitHub Actions health check')));
+});

@@ -27,7 +27,13 @@ export function getApplicationCapabilities(env: NodeJS.ProcessEnv = process.env)
   const runnerConfigured = configured(env, ['REPOSITORY_RUNNER_URL', 'RUNNER_HMAC_SECRET']);
   const androidToolchain = getAndroidBuildCapabilities(env);
   const androidStorageConfigured = configured(env, ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']);
-  const androidWorkerConfigured = Boolean(env.ANDROID_BUILD_WORKER_SECRET?.trim());
+  // Hosted GitHub Actions runs the toolchain outside Vercel; this explicit flag is an
+  // operator assertion that the workflow is on the default branch and its secrets are configured.
+  const androidHostedWorkerConfigured = env.ANDROID_HOSTED_WORKER_ENABLED?.trim() === 'true';
+  const androidServerlessWorkerConfigured = env.ANDROID_BUILD_WORKER_ENABLED?.trim() === 'true'
+    && Boolean(env.ANDROID_BUILD_WORKER_SECRET?.trim() && env.ANDROID_BUILD_WORKER_SECRET.trim().length >= 32)
+    && androidToolchain.buildable;
+  const androidWorkerConfigured = androidHostedWorkerConfigured || androidServerlessWorkerConfigured;
   return [
     {
       id: 'web-nextjs-vercel', category: 'web_application', projectType: 'website', frameworks: ['Next.js'],
@@ -81,10 +87,16 @@ export function getApplicationCapabilities(env: NodeJS.ProcessEnv = process.env)
     {
       id: 'android-native', category: 'mobile_application', projectType: 'mobile_app', frameworks: ['Java', 'Android Gradle Plugin'],
       generator: 'registered_starter', buildAdapter: 'Leased Gradle debug APK worker + private Supabase storage', buildMode: 'async_worker',
-      status: androidToolchain.buildable && androidStorageConfigured && androidWorkerConfigured ? 'partially_available' : 'unavailable',
-      configured: androidToolchain.buildable && androidStorageConfigured && androidWorkerConfigured,
-      requirements: [...androidToolchain.missing, ...(!androidStorageConfigured ? ['Supabase private artifact storage and applied Android artifact migration'] : []), ...(!androidWorkerConfigured ? ['A 32+ character ANDROID_BUILD_WORKER_SECRET and trusted scheduler for POST /api/workers/android-build'] : []), 'A trusted scheduler must invoke POST /api/workers/android-build', 'MCP write scope', 'eligible mobile-app plan'],
-      limitations: ['The registered Java calculator starter is wired to an owner-scoped asynchronous build/status/download workflow.', 'The database lease recovers jobs after worker restart; it reruns the Gradle build from saved project files rather than resuming Gradle internals.', 'Only the calculator starter is registered for native Android; arbitrary Android project builds are not yet exposed.'],
+      status: androidStorageConfigured && androidWorkerConfigured ? 'partially_available' : 'unavailable',
+      configured: androidStorageConfigured && androidWorkerConfigured,
+      requirements: [
+        ...(!androidHostedWorkerConfigured && !androidServerlessWorkerConfigured ? [
+          'Either enable the GitHub Actions Android queue workflow with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY secrets and set ANDROID_HOSTED_WORKER_ENABLED=true, or provide Java/Gradle/Android SDK plus ANDROID_BUILD_WORKER_ENABLED=true and a 32+ character ANDROID_BUILD_WORKER_SECRET on a compatible self-hosted runtime.',
+        ] : []),
+        ...(!androidStorageConfigured ? ['Supabase private artifact storage and applied Android artifact migrations'] : []),
+        'MCP write scope', 'eligible mobile-app plan',
+      ],
+      limitations: ['The hosted-worker flag is an operator declaration, not a live GitHub Actions health check; verify the workflow run history and job row before claiming worker health.', 'The database lease recovers jobs after worker restart; it reruns the Gradle build from saved project files unless a previously uploaded, verified APK can be recovered.', 'Only the calculator starter is registered for native Android; arbitrary Android project builds are not yet exposed.'],
     },
     {
       id: 'python-api', category: 'backend_api', projectType: null, frameworks: ['Python'],

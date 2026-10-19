@@ -1,0 +1,41 @@
+name: Godot Build Service Image
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'services/godot-build-service/**'
+      - '.github/workflows/godot-build-service.yml'
+  pull_request:
+    paths:
+      - 'services/godot-build-service/**'
+      - '.github/workflows/godot-build-service.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: godot-build-service-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run Godot build-service unit and integrity tests
+        working-directory: services/godot-build-service
+        run: python -m unittest discover -v -p 'test_*.py'
+      - name: Build clean image and run non-root engine/export smoke test
+        run: >-
+          docker build --no-cache
+          --build-arg GODOT_VERSION=4.7.2
+          --build-arg GODOT_ENGINE_SHA256=cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+          --build-arg GODOT_TEMPLATES_SHA256=f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011
+          --tag leonardx-godot-build-service:ci
+          services/godot-build-service

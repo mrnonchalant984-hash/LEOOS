@@ -46,3 +46,19 @@ Run `npm ci` first, then `npm run verify` for local typecheck, lint, unit tests,
 Required staging variables include `LEONARDX_STAGING_URL`, `LEONARDX_MCP_URL` (the staging `/mcp` endpoint), `LEONARDX_MCP_ACCESS_TOKEN` (short-lived staging `mcp:read` token), `REPOSITORY_RUNNER_URL`, and `GODOT_BUILD_SERVICE_URL`. Existing `production-preflight.mjs` additionally validates the deployment's required environment configuration. Keep all credentials in the terminal's environment or an untracked local env file; never paste them into chat or commit them.
 
 `npm run verify:release` does not create paid cloud resources or deploy to production. The live checks are read-only. Project creation, real Android/Godot builds, artifact downloads, cross-account authorization, and production deployment must be verified separately in an isolated staging account using disposable test data and actual configured providers. The script reports health checks as health checks, not proof that a complete build pipeline works.
+
+
+## Durable-agent scheduler follow-up (2026-10-19)
+
+The Vercel Hobby cron schedule for `/api/internal/agents/worker` is once daily, while the endpoint claims one job per poll. That is insufficient for interactive durable jobs and explains why newly queued jobs can remain waiting for many hours if no separate scheduler is installed. `.github/workflows/agent-queue-worker.yml` provides an optional protected five-minute GitHub Actions poller. Configure repository Actions secrets `LEONARDX_BASE_URL` and `CRON_SECRET` before enabling it. It calls only the existing authenticated worker endpoint; it does not read task prompts, results, or credentials. The database `claim_agent_jobs` RPC continues to use row locking and leases.
+
+This repository update does not prove that GitHub Actions is enabled, that the secrets are configured, or that a production worker has polled successfully. The two reported queued runs must remain untouched until the workflow is configured and a live poll confirms that a run is safely claimed. The current worker still performs the provider operation inside the HTTP request; truly long-running operations that may exceed the serverless request limit require a dedicated persistent worker process and must not be described as solved by this scheduler alone.
+
+
+## Queue finalization hardening (2026-10-19 follow-up)
+
+- Added `20261019170000_agent_job_atomic_finalization.sql`. The service-role-only RPC updates the persisted run result and queue state in one database transaction and only while the caller still owns the unexpired job lease.
+- The worker now uses this RPC for successful completion, bounded retries, and terminal failure transitions. A stale worker cannot overwrite a newer attempt, and a partial run-result/job-status write no longer silently queues a completed operation for replay.
+- Added source-contract tests for lease ownership, atomic finalization, bounded retry timestamp requirements, and redacted error categories.
+- The five-minute GitHub Actions scheduler is still opt-in and has not been proven active in production. Configure the documented Actions secrets and apply the migration only through the approved release process.
+- The worker endpoint remains serverless with `maxDuration = 60`; a dedicated persistent worker service is still required to execute tasks beyond that request limit without depending on the HTTP request lifetime. No production queue records were modified by this source update.

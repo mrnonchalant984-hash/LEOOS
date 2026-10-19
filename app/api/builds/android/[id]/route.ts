@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'Invalid Android build job ID.' }, { status: 400 });
   const { data, error } = await adminSupabase().from('android_build_jobs')
-    .select('id,project_id,status,progress,attempts,size_bytes,sha256,error,created_at,updated_at,completed_at')
+    .select('id,project_id,status,progress,attempts,started_at,size_bytes,sha256,error,created_at,updated_at,completed_at')
     .eq('id', id).eq('owner_user_id', actor.user.id).maybeSingle();
   if (error) return NextResponse.json({ error: 'Android build status is temporarily unavailable.' }, { status: 503 });
   if (!data) return NextResponse.json({ error: 'Android build job not found.' }, { status: 404 });

@@ -16,6 +16,7 @@ $$;
 alter table public.android_build_jobs
   add column if not exists progress integer not null default 0 check (progress between 0 and 100),
   add column if not exists attempts integer not null default 0 check (attempts between 0 and 3),
+  add column if not exists started_at timestamptz,
   add column if not exists available_at timestamptz not null default now(),
   add column if not exists lease_owner text,
   add column if not exists lease_expires_at timestamptz;
@@ -40,7 +41,7 @@ begin
      set status = 'failed', progress = 0, lease_owner = null, lease_expires_at = null,
          error = 'Worker lease expired three times. Retry this build with a new idempotency key.',
          updated_at = now()
-   where status = 'building' and lease_expires_at < now() and attempts >= 3;
+   where status = 'building' and (lease_expires_at is null or lease_expires_at < now()) and attempts >= 3;
 
   update public.android_build_jobs
      set status = 'failed', error = 'Build request expired before its project could be attached.', updated_at = now()
@@ -57,13 +58,14 @@ begin
   with candidate as (
     select id from public.android_build_jobs
      where (status = 'queued' and project_id is not null and available_at <= now())
-        or (status = 'building' and lease_expires_at < now() and attempts < 3)
+        or (status = 'building' and (lease_expires_at is null or lease_expires_at < now()) and attempts < 3)
      order by created_at
      limit 1
      for update skip locked
   )
   update public.android_build_jobs j
      set status = 'building', progress = 10, attempts = j.attempts + 1,
+         started_at = coalesce(j.started_at, now()),
          lease_owner = p_worker, lease_expires_at = now() + interval '15 minutes',
          error = null, updated_at = now()
     from candidate c where j.id = c.id

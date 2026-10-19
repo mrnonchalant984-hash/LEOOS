@@ -26,7 +26,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (artifact.status !== 'completed' || !artifact.storage_path || !artifact.sha256 || !artifact.size_bytes) {
     return NextResponse.json({ error: 'APK artifact is not available.' }, { status: 409 });
   }
-  if (artifact.storage_path !== `android-artifacts/${actor.user.id}/${artifact.id}.apk`) {
+  const expectedLegacyPath = `android-artifacts/${actor.user.id}/${artifact.id}.apk`;
+  const expectedImmutablePath = `android-artifacts/${actor.user.id}/${artifact.id}-${artifact.sha256}.apk`;
+  if (artifact.storage_path !== expectedLegacyPath && artifact.storage_path !== expectedImmutablePath) {
     return NextResponse.json({ error: 'APK storage metadata failed its ownership check.' }, { status: 503 });
   }
   const { data: blob, error: downloadError } = await db.storage.from(BUCKET).download(artifact.storage_path);

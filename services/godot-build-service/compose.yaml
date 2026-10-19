@@ -5,7 +5,7 @@ services:
       args:
         GODOT_VERSION: 4.7.2
         GODOT_ENGINE_SHA256: ${GODOT_ENGINE_SHA256:?Set official Godot engine archive checksum}
-        GODOT_TEMPLATES_SHA256: ${GODOT_TEMPLATES_SHA256:?Set SHA-256 of the Windows template range listed in the service README}
+        GODOT_TEMPLATES_SHA256: ${GODOT_TEMPLATES_SHA256:?Set the official full export-template archive SHA-256 from .env.example}
     image: leonardx-godot-build-service:4.7.2
     restart: unless-stopped
     init: true

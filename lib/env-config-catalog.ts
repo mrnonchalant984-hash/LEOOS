@@ -52,6 +52,15 @@ export const LEONARDX_ENV_CATALOG: EnvVariableDefinition[] = [
     restartRequired: true,
   },
   {
+    name: 'ANDROID_HOSTED_WORKER_ENABLED',
+    purpose: 'Operator declaration that the GitHub Actions Android queue workflow and its Supabase secrets are configured; not a live health check.',
+    required: false,
+    service: 'android-build',
+    public: false,
+    targets: ['preview', 'production'],
+    restartRequired: true,
+  },
+  {
     name: 'OPENAI_API_KEY',
     purpose: 'Hosted OpenAI inference for Leo and generation features.',
     required: false,
