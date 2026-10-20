@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from "next/server";
 import { getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from "@/lib/openai";
-import { generateText, generateTextWithTools, getDefaultTextModel, ModelProviderError } from "@/lib/ai/provider-registry";
+import { generateText, generateTextWithTools, getDefaultTextModel, ModelProviderError, resolveModel } from "@/lib/ai/provider-registry";
+import { generateWithExplicitFallback } from "@/lib/ai/provider-fallback";
 import type { ModelMessage } from "@/lib/ai/provider-registry";
 import { createUserAssistantTools } from "@/lib/ai/tool-orchestrator";
 import { adminSupabase, getProfile, isPlatformOwner } from "@/lib/auth";
