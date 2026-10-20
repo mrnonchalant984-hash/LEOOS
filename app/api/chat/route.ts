@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from "next/server";
 import { getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from "@/lib/openai";
-import { generateText, generateTextWithTools, getDefaultTextModel, ModelProviderError, resolveModel } from "@/lib/ai/provider-registry";
-import { generateWithExplicitFallback } from "@/lib/ai/provider-fallback";
+import { generateText, generateTextWithTools, getDefaultTextModel, ModelProviderError } from "@/lib/ai/provider-registry";
+import { generateWithExplicitFallback, getSafeFallbackModel } from "@/lib/ai/provider-fallback";
 import type { ModelMessage } from "@/lib/ai/provider-registry";
 import { createUserAssistantTools } from "@/lib/ai/tool-orchestrator";
 import { adminSupabase, getProfile, isPlatformOwner } from "@/lib/auth";
@@ -313,7 +313,7 @@ export async function POST(req: NextRequest) {
         }
         const selectedTools = selectedTool ? [selectedTool] : agentTools;
         if (customAgent) customAgentProviderStarted = true;
-        const fallbackModel = customAgent ? undefined : (process.env.LEO_FALLBACK_MODEL?.trim() || (isProviderConfigured('google') && resolveModel(selectedModel).provider === 'openai' ? 'google/gemini-2.5-flash' : undefined));
+        const fallbackModel = getSafeFallbackModel(selectedModel, process.env.LEO_FALLBACK_MODEL?.trim(), Boolean(customAgent));
         const outcome = await generateWithExplicitFallback(selectedModel, fallbackModel, model => generateTextWithTools({
           ...request,
           model,
@@ -328,7 +328,7 @@ export async function POST(req: NextRequest) {
         selectedModel = `${response.provider}/${response.model}`;
       } else {
         if (customAgent) customAgentProviderStarted = true;
-        const fallbackModel = customAgent ? undefined : (process.env.LEO_FALLBACK_MODEL?.trim() || (isProviderConfigured('google') && resolveModel(selectedModel).provider === 'openai' ? 'google/gemini-2.5-flash' : undefined));
+        const fallbackModel = getSafeFallbackModel(selectedModel, process.env.LEO_FALLBACK_MODEL?.trim(), Boolean(customAgent));
         const outcome = await generateWithExplicitFallback(selectedModel, fallbackModel, model => generateText({ ...request, model }));
         const response = outcome.result;
         reply = response.text || "I could not generate a reply.";

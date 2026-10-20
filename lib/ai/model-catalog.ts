@@ -42,6 +42,11 @@ export function resolveModel(modelName: string): { provider: ModelProvider; mode
   const preset = MODEL_PRESETS[normalized];
   if (preset) return { provider: preset.provider, model: preset.model };
 
+  // Accept an unqualified model name only when it uniquely matches a known preset.
+  // This keeps UI/environment aliases interoperable without allowing arbitrary IDs.
+  const matchingPreset = Object.values(MODEL_PRESETS).find(entry => entry.model === normalized);
+  if (matchingPreset) return { provider: matchingPreset.provider, model: matchingPreset.model };
+
   const separator = normalized.indexOf('/');
   if (separator > 0) {
     const provider = normalized.slice(0, separator) as ModelProvider;
@@ -63,10 +68,19 @@ export function getDefaultTextModel(mode: 'chat' | 'reasoning' = 'chat') {
   const configured = mode === 'reasoning'
     ? process.env.LEO_REASONING_MODEL?.trim()
     : process.env.LEO_CHAT_MODEL?.trim() || process.env.LEO_MEETING_MODEL?.trim() || process.env.LEO_AGENT_MODEL?.trim();
-  if (!configured) return mode === 'reasoning' ? 'openai/gpt-5.6-luna' : 'openai/gpt-4o-mini';
-  if (MODEL_PRESETS[`openai/${configured}`]) return `openai/${configured}`;
-  if (configured.includes('/')) return configured;
-  return `openai/${configured}`;
+  const safeDefault = mode === 'reasoning' ? 'openai/gpt-5.6-luna' : 'openai/gpt-4o-mini';
+  if (!configured) return safeDefault;
+  const candidate = configured.includes('/')
+    ? configured
+    : (MODEL_PRESETS[`openai/${configured}`] ? `openai/${configured}` : configured);
+  try {
+    const resolved = resolveModel(candidate);
+    return `${resolved.provider}/${resolved.model}`;
+  } catch {
+    // A stale/unsupported deployment env value should not make the entire chat unusable.
+    // Fall back to the documented default and leave provider failures to the provider layer.
+    return safeDefault;
+  }
 }
 
 export function isProviderConfigured(provider: ModelProvider) {

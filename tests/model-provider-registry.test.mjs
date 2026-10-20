@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { getSafeFallbackModel } from '../lib/ai/provider-fallback.ts';
 import {
   getDefaultTextModel,
   getModelProviderStatus,
@@ -12,12 +13,25 @@ test('provider registry resolves its supported named models to concrete provider
   assert.deepEqual(resolveModel('openai/gpt-5.6-luna'), { provider: 'openai', model: 'gpt-5.6-luna' });
   assert.deepEqual(resolveModel('anthropic/claude-3-5-haiku-latest'), { provider: 'anthropic', model: 'claude-3-5-haiku-latest' });
   assert.deepEqual(resolveModel('google/gemini-2.5-flash'), { provider: 'google', model: 'gemini-2.5-flash' });
+  assert.deepEqual(resolveModel('gemini-2.5-flash'), { provider: 'google', model: 'gemini-2.5-flash' });
+  assert.deepEqual(resolveModel('gpt-4o-mini'), { provider: 'openai', model: 'gpt-4o-mini' });
 });
 
 test('model registry rejects unknown and malformed caller-selected models', () => {
   assert.throws(() => resolveModel('not-a-model'), /supported model/i);
   assert.throws(() => resolveModel('openai/'), /supported model/i);
   assert.throws(() => resolveModel('anthropic/model with spaces'), /supported model/i);
+});
+
+test('unsupported configured default safely falls back instead of breaking chat model resolution', () => {
+  const previous = process.env.LEO_CHAT_MODEL;
+  try {
+    process.env.LEO_CHAT_MODEL = 'provider-model-that-is-not-registered';
+    assert.equal(getDefaultTextModel('chat'), 'openai/gpt-4o-mini');
+  } finally {
+    if (previous === undefined) delete process.env.LEO_CHAT_MODEL;
+    else process.env.LEO_CHAT_MODEL = previous;
+  }
 });
 
 test('provider status reveals availability without returning configured secrets', () => {
@@ -62,4 +76,31 @@ test('external-model deployments require GitHub and Vercel but not a LeonardX AI
   const missing = getExternalModelBuilderAvailability('website', { GITHUB_TOKEN: 'configured' });
   assert.equal(missing.status, 'not_configured');
   assert.deepEqual(missing.requiredEnvironment, ['GITHUB_TOKEN', 'VERCEL_TOKEN']);
+});
+
+
+test('invalid explicit fallback configuration safely uses configured Gemini for OpenAI chat', () => {
+  const configured = provider => provider === 'google' || provider === 'openai';
+  assert.equal(
+    getSafeFallbackModel('openai/gpt-4o-mini', 'unsupported/fallback-model', false, configured),
+    'google/gemini-2.5-flash',
+  );
+});
+
+test('valid explicit fallback is normalized and requires a configured provider', () => {
+  const configured = provider => provider === 'google';
+  assert.equal(
+    getSafeFallbackModel('openai/gpt-4o-mini', 'gemini-2.5-flash', false, configured),
+    'google/gemini-2.5-flash',
+  );
+  assert.equal(
+    getSafeFallbackModel('openai/gpt-4o-mini', 'anthropic/claude-3-5-haiku-latest', false, configured),
+    'google/gemini-2.5-flash',
+  );
+});
+
+test('fallback is not used for custom agents or non-OpenAI primary providers', () => {
+  const configured = provider => provider === 'google';
+  assert.equal(getSafeFallbackModel('openai/gpt-4o-mini', 'bad/model', true, configured), undefined);
+  assert.equal(getSafeFallbackModel('google/gemini-2.5-flash', 'bad/model', false, configured), undefined);
 });

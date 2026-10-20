@@ -21,6 +21,37 @@ export function isRetryableProviderFailure(error: unknown) {
   return status === 429 || (status !== null && status >= 500) || (status === null && isTransientNetworkError(error));
 }
 
+
+export function getSafeFallbackModel(
+  primaryModel: string,
+  configuredFallback = process.env.LEO_FALLBACK_MODEL?.trim(),
+  customAgent = false,
+  configured: (provider: ReturnType<typeof resolveModel>['provider']) => boolean = isProviderConfigured,
+): string | undefined {
+  if (customAgent) return undefined;
+
+  // A stale deployment variable must not prevent ordinary chat from working.
+  // Prefer a valid, configured explicit fallback; otherwise use Gemini only
+  // when it is configured and the primary provider is OpenAI.
+  const primary = resolveModel(primaryModel);
+  if (configuredFallback) {
+    try {
+      const fallback = resolveModel(configuredFallback);
+      if (fallback.provider !== primary.provider && configured(fallback.provider)) {
+        return `${fallback.provider}/${fallback.model}`;
+      }
+    } catch {
+      // Ignore stale/unsupported fallback configuration and continue to the
+      // safe automatic fallback below.
+    }
+  }
+
+  if (primary.provider === 'openai' && configured('google')) {
+    return 'google/gemini-2.5-flash';
+  }
+  return undefined;
+}
+
 export async function generateWithExplicitFallback<T>(
   primaryModel: string,
   fallbackModel: string | undefined,
@@ -33,7 +64,7 @@ export async function generateWithExplicitFallback<T>(
     if (!fallbackModel || fallbackModel === primaryModel || !isRetryableProviderFailure(primaryError)) throw primaryError;
     let fallbackProvider: ReturnType<typeof resolveModel>['provider'];
     try { fallbackProvider = resolveModel(fallbackModel).provider; }
-    catch { throw new ModelProviderError('The explicitly selected fallback model is not supported.', 400); }
+    catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use a registered model such as google/gemini-2.5-flash.', 503); }
     if (!configured(fallbackProvider)) throw new ModelProviderError(`The explicitly selected fallback provider (${fallbackProvider}) is not configured.`, 503);
     return { result: await generate(fallbackModel), model: fallbackModel, fallback_used: true };
   }
