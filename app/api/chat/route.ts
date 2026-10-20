@@ -321,7 +321,7 @@ export async function POST(req: NextRequest) {
           executeTool: available.execute,
           maxToolCalls: selectedTool ? 1 : 6,
           ...(selectedTool ? { requiredToolName: selectedTool.name } : {}),
-        }));
+        }), isProviderConfigured, { signal: req.signal });
         const response = outcome.result;
         reply = response.text || "I could not generate a reply.";
         usage = response.usage;
@@ -329,7 +329,13 @@ export async function POST(req: NextRequest) {
       } else {
         if (customAgent) customAgentProviderStarted = true;
         const fallbackModel = getSafeFallbackModel(selectedModel, process.env.LEO_FALLBACK_MODEL?.trim(), Boolean(customAgent));
-        const outcome = await generateWithExplicitFallback(selectedModel, fallbackModel, model => generateText({ ...request, model }));
+        const outcome = await generateWithExplicitFallback(
+          selectedModel,
+          fallbackModel,
+          model => generateText({ ...request, model }),
+          isProviderConfigured,
+          { signal: req.signal },
+        );
         const response = outcome.result;
         reply = response.text || "I could not generate a reply.";
         usage = response.usage;

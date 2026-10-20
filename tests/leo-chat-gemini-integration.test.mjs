@@ -3,8 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 const route = await readFile(new URL('../app/api/chat/route.ts', import.meta.url), 'utf8');
-const envExample = await readFile(new URL('../.env.example', import.meta.url), 'utf8');
+const envCatalog = await readFile(new URL('../lib/env-config-catalog.ts', import.meta.url), 'utf8');
 const provider = await readFile(new URL('../lib/ai/provider-registry.ts', import.meta.url), 'utf8');
+const fallback = await readFile(new URL('../lib/ai/provider-fallback.ts', import.meta.url), 'utf8');
 
 test('Leo chat sends its server-generated system prompt and bounded conversation history to the selected provider', () => {
   assert.match(route, /getLeoSystemPrompt\(\)/);
@@ -14,9 +15,9 @@ test('Leo chat sends its server-generated system prompt and bounded conversation
 
 test('Leo chat wires transient provider fallback and defaults to Gemini when configured for OpenAI primary', () => {
   assert.match(route, /generateWithExplicitFallback/);
-  assert.match(route, /isProviderConfigured\('google'\)/);
-  assert.match(route, /google\/gemini-2\.5-flash/);
-  assert.match(route, /customAgent \? undefined/);
+  assert.match(route, /getSafeFallbackModel/);
+  assert.match(fallback, /google\/gemini-3\.8-flash/);
+  assert.match(fallback, /if \(customAgent\) return undefined/);
 });
 
 test('Gemini provider forwards system instructions and maps assistant history to model turns', () => {
@@ -26,7 +27,7 @@ test('Gemini provider forwards system instructions and maps assistant history to
 });
 
 test('Gemini API key and fallback configuration are server-side environment variables', () => {
-  assert.match(envExample, /^GEMINI_API_KEY=$/m);
-  assert.match(envExample, /^LEO_FALLBACK_MODEL=$/m);
-  assert.doesNotMatch(envExample, /^NEXT_PUBLIC_GEMINI_API_KEY=/m);
+  assert.match(envCatalog, /name: 'GEMINI_API_KEY'/);
+  assert.match(route, /process\.env\.LEO_FALLBACK_MODEL/);
+  assert.doesNotMatch(envCatalog, /NEXT_PUBLIC_GEMINI_API_KEY/);
 });

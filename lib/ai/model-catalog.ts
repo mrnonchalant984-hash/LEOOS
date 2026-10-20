@@ -15,7 +15,7 @@ const MODEL_PRESETS: Record<string, { provider: ModelProvider; model: string; ca
   'openai/gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini', capabilities: ['text', 'tools'] },
   'openai/gpt-5.6-luna': { provider: 'openai', model: 'gpt-5.6-luna', capabilities: ['text', 'reasoning'] },
   'anthropic/claude-3-5-haiku-latest': { provider: 'anthropic', model: 'claude-3-5-haiku-latest', capabilities: ['text', 'tools'] },
-  'google/gemini-2.5-flash': { provider: 'google', model: 'gemini-2.5-flash', capabilities: ['text', 'tools', 'multimodal'] },
+  'google/gemini-3.8-flash': { provider: 'google', model: 'gemini-3.8-flash', capabilities: ['text', 'tools', 'multimodal'] },
 };
 
 function configuredProvider(provider: ModelProvider): boolean {
