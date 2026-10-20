@@ -1,0 +1,13 @@
+LEONARDX ANDROID WORKER V5 — APPLY GUIDE
+
+This is a source package; it is not deployed automatically.
+
+1. Review the diff against your current main branch before applying. Do not overwrite newer user changes.
+2. Merge these source changes into the repository default branch so GitHub scheduled workflows can run.
+3. In GitHub repository Settings > Secrets and variables > Actions, create SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY for the production Supabase project. Never put secrets in code.
+4. Verify migrations 20261019120000_android_build_worker_queue.sql and 20261019180000_android_worker_reliability.sql are applied to that same Supabase project.
+5. Manually run the workflow named “LeonardX Android build queue worker”.
+6. After the worker is configured and verified, set ANDROID_HOSTED_WORKER_ENABLED=true in Vercel and redeploy through your normal release process.
+7. Recheck MCP capability output and the existing job status, then verify owner-authenticated download bytes and SHA-256.
+
+Vercel vercel.json was not changed. The queue poll uses GitHub Actions schedule, not Vercel Cron.

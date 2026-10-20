@@ -10,7 +10,13 @@ export type AndroidBuildCapabilities = {
   gradle: boolean;
   androidSdk: boolean;
   artifactStorageCredentialsPresent: boolean;
+  /** True only when this runtime itself can invoke Java, Gradle, and the Android SDK. */
+  localBuildable: boolean;
+  /** Configuration switch for the external GitHub Actions queue worker; not a live health check. */
+  hostedWorkerEnabled: boolean;
+  /** True when at least one build execution path is configured. */
   buildable: boolean;
+  buildMode: 'local' | 'hosted-github-actions' | 'unavailable';
   missing: string[];
 };
 
@@ -47,9 +53,18 @@ export function getAndroidBuildCapabilities(env: NodeJS.ProcessEnv = process.env
     || commandExists('gradle', env.PATH);
   const sdkRoot = env.ANDROID_HOME?.trim() || env.ANDROID_SDK_ROOT?.trim();
   const sdk = Boolean(sdkRoot && requirePath(join(sdkRoot, 'platforms', 'android-35')));
-  const missing = [!java && 'Java (JAVA_HOME or PATH)', !gradle && 'Gradle (GRADLE_HOME or PATH)', !sdk && 'Android SDK (ANDROID_HOME or ANDROID_SDK_ROOT)'].filter(Boolean) as string[];
-  const artifactStorageCredentialsPresent = Boolean(env.NEXT_PUBLIC_SUPABASE_URL?.trim() && env.SUPABASE_SERVICE_ROLE_KEY?.trim());
-  return { java, gradle, androidSdk: sdk, artifactStorageCredentialsPresent, buildable: missing.length === 0, missing };
+  const localMissing = [!java && 'Java (JAVA_HOME or PATH)', !gradle && 'Gradle (GRADLE_HOME or PATH)', !sdk && 'Android SDK (ANDROID_HOME or ANDROID_SDK_ROOT)'].filter(Boolean) as string[];
+  const localBuildable = localMissing.length === 0;
+  const hostedWorkerEnabled = env.ANDROID_HOSTED_WORKER_ENABLED?.trim().toLowerCase() === 'true';
+  const artifactStorageCredentialsPresent = Boolean((env.SUPABASE_URL?.trim() || env.NEXT_PUBLIC_SUPABASE_URL?.trim()) && env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+  const buildable = localBuildable || hostedWorkerEnabled;
+  const buildMode = localBuildable ? 'local' : hostedWorkerEnabled ? 'hosted-github-actions' : 'unavailable';
+  return {
+    java, gradle, androidSdk: sdk, artifactStorageCredentialsPresent,
+    localBuildable, hostedWorkerEnabled, buildable, buildMode,
+    // Missing local tools remain available for diagnostics even when the hosted path is configured.
+    missing: localMissing,
+  };
 }
 
 function run(command: string, args: string[], cwd: string) {
@@ -82,7 +97,7 @@ public final class MainActivity extends Activity { private final StringBuilder i
 
 export async function buildAndroidApk(files: Record<string, string>, outputRoot = join(homedir(), '.leonardx', 'android-artifacts')): Promise<AndroidBuildResult> {
   const capabilities = getAndroidBuildCapabilities();
-  if (!capabilities.buildable) throw new Error(`Android builds are unavailable. Missing: ${capabilities.missing.join(', ')}.`);
+  if (!capabilities.localBuildable) throw new Error(`Android builds are unavailable in this runtime. Missing: ${capabilities.missing.join(', ')}.`);
   if (activeBuild) throw new Error('Another Android build is already running. Retry after it completes.');
   if (!files || typeof files !== 'object' || Array.isArray(files) || Object.keys(files).length < 1 || Object.keys(files).length > 250) {
     throw new Error('Android source files must be a bounded path-to-content map.');

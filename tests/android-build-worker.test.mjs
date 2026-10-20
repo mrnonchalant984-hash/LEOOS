@@ -54,7 +54,10 @@ test('Vercel worker refuses to claim jobs when its runtime lacks the Android too
   const implementation = await read('lib/android-build-worker.ts');
   assert.match(route, /getAndroidBuildCapabilities\(\)/);
   assert.match(route, /serverless runtime cannot compile Android APKs/);
-  assert.match(implementation, /if \(!capabilities\.buildable\)/);
+  assert.match(route, /!capabilities\.localBuildable/);
+  assert.match(implementation, /if \(!capabilities\.localBuildable\)/);
+  const buildModule = await read('lib/android-build.ts');
+  assert.match(buildModule, /if \(!capabilities\.localBuildable\) throw new Error/);
   assert.match(implementation, /before|toolchain is unavailable/);
 });
 

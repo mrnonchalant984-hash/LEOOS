@@ -11,7 +11,7 @@ const MAX_APK_BYTES = 150 * 1024 * 1024;
 /** Claims at most one durable job, runs the real Gradle build, and commits a verified artifact. */
 export async function runAndroidBuildWorker(workerId: string) {
   const capabilities = getAndroidBuildCapabilities();
-  if (!capabilities.buildable) {
+  if (!capabilities.localBuildable) {
     throw new Error(`Android worker toolchain is unavailable: ${capabilities.missing.join(', ')}. Use the configured hosted Android queue worker.`);
   }
   const db = adminSupabase();

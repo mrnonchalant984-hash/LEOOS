@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   if (!authorized(request)) return NextResponse.json({ error: 'Android worker is disabled or unauthorized.' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
   try {
     const capabilities = getAndroidBuildCapabilities();
-    if (!capabilities.buildable) return NextResponse.json({ error: 'This serverless runtime cannot compile Android APKs.', missing: capabilities.missing, worker: 'Use the configured hosted Android queue worker.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+    if (!capabilities.localBuildable) return NextResponse.json({ error: 'This serverless runtime cannot compile Android APKs.', missing: capabilities.missing, worker: 'Use the configured hosted Android queue worker.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
     const result = await runAndroidBuildWorker(`android-worker-${randomUUID()}`);
     return NextResponse.json(result, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {

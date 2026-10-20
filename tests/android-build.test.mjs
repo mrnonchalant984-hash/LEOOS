@@ -12,6 +12,20 @@ test('Android capability check fails closed when the toolchain is not configured
   assert.match(result.missing.join(' '), /Android SDK/);
 });
 
+test('hosted GitHub Actions mode is reported separately from local toolchain availability', () => {
+  const result = getAndroidBuildCapabilities({
+    PATH: '', JAVA_HOME: '', GRADLE_HOME: '', ANDROID_HOME: '', ANDROID_SDK_ROOT: '',
+    ANDROID_HOSTED_WORKER_ENABLED: 'true', SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-only-not-a-real-secret',
+  });
+  assert.equal(result.localBuildable, false);
+  assert.equal(result.hostedWorkerEnabled, true);
+  assert.equal(result.buildable, true);
+  assert.equal(result.buildMode, 'hosted-github-actions');
+  assert.equal(result.artifactStorageCredentialsPresent, true);
+  assert.match(result.missing.join(' '), /Java/);
+});
+
 test('calculator starter is a real Android project with required operations', () => {
   const files = createCalculatorAndroidProject();
   assert.match(files['app/build.gradle'], /assemble|com\.android\.application/);
