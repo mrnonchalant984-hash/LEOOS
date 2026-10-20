@@ -312,19 +312,24 @@ export async function POST(req: NextRequest) {
         }
         const selectedTools = selectedTool ? [selectedTool] : agentTools;
         if (customAgent) customAgentProviderStarted = true;
-        const response = await generateTextWithTools({
+        const fallbackModel = customAgent ? undefined : (process.env.LEO_FALLBACK_MODEL?.trim() || (isProviderConfigured('google') && resolveModel(selectedModel).provider === 'openai' ? 'google/gemini-2.5-flash' : undefined));
+        const outcome = await generateWithExplicitFallback(selectedModel, fallbackModel, model => generateTextWithTools({
           ...request,
+          model,
           tools: selectedTools,
           executeTool: available.execute,
           maxToolCalls: selectedTool ? 1 : 6,
           ...(selectedTool ? { requiredToolName: selectedTool.name } : {}),
-        });
+        }));
+        const response = outcome.result;
         reply = response.text || "I could not generate a reply.";
         usage = response.usage;
         selectedModel = `${response.provider}/${response.model}`;
       } else {
         if (customAgent) customAgentProviderStarted = true;
-        const response = await generateText(request);
+        const fallbackModel = customAgent ? undefined : (process.env.LEO_FALLBACK_MODEL?.trim() || (isProviderConfigured('google') && resolveModel(selectedModel).provider === 'openai' ? 'google/gemini-2.5-flash' : undefined));
+        const outcome = await generateWithExplicitFallback(selectedModel, fallbackModel, model => generateText({ ...request, model }));
+        const response = outcome.result;
         reply = response.text || "I could not generate a reply.";
         usage = response.usage;
         selectedModel = `${response.provider}/${response.model}`;
