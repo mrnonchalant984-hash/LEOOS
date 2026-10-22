@@ -19,3 +19,6 @@ packages/sdk/dist/
 # Local Supabase CLI state can contain project-specific connection metadata
 supabase/.temp/
 supabase/.branches/
+
+# Local patch scratch files must never enter production TypeScript compilation
+/tmp/

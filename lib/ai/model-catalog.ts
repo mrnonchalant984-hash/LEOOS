@@ -68,7 +68,13 @@ export function getDefaultTextModel(mode: 'chat' | 'reasoning' = 'chat') {
   const configured = mode === 'reasoning'
     ? process.env.LEO_REASONING_MODEL?.trim()
     : process.env.LEO_CHAT_MODEL?.trim() || process.env.LEO_MEETING_MODEL?.trim() || process.env.LEO_AGENT_MODEL?.trim();
-  const safeDefault = mode === 'reasoning' ? 'openai/gpt-5.6-luna' : 'openai/gpt-4o-mini';
+  // If Gemini is the only configured hosted provider, use it as the default
+  // instead of repeatedly attempting an unavailable OpenAI provider.
+  const openAIConfigured = configuredProvider('openai');
+  const googleConfigured = configuredProvider('google');
+  const safeDefault = !openAIConfigured && googleConfigured
+    ? 'google/gemini-2.5-flash'
+    : mode === 'reasoning' ? 'openai/gpt-5.6-luna' : 'openai/gpt-4o-mini';
   if (!configured) return safeDefault;
   const candidate = configured.includes('/')
     ? configured
