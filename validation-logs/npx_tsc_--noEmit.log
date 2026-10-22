@@ -1,0 +1,51 @@
+error TS2688: Cannot find type definition file for 'bunyan'.
+  The file is in the program because:
+    Entry point for implicit type library 'bunyan'
+error TS2688: Cannot find type definition file for 'cli-progress'.
+  The file is in the program because:
+    Entry point for implicit type library 'cli-progress'
+error TS2688: Cannot find type definition file for 'draco3d'.
+  The file is in the program because:
+    Entry point for implicit type library 'draco3d'
+error TS2688: Cannot find type definition file for 'estree'.
+  The file is in the program because:
+    Entry point for implicit type library 'estree'
+error TS2688: Cannot find type definition file for 'json-schema'.
+  The file is in the program because:
+    Entry point for implicit type library 'json-schema'
+error TS2688: Cannot find type definition file for 'json5'.
+  The file is in the program because:
+    Entry point for implicit type library 'json5'
+error TS2688: Cannot find type definition file for 'jszip'.
+  The file is in the program because:
+    Entry point for implicit type library 'jszip'
+error TS2688: Cannot find type definition file for 'node'.
+  The file is in the program because:
+    Entry point for implicit type library 'node'
+error TS2688: Cannot find type definition file for 'offscreencanvas'.
+  The file is in the program because:
+    Entry point for implicit type library 'offscreencanvas'
+error TS2688: Cannot find type definition file for 'qrcode'.
+  The file is in the program because:
+    Entry point for implicit type library 'qrcode'
+error TS2688: Cannot find type definition file for 'react'.
+  The file is in the program because:
+    Entry point for implicit type library 'react'
+error TS2688: Cannot find type definition file for 'react-dom'.
+  The file is in the program because:
+    Entry point for implicit type library 'react-dom'
+error TS2688: Cannot find type definition file for 'react-reconciler'.
+  The file is in the program because:
+    Entry point for implicit type library 'react-reconciler'
+error TS2688: Cannot find type definition file for 'retry'.
+  The file is in the program because:
+    Entry point for implicit type library 'retry'
+error TS2688: Cannot find type definition file for 'stats.js'.
+  The file is in the program because:
+    Entry point for implicit type library 'stats.js'
+error TS2688: Cannot find type definition file for 'three'.
+  The file is in the program because:
+    Entry point for implicit type library 'three'
+error TS2688: Cannot find type definition file for 'webxr'.
+  The file is in the program because:
+    Entry point for implicit type library 'webxr'

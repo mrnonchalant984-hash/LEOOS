@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, CircleHelp, LoaderCircle, RefreshCw } from 'lucide-react';
 
 type ModelStatus = { id: string; provider: string; model: string; capabilities?: string[]; configured: boolean };
@@ -13,24 +13,56 @@ function Status({ ready }: { ready: boolean }) {
   </span>;
 }
 
+async function fetchPayload(signal: AbortSignal): Promise<Payload> {
+  const response = await fetch('/api/models', { cache: 'no-store', signal });
+  const data = await response.json() as Payload;
+  if (!response.ok) throw new Error(data.error || `Could not load provider status (${response.status}).`);
+  return data;
+}
+
 export function AIProviderStatus() {
   const [payload, setPayload] = useState<Payload | null>(null);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const requests = useRef(new Set<AbortController>());
 
   async function load() {
-    setLoading(true); setError('');
+    const controller = new AbortController();
+    requests.current.add(controller);
+    setLoading(true);
+    setError('');
     try {
-      const response = await fetch('/api/models', { cache: 'no-store' });
-      const data = await response.json() as Payload;
-      if (!response.ok) throw new Error(data.error || `Could not load provider status (${response.status}).`);
-      setPayload(data);
+      const data = await fetchPayload(controller.signal);
+      if (!controller.signal.aborted) setPayload(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load provider status.');
-    } finally { setLoading(false); }
+      if (!controller.signal.aborted) {
+        setError(e instanceof Error ? e.message : 'Could not load provider status.');
+      }
+    } finally {
+      requests.current.delete(controller);
+      if (!controller.signal.aborted) setLoading(false);
+    }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    requests.current.add(controller);
+    void fetchPayload(controller.signal).then(data => {
+      if (!controller.signal.aborted) setPayload(data);
+    }).catch(e => {
+      if (!controller.signal.aborted) {
+        setError(e instanceof Error ? e.message : 'Could not load provider status.');
+      }
+    }).finally(() => {
+      requests.current.delete(controller);
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => {
+      requests.current.forEach(request => request.abort());
+      requests.current.clear();
+    };
+  }, []);
+
   const models = payload?.models || [];
   const providers = [...new Set(models.map(m => m.provider))];
   const hasGoogle = models.some(m => m.provider === 'google' && m.configured);
