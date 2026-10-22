@@ -16,7 +16,13 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ client_secret: { value: response.value, expires_at: response.expires_at }, model, voice });
   } catch (error) {
-    console.error('Realtime session error:', error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to start live voice chat.' }, { status: 500 });
+    if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
+      // Gemini turn-based voice is a safe fallback when realtime WebRTC cannot
+      // be provisioned. The browser sends short recordings to /api/voice; no
+      // Gemini API key is exposed to the client.
+      return NextResponse.json({ mode: 'gemini_turn_based', voice: 'Kore', message: 'Live WebRTC is unavailable; Gemini voice chat is ready in turn-based mode.' });
+    }
+    console.error('Realtime session error:', error instanceof Error ? error.message : 'unknown');
+    return NextResponse.json({ error: 'Unable to start live voice chat. Configure OpenAI Realtime or Gemini voice fallback.' }, { status: 503 });
   }
 }

@@ -7,6 +7,43 @@ const BUCKET = 'leo-files';
 const SIGNED_URL_SECONDS = 60 * 60;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
+async function generateImageWithProviderFallback(prompt: string, preferredModel: string) {
+  const googleKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  try {
+    const result: any = await getOpenAI().images.generate({
+      model: preferredModel,
+      prompt,
+      size: '1024x1024',
+      quality: 'medium',
+      n: 1,
+    });
+    const image = result.data?.[0];
+    if (!image) throw new Error('OpenAI image provider returned no image.');
+    return { image, provider: 'openai', model: preferredModel };
+  } catch (primaryError) {
+    if (!googleKey) throw primaryError;
+    // Gemini's Imagen endpoint is a still-image fallback only. Video generation
+    // deliberately remains on its separately configured video provider.
+    const model = process.env.LEO_GEMINI_IMAGE_MODEL?.trim() || 'imagen-4.0-generate-001';
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:predict?key=${encodeURIComponent(googleKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: '1:1' } }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    const payload = await response.json().catch(() => null) as any;
+    if (!response.ok) {
+      const providerMessage = typeof payload?.error?.message === 'string' ? payload.error.message.slice(0, 300) : `HTTP ${response.status}`;
+      throw new Error(`Gemini image fallback failed (${response.status}): ${providerMessage}`);
+    }
+    const prediction = payload?.predictions?.[0];
+    const base64 = prediction?.bytesBase64Encoded || prediction?.bytes_base64_encoded;
+    if (typeof base64 !== 'string' || !base64) throw new Error('Gemini image fallback returned no image data.');
+    return { image: { b64_json: base64, output_format: String(prediction.mimeType || prediction.mime_type || 'image/png').includes('jpeg') ? 'jpeg' : 'png' }, provider: 'google', model };
+  }
+}
+
+
 type ImageJobOptions = {
   userId: string;
   prompt: string;
@@ -114,14 +151,10 @@ export async function generateAndPersistImage(options: ImageJobOptions) {
     }
     await db.from('generation_jobs').update({ status: 'processing', credit_source: creditSource, platform_credits_reserved: platformCost, updated_at: new Date().toISOString() }).eq('id', job.id).eq('user_id', options.userId);
 
-    const result: any = await getOpenAI().images.generate({
-      model,
-      prompt: visualDirection ? `${visualDirection}\n\n${options.prompt}` : options.prompt,
-      size: '1024x1024',
-      quality: 'medium',
-      n: 1,
-    });
-    const image = result.data?.[0];
+    const finalPrompt = visualDirection ? `${visualDirection}\n\n${options.prompt}` : options.prompt;
+    const generated = await generateImageWithProviderFallback(finalPrompt, model);
+    const image = generated.image;
+    await db.from('generation_jobs').update({ provider: generated.provider, model: generated.model, updated_at: new Date().toISOString() }).eq('id', job.id).eq('user_id', options.userId);
     const { bytes, mime } = await getImageBytes(image);
     const extension = mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'png';
     storagePath = `generated-images/${options.userId}/${job.id}.${extension}`;
@@ -136,7 +169,7 @@ export async function generateAndPersistImage(options: ImageJobOptions) {
       storage_path: storagePath,
       mime_type: mime,
       size_bytes: bytes.length,
-      metadata: { provider: 'openai', model, mode, width: 1024, height: 1024 },
+      metadata: { provider: generated.provider, model: generated.model, mode, width: 1024, height: 1024 },
     }).select('id').single();
     if (assetError) {
       await db.storage.from(BUCKET).remove([storagePath]);

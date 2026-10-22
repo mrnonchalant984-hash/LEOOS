@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ project: workspace, builds: builds || [] }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
   }
   const { data, error } = await db.from('website_projects')
-    .select('id,owner_user_id,project_type,website_type,business_name,chatbot_enabled,payment_mode,requirements,status,live_url,admin_url,github_repo,build_provider,build_status,build_step,last_build_at,created_at,updated_at')
+    .select('id,owner_user_id,project_type,website_type,business_name,chatbot_enabled,payment_mode,requirements,status,live_url,admin_url,github_repo,vercel_project_id,custom_domain,build_provider,build_status,build_step,last_build_at,created_at,updated_at')
     .eq('id', id).eq('owner_user_id', ctx.user.id).maybeSingle();
   if (error) return NextResponse.json({ error: 'Project could not be loaded.' }, { status: 500 });
   if (!data) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });

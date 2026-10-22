@@ -21,6 +21,7 @@ test('external AI assist is explicitly client-driven and does not call a Leonard
 test('agent worker no longer depends on AGENT_WORKER_ENABLED but remains protected by CRON_SECRET', () => {
   assert.doesNotMatch(workerSource, /AGENT_WORKER_ENABLED/);
   assert.match(workerSource, /process\.env\.CRON_SECRET/);
-  assert.match(mcpRouteSource, /worker_enabled: true/);
+  assert.match(mcpRouteSource, /worker_enabled: Boolean\(process\.env\.CRON_SECRET\)/);
+  assert.match(mcpRouteSource, /direct_execution_enabled: true/);
   assert.doesNotMatch(mcpRouteSource, /AGENT_WORKER_ENABLED/);
 });

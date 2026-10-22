@@ -73,7 +73,8 @@ type VoiceStatus =
   | "Muted"
   | "Reconnecting"
   | "Error"
-  | "Ended";
+  | "Ended"
+  | "Gemini voice ready · tap to speak";
 type ToolOption = { name: string; description: string };
 type CustomAgentOption = { id: string; name: string; description: string; allowed_tools: string[] };
 type OfflineDraft = { text: string; mode: "normal" | "deep" | "tools"; selectedToolName?: string; selectedAgentId?: string; savedAt: string };
@@ -122,7 +123,8 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     [voiceOpen, setVoiceOpen] = useState(false),
     [voice, setVoice] = useState("marin"),
     [muted, setMuted] = useState(false),
-    [voiceLocked, setVoiceLocked] = useState(false);
+    [voiceLocked, setVoiceLocked] = useState(false),
+    [voiceFallbackMode, setVoiceFallbackMode] = useState(false);
   const [platformCredits, setPlatformCredits] = useState<number | null>(null);
   const [toolOptions, setToolOptions] = useState<ToolOption[]>([]);
   const [customAgentOptions, setCustomAgentOptions] = useState<CustomAgentOption[]>([]);
@@ -605,12 +607,26 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
             new Blob(chunks.current, { type: "audio/webm" }),
             "voice.webm",
           );
+          fd.append("mode", voiceFallbackMode ? "chat" : "transcribe");
           const r = await fetch("/api/voice", { method: "POST", body: fd });
-          const d = await r.json();
-          if (!r.ok) throw new Error(d.error || "Transcription failed");
+          if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            throw new Error(d.error || "Voice processing failed");
+          }
           const text = decodeURIComponent(r.headers.get("X-Transcript") || "");
+          const assistantReply = decodeURIComponent(r.headers.get("X-Assistant-Reply") || "");
           if (!text.trim()) throw new Error("No speech was detected.");
-          setInput(text);
+          if (voiceFallbackMode) {
+            setMessages((current) => [...current, { role: "user", content: text }, { role: "assistant", content: assistantReply || "I processed your voice message." }]);
+            setVoiceStatus("Speaking");
+          } else {
+            setInput(text);
+          }
+          const audioBlob = await r.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const playback = new Audio(audioUrl);
+          playback.onended = () => { URL.revokeObjectURL(audioUrl); if (voiceFallbackMode) setVoiceStatus("Listening"); };
+          await playback.play().catch(() => { URL.revokeObjectURL(audioUrl); });
         } catch (e) {
           setError(e instanceof Error ? e.message : "Transcription failed");
         } finally {
@@ -645,6 +661,12 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       });
       const session = await r.json();
       if (!r.ok) throw new Error(session.error || "Unable to start voice chat");
+      if (session.mode === "gemini_turn_based") {
+        setVoiceFallbackMode(true);
+        setVoiceStatus("Gemini voice ready · tap to speak");
+        return;
+      }
+      setVoiceFallbackMode(false);
       const secret = session.client_secret?.value;
       if (!secret)
         throw new Error("Realtime session did not return a client secret");
@@ -702,6 +724,8 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     }
   }
   function endVoiceChat() {
+    if (recording) stopRecording();
+    setVoiceFallbackMode(false);
     stream.current?.getTracks().forEach((t) => t.stop());
     stream.current = null;
     pc.current?.close();
@@ -1250,13 +1274,14 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
                       </select>
                     </label>
                   </div>
+                  {voiceFallbackMode && <button type="button" onClick={() => void startVoiceInput()} disabled={loading} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[var(--gold)] px-5 py-3 font-bold text-black disabled:opacity-50"><Mic size={17} />{recording ? "Stop speaking" : loading ? "Leo is responding…" : "Talk to Leo"}</button>}
                   <div className="mt-7 flex justify-center gap-3">
-                    <button
+                    {!voiceFallbackMode && <button
                       onClick={toggleMute}
                       className="rounded-xl border border-white/10 px-4 py-3 text-sm"
                     >
                       {muted ? "Unmute" : "Mute"}
-                    </button>
+                    </button>}
                     <button
                       onClick={endVoiceChat}
                       className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-4 py-3 text-sm font-bold text-white"

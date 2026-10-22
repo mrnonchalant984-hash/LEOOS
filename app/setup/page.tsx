@@ -12,7 +12,16 @@ const DEFAULT_QUESTIONS = [
   "What content/assets must be supplied?",
   "Are payment, booking or accounts required?",
   "What contact links should be used?",
+  "What visual style, colors, typography and references should the design follow?",
+  "What are the must-have pages/screens and their purpose?",
 ];
+const PROJECT_TYPE_QUESTIONS: Partial<Record<ProjectType, string[]>> = {
+  website: ["What visual style, colors, typography and reference websites should guide the design?", "List the required pages, navigation and key sections.", "What should the primary call-to-action do?"],
+  web_app: ["Describe the main user workflows and dashboard screens.", "Which user roles and permissions are needed?", "What data entities, integrations and APIs are required?", "Describe the visual design system: colors, typography, density and reference products."],
+  saas: ["What problem does the SaaS solve and for which users?", "What plans, feature gates and usage/credit limits should exist?", "Which roles, organization/team features and billing flows are required?", "What data model, integrations and admin tools are required?", "Describe the brand, design system and reference products."],
+  mobile_app: ["What are the core user journeys and required screens?", "Which navigation pattern should be used (tabs, stack, drawer, or custom)?", "What visual style, colors, typography, spacing and reference apps should guide the UI?", "What authentication, offline behavior, device permissions and integrations are needed?", "What backend/data model and APIs should the app use?", "What platform targets are required: Android, iOS, or both?", "If you already have them, provide the Android package name and iOS bundle identifier. Otherwise write ‘generate draft identifiers’ so LeonardX can add project-specific draft IDs that you must verify before publishing."],
+  game: ["Describe the core gameplay loop, win/lose conditions and controls.", "Is the game 2D or 3D, and what art direction/camera should it use?", "List the levels, modes, characters and progression systems.", "Which platforms and input methods must be supported?", "Does it need multiplayer, save data, accounts or monetization?"],
+};
 const icons = [
   "🏢",
   "💼",
@@ -51,10 +60,23 @@ export default function Setup() {
   >(null);
   const [business, setBusiness] = useState("");
   const [saving, setSaving] = useState(false);
+  const [buildPolicy, setBuildPolicy] = useState<"ask" | "once" | "always">("once");
   const chooseType = (value: string) => {
     setType(value);
-    setAnswers((TYPE_QUESTIONS[value] || DEFAULT_QUESTIONS).map(() => ""));
+    setAnswers([...((TYPE_QUESTIONS[value] || DEFAULT_QUESTIONS)), ...(PROJECT_TYPE_QUESTIONS[projectType] || [])].map(() => ""));
   };
+  useEffect(() => {
+    let frame = 0;
+    try {
+      const savedPolicy = window.localStorage.getItem("leonardx_build_policy");
+      if (savedPolicy === "always") {
+        frame = window.requestAnimationFrame(() => setBuildPolicy("always"));
+      }
+    } catch {}
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
   useEffect(() => {
     let active = true;
     const supabase = createBrowserClient(
@@ -91,7 +113,12 @@ export default function Setup() {
       const params = new URLSearchParams(window.location.search);
       const requestedProjectType = params.get("project_type");
       if (["website", "web_app", "saas", "mobile_app", "game"].includes(requestedProjectType || "")) {
-        setProjectType(requestedProjectType as ProjectType);
+        const selectedProjectType = requestedProjectType as ProjectType;
+        setProjectType(selectedProjectType);
+        if (selectedProjectType === "mobile_app" || selectedProjectType === "game") {
+          setType(selectedProjectType);
+          setAnswers((PROJECT_TYPE_QUESTIONS[selectedProjectType] || DEFAULT_QUESTIONS).map(() => ""));
+        }
       }
       const templateId = params.get("template");
       const template = LEO_TEMPLATES.find((item) => item.id === templateId);
@@ -109,7 +136,9 @@ export default function Setup() {
       .then((r) => r.json())
       .then(setLoc);
   }, []);
-  const questions = TYPE_QUESTIONS[type] || TYPE_QUESTIONS.company;
+  const questions = type === "mobile_app" || type === "game"
+    ? PROJECT_TYPE_QUESTIONS[projectType] || DEFAULT_QUESTIONS
+    : [...(TYPE_QUESTIONS[type] || TYPE_QUESTIONS.company), ...(PROJECT_TYPE_QUESTIONS[projectType] || [])];
   const projectTypeLabel: Record<ProjectType, string> = {
     website: "website",
     web_app: "web app",
@@ -118,6 +147,7 @@ export default function Setup() {
     game: "game",
   };
   const projectTypeAvailable = allowedProjectTypes.includes(projectType);
+  const isCloudProject = projectType === "mobile_app" || projectType === "game";
   return (
     <main className="mx-auto max-w-6xl px-4 py-12">
       <GlassCard className="p-6">
@@ -155,7 +185,18 @@ export default function Setup() {
                 key={value}
                 type="button"
                 disabled={!available}
-                onClick={() => setProjectType(value)}
+                onClick={() => {
+                  setProjectType(value);
+                  if (value === "mobile_app" || value === "game") {
+                    setType(value);
+                    setAnswers((PROJECT_TYPE_QUESTIONS[value] || DEFAULT_QUESTIONS).map(() => ""));
+                  } else if (type === "mobile_app" || type === "game") {
+                    setType("");
+                    setAnswers([]);
+                  } else if (type) {
+                    setAnswers([...((TYPE_QUESTIONS[type] || TYPE_QUESTIONS.company)), ...(PROJECT_TYPE_QUESTIONS[value] || [])].map(() => ""));
+                  }
+                }}
                 className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold ${projectType === value ? "border-orange-400 bg-orange-500/10" : "border-white/10 bg-white/[.03]"} disabled:cursor-not-allowed disabled:opacity-40`}
               >
                 <span>{label}</span>
@@ -172,7 +213,7 @@ export default function Setup() {
           <p className="mt-2 text-sm text-zinc-400">{providers[projectType]?.message || "This project type is not available on the current plan."}</p>
           {!planProjectTypes.includes(projectType) && <a href="/pricing" className="mt-3 inline-block text-sm font-semibold text-[var(--gold)]">View plans</a>}
         </section>
-      ) : !type ? (
+      ) : !type && projectType !== "mobile_app" && projectType !== "game" ? (
         <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
           {WEBSITE_TYPES.map(([id, label], i) => (
             <button
@@ -227,7 +268,7 @@ export default function Setup() {
                 />
               </div>
             ))}
-            <div className="mt-6 rounded-2xl border border-white/10 p-4">
+            {!isCloudProject && <div className="mt-6 rounded-2xl border border-white/10 p-4">
               <b>AI Chatbot Assistant?</b>
               <p className="mt-1 text-sm text-zinc-400">
                 Customers can ask questions 24/7. If enabled, the client
@@ -247,7 +288,7 @@ export default function Setup() {
                   No, just website
                 </button>
               </div>
-            </div>
+            </div>}
             {(type === "ecommerce" || DB_NEEDED.has(type)) && (
               <div className="mt-6 rounded-2xl border border-white/10 p-4">
                 <b>Payment method</b>
@@ -281,9 +322,12 @@ export default function Setup() {
             )}
           </GlassCard>
           <GlassCard className="p-6">
-            <h2 className="text-xl font-bold">What Leo needs</h2>
+            <h2 className="text-xl font-bold">Your build brief</h2>
+            <p className="mt-2 text-sm text-zinc-400">Leo will use your answers to plan the information architecture, screens, design system and integrations before building. It must not silently substitute a generic template.</p>
             <ul className="mt-4 space-y-3 text-sm text-zinc-300">
               <li>✓ Real business name, text and links</li>
+              <li>✓ Explicit visual direction, palette and screen/page requirements</li>
+              <li>✓ Data model, roles, integrations and platform targets where relevant</li>
               <li>✓ Real owner/team photos when required</li>
               <li>✓ Real credentials, testimonials and portfolio items</li>
               <li>✓ No invented products, reviews or credentials</li>
@@ -298,8 +342,19 @@ export default function Setup() {
                 for this website type
               </li>
             </ul>
+            <div className="mt-6 rounded-2xl border border-white/10 p-4">
+              <b>Build and deployment permission</b>
+              <p className="mt-1 text-sm text-zinc-400">Your brief is saved first. Auto-build starts only under the permission you select; provider readiness and the monthly build allowance are checked server-side before execution; platform credits are shown separately in the project workspace. Deployment can still fail if provider credentials or required integrations are unavailable.</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {([ ["once", "Allow once", "Build and deploy this project after saving."], ["always", "Allow always", "Remember this choice for future website builds on this browser."], ["ask", "Ask every time", "Save the brief and decide before deployment." ] ] as const).map(([value, label, description]) => (
+                  <button key={value} type="button" onClick={() => setBuildPolicy(value)} className={`rounded-xl border p-3 text-left ${buildPolicy === value ? "border-orange-400 bg-orange-500/10" : "border-white/10 bg-white/[.03]"}`}>
+                    <span className="block text-sm font-semibold">{label}</span><span className="mt-1 block text-xs text-zinc-400">{description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <button
-              disabled={!business || chatbot === null || saving}
+              disabled={!business || (!isCloudProject && chatbot === null) || saving}
               onClick={async () => {
                 if (saving) return;
                 setSaving(true);
@@ -320,7 +375,7 @@ export default function Setup() {
                       website_type: type,
                                             project_type: projectType,
                       business_name: business,
-                      chatbot_enabled: chatbot,
+                      chatbot_enabled: chatbot === true,
                       payment_mode: payment || "manual_email",
                       requirements: Object.fromEntries(
                         [
@@ -334,7 +389,21 @@ export default function Setup() {
                   });
                   const j = await r.json();
                   if (!r.ok || !j.project) throw new Error(j.error || "Could not save project.");
-                  router.push(`/dashboard/websites/${j.project.id}`);
+                  if (buildPolicy === "always") window.localStorage.setItem("leonardx_build_policy", "always");
+                  else window.localStorage.removeItem("leonardx_build_policy");
+                  if (isCloudProject && buildPolicy !== "ask") {
+                    const buildRequest = projectType === "mobile_app"
+                      ? { project_id: j.project.id, platform: "android", profile: "preview", idempotency_key: window.crypto.randomUUID() }
+                      : { project_id: j.project.id, preset: "Windows Desktop", idempotency_key: window.crypto.randomUUID() };
+                    const buildResponse = await fetch(projectType === "mobile_app" ? "/api/builds/expo" : "/api/builds/godot", {
+                      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify(buildRequest),
+                    });
+                    const buildResult = await buildResponse.json().catch(() => ({}));
+                    if (!buildResponse.ok) alert(`Project saved, but the build could not start: ${buildResult.error || "Check provider setup and project identifiers."}`);
+                    else alert(`Build submitted. Status: ${buildResult.status || "queued"}. Open the workspace to follow progress.`);
+                  }
+                  const canAutoBuild = !isCloudProject && buildPolicy !== "ask";
+                  router.push(canAutoBuild ? `/dashboard/websites/${j.project.id}?auto_build=1` : isCloudProject ? `/ide/${j.project.id}` : `/dashboard/websites/${j.project.id}`);
                 } catch (error) {
                   alert(error instanceof Error ? error.message : "Could not save project.");
                   setSaving(false);
@@ -342,7 +411,7 @@ export default function Setup() {
               }}
               className="mt-6 w-full rounded-full bg-orange-500 p-3 font-bold disabled:opacity-40"
             >
-              {saving ? "Saving project…" : "Save & continue"}
+              {saving ? "Saving project…" : buildPolicy === "ask" ? "Save project brief" : "Save, build & deploy"}
             </button>
           </GlassCard>
         </div>

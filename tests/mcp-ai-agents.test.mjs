@@ -29,6 +29,9 @@ test('MCP agent execution rechecks entitlements and account ownership', async ()
   assert.match(worker, /canUseManualAgents\(plan\.key, owner\)/);
   assert.match(worker, /agentAllowed\(agent\.id, plan\.key, owner\)/);
   assert.match(worker, /claim_agent_jobs/);
+  assert.match(route, /mcp_direct_execution/);
+  assert.match(route, /const result = await runAgent\(staticAgent/);
+  assert.match(route, /Agent finished but its result could not be persisted/);
 });
 
 test('owner-created agents use only the no-tools text adapter and remain owner-only', async () => {

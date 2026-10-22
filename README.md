@@ -143,3 +143,8 @@ The audit page runs Google PageSpeed Insights Lighthouse reports for both mobile
 ### Platform owner Developer API access
 
 The configured platform owner (`OWNER_EMAIL` plus the matching owner role in the user's profile) can use product features and Developer API access without a paid subscription, project/build/image plan quotas, or Developer API credits. Owner API requests still pass API-key authentication, tool scopes, audit logging, and the API rate-limit service; no payment or subscription record is fabricated.
+
+
+## Customer-owned integrations and custom domains
+
+See [`LEONARDX_CUSTOMER_CONNECTIONS_AND_DOMAIN_MANAGEMENT.md`](./LEONARDX_CUSTOMER_CONNECTIONS_AND_DOMAIN_MANAGEMENT.md) for the new encrypted per-user integration registry, GitHub/Vercel account-aware builds, custom-domain management, rollout steps, and explicit provider capability boundaries. Apply the new Supabase migration and configure `MCP_CREDENTIAL_ENCRYPTION_KEY` before using customer-owned credentials.

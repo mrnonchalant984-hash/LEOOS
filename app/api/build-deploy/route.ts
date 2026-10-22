@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProfile, adminSupabase, isPlatformOwner } from '@/lib/auth';
 import { authenticateApiKey } from '@/lib/api-auth';
-import { getTextOpenAI as getOpenAI, getConfiguredModel } from '@/lib/openai';
+import { getConfiguredModel } from '@/lib/openai';
+import { generateText } from '@/lib/ai/provider-registry';
+import { generateWithExplicitFallback, getSafeFallbackModel } from '@/lib/ai/provider-fallback';
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import type { ProjectType } from '@/lib/pricing';
 import { getBuilderAvailability, getExternalModelBuilderAvailability } from '@/lib/builders/providers';
@@ -11,6 +13,7 @@ import { normalizeIdePath, validateIdeFiles } from '@/lib/ide-files';
 import { normalizeVercelDomain, resolveVerifiedVercelMainUrl, toVercelSubdomain, verifyPublicMainDomain } from '@/lib/vercel-deployment-url';
 import { buildDeployRequestHash, getBuildDeployRateLimitPerHour, resolveBuildDeployIdempotencyKey } from '@/lib/build-deploy-idempotency';
 import { ProviderHttpError, requestProviderJson } from '@/lib/provider-http';
+import { decryptMcpCredential } from '@/lib/mcp/outbound-security';
 import type { DeploymentProvider } from '@/lib/provider-http';
 
 export const runtime = 'nodejs';
@@ -26,11 +29,11 @@ function validateGeneratedSite(site: GeneratedSite, chatbot: boolean) {
   return required.filter(p => !paths.has(p));
 }
 
-  async function waitForVercelDeployment(id: string, timeoutMs = 180000, onState?: (state: string) => Promise<void>) {
+  async function waitForVercelDeployment(id: string, token: string | undefined, timeoutMs = 180000, onState?: (state: string) => Promise<void>) {
   const started = Date.now();
     let previousState = '';
   while (Date.now() - started < timeoutMs) {
-    const d = await vercel(`/v13/deployments/${encodeURIComponent(id)}`);
+    const d = await vercel(`/v13/deployments/${encodeURIComponent(id)}`, {}, token);
     const state = String(d.readyState || d.status || '');
       if (state && state !== previousState) {
         previousState = state;
@@ -43,12 +46,12 @@ function validateGeneratedSite(site: GeneratedSite, chatbot: boolean) {
   throw new Error('Vercel deployment did not become ready within the verification window.');
 }
 
-async function gh(path: string, opts: RequestInit = {}) {
+async function gh(path: string, opts: RequestInit = {}, token: string | undefined = process.env.GITHUB_TOKEN) {
   return requestProviderJson<Record<string, any>>('github', `https://api.github.com${path}`, {
     ...opts,
     headers: {
       Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+      Authorization: `Bearer ${token || ''}`,
       'X-GitHub-Api-Version': '2022-11-28',
       'Content-Type': 'application/json',
       ...(opts.headers || {}),
@@ -56,16 +59,34 @@ async function gh(path: string, opts: RequestInit = {}) {
   });
 }
 
-async function vercel(path: string, opts: RequestInit = {}) {
-  const query = process.env.VERCEL_TEAM_ID ? `?teamId=${encodeURIComponent(process.env.VERCEL_TEAM_ID)}` : '';
+async function vercel(path: string, opts: RequestInit = {}, token: string | undefined = process.env.VERCEL_TOKEN) {
+  const query = token === process.env.VERCEL_TOKEN && process.env.VERCEL_TEAM_ID ? `?teamId=${encodeURIComponent(process.env.VERCEL_TEAM_ID)}` : '';
   return requestProviderJson<Record<string, any>>('vercel', `https://api.vercel.com${path}${query}`, {
     ...opts,
     headers: {
-      Authorization: `Bearer ${process.env.VERCEL_TOKEN}`,
+      Authorization: `Bearer ${token || ''}`,
       'Content-Type': 'application/json',
       ...(opts.headers || {}),
     },
   });
+}
+
+async function getCustomerProviderToken(userId: string, provider: 'github' | 'vercel'): Promise<string | undefined> {
+  const { data, error } = await adminSupabase().from('user_integrations')
+    .select('credential_ciphertext')
+    .eq('user_id', userId).eq('provider', provider).eq('status', 'verified')
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  // Keep existing platform-managed credentials as a compatibility fallback if a customer has
+  // not connected their own account. Never use a connection belonging to another user.
+  if (error || !data?.credential_ciphertext) return provider === 'github' ? process.env.GITHUB_TOKEN : process.env.VERCEL_TOKEN;
+  try {
+    const config = JSON.parse(decryptMcpCredential(data.credential_ciphertext)) as Record<string, unknown>;
+    const token = provider === 'github' || provider === 'vercel' ? config.token : undefined;
+    if (typeof token !== 'string' || !token.trim()) throw new Error('Credential is missing.');
+    return token;
+  } catch {
+    throw new Error(`The connected ${provider} credential could not be decrypted. Reconnect the integration before building.`);
+  }
 }
 
 type BuildContext = { id: string; projectId: string; userId: string; deploymentId?: string | null };
@@ -282,17 +303,32 @@ export async function POST(req: NextRequest) {
     if (suppliedMcpFiles) {
       json = { files: suppliedMcpFiles };
     } else {
-      const ai = getOpenAI();
-      const baseSystem = 'Generate a coherent production-oriented Next.js App Router website. Return ONLY JSON: {"files":[{"path":"...","content":"..."}],"missingRequirements":["..."]}. Do not invent client facts. Use clearly marked placeholders only where the client has not supplied required assets, and list every missing asset in missingRequirements. The output MUST include package.json, app/layout.tsx, app/page.tsx, app/admin/page.tsx, app/sitemap.ts, app/robots.ts, secure server-side environment handling, a client-friendly admin area relevant to the selected website type, SEO metadata, and real error states. If chatbot is enabled, include app/api/chat/route.ts using only the client-owned AI credential. Never put secrets in NEXT_PUBLIC_* or source files.';
-      let generated = await ai.chat.completions.create({ model:getConfiguredModel(), messages:[{role:'system',content:baseSystem},{role:'user',content:prompt}], max_tokens:16000 });
-      let content = generated.choices[0]?.message?.content || '';
+      const primaryModel = process.env.LEO_BUILD_MODEL?.trim() || getConfiguredModel();
+      const fallbackModel = getSafeFallbackModel(primaryModel, process.env.LEO_FALLBACK_MODEL?.trim());
+      const baseSystem = 'Generate a coherent, tailored, production-oriented Next.js App Router website from the user’s requirements. Do not use a generic one-page template when the brief calls for a real multi-page product. Return ONLY JSON: {"files":[{"path":"...","content":"..."}],"missingRequirements":["..."]}. Follow the requested brand, design system, navigation, pages, content hierarchy, responsive behavior and accessibility requirements. Do not invent client facts. Use clearly marked placeholders only where the client has not supplied required assets, and list every missing asset in missingRequirements. The output MUST include package.json, app/layout.tsx, app/page.tsx, app/admin/page.tsx, app/sitemap.ts, app/robots.ts, secure server-side environment handling, a client-friendly admin area relevant to the selected website type, SEO metadata, and real error states. If chatbot is enabled, include app/api/chat/route.ts using only the client-owned AI credential. Never put secrets in NEXT_PUBLIC_* or source files.';
+      const generateSite = async (userPrompt: string) => {
+        const messages = [{ role: 'system' as const, content: baseSystem }, { role: 'user' as const, content: userPrompt }];
+        let outcome = await generateWithExplicitFallback(primaryModel, fallbackModel, model => generateText({ model, messages, maxOutputTokens: 16000, temperature: 0.2 }));
+        if (fallbackModel && !outcome.fallback_used) {
+          try { JSON.parse(outcome.result.text.replace(/^```json\s*|```$/g, '')); }
+          catch {
+            // A provider can return a healthy HTTP response with malformed JSON.
+            // Treat that as a generation failure and try the configured fallback once.
+            const fallback = await generateText({ model: fallbackModel, messages, maxOutputTokens: 16000, temperature: 0.2 });
+            outcome = { result: fallback, model: fallbackModel, fallback_used: true };
+          }
+        }
+        return outcome;
+      };
+      let generated = await generateSite(prompt);
+      let content = generated.result.text || '';
       json = JSON.parse(content.replace(/^```json\s*|```$/g, '')) as GeneratedSite;
       buildContext.stage = 'testing';
-      await recordBuildState(buildContext, 'testing', 'Checking generated project files');
+      await recordBuildState(buildContext, 'testing', `Checking generated project files (${generated.model})`);
       let missing = validateGeneratedSite(json, Boolean(body.chatbot_enabled));
       if (missing.length) {
-        generated = await ai.chat.completions.create({ model:getConfiguredModel(), messages:[{role:'system',content:baseSystem},{role:'user',content:`Your previous output was incomplete. These required files were missing: ${missing.join(', ')}. Return a corrected complete JSON project. Original request:\n${prompt}`}], max_tokens:18000 });
-        content = generated.choices[0]?.message?.content || '';
+        generated = await generateSite(`Your previous output was incomplete. These required files were missing: ${missing.join(', ')}. Return a corrected complete JSON project. Original request:\n${prompt}`);
+        content = generated.result.text || '';
         json = JSON.parse(content.replace(/^```json\s*|```$/g, '')) as GeneratedSite;
         missing = validateGeneratedSite(json, Boolean(body.chatbot_enabled));
       }
@@ -301,34 +337,37 @@ export async function POST(req: NextRequest) {
 
     buildContext.stage = 'building';
     await recordBuildState(buildContext, 'building', 'Creating isolated customer repository');
-    const me = await gh('/user');
+    const githubToken = await getCustomerProviderToken(ctx.user.id, 'github');
+    const vercelToken = await getCustomerProviderToken(ctx.user.id, 'vercel');
+    if (!githubToken || !vercelToken) throw new Error('Connect verified GitHub and Vercel accounts in Integrations, or configure the platform-managed fallback credentials.');
+    const me = await gh('/user', {}, githubToken);
     const repoName = `${process.env.VERCEL_PROJECT_PREFIX || 'leo-site'}-${Date.now()}`;
     const repo = await gh('/user/repos', {
       method: 'POST',
       body: JSON.stringify({ name: repoName, private: true, description: `Website generated by LEO for ${ctx.profile.email}`, auto_init: true }),
-    });
-    const ref = await gh(`/repos/${me.login}/${repoName}/git/ref/heads/main`);
+    }, githubToken);
+    const ref = await gh(`/repos/${me.login}/${repoName}/git/ref/heads/main`, {}, githubToken);
     const base = ref.object.sha;
-    const baseCommit = await gh(`/repos/${me.login}/${repoName}/git/commits/${base}`);
+    const baseCommit = await gh(`/repos/${me.login}/${repoName}/git/commits/${base}`, {}, githubToken);
     const blobs = await Promise.all((json.files || []).map(async (f) => {
       const b = await gh(`/repos/${me.login}/${repoName}/git/blobs`, {
         method: 'POST',
         body: JSON.stringify({ content: f.content, encoding: 'utf-8' }),
-      });
+      }, githubToken);
       return { path: f.path, mode: '100644', type: 'blob', sha: b.sha };
     }));
     const tree = await gh(`/repos/${me.login}/${repoName}/git/trees`, {
       method: 'POST',
       body: JSON.stringify({ base_tree: baseCommit.tree.sha, tree: blobs }),
-    });
+    }, githubToken);
     const commit = await gh(`/repos/${me.login}/${repoName}/git/commits`, {
       method: 'POST',
-      body: JSON.stringify({ message: 'Create website with LEO OS', tree: tree.sha, parents: [base] }),
-    });
+      body: JSON.stringify({ message: 'Create website with LeonardX', tree: tree.sha, parents: [base] }),
+    }, githubToken);
     await gh(`/repos/${me.login}/${repoName}/git/refs/heads/main`, {
       method: 'PATCH',
-      body: JSON.stringify({ sha: commit.sha, force: true }),
-    });
+      body: JSON.stringify({ sha: commit.sha, force: false }),
+    }, githubToken);
 
     const publicEnv: Record<string, string> = {};
     const secretEnv: Record<string, string> = {};
@@ -339,9 +378,9 @@ export async function POST(req: NextRequest) {
 
     const project = await vercel('/v10/projects', {
       method: 'POST',
-      body: JSON.stringify({ name: repoName, framework: 'nextjs' }),
-    }).catch(async (e) => {
-      const existing = await vercel(`/v9/projects/${encodeURIComponent(repoName)}`).catch(() => null);
+      body: JSON.stringify({ name: repoName, framework: 'nextjs', gitRepository: { type: 'github', repo: `${me.login}/${repoName}` } }),
+    }, vercelToken).catch(async (e) => {
+      const existing = await vercel(`/v9/projects/${encodeURIComponent(repoName)}`, {}, vercelToken).catch(() => null);
       if (existing) return existing;
       throw e;
     });
@@ -350,10 +389,10 @@ export async function POST(req: NextRequest) {
       await vercel(`/v10/projects/${encodeURIComponent(projectId)}/env`, {
         method: 'POST',
         body: JSON.stringify({ key, value, type: publicEnv[key] ? 'plain' : 'secret', target: ['production', 'preview', 'development'] }),
-      });
+      }, vercelToken);
     }
     if (customDomain) {
-      const domainResult = await vercel(`/v9/projects/${encodeURIComponent(projectId)}/domains`);
+      const domainResult = await vercel(`/v9/projects/${encodeURIComponent(projectId)}/domains`, {}, vercelToken);
       const attachedDomainNames = new Set<string>(
         (Array.isArray(domainResult.domains) ? domainResult.domains : []).flatMap((entry: { name?: unknown }) => {
           const domain = normalizeVercelDomain(entry.name);
@@ -363,8 +402,8 @@ export async function POST(req: NextRequest) {
       if (!attachedDomainNames.has(customDomain)) {
         await vercel(`/v10/projects/${encodeURIComponent(projectId)}/domains`, {
           method: 'POST',
-          body: JSON.stringify({ domain: customDomain }),
-        });
+          body: JSON.stringify({ name: customDomain }),
+        }, vercelToken);
       }
     }
 
@@ -374,7 +413,7 @@ export async function POST(req: NextRequest) {
     const deploy = await vercel('/v13/deployments', {
       method: 'POST',
       body: JSON.stringify({ name: repoName, project: projectId, files, projectSettings: { framework: 'nextjs' }, target: 'production' }),
-    });
+    }, vercelToken);
 
     const deploymentId = String(deploy.id || deploy.uid || '');
     if (!deploymentId) throw new Error('Vercel did not return a deployment ID.');
@@ -383,11 +422,11 @@ export async function POST(req: NextRequest) {
       deploymentId,
       message: 'Vercel accepted the production deployment and returned a deployment ID.',
     });
-    await waitForVercelDeployment(deploymentId, 180000, (state) =>
+    await waitForVercelDeployment(deploymentId, vercelToken, 180000, (state) =>
       recordBuildState(buildContext!, 'deploying', `Vercel build state: ${state}`, { deploymentId }),
     );
     await recordBuildState(buildContext, 'deploying', 'Verifying the project’s main production domain');
-    const projectDomainsResult = await vercel(`/v9/projects/${encodeURIComponent(projectId)}/domains`);
+    const projectDomainsResult = await vercel(`/v9/projects/${encodeURIComponent(projectId)}/domains`, {}, vercelToken);
     const projectDomains = Array.isArray(projectDomainsResult.domains) ? projectDomainsResult.domains : [];
     const businessSubdomain = toVercelSubdomain(body.client_name || ownedProject.business_name);
     const compactBusinessSubdomain = businessSubdomain?.replaceAll('-', '');

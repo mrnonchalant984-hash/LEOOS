@@ -76,8 +76,9 @@ export default function MeetingRoomPage() {
         if (!workforceResponse.ok) throw new Error(workforce.error || 'Workforce roles could not be loaded.');
         if (!alive) return;
         setRoles(workforce.role_catalog || []);
-        setOperationalAgents(workforce.operational_agents || []);
-        if (workforce.operational_agents?.length && !workforce.operational_agents.some((agent: OperationalAgent) => agent.id === selectedExecutor)) setSelectedExecutor(workforce.operational_agents[0].id);
+        const availableAgents = (workforce.operational_agents || []) as OperationalAgent[];
+        setOperationalAgents(availableAgents);
+        setSelectedExecutor(current => availableAgents.length && !availableAgents.some(agent => agent.id === current) ? availableAgents[0].id : current);
         const existing = meetingItems[0];
         if (existing) await loadMeeting(existing.id);
       } catch (cause) { if (alive) setError(cause instanceof Error ? cause.message : 'Meeting room could not be initialized.'); }

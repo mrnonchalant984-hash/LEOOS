@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ExternalLink, Loader2, Rocket } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import { LEO_TEMPLATES } from "@/data/website-templates";
 import { BuildProgressVisualizer } from "@/components/BuildProgressVisualizer";
+import { ProjectDomainManager } from "@/components/ProjectDomainManager";
 
 type WebsiteProject = {
   id: string;
@@ -23,6 +24,8 @@ type WebsiteProject = {
   github_repo: string | null;
   live_url: string | null;
   admin_url: string | null;
+  vercel_project_id?: string | null;
+  custom_domain?: string | null;
 };
 type BuildRecord = {
   id: string;
@@ -39,6 +42,8 @@ type BuildRecord = {
 
 export default function WebsiteManagementPage() {
   const router = useRouter();
+  const autoBuildStarted = useRef(false);
+  const deployRef = useRef<() => Promise<void>>(async () => {});
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<WebsiteProject | null>(null);
   const [builds, setBuilds] = useState<BuildRecord[]>([]);
@@ -52,6 +57,8 @@ export default function WebsiteManagementPage() {
   const [error, setError] = useState("");
   const [hostingWarning, setHostingWarning] = useState("");
   const [missingRequirements, setMissingRequirements] = useState<string[]>([]);
+  const [platformCredits, setPlatformCredits] = useState<number | null>(null);
+  const [showBuildApproval, setShowBuildApproval] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -66,6 +73,11 @@ export default function WebsiteManagementPage() {
         return;
       }
       setProgressToken(session.access_token);
+      const creditResponse = await fetch('/api/credits', { headers: { Authorization: `Bearer ${session.access_token}` }, cache: 'no-store' });
+      if (creditResponse.ok) {
+        const creditData = await creditResponse.json();
+        setPlatformCredits(Number.isSafeInteger(creditData.platform_credits) ? creditData.platform_credits : null);
+      }
       const response = await fetch(
         `/api/setup/projects?project_id=${encodeURIComponent(id)}`,
         { headers: { Authorization: `Bearer ${session.access_token}` }, cache: "no-store" },
@@ -125,7 +137,7 @@ export default function WebsiteManagementPage() {
     };
   }, [deploying, id, progressToken, project?.build_status]);
 
-  async function deploy() {
+  const deploy = useCallback(async () => {
     if (!project || deploying) return;
     setDeploying(true);
     setProgressToken(null);
@@ -138,6 +150,11 @@ export default function WebsiteManagementPage() {
     try {
       const session = (await supabase.auth.getSession()).data.session;
       if (!session) throw new Error("Please log in to deploy this website.");
+      const creditResponse = await fetch('/api/credits', { headers: { Authorization: `Bearer ${session.access_token}` }, cache: 'no-store' });
+      if (creditResponse.ok) {
+        const creditData = await creditResponse.json();
+        setPlatformCredits(Number.isSafeInteger(creditData.platform_credits) ? creditData.platform_credits : null);
+      }
       setProgressToken(session.access_token);
       const template = LEO_TEMPLATES.find(
         (item) => item.id === project.requirements?.template_id,
@@ -188,7 +205,45 @@ export default function WebsiteManagementPage() {
       setDeploying(false);
       setProgressToken(null);
     }
+  }, [project, deploying, brief]);
+
+  useEffect(() => {
+    deployRef.current = deploy;
+  }, [deploy]);
+
+  function requestDeploy() {
+    if (deploying) return;
+    let policy = 'ask';
+    try { policy = window.localStorage.getItem('leonardx_build_policy') || 'ask'; } catch {}
+    if (policy === 'always') { void deploy(); return; }
+    if (policy === 'once') {
+      try { window.localStorage.setItem('leonardx_build_policy', 'ask'); } catch {}
+      void deploy(); return;
+    }
+    setShowBuildApproval(true);
   }
+
+  function approveBuild(mode: 'once' | 'always' | 'ask') {
+    try { window.localStorage.setItem('leonardx_build_policy', mode === 'always' ? 'always' : 'ask'); } catch {}
+    setShowBuildApproval(false);
+    if (mode !== 'ask') void deploy();
+  }
+
+  useEffect(() => {
+    if (loading || !project || deploying || autoBuildStarted.current) return;
+    const autoBuildQuery = new URLSearchParams(window.location.search).get('auto_build') === '1';
+    if (!autoBuildQuery) return;
+    autoBuildStarted.current = true;
+    router.replace(`/dashboard/websites/${id}`);
+    let policy = 'ask';
+    try { policy = window.localStorage.getItem('leonardx_build_policy') || 'ask'; } catch {}
+    if (policy === 'always') {
+      void deployRef.current();
+      return;
+    }
+    const approvalFrame = window.requestAnimationFrame(() => setShowBuildApproval(true));
+    return () => window.cancelAnimationFrame(approvalFrame);
+  }, [loading, project, deploying, router, id]);
 
   if (loading) return <main className="mx-auto max-w-5xl px-4 py-12"><p className="text-zinc-400">Loading website project…</p></main>;
   if (error && !project) return <main className="mx-auto max-w-5xl px-4 py-12"><p role="alert" className="text-red-300">{error}</p></main>;
@@ -217,6 +272,8 @@ export default function WebsiteManagementPage() {
         <div className="rounded-xl border border-white/10 p-4"><p className="text-xs text-zinc-500">Source repository</p>{project.github_repo ? <a href={project.github_repo} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm text-[var(--gold)]">Open GitHub <ExternalLink size={14}/></a> : <p className="mt-2 text-sm text-zinc-500">Not created yet</p>}</div>
       </section>
 
+      {project.vercel_project_id && <section className="mt-4"><ProjectDomainManager projectId={project.vercel_project_id} initialDomain={project.custom_domain || ""} /></section>}
+
       <section className="mt-8 rounded-2xl border border-white/10 bg-white/[.03] p-5">
         <h2 className="text-lg font-bold">Project brief</h2>
         {requirements.length ? <dl className="mt-4 grid gap-3 sm:grid-cols-2">{requirements.map(([question, answer]) => <div key={question} className="border-t border-white/10 pt-3"><dt className="text-xs text-zinc-500">{question}</dt><dd className="mt-1 whitespace-pre-wrap text-sm text-zinc-200">{answer}</dd></div>)}</dl> : <p className="mt-3 text-sm text-zinc-500">No additional requirements were provided.</p>}
@@ -224,9 +281,10 @@ export default function WebsiteManagementPage() {
 
       <section className="mt-4 rounded-2xl border border-white/10 bg-white/[.03] p-5">
         <label htmlFor="build-brief" className="text-lg font-bold">Preview and deploy</label>
-        <p className="mt-2 text-sm text-zinc-400">The saved template and requirements will guide generation. Real assets and business details are never fabricated.</p>
+        <p className="mt-2 text-sm text-zinc-400">The saved requirements guide generation. Server-side checks enforce your monthly build allowance and provider readiness. Platform credits are checked for visibility here, but are separate from the website build allowance.</p>
+        <p className="mt-2 text-xs text-zinc-500" aria-live="polite">Platform credit balance: {platformCredits === null ? "not available" : platformCredits.toLocaleString()}</p>
         <textarea id="build-brief" value={brief} onChange={(event) => setBrief(event.target.value)} placeholder="Optional additional direction for the first build" className="mt-4 min-h-28 w-full rounded-xl border border-white/10 bg-black/40 p-3 text-sm outline-none focus:border-[var(--gold)]" />
-        <button onClick={deploy} disabled={deploying} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[var(--gold)] px-5 py-3 font-bold text-black disabled:opacity-50">
+        <button onClick={requestDeploy} disabled={deploying} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[var(--gold)] px-5 py-3 font-bold text-black disabled:opacity-50">
           {deploying ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />}
           {deploying ? "Building and deploying…" : project.live_url ? "Build and deploy update" : "Build and deploy website"}
         </button>
@@ -248,6 +306,7 @@ export default function WebsiteManagementPage() {
           {deployments.length ? <div className="mt-4 space-y-3">{deployments.map((deployment) => <article key={deployment.id} className="border-t border-white/10 pt-3"><div className="flex items-center justify-between gap-3"><p className="font-semibold">{deployment.event_type} · {deployment.status}</p><time className="text-xs text-zinc-500">{new Date(deployment.created_at).toLocaleString()}</time></div><p className="mt-1 text-sm text-zinc-400">{deployment.message || "No additional details"}</p>{typeof deployment.metadata?.vercel === "string" && <a className="mt-1 inline-block text-sm text-[var(--gold)]" href={deployment.metadata.vercel.startsWith("http") ? deployment.metadata.vercel : `https://${deployment.metadata.vercel}`} target="_blank" rel="noreferrer">Open deployment</a>}</article>)}</div> : <p className="mt-3 text-sm text-zinc-500">No deployments yet.</p>}
         </section>
       </div>
+      {showBuildApproval && <div role="dialog" aria-modal="true" aria-labelledby="build-approval-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"><div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#10131a] p-6 shadow-2xl"><p className="text-xs font-bold uppercase tracking-widest text-[var(--gold)]">Build authorization</p><h2 id="build-approval-title" className="mt-2 text-xl font-black">Ready to build and deploy?</h2><p className="mt-3 text-sm leading-6 text-zinc-300">LeonardX will check your build allowance and configured platform credits, generate project files, create or update a repository using the selected authorized account, and request deployment. External providers may incur their own charges. Destructive database changes are not covered by this approval.</p><div className="mt-5 grid gap-2 sm:grid-cols-3"><button onClick={() => approveBuild('once')} className="rounded-xl bg-[var(--gold)] px-3 py-3 text-sm font-bold text-black">Allow once</button><button onClick={() => approveBuild('always')} className="rounded-xl border border-white/15 px-3 py-3 text-sm font-semibold">Allow always</button><button onClick={() => approveBuild('ask')} className="rounded-xl border border-white/15 px-3 py-3 text-sm font-semibold">Ask every time</button></div><button onClick={() => setShowBuildApproval(false)} className="mt-4 w-full py-2 text-xs text-zinc-500">Cancel</button></div></div>}
     </main>
   );
 }

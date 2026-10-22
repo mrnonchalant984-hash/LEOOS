@@ -95,7 +95,7 @@ export async function generateTextWithTools(
   let usageReported = false;
   let finalText = '';
   const temperature = Math.max(0, Math.min(2, request.temperature ?? 0.3));
-  const maxOutputTokens = Math.max(64, Math.min(4000, Math.trunc(request.maxOutputTokens || 1200)));
+  const maxOutputTokens = Math.max(64, Math.min(20_000, Math.trunc(request.maxOutputTokens || 1200)));
 
     if (resolved.provider === 'openai') {
       const client = getOpenAI();
@@ -246,7 +246,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
         : resolved.provider === 'local' ? 'LEO_LOCAL_MODEL_URL' : 'OPENAI_API_KEY or LEO_API_KEY';
     throw new ModelProviderError(`${resolved.provider} is not configured. Set ${environmentName} on the server.`, 503);
   }
-  const maxOutputTokens = Math.max(64, Math.min(4000, Math.trunc(request.maxOutputTokens || 1200)));
+  const maxOutputTokens = Math.max(64, Math.min(20_000, Math.trunc(request.maxOutputTokens || 1200)));
   const temperature = Math.max(0, Math.min(2, request.temperature ?? 0.3));
 
   if (resolved.provider === 'anthropic') {

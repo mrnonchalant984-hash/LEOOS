@@ -7,8 +7,8 @@ Leo AI already uses the shared provider registry, which passes the full server-b
 Set these variables in your deployment platform's server-side environment settings:
 
 - `GEMINI_API_KEY`: API key created in Google AI Studio. `GOOGLE_API_KEY` is accepted as an alternative for compatibility.
-- `LEO_CHAT_MODEL=google/gemini-3.8-flash` to make Gemini the normal chat model, if that model is available to your key.
-- `LEO_FALLBACK_MODEL=google/gemini-3.8-flash` to explicitly select Gemini as the fallback. If this is blank, the app automatically uses Gemini Flash as fallback only when a Google key is configured and the selected primary provider is OpenAI.
+- `LEO_CHAT_MODEL=google/gemini-2.5-flash` to make Gemini the normal chat model, if that model is available to your key.
+- `LEO_FALLBACK_MODEL=google/gemini-2.5-flash` to explicitly select Gemini as the fallback. If this is blank, the app automatically uses Gemini Flash as fallback only when a Google key is configured and the selected primary provider is OpenAI.
 
 The default primary model remains the existing configured Leo model. When its request fails with HTTP 429, HTTP 5xx, or a recognized transient network failure, Leo retries once using the configured fallback model. Authentication, invalid-request, and other non-transient errors do not trigger fallback. Custom developer-agent requests retain their OpenAI-only rated billing path and do not fall back to a differently priced provider. Tool mode retains the account-scoped read-only tool allowlist.
 
