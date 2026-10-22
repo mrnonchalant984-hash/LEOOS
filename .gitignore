@@ -20,5 +20,5 @@ packages/sdk/dist/
 supabase/.temp/
 supabase/.branches/
 
-# Local patch scratch files must never enter production TypeScript compilation
-/tmp/
+# Temporary local patch overlays must not enter production TypeScript builds
+tmp/

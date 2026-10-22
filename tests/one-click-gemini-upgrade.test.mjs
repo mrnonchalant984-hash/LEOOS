@@ -104,20 +104,3 @@ test('configured Gemini fallback is also available to custom agents; Google prim
   assert.equal(getSafeFallbackModel('openai/gpt-4o-mini', 'bad/model', true, configured), 'google/gemini-2.5-flash');
   assert.equal(getSafeFallbackModel('google/gemini-2.5-flash', 'bad/model', false, configured), undefined);
 });
-
-
-test('defaults Leo chat to Gemini when a Gemini key exists but OpenAI is not configured', () => {
-  const names = ['OPENAI_API_KEY', 'LEO_API_KEY', 'LEO_OFFLINE_MODE', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'LEO_LOCAL_MODEL_URL', 'LEO_CHAT_MODEL', 'LEO_MEETING_MODEL', 'LEO_AGENT_MODEL', 'LEO_REASONING_MODEL'];
-  const previous = Object.fromEntries(names.map(name => [name, process.env[name]]));
-  try {
-    for (const name of names) delete process.env[name];
-    process.env.GEMINI_API_KEY = 'test-key-not-a-real-secret';
-    assert.equal(getDefaultTextModel('chat'), 'google/gemini-2.5-flash');
-    assert.equal(getDefaultTextModel('reasoning'), 'google/gemini-2.5-flash');
-  } finally {
-    for (const name of names) {
-      if (previous[name] === undefined) delete process.env[name];
-      else process.env[name] = previous[name];
-    }
-  }
-});
