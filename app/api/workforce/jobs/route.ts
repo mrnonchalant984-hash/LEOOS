@@ -3,9 +3,11 @@ import { z } from 'zod';
 import { adminSupabase, requireOwner } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 import { PROFESSIONAL_ROLES } from '@/lib/agents/professional-roles';
+import { POST as runWorkforceWorker } from '@/app/api/internal/workforce/worker/route';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 const roles = new Map(PROFESSIONAL_ROLES.map(role => [role.id, role]));
 const createSchema = z.object({
   role_id: z.string().min(1).max(100),
@@ -29,6 +31,25 @@ export async function GET(req: NextRequest) {
   ]);
   if (jobsResult.error || projectsResult.error) return NextResponse.json({ error: 'Workforce task queue or project list is unavailable. Apply the durable workforce migration.' }, { status: 503 });
   return NextResponse.json({ jobs: jobsResult.data || [], projects: projectsResult.data || [] }, { headers: { 'Cache-Control': 'no-store' } });
+}
+
+export async function PUT(req: NextRequest) {
+  const ctx = await requireOwner(req);
+  if (!ctx) return NextResponse.json({ error: 'Owner authentication required.' }, { status: 403 });
+  const limited = await enforceUserRateLimit(ctx.user.id, 'workforce-on-demand-worker', 20, 3600);
+  if (limited) return limited;
+  const secret = process.env.CRON_SECRET;
+  if (!secret || secret.length < 32 || process.env.WORKFORCE_WORKER_ENABLED !== 'true') {
+    return NextResponse.json({ error: 'On-demand workforce execution is unavailable until the protected worker is configured.' }, { status: 503 });
+  }
+  const workerRequest = new NextRequest(new URL('/api/internal/workforce/worker', req.url), {
+    method: 'POST',
+    headers: { authorization: `Bearer ${secret}` },
+  });
+  const response = await runWorkforceWorker(workerRequest);
+  const result = await response.json().catch(() => null);
+  if (!response.ok) return NextResponse.json(result || { error: 'The workforce worker could not process a task.' }, { status: response.status });
+  return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: NextRequest) {

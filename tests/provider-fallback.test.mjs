@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ModelProviderError } from '../lib/ai/model-catalog.ts';
-import { generateWithExplicitFallback, isRetryableProviderFailure } from '../lib/ai/provider-fallback.ts';
+import { generateWithExplicitFallback, getSafeFallbackModel, isRetryableProviderFailure } from '../lib/ai/provider-fallback.ts';
 
 test('uses only an explicitly selected configured fallback after a transient failure', async () => {
   const calls = [];
@@ -49,14 +49,37 @@ test('routes directly to configured Gemini when the primary provider is not conf
   const calls = [];
   const result = await generateWithExplicitFallback(
     'openai/gpt-4o-mini',
-    'google/gemini-2.5-flash',
+    'gemini-2.5-flash',
     async model => { calls.push(model); return { text: 'Gemini answered' }; },
     provider => provider === 'google',
   );
-  assert.deepEqual(calls, ['google/gemini-2.5-flash']);
-  assert.equal(result.model, 'google/gemini-2.5-flash');
+  assert.deepEqual(calls, ['google/gemini-3.8-flash']);
+  assert.equal(result.model, 'google/gemini-3.8-flash');
   assert.equal(result.fallback_used, true);
   assert.equal(result.result.text, 'Gemini answered');
+});
+
+test('uses OpenAI as a final fallback when Gemini itself is selected and OpenAI is configured', async () => {
+  const calls = [];
+  const fallbackModel = getSafeFallbackModel(
+    'google/gemini-3.8-flash',
+    undefined,
+    false,
+    provider => provider === 'google' || provider === 'openai',
+  );
+  const result = await generateWithExplicitFallback(
+    'google/gemini-2.5-flash',
+    fallbackModel,
+    async model => {
+      calls.push(model);
+      if (model.startsWith('google/')) throw new ModelProviderError('Gemini unavailable', 503);
+      return { text: 'OpenAI backup answered' };
+    },
+    provider => provider === 'google' || provider === 'openai',
+  );
+  assert.deepEqual(calls, ['google/gemini-2.5-flash', 'openai/gpt-4o-mini']);
+  assert.equal(result.model, 'openai/gpt-4o-mini');
+  assert.equal(result.fallback_used, true);
 });
 
 test('falls back to Gemini after primary provider authentication failure and does not expose error details in fallback logs', async () => {
@@ -76,7 +99,7 @@ test('falls back to Gemini after primary provider authentication failure and doe
       () => true,
     );
     assert.equal(result.fallback_used, true);
-    assert.deepEqual(calls, ['openai/gpt-4o-mini', 'google/gemini-2.5-flash']);
+    assert.deepEqual(calls, ['openai/gpt-4o-mini', 'google/gemini-3.8-flash']);
     assert.ok(logs.some(line => line.includes('leo.ai.fallback.start')));
     assert.ok(logs.some(line => line.includes('leo.ai.fallback.success')));
     assert.ok(logs.every(line => !line.includes('do-not-log-this')));

@@ -17,7 +17,8 @@ test('Leo chat wires transient provider fallback and defaults to Gemini when con
   assert.match(route, /generateWithExplicitFallback/);
   assert.match(route, /getSafeFallbackModel/);
   assert.match(fallback, /primary\.provider !== 'google' && configured\('google'\)/);
-  assert.match(fallback, /google\/gemini-2\.5-flash/);
+  assert.match(fallback, /gemini-3\.8-flash/);
+  assert.match(fallback, /primary\.provider !== 'google' && configured\('google'\)/);
   assert.doesNotMatch(route, /getSafeFallbackModel\([^;]*Boolean\(customAgent\)/);
 });
 
@@ -30,5 +31,8 @@ test('Gemini provider forwards system instructions and maps assistant history to
 test('Gemini API key and fallback configuration are server-side environment variables', () => {
   assert.match(envExample, /^GEMINI_API_KEY=$/m);
   assert.match(envExample, /^LEO_FALLBACK_MODEL=$/m);
+  assert.match(envExample, /^LEO_GEMINI_IMAGE_MODEL=gemini-nano-banana-2\.1$/m);
+  assert.match(envExample, /^LEO_GEMINI_AUDIO_MODEL=gemini-3\.5-transcribe$/m);
+  assert.match(envExample, /^LEO_GEMINI_TTS_MODEL=gemini-3\.8-flash-tts$/m);
   assert.doesNotMatch(envExample, /^NEXT_PUBLIC_GEMINI_API_KEY=/m);
 });

@@ -3,6 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 import { getOpenAI, getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from '@/lib/openai';
 import { generateText } from '@/lib/ai/provider-registry';
 import { generateWithExplicitFallback, getSafeFallbackModel } from '@/lib/ai/provider-fallback';
+import { normalizeGeminiModelId } from '@/lib/ai/model-catalog';
 import { getProfile } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 export const runtime = 'nodejs';
@@ -22,7 +23,7 @@ async function geminiTranscribe(audio: File) {
   const bytes = Buffer.from(await audio.arrayBuffer());
   const client = new GoogleGenAI({ apiKey: key });
   const response = await client.models.generateContent({
-    model: process.env.LEO_GEMINI_AUDIO_MODEL?.trim() || 'gemini-2.5-flash',
+    model: normalizeGeminiModelId(process.env.LEO_GEMINI_AUDIO_MODEL?.trim() || 'gemini-3.5-transcribe'),
     contents: [{ role: 'user', parts: [
       { inlineData: { mimeType: audio.type || 'audio/webm', data: bytes.toString('base64') } },
       { text: 'Transcribe the spoken words accurately. Return only the transcript, without commentary.' },
@@ -37,7 +38,7 @@ async function geminiSpeak(text: string) {
   if (!key) throw new Error('Gemini is not configured.');
   const client = new GoogleGenAI({ apiKey: key });
   const response = await client.models.generateContent({
-    model: process.env.LEO_GEMINI_TTS_MODEL?.trim() || 'gemini-2.5-flash-preview-tts',
+    model: process.env.LEO_GEMINI_TTS_MODEL?.trim() || 'gemini-3.8-flash-tts',
     contents: [{ role: 'user', parts: [{ text }] }],
     config: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } },
   });
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
     const turnMode = fd.get('mode') === 'chat';
     let assistantReply = '';
     if (turnMode) {
-      const primaryModel = googleKey() ? (process.env.LEO_FALLBACK_MODEL?.trim() && process.env.LEO_FALLBACK_MODEL.trim().startsWith('google/') ? process.env.LEO_FALLBACK_MODEL.trim() : 'google/gemini-2.5-flash') : 'openai/gpt-4o-mini';
+      const primaryModel = googleKey() ? (process.env.LEO_FALLBACK_MODEL?.trim() && process.env.LEO_FALLBACK_MODEL.trim().startsWith('google/') ? process.env.LEO_FALLBACK_MODEL.trim() : 'google/gemini-3.8-flash') : 'openai/gpt-4o-mini';
       const configuredFallback = process.env.LEO_FALLBACK_MODEL?.trim();
       const fallbackPreference = configuredFallback && !configuredFallback.startsWith('google/') ? configuredFallback : 'openai/gpt-4o-mini';
       const fallbackModel = getSafeFallbackModel(primaryModel, fallbackPreference);

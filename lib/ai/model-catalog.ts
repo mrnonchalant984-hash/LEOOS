@@ -15,13 +15,28 @@ const MODEL_PRESETS: Record<string, { provider: ModelProvider; model: string; ca
   'openai/gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini', capabilities: ['text', 'tools'] },
   'openai/gpt-5.6-luna': { provider: 'openai', model: 'gpt-5.6-luna', capabilities: ['text', 'reasoning'] },
   'anthropic/claude-3-5-haiku-latest': { provider: 'anthropic', model: 'claude-3-5-haiku-latest', capabilities: ['text', 'tools'] },
-  'google/gemini-2.5-flash': { provider: 'google', model: 'gemini-2.5-flash', capabilities: ['text', 'tools', 'multimodal'] },
+  'google/gemini-3.8-flash': { provider: 'google', model: 'gemini-3.8-flash', capabilities: ['text', 'tools', 'multimodal'] },
 };
 
+const GEMINI_MODEL_ALIASES: Record<string, string> = {
+  'gemini-1.5-flash': 'gemini-3.8-flash',
+  'gemini-2.0-flash': 'gemini-3.8-flash',
+  'gemini-2.5-flash': 'gemini-3.8-flash',
+};
+
+export function normalizeGeminiModelId(modelName: string) {
+  const normalized = modelName.trim();
+  return GEMINI_MODEL_ALIASES[normalized] || normalized;
+}
+
+function hasConfiguredValue(...values: (string | undefined)[]) {
+  return values.some(value => Boolean(value?.trim()));
+}
+
 function configuredProvider(provider: ModelProvider): boolean {
-  if (provider === 'openai') return Boolean(process.env.OPENAI_API_KEY || process.env.LEO_API_KEY) && process.env.LEO_OFFLINE_MODE !== 'true';
-  if (provider === 'anthropic') return Boolean(process.env.ANTHROPIC_API_KEY);
-  if (provider === 'google') return Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
+  if (provider === 'openai') return hasConfiguredValue(process.env.OPENAI_API_KEY, process.env.LEO_API_KEY) && process.env.LEO_OFFLINE_MODE !== 'true';
+  if (provider === 'anthropic') return hasConfiguredValue(process.env.ANTHROPIC_API_KEY);
+  if (provider === 'google') return hasConfiguredValue(process.env.GEMINI_API_KEY, process.env.GOOGLE_API_KEY);
   return Boolean(process.env.LEO_LOCAL_MODEL_URL?.trim());
 }
 
@@ -52,8 +67,13 @@ export function resolveModel(modelName: string): { provider: ModelProvider; mode
     const provider = normalized.slice(0, separator) as ModelProvider;
     const model = normalized.slice(separator + 1);
     if (provider === 'local' && configuredProvider('local') && model === (process.env.LEO_LOCAL_MODEL_NAME?.trim() || 'local-model')) return { provider, model };
-    if (['openai', 'anthropic', 'google'].includes(provider) && MODEL_ID_RE.test(model)) return { provider, model };
+    if (['openai', 'anthropic', 'google'].includes(provider) && MODEL_ID_RE.test(model)) {
+      return { provider, model: provider === 'google' ? normalizeGeminiModelId(model) : model };
+    }
   } else if (MODEL_ID_RE.test(normalized)) {
+    // Google AI Studio model IDs are normally unqualified (e.g. gemini-3.8-flash).
+    // Resolve them as Google models instead of silently reverting to OpenAI.
+    if (normalized.startsWith('gemini-')) return { provider: 'google', model: normalizeGeminiModelId(normalized) };
     const customModel = [process.env.LEO_AGENT_MODEL, process.env.LEO_MEETING_MODEL, process.env.LEO_REASONING_MODEL]
       .find(value => value?.trim() === normalized);
     if (customModel) return { provider: 'openai', model: normalized };
@@ -72,8 +92,9 @@ export function getDefaultTextModel(mode: 'chat' | 'reasoning' = 'chat') {
   // of deliberately calling an unconfigured OpenAI endpoint and hoping a retry fires.
   const hasOpenAI = configuredProvider('openai');
   const hasGemini = configuredProvider('google');
+  const configuredGeminiModel = process.env.LEO_CHAT_MODEL?.trim().replace(/^google\//, '');
   const safeDefault = !hasOpenAI && hasGemini
-    ? 'google/gemini-2.5-flash'
+    ? `google/${configuredGeminiModel?.startsWith('gemini-') ? configuredGeminiModel : 'gemini-3.8-flash'}`
     : mode === 'reasoning' ? 'openai/gpt-5.6-luna' : 'openai/gpt-4o-mini';
   if (!configured) return safeDefault;
   const candidate = configured.includes('/')

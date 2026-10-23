@@ -23,8 +23,9 @@ test('meeting API validates role IDs and limits participants', async () => {
 
 test('meeting discussion uses configured AI and persists each contribution', async () => {
   const source = await read('app/api/meetings/[id]/discuss/route.ts');
-  assert.match(source, /createTextResponse\(/);
-  assert.match(source, /createTextResponse\(/);
+  assert.match(source, /generateWithExplicitFallback\(/);
+  assert.match(source, /getSafeFallbackModel\(/);
+  assert.match(source, /isProviderConfigured\('google'\)/);
   assert.match(source, /workforce_meeting_messages/);
   assert.match(source, /workforce_meeting_action_items/);
   assert.match(source, /status: 'paused'/);
@@ -96,7 +97,8 @@ test('individual engineer conversations persist history and use role-specific mo
   assert.match(create, /requireOwner\(req\)/);
   assert.match(messages, /workforce_conversation_messages/);
   assert.match(messages, /role\.instructions/);
-  assert.match(messages, /createTextResponse\(/);
+  assert.match(messages, /generateWithExplicitFallback\(/);
+  assert.match(messages, /getSafeFallbackModel\(/);
   assert.match(messages, /eq\('user_id', ctx\.user\.id\)/);
 });
 
@@ -221,7 +223,9 @@ test('durable workforce queue has idempotency, dependency checks, retries and at
   assert.match(api, /dependencies/);
   assert.match(api, /requireOwner\(req\)/);
   assert.match(worker, /claim_workforce_role_jobs/);
-  assert.match(worker, /getConfiguredModel/);
+  assert.match(worker, /getDefaultTextModel/);
+  assert.match(worker, /getSafeFallbackModel/);
+  assert.match(worker, /generateWithExplicitFallback/);
   assert.match(worker, /owner_entitlement_revoked/);
   assert.match(migration, /for update skip locked/i);
   assert.match(migration, /dependency_failed/);

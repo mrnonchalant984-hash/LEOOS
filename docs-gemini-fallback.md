@@ -7,10 +7,11 @@ Leo AI already uses the shared provider registry, which passes the full server-b
 Set these variables in your deployment platform's server-side environment settings:
 
 - `GEMINI_API_KEY`: API key created in Google AI Studio. `GOOGLE_API_KEY` is accepted as an alternative for compatibility.
-- `LEO_CHAT_MODEL=google/gemini-2.5-flash` to make Gemini the normal chat model, if that model is available to your key.
-- `LEO_FALLBACK_MODEL=google/gemini-2.5-flash` to explicitly select Gemini as the fallback. If this is blank, the app automatically uses Gemini Flash as fallback only when a Google key is configured and the selected primary provider is OpenAI.
+- `LEO_CHAT_MODEL=gemini-3.8-flash` to make Gemini the normal chat model.
+- `LEO_FALLBACK_MODEL` to select a configured cross-provider fallback. Setting it to another Gemini model will not provide a fallback when Gemini itself is the primary provider.
+- `LEO_GEMINI_IMAGE_MODEL=gemini-nano-banana-2.1`, `LEO_GEMINI_AUDIO_MODEL=gemini-3.5-transcribe`, and `LEO_GEMINI_TTS_MODEL=gemini-3.8-flash-tts` for the current image, transcription, and speech models.
 
-The default primary model remains the existing configured Leo model. When its request fails with HTTP 429, HTTP 5xx, or a recognized transient network failure, Leo retries once using the configured fallback model. Authentication, invalid-request, and other non-transient errors do not trigger fallback. Custom developer-agent requests retain their OpenAI-only rated billing path and do not fall back to a differently priced provider. Tool mode retains the account-scoped read-only tool allowlist.
+Leave both chat and fallback model variables blank to use automatic provider selection: Gemini is selected as the primary only when Google is configured and OpenAI is not. When Gemini is primary, an explicitly configured fallback must use another provider and that provider must have usable access and quota. Leo retries once with the configured cross-provider fallback for HTTP 401/403, 404, 408, 409, 429, 5xx, and recognized transient network failures. Invalid requests and other non-retryable errors do not trigger fallback. Paid custom-agent requests remain on their provider-priced OpenAI model and do not cross-provider fallback, keeping usage settlement tied to the rated model. Tool mode retains the account-scoped read-only tool allowlist.
 
 Google AI Studio free-tier availability, quotas, supported models, and regional eligibility can change; fallback is not guaranteed to succeed if the Google account has exhausted quota or the model is unavailable. No provider key is included in this repository.
 

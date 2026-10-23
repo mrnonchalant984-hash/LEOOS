@@ -29,6 +29,7 @@ export default function WorkforceMonitoringPage() {
     finally { setBusy(false); }
   }, []);
   useEffect(() => { const timer = window.setTimeout(() => { void refresh(); }, 0); return () => window.clearTimeout(timer); }, [refresh]);
+  useEffect(() => { const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 15000); return () => window.clearInterval(timer); }, [refresh]);
   const cards = [
     ['Queued', data?.queue.counts.queued ?? 0], ['Running', data?.queue.counts.running ?? 0], ['Succeeded', data?.queue.counts.succeeded ?? 0], ['Failed', data?.queue.counts.failed ?? 0], ['Blocked', data?.queue.counts.blocked ?? 0], ['Cancelled', data?.queue.counts.cancelled ?? 0],
   ];

@@ -6,10 +6,12 @@ import { LEOAppShell, Panel, StatusPill } from '@/components/LEOAppShell';
 
 type Agent = { id: string; name: string; description: string; ownerOnly: boolean; approvalRequired: boolean };
 type Run = { id: string; agent_id: string; task: string; status: string; created_at: string; started_at?: string | null; completed_at?: string | null; error?: string | null };
+type Approval = { id: string; run_id: string; action: string; metadata?: { task?: string; agent_id?: string }; created_at: string };
 
 export default function Agents() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
   const [task, setTask] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -22,9 +24,11 @@ export default function Agents() {
       const [agentResponse, runResponse] = await Promise.all([fetch('/api/agents'), fetch('/api/agents/runs')]);
       if (!agentResponse.ok) throw new Error('Agent registry could not be loaded.');
       const agentData = await agentResponse.json();
-      const runData = runResponse.ok ? await runResponse.json() : { runs: [] };
+      if (!runResponse.ok) throw new Error('Agent runs and approvals could not be loaded.');
+      const runData = await runResponse.json();
       setAgents(agentData.agents || []);
       setRuns(runData.runs || []);
+      setApprovals(runData.approvals || []);
       setLoadError('');
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Agent data could not be loaded.');
@@ -35,7 +39,8 @@ export default function Agents() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(false); }, 0);
-    return () => window.clearTimeout(timer);
+    const refresh = window.setInterval(() => { if (document.visibilityState === 'visible') void load(false); }, 15000);
+    return () => { window.clearTimeout(timer); window.clearInterval(refresh); };
   }, [load]);
 
   async function runTask() {
@@ -54,6 +59,26 @@ export default function Agents() {
     }
   }
 
+  async function approve(approvalId: string) {
+    if (busy) return;
+    setBusy(true);
+    setMessage('Starting approved agent…');
+    try {
+      const response = await fetch('/api/agents/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approval_id: approvalId }),
+      });
+      const data = await response.json();
+      setMessage(data.message || data.error || (response.ok ? 'Approved agent started.' : 'Approval could not be processed.'));
+      await load(false);
+    } catch {
+      setMessage('Could not reach the approval service. Check your connection and try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return <LEOAppShell title="Agents" subtitle="Specialized execution with server-side permissions.">
     <div className="page-hero agent-control-hero">
       <span className="mini-label">Agent control plane</span>
@@ -67,6 +92,13 @@ export default function Agents() {
     </div>
     {loadError && <div className="agent-load-error" role="alert"><span>{loadError}</span><button className="secondary-button" onClick={() => void load()}><RotateCw size={13}/> Retry</button></div>}
     <div className="section-grid">
+      <Panel className="agent-glass-panel">
+        <div className="panel-title">Pending approvals</div><div className="panel-subtitle">Review and start agents that require your confirmation.</div>
+        <div className="data-list mt-4">{loading ? <div className="agent-skeleton-list" aria-label="Loading approvals"><i/><i/></div> : approvals.length ? approvals.map(approval => <div className="data-card agent-state-card" key={approval.id}>
+          <div className="data-icon agent-orb"><ShieldCheck size={15}/></div><main><strong>{approval.action}</strong><small>{approval.metadata?.task || 'This agent run is waiting for your approval.'}</small><small className="agent-run-time">Requested {new Date(approval.created_at).toLocaleString()}</small></main>
+          <button className="primary-button" onClick={() => void approve(approval.id)} disabled={busy}><ShieldCheck size={13}/> Approve &amp; run</button>
+        </div>) : <div className="agent-empty-state"><ShieldCheck size={18}/><strong>No pending approvals</strong><small>Approval-required agent tasks will appear here.</small></div>}</div>
+      </Panel>
       <Panel className="agent-glass-panel">
         <div className="flex items-center justify-between"><div><div className="panel-title">Available agents</div><div className="panel-subtitle">Loaded from the configured registry.</div></div><span className="status-pill"><Bot size={11}/> {agents.length} agents</span></div>
         <div className="data-list mt-4">{loading ? <div className="agent-skeleton-list" aria-label="Loading agents"><i/><i/><i/></div> : agents.length ? agents.slice(0, 30).map(agent => <div className="data-card agent-state-card" key={agent.id}>

@@ -2,13 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { adminSupabase } from '@/lib/auth';
 import { accountAccess, consumeCredit } from '@/lib/access';
 import { getOpenAI } from '@/lib/openai';
+import { generateGeminiImage } from './gemini-image';
 
 const BUCKET = 'leo-files';
 const SIGNED_URL_SECONDS = 60 * 60;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 async function generateImageWithProviderFallback(prompt: string, preferredModel: string) {
-  const googleKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const googleKey = process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim();
   try {
     const result: any = await getOpenAI().images.generate({
       model: preferredModel,
@@ -22,9 +23,13 @@ async function generateImageWithProviderFallback(prompt: string, preferredModel:
     return { image, provider: 'openai', model: preferredModel };
   } catch (primaryError) {
     if (!googleKey) throw primaryError;
-    // Gemini's Imagen endpoint is a still-image fallback only. Video generation
-    // deliberately remains on its separately configured video provider.
-    const model = process.env.LEO_GEMINI_IMAGE_MODEL?.trim() || 'imagen-4.0-generate-001';
+    const model = process.env.LEO_GEMINI_IMAGE_MODEL?.trim() || 'gemini-nano-banana-2.1';
+    if (model.startsWith('gemini-')) {
+      const generated = await generateGeminiImage(prompt);
+      return { image: generated.image, provider: 'google', model: generated.model };
+    }
+    // Imagen still-image generation uses the predict endpoint; video remains on
+    // its separately configured provider.
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:predict?key=${encodeURIComponent(googleKey)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

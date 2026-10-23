@@ -91,6 +91,12 @@ export type McpProjectReader = {
   createRegisteredAgent?(userId: string, input: { name: string; category: string; description: string; instructions: string }): Promise<{ data: unknown; error: unknown }>;
   updateRegisteredAgent?(userId: string, input: { agent_id: string; name: string; category: string; description: string; instructions: string }): Promise<{ data: unknown; error: unknown }>;
   setRegisteredAgentEnabled?(userId: string, agentId: string, enabled: boolean): Promise<{ data: unknown; error: unknown }>;
+  getMainWebsiteStatus?(userId: string): Promise<{ data: unknown; error: unknown }>;
+  updateMainWebsite?(userId: string, input: {
+    expected_commit_sha: string;
+    commit_message: string;
+    files: Array<{ path: string; content: string }>;
+  }): Promise<{ data: unknown; error: unknown }>;
 };
 
 export function createUserMcpServer(userId: string, scopes: string[], projects: McpProjectReader) {
@@ -98,6 +104,42 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     maxToolInputElements: 2048,
   });
   const writeAccess = scopes.includes('mcp:write');
+  const getMainWebsiteStatus = projects.getMainWebsiteStatus;
+  if (projects.isPlatformOwner && getMainWebsiteStatus) {
+    server.registerTool('inspect_main_website', {
+      title: 'Inspect the LeonardX main website',
+      description: 'Read the configured main website main-branch commit, GitHub Actions and check-run results, and recent Vercel deployment states and errors. Owner-only and read-only. Requires verified owner GitHub and Vercel integrations.',
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    }, async () => {
+      const { data, error } = await getMainWebsiteStatus(userId);
+      if (error) return toolError(typeof error === 'string' ? error : 'Main website status could not be loaded.');
+      return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+    });
+  }
+  if (projects.isPlatformOwner && writeAccess && projects.updateMainWebsite) {
+    server.registerTool('update_main_website', {
+      title: 'Update the LeonardX main website',
+      description: 'Commit AI-generated LeonardX website source files directly to the configured GitHub main branch. The Vercel project must be verified as linked to that repository. First call inspect_main_website and use its latest main-branch SHA. This changes production source and triggers the normal GitHub/Vercel deployment; call only after the owner explicitly approves this exact change and set confirm=true. GitHub workflow, secret, environment, and credential files are blocked. Review deployment results with inspect_main_website after the commit.',
+      inputSchema: {
+        expected_commit_sha: z.string().regex(/^[a-f0-9]{40}$/i),
+        commit_message: z.string().trim().min(1).max(200),
+        files: z.array(z.object({
+          path: z.string().min(1).max(240),
+          content: z.string().max(256_000),
+        })).min(1).max(100),
+        confirm: z.literal(true).describe('Set true only after the owner explicitly approves pushing these files to the production main branch.'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    }, async ({ expected_commit_sha, commit_message, files }) => {
+      const { data, error } = await projects.updateMainWebsite!(userId, {
+        expected_commit_sha,
+        commit_message,
+        files,
+      });
+      if (error) return toolError(typeof error === 'string' ? error : 'Main website update failed.');
+      return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+    });
+  }
   server.registerTool('list_ai_providers', {
     title: 'List configured AI providers',
     description: 'Report only provider/model identifiers and whether each integration is configured. This never returns credentials and does not invoke a provider.',

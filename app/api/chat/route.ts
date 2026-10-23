@@ -313,7 +313,9 @@ export async function POST(req: NextRequest) {
         }
         const selectedTools = selectedTool ? [selectedTool] : agentTools;
         if (customAgent) customAgentProviderStarted = true;
-        const fallbackModel = getSafeFallbackModel(selectedModel, process.env.LEO_FALLBACK_MODEL?.trim());
+        const fallbackModel = customAgent && !owner
+          ? undefined
+          : getSafeFallbackModel(selectedModel, process.env.LEO_FALLBACK_MODEL?.trim());
         const outcome = await generateWithExplicitFallback(selectedModel, fallbackModel, model => generateTextWithTools({
           ...request,
           model,
@@ -328,7 +330,9 @@ export async function POST(req: NextRequest) {
         selectedModel = `${response.provider}/${response.model}`;
       } else {
         if (customAgent) customAgentProviderStarted = true;
-        const fallbackModel = getSafeFallbackModel(selectedModel, process.env.LEO_FALLBACK_MODEL?.trim());
+        const fallbackModel = customAgent && !owner
+          ? undefined
+          : getSafeFallbackModel(selectedModel, process.env.LEO_FALLBACK_MODEL?.trim());
         const outcome = await generateWithExplicitFallback(selectedModel, fallbackModel, model => generateText({ ...request, model }));
         const response = outcome.result;
         reply = response.text || "I could not generate a reply.";

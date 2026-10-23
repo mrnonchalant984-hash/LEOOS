@@ -4,6 +4,7 @@ import { adminSupabase } from '@/lib/auth';
 import { accountAccess, consumeCredit } from '@/lib/access';
 import { getOpenAI } from '@/lib/openai';
 import { inspectImageUpload } from '@/lib/generation/image-input';
+import { generateGeminiImage } from '@/lib/generation/gemini-image';
 
 const BUCKET = 'leo-files';
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -45,7 +46,9 @@ export async function editAndPersistImage(options: EditOptions) {
   if (options.bytes.length > MAX_IMAGE_BYTES) throw new ImageEditError('Choose an image no larger than 4 MB.', 413);
   const format = inspectImageUpload(options.bytes, options.mimeType);
   if (!format) throw new ImageEditError('Upload a valid PNG, JPEG, or WebP image.', 400);
-  if (!process.env.OPENAI_API_KEY && !process.env.LEO_API_KEY) throw new ImageEditError('Image editing is not configured. No credits were charged.', 503);
+  const hasOpenAI = Boolean(process.env.OPENAI_API_KEY?.trim() || process.env.LEO_API_KEY?.trim());
+  const hasGemini = Boolean(process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim());
+  if (!hasOpenAI && !hasGemini) throw new ImageEditError('Image editing is not configured. No credits were charged.', 503);
   if (process.env.LEO_OFFLINE_MODE === 'true') throw new ImageEditError('Image editing is unavailable while hosted providers are disabled.', 503);
 
   const db = adminSupabase();
@@ -141,17 +144,30 @@ export async function editAndPersistImage(options: EditOptions) {
     inputAssetId = inputAsset.id;
 
     const inputFile = await toFile(options.bytes, `source.${format.extension}`, { type: format.mimeType });
-    const generated = await getOpenAI().images.edit({
-      model: job.model,
-      image: inputFile,
-      prompt: options.prompt,
-      size: '1024x1024',
-      quality: 'medium',
-      n: 1,
-      output_format: 'png',
-    });
-    const image = generated.data?.[0];
+    let image: { b64_json?: string | null; output_format?: string | null } | undefined;
+    let provider = 'openai';
+    let model = job.model;
+    try {
+      const generated = await getOpenAI().images.edit({
+        model: job.model,
+        image: inputFile,
+        prompt: options.prompt,
+        size: '1024x1024',
+        quality: 'medium',
+        n: 1,
+        output_format: 'png',
+      });
+      image = generated.data?.[0];
+    } catch (primaryError) {
+      if (!hasGemini) throw primaryError;
+      const generated = await generateGeminiImage(options.prompt, { bytes: options.bytes, mimeType: format.mimeType });
+      image = generated.image;
+      provider = 'google';
+      model = generated.model;
+    }
     if (!image) throw new Error('The image provider returned no result.');
+    const { error: providerUpdateError } = await db.from('generation_jobs').update({ provider, model, updated_at: new Date().toISOString() }).eq('id', job.id).eq('user_id', options.userId);
+    if (providerUpdateError) throw new Error('Image edit provider could not be recorded.');
     const output = getImageBytes(image);
     outputStoragePath = `studio-edits/${options.userId}/${job.id}.${output.extension}`;
     const outputUpload = await db.storage.from(BUCKET).upload(outputStoragePath, output.bytes, {
@@ -168,7 +184,7 @@ export async function editAndPersistImage(options: EditOptions) {
       storage_path: outputStoragePath,
       mime_type: output.mimeType,
       size_bytes: output.bytes.length,
-      metadata: { provider: 'openai', model: job.model, role: 'result', source_asset_id: inputAsset.id, mode: 'edit' },
+      metadata: { provider, model, role: 'result', source_asset_id: inputAsset.id, mode: 'edit' },
     }).select('id').single();
     if (outputAssetError) throw new Error('The edited image metadata could not be saved.');
     outputAssetId = outputAsset.id;
@@ -182,13 +198,14 @@ export async function editAndPersistImage(options: EditOptions) {
         source_asset_id: inputAsset.id,
         asset_id: outputAsset.id,
         storage_path: outputStoragePath,
-        model: job.model,
+        provider,
+        model,
       },
       completed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq('id', job.id).eq('user_id', options.userId);
     if (completeError) throw new Error('The edit completed, but its job record could not be finalized.');
-    return { job_id: job.id, asset_id: outputAsset.id, source_asset_id: inputAsset.id, url, model: job.model };
+    return { job_id: job.id, asset_id: outputAsset.id, source_asset_id: inputAsset.id, url, model, provider };
   } catch (error) {
     if (outputAssetId) await db.from('media_assets').delete().eq('id', outputAssetId).eq('user_id', options.userId);
     if (outputStoragePath) await db.storage.from(BUCKET).remove([outputStoragePath]);

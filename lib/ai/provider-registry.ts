@@ -30,6 +30,27 @@ function normalizeUsage(inputTokens?: number | null, outputTokens?: number | nul
   return { inputTokens: input, outputTokens: output, totalTokens: input + output };
 }
 
+async function withProviderError<T>(provider: ModelProvider, model: string, request: () => Promise<T>): Promise<T> {
+  try {
+    return await request();
+  } catch (error) {
+    if (error instanceof ModelProviderError) throw error;
+    const candidate = error && typeof error === 'object' ? error as { status?: unknown; statusCode?: unknown } : {};
+    const status = typeof candidate.status === 'number' ? candidate.status
+      : typeof candidate.statusCode === 'number' ? candidate.statusCode : null;
+    const safeStatus = status && status >= 400 && status <= 599 ? status : 502;
+    const providerName = provider === 'google' ? 'Gemini'
+      : provider === 'openai' ? 'OpenAI'
+        : provider === 'anthropic' ? 'Anthropic' : 'Local model';
+    const cause = safeStatus === 401 || safeStatus === 403 ? 'rejected the configured credential or denied model access'
+      : safeStatus === 404 ? 'could not find the configured model'
+        : safeStatus === 429 ? 'reached a rate or quota limit'
+          : safeStatus >= 500 ? 'is temporarily unavailable'
+            : 'rejected the generation request';
+    throw new ModelProviderError(`${providerName} model ${model} ${cause} (HTTP ${safeStatus}). Check the model ID, provider key, and quota.`, safeStatus);
+  }
+}
+
 function isProviderMessage(message: ModelMessage): message is { role: 'user' | 'assistant'; content: string } {
   return message.role === 'user' || message.role === 'assistant';
 }
@@ -105,7 +126,7 @@ export async function generateTextWithTools(
       }));
       const definitions = providerTools(request.tools);
       for (let turn = 0; turn < maxTurns; turn += 1) {
-        const response = await client.chat.completions.create({
+        const response = await withProviderError(resolved.provider, resolved.model, () => client.chat.completions.create({
           model: resolved.model,
           messages,
           tools: definitions,
@@ -114,7 +135,7 @@ export async function generateTextWithTools(
             : 'auto',
           temperature,
           max_tokens: maxOutputTokens,
-        });
+        }));
         const message = response.choices[0]?.message;
         finalText = message?.content || '';
         if (response.usage) {
@@ -147,7 +168,7 @@ export async function generateTextWithTools(
         input_schema: tool.inputSchema as Anthropic.Tool['input_schema'],
       }));
       for (let turn = 0; turn < maxTurns; turn += 1) {
-        const response = await client.messages.create({
+        const response = await withProviderError(resolved.provider, resolved.model, () => client.messages.create({
           model: resolved.model,
           max_tokens: maxOutputTokens,
           temperature,
@@ -155,7 +176,7 @@ export async function generateTextWithTools(
           messages,
           tools: definitions,
           ...(request.requiredToolName && callsMade === 0 ? { tool_choice: { type: 'tool' as const, name: request.requiredToolName } } : {}),
-        });
+        }));
         finalText = response.content.filter(block => block.type === 'text').map(block => block.text).join('');
         usageReported = true;
         totalInputTokens += response.usage.input_tokens;
@@ -186,7 +207,7 @@ export async function generateTextWithTools(
         parametersJsonSchema: tool.inputSchema,
       }));
       for (let turn = 0; turn < maxTurns; turn += 1) {
-        const response = await client.models.generateContent({
+        const response = await withProviderError(resolved.provider, resolved.model, () => client.models.generateContent({
           model: resolved.model,
           contents,
           config: {
@@ -196,7 +217,7 @@ export async function generateTextWithTools(
             tools: [{ functionDeclarations: definitions }],
             ...(request.requiredToolName && callsMade === 0 ? { toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [request.requiredToolName] } } } : {}),
           },
-        });
+        }));
         const content = response.candidates?.[0]?.content;
         const parts: Part[] = content?.parts || [];
         finalText = parts.filter(part => typeof part.text === 'string').map(part => part.text || '').join('');
@@ -252,13 +273,13 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
   if (resolved.provider === 'anthropic') {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
-    const response = await client.messages.create({
+    const response = await withProviderError(resolved.provider, resolved.model, () => client.messages.create({
       model: resolved.model,
       max_tokens: maxOutputTokens,
       temperature,
       ...(system ? { system } : {}),
       messages: asProviderMessages(request.messages),
-    });
+    }));
     const text = response.content.filter(block => block.type === 'text').map(block => block.text).join('');
     return {
       text,
@@ -271,7 +292,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
   if (resolved.provider === 'google') {
     const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY });
     const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
-    const response = await client.models.generateContent({
+    const response = await withProviderError(resolved.provider, resolved.model, () => client.models.generateContent({
       model: resolved.model,
       contents: asProviderMessages(request.messages).map(message => ({
         role: message.role === 'assistant' ? 'model' : 'user',
@@ -282,7 +303,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
         temperature,
         ...(system ? { systemInstruction: system } : {}),
       },
-    });
+    }));
     const usage = response.usageMetadata;
     return {
       text: response.text || '',
@@ -294,7 +315,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
 
   const client: OpenAI = resolved.provider === 'local' ? getTextOpenAI() : getOpenAI();
   if (request.reasoning && resolved.provider === 'openai' && !process.env.LEO_LOCAL_MODEL_URL?.trim()) {
-    const response = await client.responses.create({
+    const response = await withProviderError(resolved.provider, resolved.model, () => client.responses.create({
       model: resolved.model,
       reasoning: request.reasoning,
       input: request.messages.map(message => ({
@@ -302,7 +323,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
         content: [{ type: 'input_text' as const, text: message.content }],
       })),
       max_output_tokens: maxOutputTokens,
-    });
+    }));
     return {
       text: response.output_text || '',
       model: resolved.model,
@@ -314,7 +335,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
   if (resolved.provider === 'local' && process.env.LEO_OFFLINE_MODE === 'true' && !process.env.LEO_LOCAL_MODEL_URL?.trim()) {
     throw new ModelProviderError('Offline mode requires LEO_LOCAL_MODEL_URL; no hosted fallback is permitted.', 503);
   }
-  const response = await client.chat.completions.create({
+  const response = await withProviderError(resolved.provider, resolved.model, () => client.chat.completions.create({
     model: resolved.model,
     messages: request.messages.map(message => ({
       role: message.role === 'developer' ? 'system' as const : message.role,
@@ -322,7 +343,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
     })),
     max_tokens: maxOutputTokens,
     temperature,
-  });
+  }));
   const resultUsage = response.usage;
   return {
     text: response.choices[0]?.message?.content || '',

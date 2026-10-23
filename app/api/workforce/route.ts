@@ -4,6 +4,7 @@ import { PROFESSIONAL_ROLES } from '@/lib/agents/professional-roles';
 import { publicAgentSummary } from '@/lib/agents/manager';
 import { getEffectiveUserPlan } from '@/lib/plan-access';
 import { getAllowedAgentIds } from '@/lib/agents/entitlements';
+import { isProviderConfigured } from '@/lib/ai/model-catalog';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -50,8 +51,8 @@ export async function GET(req: NextRequest) {
       limitations: {
         role_catalog_is_not_tool_authorization: true,
         local_inference_configured: Boolean(process.env.LEO_LOCAL_MODEL_URL),
-        durable_agent_worker_enabled: true,
-        meeting_model_configured: Boolean(process.env.OPENAI_API_KEY),
+        durable_agent_worker_enabled: process.env.WORKFORCE_WORKER_ENABLED === 'true' && Boolean(process.env.CRON_SECRET),
+        meeting_model_configured: isProviderConfigured('openai') || isProviderConfigured('google') || isProviderConfigured('local'),
       },
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch {

@@ -39,6 +39,7 @@ test('API usage ledger can reconcile reservations and credit metadata endpoints 
   assert.match(chat, /calculateApiCredits\(customAgentBillingModel, usage\.inputTokens, usage\.outputTokens\)/);
   assert.match(chat, /if \(!owner\) \{/);
   assert.match(chat, /isProviderConfigured\('openai'\)/);
+  assert.equal([...chat.matchAll(/customAgent && !owner\s*\?\s*undefined\s*:\s*getSafeFallbackModel/g)].length, 2);
   assert.doesNotMatch(chat, /API_CREDITS_PER_1000_TOKENS/);
 });
 

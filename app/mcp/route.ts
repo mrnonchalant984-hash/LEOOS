@@ -19,6 +19,8 @@ import { createUserAssistantTools } from '@/lib/ai/tool-orchestrator';
 import { calculateApiCredits, isApiModel } from '@/lib/api-plan-catalog';
 import { isProviderConfigured } from '@/lib/ai/model-catalog';
 import { generateWithExplicitFallback, getSafeFallbackModel } from '@/lib/ai/provider-fallback';
+import { openConnectionConfig } from '@/lib/integrations/customer-connections';
+import { inspectMainWebsite, pushMainWebsiteChanges, type MainWebsiteFile } from '@/lib/mcp/main-website';
 
 async function invokeCloudBuildRoute(
   request: NextRequest,
@@ -872,6 +874,67 @@ export async function POST(request: NextRequest) {
         const resultBody = await result.json().catch(() => null);
         if (!result.ok) return { data: resultBody, error: resultBody?.error || `Deployment request failed with status ${result.status}.` };
         return { data: resultBody, error: null };
+      },
+      async getMainWebsiteStatus(userId: string) {
+        if (!platformOwner || userId !== token.userId) return { data: null, error: 'Platform owner access is required.' };
+        const [githubResult, vercelResult] = await Promise.all([
+          db.from('user_integrations').select('credential_ciphertext')
+            .eq('user_id', userId).eq('provider', 'github').eq('status', 'verified')
+            .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+          db.from('user_integrations').select('credential_ciphertext')
+            .eq('user_id', userId).eq('provider', 'vercel').eq('status', 'verified')
+            .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        ]);
+        if (githubResult.error || vercelResult.error) return { data: null, error: 'Verified owner GitHub and Vercel integrations could not be loaded.' };
+        if (!githubResult.data?.credential_ciphertext || !vercelResult.data?.credential_ciphertext) {
+          return { data: null, error: 'Connect and verify both GitHub and Vercel in Integrations before managing the main website.' };
+        }
+        try {
+          const githubToken = openConnectionConfig(githubResult.data.credential_ciphertext).token;
+          const vercelToken = openConnectionConfig(vercelResult.data.credential_ciphertext).token;
+          if (!githubToken || !vercelToken) return { data: null, error: 'Reconnect the owner GitHub and Vercel integrations.' };
+          return { data: await inspectMainWebsite({ githubToken, vercelToken }), error: null };
+        } catch (error) {
+          return { data: null, error: error instanceof Error ? error.message : 'Main website status could not be loaded.' };
+        }
+      },
+      async updateMainWebsite(userId: string, input: {
+        expected_commit_sha: string;
+        commit_message: string;
+        files: MainWebsiteFile[];
+      }) {
+        if (!platformOwner || userId !== token.userId) return { data: null, error: 'Platform owner access is required.' };
+        const limited = await enforceUserRateLimit(userId, 'mcp-main-website-push', 10, 3600);
+        if (limited) return { data: null, error: 'Main website push rate limit reached. Try again later.' };
+        const [githubResult, vercelResult] = await Promise.all([
+          db.from('user_integrations').select('credential_ciphertext')
+            .eq('user_id', userId).eq('provider', 'github').eq('status', 'verified')
+            .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+          db.from('user_integrations').select('credential_ciphertext')
+            .eq('user_id', userId).eq('provider', 'vercel').eq('status', 'verified')
+            .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        ]);
+        if (githubResult.error || vercelResult.error) return { data: null, error: 'Verified owner GitHub and Vercel integrations could not be loaded.' };
+        if (!githubResult.data?.credential_ciphertext || !vercelResult.data?.credential_ciphertext) {
+          return { data: null, error: 'Connect and verify both GitHub and Vercel in Integrations before changing the main website.' };
+        }
+        try {
+          const githubToken = openConnectionConfig(githubResult.data.credential_ciphertext).token;
+          const vercelToken = openConnectionConfig(vercelResult.data.credential_ciphertext).token;
+          if (!githubToken || !vercelToken) return { data: null, error: 'Reconnect the owner GitHub and Vercel integrations.' };
+          return {
+            data: await pushMainWebsiteChanges({
+              githubToken,
+              vercelToken,
+              expectedCommitSha: input.expected_commit_sha,
+              commitMessage: input.commit_message,
+              files: input.files,
+            }),
+            error: null,
+          };
+        } catch (error) {
+          return { data: null, error: error instanceof Error ? error.message : 'The main website update failed.' };
+        }
       },
       async getConfigurationStatus(_userId: string, target: 'development' | 'preview' | 'production' = 'production') {
         const { buildEnvStatusReport, missingRequiredEnvNames } = await import('@/lib/env-config-catalog');

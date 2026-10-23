@@ -5,7 +5,7 @@ Audit date: 2026-10-19
 ## Existing implementation
 
 - `/mcp` is an OAuth-protected Streamable HTTP MCP endpoint using the installed MCP SDK. Read and write tools are separated by `mcp:read` and `mcp:write`; project/build handlers bind work to the authenticated user.
-- Project tools already create typed projects, read/save source files, run bounded project operations when the isolated runner is deployed, and use the existing GitHub/Vercel deployment flow.
+- Project tools already create typed projects, read/save source files, run bounded project operations when the isolated runner is deployed, and use the existing GitHub/Vercel deployment flow. Platform owners can separately inspect the LeonardX main repository's GitHub/Vercel state and push explicitly approved file changes to its linked `main` branch.
 - Durable engineering workflows, Expo EAS builds, Godot build-service jobs, and the native Android calculator worker already have persisted status and owner-scoped result paths. Android worker availability still depends on external toolchain/scheduler configuration.
 - Leo AI already has a provider router supporting configured OpenAI, Anthropic, Google, and local OpenAI-compatible providers. Provider availability is reported from server configuration; no automatic cross-provider fallback is implemented.
 - Specialist agents already have a static runtime registry, plan/owner entitlement checks, durable `agent_runs`/`agent_jobs`, and a protected worker. Developer Agent Studio has a separate owner-scoped custom-agent table and paid API-credit reservation flow.
@@ -22,5 +22,7 @@ Audit date: 2026-10-19
 
 - No MCP Resources or Prompts are currently registered; the implementation uses tools and Streamable HTTP.
 - The static built-in agent registry remains code-defined. The owner database registry is supported only for explicitly tagged text-only agents; database records do not automatically become executable agents.
-- There is no automatic model fallback when a requested provider fails. Errors are returned honestly, and clients can choose another configured provider/model explicitly.
+- The owner main-website push is restricted to the configured repository and Vercel project, requires the latest inspected commit SHA and `confirm=true`, uses only the owner's verified GitHub/Vercel integrations, and refuses GitHub workflow, environment-secret, and credential files. GitHub branch protection and Vercel's Git integration remain authoritative.
+- Workforce monitoring, team, and queue pages refresh only while visible. On-demand workforce task execution is owner-authenticated; the existing Vercel Hobby cron schedules remain daily instead of exceeding Hobby's cron cadence.
 - This audit does not claim a production deployment or a successful live Leo/provider invocation unless separately verified with a real MCP token and provider call.
+- Leo MCP execution uses the shared provider router and configured Gemini fallback where eligible; provider failures remain explicit and are not presented as successful responses.
