@@ -62,7 +62,7 @@ const rawDefs = ([
 ['shopping','Shopping Agent','Shopping workflows','computer','Search and compare products, prepare checkout, then stop for explicit approval before purchase.',true,['browser','shopping'],['read','write','critical'],true],
 ['web-automation','Web Automation Agent','Web automation','computer','Automate approved browser workflows only with connected tools.',true,['browser','web_automation'],['read','write','sensitive'],true],
 ['app-testing','App Testing Agent','Application testing','computer','Test applications using connected browser/computer tools and report actual results.',true,['browser','computer_use','test_execute'],['read','write'],false],
-] as Array<[string,string,string,AgentDefinition['category'],string,boolean,string[],AgentDefinition['permissions'],boolean]>).map(([id,name,description,category,instructions,ownerOnly,allowedTools,permissions,approvalRequired])=>({id,name,description,category,instructions,enabled:true,ownerOnly,allowedTools,permissions,approvalRequired,model:process.env.LEO_AGENT_MODEL||'gpt-4o-mini',timeoutMs:60000,maxRetries:1}));
+] as Array<[string,string,string,AgentDefinition['category'],string,boolean,string[],AgentDefinition['permissions'],boolean]>).map(([id,name,description,category,instructions,ownerOnly,allowedTools,permissions,approvalRequired])=>({id,name,description,category,instructions,enabled:true,ownerOnly,allowedTools,permissions,approvalRequired,model:process.env.LEO_AGENT_MODEL || undefined,timeoutMs:60000,maxRetries:1}));
 const defs: AgentDefinition[] = rawDefs;
 export function listAgents(owner:boolean){return defs.filter(a=>a.enabled&&(!a.ownerOnly||owner));}
 export function getAgent(id:string){return defs.find(a=>a.id===id)||null;}

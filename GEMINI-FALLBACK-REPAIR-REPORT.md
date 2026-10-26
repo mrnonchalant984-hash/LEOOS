@@ -4,7 +4,7 @@
 
 - `lib/ai/provider-fallback.ts`: emits structured `leo.ai.fallback.start`, `leo.ai.fallback.success`, and `leo.ai.fallback.failure` log events with provider names, reason, status code, and error type only. It never logs prompt content, credentials, headers, or raw provider error messages.
 - The fallback helper now skips an unconfigured primary provider and directly tries the configured cross-provider fallback. It treats provider authentication/permission errors (401/403) as eligible for a cross-provider fallback, while still refusing malformed requests (400).
-- `lib/ai/model-catalog.ts`: selects `google/gemini-2.5-flash` as the default hosted model when Gemini is configured and OpenAI is not, unless an explicit model setting is provided.
+- `lib/ai/model-catalog.ts`: selects `google/gemini-1.5-flash` as the default hosted model when Gemini is configured and OpenAI is not, unless an explicit model setting is provided.
 - `tsconfig.json`: excludes temporary `tmp` patch artifacts from compilation.
 - `.gitignore`: ignores the root `tmp/` folder.
 - `tests/provider-fallback.test.mjs`: adds coverage for direct Gemini-only selection, auth-error fallback, safe fallback logs, and explicit fallback failure.
@@ -18,4 +18,4 @@
 
 ## Environment
 
-Set `GEMINI_API_KEY` or `GOOGLE_API_KEY` as a server-side environment variable. Never use a `NEXT_PUBLIC_` key. If you want to explicitly pin fallback, set `LEO_FALLBACK_MODEL=google/gemini-2.5-flash`.
+Set `GEMINI_API_KEY` or `GOOGLE_API_KEY` as a server-side environment variable. Never use a `NEXT_PUBLIC_` key. For this deployment, set `LEO_CHAT_MODEL=gemini-1.5-flash` and `LEO_FALLBACK_MODEL=gemini-1.5-flash` (unqualified Google AI Studio model IDs).

@@ -13,7 +13,7 @@ export function ProjectCard({project}:{project:any}){
       <div className='text-xs uppercase text-yellow-300'>{project.type}</div>
       <h3 className='mt-1 text-lg font-bold'>{project.name}</h3>
       <p className='mt-2 text-sm text-zinc-400'>{project.description}</p>
-      {project.url?<a href={project.url} target='_blank' rel='noreferrer'><Button className='mt-4 w-full'>View Project</Button></a>:<Button className='mt-4 w-full' disabled>Project URL coming soon</Button>}
+      {project.url ? <a href={project.url} target='_blank' rel='noreferrer'><Button className='mt-4 w-full'>View Project</Button></a> : <p className='mt-4 text-xs text-zinc-500'>Live URL is not configured for this project.</p>}
     </CardContent>
   </Card>
 }

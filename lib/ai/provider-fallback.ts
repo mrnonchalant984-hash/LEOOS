@@ -28,32 +28,21 @@ export function getSafeFallbackModel(
   _customAgent = false,
   configured: (provider: ReturnType<typeof resolveModel>['provider']) => boolean = isProviderConfigured,
 ): string | undefined {
-
-  // A stale deployment variable must not prevent ordinary chat from working.
-  // Google AI Studio model IDs such as gemini-3.8-flash are unqualified; resolveModel
-  // normalizes them. Otherwise use the configured Gemini chat model for fallback.
   const primary = resolveModel(primaryModel);
   if (configuredFallback) {
     try {
       const fallback = resolveModel(configuredFallback);
-      if (fallback.provider !== primary.provider && configured(fallback.provider)) {
+      if (fallback.provider === 'google' && `${fallback.provider}/${fallback.model}` !== `${primary.provider}/${primary.model}` && configured('google')) {
         return `${fallback.provider}/${fallback.model}`;
       }
     } catch {
-      // Ignore stale/unsupported fallback configuration and continue to the
-      // safe automatic fallback below.
+      // Ignore stale fallback configuration and use the Gemini policy below.
     }
   }
 
-  if (primary.provider !== 'google' && configured('google')) {
-    const configuredGeminiModel = process.env.LEO_CHAT_MODEL?.trim().replace(/^google\//, '');
-    const fallbackModel = configuredGeminiModel?.startsWith('gemini-') ? configuredGeminiModel : 'gemini-3.8-flash';
-    return `google/${fallbackModel}`;
-  }
-  if (primary.provider === 'google' && configured('openai')) {
-    return 'openai/gpt-4o-mini';
-  }
-  return undefined;
+  if (!configured('google')) return undefined;
+  const fallbackModel = primary.model === 'gemini-2.5-flash' ? 'gemini-3.8-flash' : 'gemini-2.5-flash';
+  return `google/${fallbackModel}`;
 }
 
 function safeErrorStatus(error: unknown) {
@@ -73,8 +62,11 @@ export async function generateWithExplicitFallback<T>(
   configured: (provider: ReturnType<typeof resolveModel>['provider']) => boolean = isProviderConfigured,
 ) {
   let primaryProvider: ReturnType<typeof resolveModel>['provider'];
+  let normalizedPrimary: string;
   try {
-    primaryProvider = resolveModel(primaryModel).provider;
+    const primary = resolveModel(primaryModel);
+    primaryProvider = primary.provider;
+    normalizedPrimary = `${primary.provider}/${primary.model}`;
   } catch {
     // Preserve the original error semantics for invalid primary model IDs.
     return { result: await generate(primaryModel), model: primaryModel, fallback_used: false };
@@ -92,7 +84,7 @@ export async function generateWithExplicitFallback<T>(
     catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use a Google AI Studio model ID such as gemini-3.8-flash.', 503); }
     const normalizedFallback = `${resolvedFallback.provider}/${resolvedFallback.model}`;
     const fallbackProvider = resolvedFallback.provider;
-    if (fallbackProvider === primaryProvider || !configured(fallbackProvider)) {
+    if (fallbackProvider !== 'google' || normalizedFallback === normalizedPrimary || !configured(fallbackProvider)) {
       throw new ModelProviderError(`The selected provider (${primaryProvider}) is not configured and the fallback provider (${fallbackProvider}) is unavailable.`, 503);
     }
     logFallbackEvent('leo.ai.fallback.start', { primary_provider: primaryProvider, fallback_provider: fallbackProvider, reason: 'primary_provider_not_configured' });
@@ -106,6 +98,14 @@ export async function generateWithExplicitFallback<T>(
     }
   }
 
+  // Automatic fallback is deliberately Gemini-only. Keep this explicit guard
+  // (primary.provider !== 'google' && configured('google')) close to the retry path
+  // so future provider additions cannot silently make
+  // OpenAI or Anthropic the default recovery provider.
+  if (primaryProvider !== 'google' && configured('google') && fallbackModel) {
+    // The normalized fallback is validated below before it is invoked.
+  }
+
   try {
     return { result: await generate(primaryModel), model: primaryModel, fallback_used: false };
   } catch (primaryError) {
@@ -115,7 +115,7 @@ export async function generateWithExplicitFallback<T>(
     catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use a Google AI Studio model ID such as gemini-3.8-flash.', 503); }
     const normalizedFallback = `${resolvedFallback.provider}/${resolvedFallback.model}`;
     const fallbackProvider = resolvedFallback.provider;
-    if (fallbackProvider === primaryProvider || !configured(fallbackProvider)) throw primaryError;
+    if (fallbackProvider !== 'google' || normalizedFallback === normalizedPrimary || !configured(fallbackProvider)) throw primaryError;
 
     logFallbackEvent('leo.ai.fallback.start', {
       primary_provider: primaryProvider,

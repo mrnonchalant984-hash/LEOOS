@@ -36,9 +36,12 @@ export function getTextOpenAI(){
   });
 }
 
-export function getConfiguredModel(fallback = 'gpt-4o-mini') {
+export function getConfiguredModel(fallback = 'gemini-3.8-flash') {
   if (process.env.LEO_LOCAL_MODEL_URL?.trim()) return process.env.LEO_LOCAL_MODEL_NAME?.trim() || 'local-model';
-  return process.env.LEO_MEETING_MODEL || process.env.LEO_AGENT_MODEL || fallback;
+  const preferred = process.env.LEO_CHAT_MODEL?.trim() || process.env.LEO_MEETING_MODEL?.trim() || process.env.LEO_AGENT_MODEL?.trim() || process.env.LEO_REASONING_MODEL?.trim();
+  if (preferred) return preferred;
+  if (process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim()) return 'gemini-3.8-flash';
+  return fallback;
 }
 
 type TextInputMessage = { role: 'system' | 'user' | 'assistant' | 'developer'; content: string | Array<{ type?: string; text?: string }> };

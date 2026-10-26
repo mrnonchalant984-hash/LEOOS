@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
-import { getOpenAI, getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from '@/lib/openai';
+import { getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from '@/lib/openai';
 import { generateText } from '@/lib/ai/provider-registry';
-import { generateWithExplicitFallback, getSafeFallbackModel } from '@/lib/ai/provider-fallback';
 import { normalizeGeminiModelId } from '@/lib/ai/model-catalog';
 import { getProfile } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
@@ -62,42 +61,27 @@ export async function POST(req: NextRequest) {
     if (!(audio instanceof File)) return NextResponse.json({ error: 'Audio file required' }, { status: 400 });
     let transcript = '';
     let transcriptionProvider = 'google';
-    try { transcript = await geminiTranscribe(audio); }
-    catch (error) {
-      if (!process.env.OPENAI_API_KEY && !process.env.LEO_API_KEY) throw error;
-      transcriptionProvider = 'openai';
-      transcript = (await getOpenAI().audio.transcriptions.create({ file: audio, model: process.env.LEO_TRANSCRIPTION_MODEL || 'whisper-1' })).text;
-    }
+    transcript = await geminiTranscribe(audio);
     const turnMode = fd.get('mode') === 'chat';
     let assistantReply = '';
     if (turnMode) {
-      const primaryModel = googleKey() ? (process.env.LEO_FALLBACK_MODEL?.trim() && process.env.LEO_FALLBACK_MODEL.trim().startsWith('google/') ? process.env.LEO_FALLBACK_MODEL.trim() : 'google/gemini-3.8-flash') : 'openai/gpt-4o-mini';
-      const configuredFallback = process.env.LEO_FALLBACK_MODEL?.trim();
-      const fallbackPreference = configuredFallback && !configuredFallback.startsWith('google/') ? configuredFallback : 'openai/gpt-4o-mini';
-      const fallbackModel = getSafeFallbackModel(primaryModel, fallbackPreference);
-      const outcome = await generateWithExplicitFallback(primaryModel, fallbackModel, model => generateText({
-        model,
+      const outcome = await generateText({
+        model: 'google/gemini-3.8-flash',
         messages: [
           { role: 'system', content: `${getLeoSystemPrompt()}\n\n${LEO_PLAN_TERMINOLOGY}\n\nYou are Leo in voice chat. Answer naturally and concisely. Never claim to have completed actions without tool confirmation.` },
           { role: 'user', content: transcript },
         ],
         maxOutputTokens: 700,
-      }));
-      assistantReply = outcome.result.text || 'I could not form a response to that. Please try again.';
+      });
+      assistantReply = outcome.text || 'I could not form a response to that. Please try again.';
     }
     const speechText = turnMode ? assistantReply : transcript;
     let speech: { bytes: Buffer; contentType: string };
     let speechProvider = 'google';
-    try { speech = await geminiSpeak(speechText); }
-    catch (error) {
-      if (!process.env.OPENAI_API_KEY && !process.env.LEO_API_KEY) throw error;
-      speechProvider = 'openai';
-      const output = await getOpenAI().audio.speech.create({ model: process.env.LEO_TTS_MODEL || 'tts-1', voice: 'alloy', input: speechText });
-      speech = { bytes: Buffer.from(await output.arrayBuffer()), contentType: 'audio/mpeg' };
-    }
+    speech = await geminiSpeak(speechText);
     return new NextResponse(new Uint8Array(speech.bytes), { headers: { 'Content-Type': speech.contentType, 'X-Transcript': encodeURIComponent(transcript), 'X-Assistant-Reply': encodeURIComponent(assistantReply), 'X-Transcription-Provider': transcriptionProvider, 'X-Speech-Provider': speechProvider, 'X-Cache-Control': 'no-store', 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('Voice processing failed:', error instanceof Error ? error.message : 'unknown error');
-    return NextResponse.json({ error: 'Voice processing is temporarily unavailable. Check Gemini/OpenAI provider configuration and model access.' }, { status: 502 });
+    return NextResponse.json({ error: 'Voice processing is temporarily unavailable. Gemini voice configuration or model access is unavailable.' }, { status: 502 });
   }
 }

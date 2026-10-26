@@ -3,6 +3,7 @@ import { adminSupabase } from '@/lib/auth';
 import { decryptMcpCredential } from '@/lib/mcp/outbound-security';
 import { callMcpTool } from '@/lib/mcp/remote-clients';
 import type { AssistantTool, AssistantToolExecutor } from '@/lib/ai/provider-registry';
+import { listSkills, loadSkill, readSkillFile, runSkillScript } from '@/lib/skills/registry';
 
 type RemoteToolReference = {
   kind: 'remote';
@@ -10,7 +11,7 @@ type RemoteToolReference = {
   remoteName: string;
 };
 
-type LocalToolReference = { kind: 'list_projects' } | { kind: 'get_project_status' };
+type LocalToolReference = { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'run_skill_script' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -68,6 +69,21 @@ const localTools: Array<{ name: string; description: string; inputSchema: Record
     name: 'get_project_status',
     description: 'Read the status and progress of one project owned by this account.',
     inputSchema: { type: 'object', properties: { project_id: { type: 'string', description: 'UUID of the project.' } }, required: ['project_id'], additionalProperties: false },
+  },
+  {
+    name: 'load_skill',
+    description: 'Load the full instructions for an enabled skill only when it matches the task.',
+    inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'Skill name.' } }, required: ['name'], additionalProperties: false },
+  },
+  {
+    name: 'read_skill_file',
+    description: 'Read an authorized reference or asset file from an enabled skill. Path traversal is blocked.',
+    inputSchema: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string' } }, required: ['name', 'path'], additionalProperties: false },
+  },
+  {
+    name: 'run_skill_script',
+    description: 'Run an approved .py or .js helper from an enabled skill in the restricted skill sandbox.',
+    inputSchema: { type: 'object', properties: { name: { type: 'string' }, script: { type: 'string' }, args: { type: 'array', items: { type: 'string' } } }, required: ['name', 'script'], additionalProperties: false },
   },
 ];
 
@@ -140,6 +156,18 @@ export async function createUserAssistantTools(userId: string): Promise<{ tools:
       if (error) return { text: 'Project status could not be loaded.', isError: true };
       if (!data) return { text: 'Project not found.', isError: true };
       return { text: JSON.stringify(data) };
+    }
+    if (reference.kind === 'load_skill') {
+      try { const skill = await loadSkill(String(args.name || ''), userId); return { text: JSON.stringify({ name: skill.name, description: skill.description, version: skill.version, instructions: skill.body }) }; }
+      catch (error) { return { text: error instanceof Error ? error.message : 'Skill could not be loaded.', isError: true }; }
+    }
+    if (reference.kind === 'read_skill_file') {
+      try { return { text: await readSkillFile(String(args.name || ''), String(args.path || ''), userId) }; }
+      catch (error) { return { text: error instanceof Error ? error.message : 'Skill file could not be read.', isError: true }; }
+    }
+    if (reference.kind === 'run_skill_script') {
+      try { const result = await runSkillScript(String(args.name || ''), String(args.script || ''), Array.isArray(args.args) ? args.args.map(String) : [], userId); return { text: JSON.stringify(result), isError: result.code !== 0 }; }
+      catch (error) { return { text: error instanceof Error ? error.message : 'Skill script failed.', isError: true }; }
     }
 
     const { data: server, error: serverLookupError } = await db.from('mcp_remote_servers')

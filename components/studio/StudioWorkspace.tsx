@@ -23,8 +23,8 @@ type StudioJob = {
 type VideoResult = { job_id: string; status: string; asset_id?: string; video_url?: string | null; error?: string };
 
 const modes: Array<{ id: StudioMode; label: string; description: string }> = [
-  { id: 'image', label: 'Create image', description: 'Text-to-image · OpenAI' },
-  { id: 'edit', label: 'Edit image', description: 'Image transformation · OpenAI' },
+  { id: 'image', label: 'Create image', description: 'Text-to-image · Gemini' },
+  { id: 'edit', label: 'Edit image', description: 'Image transformation · Gemini' },
   { id: 'video', label: 'Create video', description: 'Text- or image-to-video · Runway Gen-4.5' },
 ];
 

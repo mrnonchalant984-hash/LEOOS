@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { adminSupabase } from '@/lib/auth';
 import { accountAccess, consumeCredit } from '@/lib/access';
-import { getOpenAI } from '@/lib/openai';
-import { generateGeminiImage } from './gemini-image';
+import { generateGeminiImage, isGeminiImageModel, resolveGeminiImageModel } from './gemini-image';
 
 const BUCKET = 'leo-files';
 const SIGNED_URL_SECONDS = 60 * 60;
@@ -10,41 +9,39 @@ const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 async function generateImageWithProviderFallback(prompt: string, preferredModel: string) {
   const googleKey = process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim();
-  try {
-    const result: any = await getOpenAI().images.generate({
-      model: preferredModel,
-      prompt,
-      size: '1024x1024',
-      quality: 'medium',
-      n: 1,
-    });
-    const image = result.data?.[0];
-    if (!image) throw new Error('OpenAI image provider returned no image.');
-    return { image, provider: 'openai', model: preferredModel };
-  } catch (primaryError) {
-    if (!googleKey) throw primaryError;
-    const model = process.env.LEO_GEMINI_IMAGE_MODEL?.trim() || 'gemini-nano-banana-2.1';
-    if (model.startsWith('gemini-')) {
-      const generated = await generateGeminiImage(prompt);
+  if (!googleKey) throw new Error('Gemini image generation is not configured.');
+  const primaryModel = preferredModel.replace(/^google\//, '').trim();
+
+  const generate = async (model: string) => {
+    if (isGeminiImageModel(model)) {
+      const generated = await generateGeminiImage(prompt, undefined, model);
       return { image: generated.image, provider: 'google', model: generated.model };
     }
-    // Imagen still-image generation uses the predict endpoint; video remains on
-    // its separately configured provider.
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:predict?key=${encodeURIComponent(googleKey)}`, {
+    if (!model.startsWith('imagen-')) throw new Error('The configured Gemini image model is not image-capable.');
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:predict`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': googleKey },
       body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: '1:1' } }),
       signal: AbortSignal.timeout(60_000),
     });
     const payload = await response.json().catch(() => null) as any;
     if (!response.ok) {
       const providerMessage = typeof payload?.error?.message === 'string' ? payload.error.message.slice(0, 300) : `HTTP ${response.status}`;
-      throw new Error(`Gemini image fallback failed (${response.status}): ${providerMessage}`);
+      throw new Error(`Gemini image generation failed (${response.status}): ${providerMessage}`);
     }
     const prediction = payload?.predictions?.[0];
     const base64 = prediction?.bytesBase64Encoded || prediction?.bytes_base64_encoded;
-    if (typeof base64 !== 'string' || !base64) throw new Error('Gemini image fallback returned no image data.');
+    if (typeof base64 !== 'string' || !base64) throw new Error('Gemini image generation returned no image data.');
     return { image: { b64_json: base64, output_format: String(prediction.mimeType || prediction.mime_type || 'image/png').includes('jpeg') ? 'jpeg' : 'png' }, provider: 'google', model };
+  };
+
+  try {
+    return await generate(primaryModel);
+  } catch (primaryError) {
+    const fallbackModel = resolveGeminiImageModel(process.env.LEO_GEMINI_IMAGE_FALLBACK_MODEL?.trim() || 'gemini-2.5-flash-image-preview');
+    if (fallbackModel === primaryModel) throw primaryError;
+    return generate(fallbackModel);
   }
 }
 
@@ -58,7 +55,7 @@ type ImageJobOptions = {
 
 function safeMessage(error: unknown) {
   const text = error instanceof Error ? error.message : '';
-  if (/credit|plan|entitled|subscription/i.test(text)) return text.slice(0, 180);
+  if (/credit|plan|entitled|subscription|configured model|image-capable|not configured|provider failed|returned no image|unsupported image/i.test(text)) return text.slice(0, 240);
   return 'Image generation failed. Any reserved credits were returned when possible. Please retry.';
 }
 
@@ -99,7 +96,8 @@ export async function generateAndPersistImage(options: ImageJobOptions) {
   const db = adminSupabase();
   const access = await accountAccess(options.userId, 'image_generation');
   if (!access.owner && !access.entitled) throw new Error('Image generation is not included in your current plan.');
-  const model = process.env.LEO_IMAGE_MODEL || 'gpt-image-2';
+  const configuredImageModel = process.env.LEO_GEMINI_IMAGE_MODEL?.trim();
+  const model = resolveGeminiImageModel(configuredImageModel);
   const requestKey = options.requestKey?.trim().slice(0, 128) || randomUUID();
   const mode = options.mode || 'image';
   const visualDirection = mode === '3d'
@@ -111,7 +109,7 @@ export async function generateAndPersistImage(options: ImageJobOptions) {
     user_id: options.userId,
     request_key: requestKey,
     job_type: 'image',
-    provider: 'openai',
+    provider: 'google',
     model,
     status: 'queued',
     prompt: options.prompt,
@@ -184,7 +182,7 @@ export async function generateAndPersistImage(options: ImageJobOptions) {
     const { data: signed, error: signError } = await db.storage.from(BUCKET).createSignedUrl(storagePath, SIGNED_URL_SECONDS);
     if (signError || !signed?.signedUrl) throw new Error('Generated image was saved but a secure preview URL could not be issued.');
 
-    const metadata = { mode, asset_id: asset.id, storage_path: storagePath, mime_type: mime, size_bytes: bytes.length, usage: image?.usage || null };
+    const metadata = { mode, asset_id: asset.id, storage_path: storagePath, mime_type: mime, size_bytes: bytes.length };
     const { error: completeError } = await db.from('generation_jobs').update({
       status: 'completed', platform_credits_charged: platformCost, completed_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata,
     }).eq('id', job.id).eq('user_id', options.userId);

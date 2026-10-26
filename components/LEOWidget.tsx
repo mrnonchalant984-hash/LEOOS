@@ -40,6 +40,11 @@ import {
   Trash,
   Users,
   Video as VideoIcon,
+  ChevronRight,
+  Github,
+  Plug,
+  Palette,
+  Puzzle,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import type { LucideIcon } from "lucide-react";
@@ -77,6 +82,7 @@ type VoiceStatus =
   | "Gemini voice ready · tap to speak";
 type ToolOption = { name: string; description: string };
 type CustomAgentOption = { id: string; name: string; description: string; allowed_tools: string[] };
+type ModelOption = { id: string; provider: string; model: string; capabilities: string[]; configured: boolean };
 type OfflineDraft = { text: string; mode: "normal" | "deep" | "tools"; selectedToolName?: string; selectedAgentId?: string; savedAt: string };
 const OFFLINE_DRAFT_KEY = "leo_offline_chat_draft_v1";
 const actions = [
@@ -110,7 +116,7 @@ function getRemoteDeviceId() {
   } catch { return "web-device"; }
 }
 
-export function LEOWidget({ full = false }: { full?: boolean }) {
+export function LEOWidget({ full = false, initialSessionId = "" }: { full?: boolean; initialSessionId?: string }) {
   const [open, setOpen] = useState(full),
     [messages, setMessages] = useState<Msg[]>([]),
     [input, setInput] = useState(""),
@@ -128,6 +134,17 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
   const [platformCredits, setPlatformCredits] = useState<number | null>(null);
   const [toolOptions, setToolOptions] = useState<ToolOption[]>([]);
   const [customAgentOptions, setCustomAgentOptions] = useState<CustomAgentOption[]>([]);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [selectedModel, setSelectedModel] = useState("auto");
+  const [modelLoadError, setModelLoadError] = useState("");
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [effort, setEffort] = useState<"standard" | "deep">("standard");
+  const [chatSearch, setChatSearch] = useState("");
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [microphoneMenuOpen, setMicrophoneMenuOpen] = useState(false);
+  const [plusSubmenu, setPlusSubmenu] = useState<"skills" | "connectors" | "design" | "plugins" | null>(null);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedAudioDevice, setSelectedAudioDevice] = useState("");
   const [selectedTool, setSelectedTool] = useState<ToolOption | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<CustomAgentOption | null>(null);
   const [toolOptionsError, setToolOptionsError] = useState("");
@@ -192,7 +209,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
   const cameraRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    const sid = localStorage.getItem("leo_chat_id") || crypto.randomUUID();
+    const sid = initialSessionId || localStorage.getItem("leo_chat_id") || crypto.randomUUID();
     sidRef.current = sid;
     queueMicrotask(() => setActiveChatId(sid));
     localStorage.setItem("leo_chat_id", sid);
@@ -219,6 +236,17 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
         if (d.profile?.full_name)
           setWelcomeName(d.profile.full_name.split(/\s+/)[0]);
       } catch {}
+    })();
+    (async () => {
+      try {
+        const t = await token();
+        const response = await fetch('/api/models', { headers: t ? { Authorization: `Bearer ${t}` } : {}, cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Models could not be loaded.');
+        const available = Array.isArray(data.models) ? data.models as ModelOption[] : [];
+        setModelOptions(available);
+        if (!available.some((item) => item.configured)) setSelectedModel("unavailable");
+      } catch (cause) { setModelLoadError(cause instanceof Error ? cause.message : 'Models could not be loaded.'); }
     })();
     const close = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node))
@@ -434,7 +462,8 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
   async function send(text = input, mode: "normal" | "deep" | "tools" = "normal", attachedTool = selectedTool, attachedAgent = selectedAgent) {
     if (!text.trim() || loading) return;
     const next = text.trim();
-    const effectiveMode = attachedTool || attachedAgent?.allowed_tools.length ? "tools" : mode;
+    const requestedMode = effort === "deep" && mode === "normal" ? "deep" : mode;
+    const effectiveMode = attachedTool || attachedAgent?.allowed_tools.length ? "tools" : requestedMode;
     if (!navigator.onLine) {
       const draft: OfflineDraft = { text: next, mode: effectiveMode, ...(attachedTool ? { selectedToolName: attachedTool.name } : {}), ...(attachedAgent ? { selectedAgentId: attachedAgent.id } : {}), savedAt: new Date().toISOString() };
       try {
@@ -469,6 +498,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
           mode: effectiveMode,
           ...(attachedTool ? { tool_name: attachedTool.name } : {}),
           ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}),
+          ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}),
         }),
       });
       const d = await r.json();
@@ -592,7 +622,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       return;
     }
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const s = await navigator.mediaDevices.getUserMedia({ audio: selectedAudioDevice ? { deviceId: { exact: selectedAudioDevice } } : true });
       const rec = new MediaRecorder(s);
       chunks.current = [];
       rec.ondataavailable = (e) => chunks.current.push(e.data);
@@ -807,7 +837,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
   ];
   const composer = (
     <div ref={menuRef} className="relative">
-      <div className="flex items-center gap-2 rounded-[22px] border border-white/10 bg-[#0b0b0c]/95 p-2 shadow-2xl backdrop-blur-xl">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/[.13] bg-[#151515] p-2 shadow-[0_12px_35px_rgba(0,0,0,.22)]">
         <button
           type="button"
           onClick={() => setMenu((v) => !v)}
@@ -818,6 +848,15 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
           <Plus size={20} />
         </button>
         {(selectedTool || selectedAgent) && <button type="button" onClick={() => { setSelectedTool(null); setSelectedAgent(null); }} aria-label="Remove selected tool or agent" className="flex max-w-[35%] shrink-0 items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-[10px] text-zinc-300"><Wrench size={11}/><span className="truncate">{selectedAgent ? `Agent: ${selectedAgent.name}` : selectedTool?.name}</span><X size={11}/></button>}
+        <label className="sr-only" htmlFor="leo-model-select">Leo model</label>
+        <select id="leo-model-select" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)} disabled={!modelOptions.some((item) => item.configured)} title={modelLoadError || (!modelOptions.some((item) => item.configured) ? 'No configured text model is available.' : 'Choose the model for this message')} className="order-3 max-w-[150px] shrink-0 rounded-xl border border-white/10 bg-white/[.04] px-2 py-2 text-[10px] text-zinc-300 outline-none focus:border-[var(--gold)] disabled:opacity-50 sm:order-none">
+          {modelOptions.some((item) => item.configured) ? <option value="auto">Auto</option> : <option value="unavailable">No model configured</option>}
+          {modelOptions.filter((item) => item.configured).map((item) => <option key={item.id} value={item.id}>{item.provider === 'google' ? 'Gemini' : item.provider} · {item.model}</option>)}
+        </select>
+        <label className="order-4 inline-flex h-10 items-center gap-1 rounded-xl border border-white/10 px-2 text-[10px] text-zinc-400 sm:order-none">
+          <span className="sr-only">Reasoning effort</span>
+          <select value={effort} onChange={(event) => setEffort(event.target.value as "standard" | "deep")} className="max-w-[64px] bg-transparent outline-none"><option value="standard">Fast</option><option value="deep">Deep</option></select>
+        </label>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -827,11 +866,13 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
           className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm outline-none placeholder:text-zinc-600"
           placeholder="Message Leo..."
         />
+        <div className="relative">
         <button
           type="button"
-          onClick={startVoiceInput}
+          onClick={() => void openMicrophoneMenu()}
           aria-label="Voice to text"
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${recording ? "bg-red-500 text-white" : "hover:bg-white/[.06]"}`}
+          aria-expanded={microphoneMenuOpen}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${recording ? "bg-red-500 text-white" : "hover:bg-white/[.06]"}`}
         >
           {recording ? (
             <span className="text-xs font-bold">STOP</span>
@@ -839,6 +880,8 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
             <Mic size={19} />
           )}
         </button>
+        {microphoneMenuOpen && <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 w-64 rounded-xl border border-white/15 bg-[#191919] p-2 shadow-2xl"><p className="px-2 py-1 text-[10px] uppercase tracking-[.14em] text-zinc-600">Microphone</p><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceInput(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Mic size={14}/> Dictate into composer</button><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceChat(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Volume2 size={14}/> Live voice conversation</button><div className="my-1 border-t border-white/10"/><p className="px-2 py-1 text-[10px] text-zinc-600">Audio input</p>{audioDevices.length ? audioDevices.map((device, index) => <button key={device.deviceId} type="button" onClick={() => setSelectedAudioDevice(device.deviceId)} className={`block w-full truncate rounded-lg px-2 py-1.5 text-left text-[11px] ${selectedAudioDevice === device.deviceId ? "bg-white/10 text-white" : "text-zinc-500 hover:bg-white/5"}`}>{device.label || `Microphone ${index + 1}`}</button>) : <p className="px-2 py-1 text-[11px] text-zinc-600">Device names appear after permission is granted.</p>}</div>}
+        </div>
         <button
           type="button"
           onClick={startVoiceChat}
@@ -859,7 +902,20 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       </div>
       {menu && (
         <div className="absolute bottom-[calc(100%+10px)] left-0 z-50 w-[min(360px,calc(100vw-24px))] rounded-3xl border border-white/10 bg-[#101011]/98 p-2 shadow-2xl backdrop-blur-xl">
-          <div className="grid grid-cols-2 gap-1">
+          <div className="space-y-0.5">
+            <button type="button" onClick={() => { setMenu(false); fileRef.current?.click(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-zinc-200 hover:bg-white/[.08]"><Paperclip size={17}/><span className="flex-1">Upload or add files</span><span className="text-[10px] text-zinc-600">Ctrl+U</span></button>
+            <Link href="/app/projects" onClick={() => setMenu(false)} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/[.08]"><Library size={17}/><span className="flex-1">Add to project</span><ChevronRight size={14} className="text-zinc-600"/></Link>
+            <Link href="/integrations" onClick={() => setMenu(false)} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/[.08]"><Github size={17}/><span className="flex-1">Add from GitHub</span><ChevronRight size={14} className="text-zinc-600"/></Link>
+            <div className="my-1 border-t border-white/10"/>
+            <button type="button" onClick={() => { setPlusSubmenu(plusSubmenu === "skills" ? null : "skills"); if (!toolOptions.length && !loadingToolOptions) void loadToolOptions(); }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm ${plusSubmenu === "skills" ? "bg-white/[.1] text-white" : "text-zinc-200 hover:bg-white/[.08]"}`}><Wrench size={17}/><span className="flex-1">Skills</span><ChevronRight size={14} className="text-zinc-600"/></button>
+            {plusSubmenu === "skills" && <div className="ml-7 border-l border-white/10 pl-2">{loadingToolOptions ? <p className="px-2 py-2 text-xs text-zinc-500">Loading approved skills...</p> : toolOptionsError ? <p role="alert" className="px-2 py-2 text-xs text-red-300">{toolOptionsError}</p> : <>{customAgentOptions.map((agent) => <button key={agent.id} type="button" onClick={() => { setSelectedAgent(agent); setSelectedTool(null); setMenu(false); setPlusSubmenu(null); }} className="block w-full rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5">{agent.name}</button>)}{toolOptions.map((tool) => <button key={tool.name} type="button" onClick={() => { setSelectedTool(tool); setSelectedAgent(null); setMenu(false); setPlusSubmenu(null); }} className="block w-full rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5">{tool.name}</button>)}<Link href="/developers/agents" onClick={() => setMenu(false)} className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs text-[var(--gold)] hover:bg-white/5"><Settings2 size={13}/> Manage skills</Link></>}</div>}
+            <Link href="/integrations" onClick={() => setMenu(false)} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/[.08]"><Plug size={17}/><span className="flex-1">Connectors</span><ChevronRight size={14} className="text-zinc-600"/></Link>
+            <button type="button" onClick={() => { if (["business", "unlimited"].includes((plan || "").toLowerCase())) { setInput("Create a complete design system for this project"); setMenu(false); } else setPlusSubmenu(plusSubmenu === "design" ? null : "design"); }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm ${plusSubmenu === "design" ? "bg-white/[.1] text-white" : "text-zinc-200 hover:bg-white/[.08]"}`}><Palette size={17}/><span className="flex-1">Design system</span><ChevronRight size={14} className="text-zinc-600"/></button>
+            {plusSubmenu === "design" && <div className="ml-7 border-l border-white/10 pl-2"><p className="px-2 py-2 text-[11px] leading-4 text-zinc-500">Design systems are available on the Business plan.</p><Link href="/pricing" onClick={() => setMenu(false)} className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs text-[var(--gold)] hover:bg-white/5"><CreditCard size={13}/> Upgrade plan</Link></div>}
+            <Link href="/plugins" onClick={() => setMenu(false)} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/[.08]"><Puzzle size={17}/><span className="flex-1">Plugins</span><ChevronRight size={14} className="text-zinc-600"/></Link>
+            <button type="button" onClick={() => { setMenu(false); void research(); }} disabled={!input.trim()} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-zinc-200 hover:bg-white/[.08] disabled:opacity-40"><Search size={17}/><span className="flex-1">Web search</span>{input.trim() && <span className="text-[10px] text-emerald-300">Ready</span>}</button>
+          </div>
+          <div className="hidden grid grid-cols-2 gap-1">
             {/* Tool callbacks read DOM refs only when invoked by the user's click. */}
             {tools.map(([Icon, label, action]) => (
               <button
@@ -875,7 +931,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
               </button>
             ))}
           </div>
-          <div className="mt-2 border-t border-white/10 pt-2">
+          <div className="hidden mt-2 border-t border-white/10 pt-2">
             {loadingToolOptions ? <p role="status" className="px-3 py-2 text-xs text-zinc-400">Loading your approved tools…</p>
               : toolOptionsError ? <p role="alert" className="px-3 py-2 text-xs text-red-300">{toolOptionsError}</p>
                 : <div className="max-h-56 space-y-2 overflow-y-auto">
@@ -1005,6 +1061,16 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
       <div className="mt-3 flex gap-2"><button type="button" disabled={loading || (videoCreditsPerSecond !== null && videoCreditsPerSecond > 0 && videoCreditsAvailable !== null && videoCreditsAvailable < videoCreditsPerSecond * videoDuration)} onClick={generateVideo} className="rounded-xl bg-[var(--gold)] px-3 py-2 font-semibold text-black disabled:opacity-40">Confirm and generate</button><button type="button" disabled={loading} onClick={() => setVideoConfirmPrompt("")} className="rounded-xl border border-white/10 px-3 py-2 text-white disabled:opacity-40">Cancel</button></div>
     </div>
   ) : null;
+  async function openMicrophoneMenu() {
+    setMicrophoneMenuOpen((open) => !open);
+    if (microphoneMenuOpen) return;
+    try {
+      const devices = await navigator.mediaDevices?.enumerateDevices();
+      setAudioDevices((devices || []).filter((device) => device.kind === "audioinput"));
+    } catch {
+      setAudioDevices([]);
+    }
+  }
   async function research() {
     const q = input.trim();
     if (!q) return;
@@ -1028,14 +1094,14 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     }
   }
   const messagesView = (
-    <div className="space-y-3">
+    <div className="mx-auto w-full max-w-[760px] space-y-5">
       {messages.map((m, i) => (
         <div
           key={i}
           className={
             m.role === "user"
-              ? "ml-auto max-w-[88%] rounded-3xl bg-[var(--gold)] p-3 text-black"
-              : "max-w-[92%] rounded-3xl border border-white/10 bg-black/40 p-3"
+              ? "ml-auto max-w-[88%] rounded-3xl bg-[var(--gold)] px-4 py-3 text-black"
+              : "max-w-[92%] px-1 py-2 text-zinc-200"
           }
         >
           {m.role === "user" && m.selectedToolLabel && <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-black/20 bg-black/10 px-2.5 py-1 text-[11px] font-semibold"><Wrench size={12}/> {m.selectedToolLabel}</p>}
@@ -1101,30 +1167,25 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
     return (
       <>
         <>{inputs}</>
-        <div className="flex h-[calc(100vh-73px)] min-h-[520px] overflow-hidden rounded-3xl border border-white/10 bg-[#09090b]">
-          <aside className={`${sidebarOpen ? "w-60" : "w-[68px]"} hidden shrink-0 flex-col border-r border-white/10 bg-black/35 transition-[width] duration-200 md:flex`}>
-            <div className="flex items-center justify-between gap-2 border-b border-white/10 p-3">
+        <div className="flex h-[calc(100vh-73px)] min-h-[520px] overflow-hidden bg-[#0b0b0b]">
+          <aside className={`${sidebarOpen ? "w-[240px]" : "w-[60px]"} hidden shrink-0 flex-col border-r border-[#252525] bg-[#101010] transition-[width] duration-200 md:flex`}>
+            <div className="flex h-14 items-center justify-between gap-2 border-b border-white/10 px-3">
               {sidebarOpen && <div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--gold)] text-black"><Bot size={17}/></div><div><b className="text-sm">Leo AI</b><p className="text-[10px] text-zinc-500">Your workspace</p></div></div>}
               <button type="button" onClick={() => setSidebarOpen((value) => !value)} className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white" aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}><PanelLeftClose size={16}/></button>
             </div>
-            <div className="space-y-1 p-2">
-              <button type="button" onClick={startNewChat} title="New chat" className="flex w-full items-center gap-3 rounded-xl bg-[var(--gold)] px-3 py-2.5 text-left text-sm font-semibold text-black"><PlusCircle size={17}/>{sidebarOpen && "New chat"}</button>
-              <button type="button" onClick={() => { setMemoryOpen(false); }} title="Chat" className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-zinc-300 hover:bg-white/5"><MessageSquare size={17}/>{sidebarOpen && "Chat"}</button>
-              <button type="button" onClick={() => { setMemoryOpen(true); void loadMemories(); }} title="Memory" className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-white/5 ${memoryOpen ? "bg-white/10 text-white" : "text-zinc-300"}`}><Brain size={17}/>{sidebarOpen && "Memory"}</button>
-              <button type="button" onClick={() => { setMemoryOpen(false); setMenu(true); }} title="Images and tools" className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-zinc-300 hover:bg-white/5"><ImageIcon size={17}/>{sidebarOpen && "Images & tools"}</button>
+            <div className="space-y-0.5 p-2">
+              <button type="button" onClick={startNewChat} title="New chat" className="flex w-full items-center gap-3 rounded-lg bg-[var(--gold)] px-3 py-2 text-left text-sm font-semibold text-black"><PlusCircle size={16}/>{sidebarOpen && "New chat"}</button>
+              <button type="button" onClick={() => { setMemoryOpen(false); }} title="Chat" className="flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-sm text-zinc-300 hover:bg-white/5"><MessageSquare size={16}/>{sidebarOpen && "Chat"}</button>
             </div>
-            {sidebarOpen && <div className="px-3 pb-2 pt-3"><p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-zinc-500"><History size={13}/> Recent chats</p></div>}
+            {sidebarOpen && <div className="px-3 pb-2 pt-3"><p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-zinc-500"><History size={13}/> Chats</p><label className="mt-2 flex items-center gap-2 rounded-lg border border-white/10 bg-white/[.025] px-2 py-1.5 text-zinc-500"><Search size={13}/><input value={chatSearch} onChange={(event) => setChatSearch(event.target.value)} placeholder="Search chats" className="min-w-0 flex-1 bg-transparent text-xs text-zinc-300 outline-none placeholder:text-zinc-600" aria-label="Search chats"/></label></div>}
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-              {chatHistory.length === 0 ? (sidebarOpen && <p className="px-2 py-3 text-xs leading-5 text-zinc-600">Your recent chats will appear here on this device.</p>) : chatHistory.map((chat) => <button key={chat.id} type="button" onClick={() => void openSavedChat(chat)} title={chat.title} className={`mb-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs ${activeChatId === chat.id ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5 hover:text-white"}`}><MessageSquare size={14} className="shrink-0"/>{sidebarOpen && <span className="truncate">{chat.title}</span>}</button>)}
+              {chatHistory.filter((chat) => !chatSearch.trim() || chat.title.toLowerCase().includes(chatSearch.trim().toLowerCase())).length === 0 ? (sidebarOpen && <p className="px-2 py-3 text-xs leading-5 text-zinc-600">{chatSearch ? "No matching chats." : "Your recent chats will appear here on this device."}</p>) : chatHistory.filter((chat) => !chatSearch.trim() || chat.title.toLowerCase().includes(chatSearch.trim().toLowerCase())).map((chat) => <button key={chat.id} type="button" onClick={() => void openSavedChat(chat)} title={chat.title} className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs ${activeChatId === chat.id ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5 hover:text-white"}`}><MessageSquare size={14} className="shrink-0"/>{sidebarOpen && <span className="truncate">{chat.title}</span>}</button>)}
             </div>
             <div className="space-y-1 border-t border-white/10 p-2">
-              <Link href="/projects" title="Projects and library" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><Library size={17}/>{sidebarOpen && "Library & projects"}</Link>
-              <Link href="/templates" title="Explore" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><Compass size={17}/>{sidebarOpen && "Explore"}</Link>
-              <Link href="/account" title="Account" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><UserCircle size={17}/>{sidebarOpen && "Account"}</Link>
-              <Link href="/pricing" title="Upgrade plan" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><CreditCard size={17}/>{sidebarOpen && "Upgrade plan"}</Link>
-              <Link href="/developers/agents" title="Developer Agent Studio" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>{sidebarOpen && "Agent & Tool Studio"}</Link>
-              <button type="button" onClick={() => { setRemoteOpen(true); setMemoryOpen(false); setRemoteStatus(""); }} title="Pair and connect devices" className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>{sidebarOpen && "Remote devices"}</button>
-              {sidebarOpen && <p className="px-3 pb-1 pt-2 text-[10px] leading-4 text-zinc-600">Pair your devices securely and exchange workspace messages.</p>}
+              <Link href="/app/projects" title="Projects" className="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/5"><Library size={16}/>{sidebarOpen && "Projects"}</Link>
+              <Link href="/app/artifacts" title="Artifacts" className="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/5"><Compass size={16}/>{sidebarOpen && "Artifacts"}</Link>
+              <Link href="/app/customize" title="Customize workspace" className="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/5"><Settings2 size={16}/>{sidebarOpen && "Customize"}</Link>
+              <div className="relative"><button type="button" onClick={() => setAccountMenuOpen((open) => !open)} title="Account menu" aria-expanded={accountMenuOpen} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-zinc-300 hover:bg-white/5"><UserCircle size={17}/>{sidebarOpen && <span className="min-w-0 flex-1 truncate">{welcomeName} <span className="text-[10px] text-zinc-600">· {plan || "Free"}</span></span>}</button>{accountMenuOpen && sidebarOpen && <div className="absolute bottom-full left-0 z-50 mb-2 w-56 rounded-xl border border-white/15 bg-[#191919] p-1.5 shadow-2xl"><p className="truncate px-2.5 py-1.5 text-[10px] text-zinc-600">{welcomeName} · {plan || "Free"}</p><Link href="/settings" className="block rounded-lg px-2.5 py-2 text-xs text-zinc-300 hover:bg-white/5">Settings</Link><Link href="/pricing" className="block rounded-lg px-2.5 py-2 text-xs text-zinc-300 hover:bg-white/5">Upgrade plan</Link><Link href="/plugins" className="block rounded-lg px-2.5 py-2 text-xs text-zinc-300 hover:bg-white/5">Apps and extensions</Link><Link href="/developers" className="block rounded-lg px-2.5 py-2 text-xs text-zinc-300 hover:bg-white/5">Learn more</Link><Link href="/api-keys" className="block rounded-lg px-2.5 py-2 text-xs text-zinc-300 hover:bg-white/5">Get API keys</Link><Link href="/support" className="block rounded-lg px-2.5 py-2 text-xs text-zinc-300 hover:bg-white/5">Get help</Link><div className="my-1 border-t border-white/10"/><button type="button" onClick={async () => { const client = getBrowserSupabase(); if (client) await client.auth.signOut(); window.location.href = "/auth"; }} className="block w-full rounded-lg px-2.5 py-2 text-left text-xs text-red-300 hover:bg-red-500/10">Log out</button></div>}</div>
             </div>
           </aside>
           {mobileSidebarOpen && (
@@ -1146,8 +1207,9 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
                   {chatHistory.length === 0 ? <p className="px-2 py-3 text-xs leading-5 text-zinc-600">Your recent chats will appear here on this device.</p> : chatHistory.map((chat) => <button key={chat.id} type="button" onClick={() => { void openSavedChat(chat); setMobileSidebarOpen(false); }} className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-xs ${activeChatId === chat.id ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5"}`}><MessageSquare size={14} className="shrink-0"/><span className="truncate">{chat.title}</span></button>)}
                 </div>
                 <div className="space-y-1 border-t border-white/10 p-3">
-                  <Link href="/projects" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Library size={17}/>Library & projects</Link>
-                  <Link href="/templates" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Compass size={17}/>Explore</Link>
+                  <Link href="/app/projects" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Library size={17}/>Projects</Link>
+                  <Link href="/app/artifacts" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Compass size={17}/>Artifacts</Link>
+                  <Link href="/app/customize" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Settings2 size={17}/>Customize</Link>
                   <Link href="/account" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><UserCircle size={17}/>Account</Link>
                   <Link href="/pricing" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><CreditCard size={17}/>Upgrade plan</Link>
                   <Link href="/developers/agents" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Laptop size={17}/>Agent & Tool Studio</Link>
@@ -1156,7 +1218,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
               </aside>
             </div>
           )}
-          <div className="relative mx-auto flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-white/[.025] backdrop-blur-xl">
+          <div className="relative mx-auto flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[#0b0b0b]">
             {remoteOpen && <div className="absolute inset-0 z-40 overflow-y-auto bg-[#080809]/95 p-4 backdrop-blur-xl md:p-7"><section className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-[#111113] p-5 shadow-2xl md:p-7"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-[var(--gold)]"><Laptop size={20}/><span className="text-xs font-bold uppercase tracking-[.18em]">Leo Remote</span></div><h2 className="mt-3 text-2xl font-black">Connect your devices</h2><p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">Sign in to the same Leo account on both devices. Create a one-time code on one device, then enter it on the other. Codes expire in five minutes.</p></div><button type="button" onClick={() => setRemoteOpen(false)} aria-label="Close remote devices" className="rounded-xl border border-white/10 p-2 text-zinc-400 hover:text-white"><X size={18}/></button></div>
               <div className="mt-6 grid gap-4 md:grid-cols-2"><div className="rounded-2xl border border-white/10 bg-black/20 p-4"><h3 className="font-bold">Pair this device</h3><p className="mt-1 text-xs leading-5 text-zinc-500">Generate a short-lived code to enter on your other signed-in device.</p><button type="button" disabled={remoteBusy} onClick={() => void createRemotePairing()} className="mt-4 w-full rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">{remoteBusy ? "Please wait…" : "Generate pairing code"}</button>{remoteCode && <div className="mt-4 rounded-xl border border-[var(--gold)]/30 bg-[var(--gold)]/5 p-4 text-center"><p className="text-[10px] uppercase tracking-widest text-zinc-400">One-time pairing code</p><p className="my-2 font-mono text-2xl font-black tracking-[.22em] text-[var(--gold)]">{remoteCode}</p><button type="button" onClick={() => { void navigator.clipboard?.writeText(remoteCode); setRemoteStatus("Pairing code copied."); }} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-200">Copy code</button></div>}</div>
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4"><h3 className="font-bold">Join a device</h3><p className="mt-1 text-xs leading-5 text-zinc-500">Enter the code displayed on the other device. Both devices must belong to the same account.</p><form onSubmit={(event) => void claimRemotePairing(event)} className="mt-4 space-y-3"><input value={remoteClaimCode} onChange={(event) => setRemoteClaimCode(event.target.value.toUpperCase().replace(/[^A-F0-9]/g, "").slice(0, 10))} inputMode="text" autoComplete="one-time-code" maxLength={10} placeholder="10-character code" className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 font-mono text-sm uppercase tracking-widest outline-none focus:border-[var(--gold)]"/><button type="submit" disabled={remoteBusy || remoteClaimCode.length !== 10} className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-white disabled:opacity-40">Pair this device</button></form></div></div>
@@ -1172,22 +1234,7 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
                   <Bot size={20} />
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <b>LEO AI</b>
-                    {plan && (
-                      <span className="rounded-full border border-[var(--gold)]/30 px-2 py-0.5 text-[10px] uppercase text-[var(--gold)]">
-                        {plan}
-                      </span>
-                    )}
-                    {platformCredits !== null && <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-zinc-400" aria-live="polite">{platformCredits} credits</span>}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-zinc-500">
-                    <span>Chat workspace</span>
-                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${networkOnline ? "border-emerald-500/20 text-emerald-300" : "border-amber-500/30 text-amber-200"}`} aria-live="polite">
-                      <span className={`h-1.5 w-1.5 rounded-full ${networkOnline ? "bg-emerald-400" : "bg-amber-300"}`} />
-                      {networkOnline ? "Network online" : "Offline"}
-                    </span>
-                  </div>
+                  <b className="text-sm">{messages.length ? (chatHistory.find((chat) => chat.id === activeChatId)?.title || "Leo chat") : "Leo AI"}</b>
                 </div>
               </div>
               <button
@@ -1206,11 +1253,11 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-8">
               {memoryOpen ? <div className="mx-auto max-w-2xl"><div className="mb-6 flex items-start gap-3"><div className="rounded-2xl bg-[var(--gold)]/10 p-3 text-[var(--gold)]"><Brain size={22}/></div><div><h1 className="text-2xl font-bold">Leo memory</h1><p className="mt-1 text-sm text-zinc-400">Saved notes help Leo retain useful context. Manage what is remembered.</p></div></div><form onSubmit={(event) => { event.preventDefault(); void addMemory(); }} className="mb-6 flex gap-2"><input value={memoryDraft} onChange={(event) => setMemoryDraft(event.target.value)} placeholder="Remember that I prefer…" maxLength={1000} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none focus:border-[var(--gold)]"/><button disabled={memoryBusy || !memoryDraft.trim()} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">Save</button></form>{memoryBusy ? <p className="text-sm text-zinc-500">Loading memories…</p> : memories.length ? <div className="space-y-2">{memories.map((memory) => <article key={memory.id} className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4"><div><p className="whitespace-pre-wrap text-sm text-zinc-200">{memory.memory}</p><p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-600">{memory.source || "saved"}</p></div><button type="button" onClick={() => void deleteMemory(memory.id)} className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-300" aria-label="Delete memory"><Trash size={15}/></button></article>)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center"><Bookmark className="mx-auto mb-3 text-zinc-500"/><p className="text-sm text-zinc-300">No saved memories yet</p><p className="mt-1 text-xs text-zinc-500">Add preferences, project context or instructions you want to keep.</p></div>}</div> : messages.length === 0 ? (
-                <div className="mx-auto max-w-2xl py-10 text-center">
-                  <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full border border-[var(--gold)]/30 bg-[var(--gold)]/10">
-                    <div className="h-14 w-14 animate-pulse rounded-full bg-[var(--gold)]/70 blur-[2px]" />
+                <div className="mx-auto flex min-h-[52vh] max-w-2xl flex-col justify-center py-10 text-center">
+                  <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--gold)]/40 text-[var(--gold)]">
+                    <Bot size={22} />
                   </div>
-                  <h1 className="text-3xl font-black md:text-5xl">
+                  <h1 className="text-2xl font-semibold tracking-tight text-zinc-100 md:text-4xl">
                     Welcome, {welcomeName} 👋
                   </h1>
                   <p className="mt-3 text-zinc-400">
@@ -1233,11 +1280,12 @@ export function LEOWidget({ full = false }: { full?: boolean }) {
                 messagesView
               )}
             </div>
-            {!memoryOpen && <div className="border-t border-white/10 p-3 md:p-4">
+            {!memoryOpen && <div className="border-t border-[#252525] bg-[#0b0b0b] p-3 md:p-4"><div className="mx-auto max-w-3xl">
               {videoConfirmationPanel}
               {videoStatus && <div className="mb-2 text-xs text-zinc-400" role="status" aria-live="polite"><p>{videoStatus}</p>{activeVideoJobId && !loading && <button type="button" onClick={refreshVideoStatus} className="mt-2 rounded-lg border border-white/10 px-3 py-2 text-white">Check status</button>}</div>}
               {composer}
-            </div>}
+              {messages.length === 0 && <div className="mx-auto mt-2 flex max-w-3xl flex-wrap gap-1.5 px-1" aria-label="Quick starts">{[{label: "Write", prompt: "Help me write"}, {label: "Learn", prompt: "Teach me"}, {label: "Code", prompt: "Help me code"}, {label: "Brainstorm", prompt: "Let's brainstorm"}, {label: "Create", prompt: "Let's create"}].map((chip) => <button key={chip.label} type="button" onClick={() => send(chip.prompt)} className="rounded-full border border-white/10 px-3 py-1.5 text-[11px] text-zinc-500 hover:border-white/25 hover:text-zinc-200">{chip.label}</button>)}</div>}
+            </div></div>}
             {voiceOpen && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xl">
                 <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#101011] p-6 text-center shadow-2xl">

@@ -7,6 +7,12 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await getProfile(req);
     if (!auth) return NextResponse.json({ error: 'Please sign in to use live voice chat.' }, { status: 401 });
+    if (process.env.OPENAI_REALTIME_ENABLED !== 'true') {
+      if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
+        return NextResponse.json({ mode: 'gemini_turn_based', voice: 'Kore', message: 'Gemini voice chat is available in turn-based mode.' });
+      }
+      return NextResponse.json({ error: 'Live voice is not configured. Enable Gemini voice or an explicitly configured realtime provider.' }, { status: 503 });
+    }
     const body = await req.json().catch(() => ({}));
     const voice = typeof body.voice === 'string' && validVoices.includes(body.voice as typeof validVoices[number]) ? body.voice as typeof validVoices[number] : 'marin';
     const model = process.env.LEO_REALTIME_MODEL || 'gpt-realtime';

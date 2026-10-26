@@ -3,22 +3,22 @@ import { test } from 'node:test';
 import { ModelProviderError } from '../lib/ai/model-catalog.ts';
 import { generateWithExplicitFallback, getSafeFallbackModel, isRetryableProviderFailure } from '../lib/ai/provider-fallback.ts';
 
-test('uses only an explicitly selected configured fallback after a transient failure', async () => {
+test('uses a configured Gemini fallback after a transient failure', async () => {
   const calls = [];
-  const result = await generateWithExplicitFallback('openai/gpt-4o-mini', 'anthropic/claude-3-5-haiku-latest', async model => {
+  const result = await generateWithExplicitFallback('openai/gpt-4o-mini', 'google/gemini-2.5-flash', async model => {
     calls.push(model);
     if (calls.length === 1) throw new ModelProviderError('rate limited', 429);
     return { text: 'fallback response' };
   }, () => true);
-  assert.deepEqual(calls, ['openai/gpt-4o-mini', 'anthropic/claude-3-5-haiku-latest']);
-  assert.equal(result.model, 'anthropic/claude-3-5-haiku-latest');
+  assert.deepEqual(calls, ['openai/gpt-4o-mini', 'google/gemini-2.5-flash']);
+  assert.equal(result.model, 'google/gemini-2.5-flash');
   assert.equal(result.fallback_used, true);
   assert.equal(result.result.text, 'fallback response');
 });
 
-test('falls back for provider authentication failures but not malformed requests', async () => {
+test('falls back to Gemini for provider authentication failures but not malformed requests', async () => {
   let calls = 0;
-  const result = await generateWithExplicitFallback('openai/gpt-4o-mini', 'anthropic/claude-3-5-haiku-latest', async model => {
+  const result = await generateWithExplicitFallback('openai/gpt-4o-mini', 'google/gemini-2.5-flash', async model => {
     calls++;
     if (model.startsWith('openai/')) throw new ModelProviderError('invalid API key', 401);
     return { text: 'fallback response' };
@@ -30,10 +30,10 @@ test('falls back for provider authentication failures but not malformed requests
 
 test('does not retry when fallback is unavailable and retries network failures only once', async () => {
   let calls = 0;
-  await assert.rejects(generateWithExplicitFallback('openai/gpt-4o-mini', 'anthropic/claude-3-5-haiku-latest', async () => {
+  await assert.rejects(generateWithExplicitFallback('openai/gpt-4o-mini', 'google/gemini-2.5-flash', async () => {
     calls++;
     throw new ModelProviderError('provider unavailable', 503);
-  }, () => false), /fallback provider \(anthropic\) is unavailable/);
+  }, () => false), /fallback provider \(google\) is unavailable/);
   assert.equal(calls, 0);
   const networkError = new TypeError('fetch failed', { cause: { code: 'ECONNRESET' } });
   assert.equal(isRetryableProviderFailure(networkError), true);
@@ -53,16 +53,16 @@ test('routes directly to configured Gemini when the primary provider is not conf
     async model => { calls.push(model); return { text: 'Gemini answered' }; },
     provider => provider === 'google',
   );
-  assert.deepEqual(calls, ['google/gemini-3.8-flash']);
-  assert.equal(result.model, 'google/gemini-3.8-flash');
+  assert.deepEqual(calls, ['google/gemini-2.5-flash']);
+  assert.equal(result.model, 'google/gemini-2.5-flash');
   assert.equal(result.fallback_used, true);
   assert.equal(result.result.text, 'Gemini answered');
 });
 
-test('uses OpenAI as a final fallback when Gemini itself is selected and OpenAI is configured', async () => {
+test('uses a different Gemini model when Gemini itself is selected', async () => {
   const calls = [];
   const fallbackModel = getSafeFallbackModel(
-    'google/gemini-3.8-flash',
+    'google/gemini-2.5-flash',
     undefined,
     false,
     provider => provider === 'google' || provider === 'openai',
@@ -72,14 +72,23 @@ test('uses OpenAI as a final fallback when Gemini itself is selected and OpenAI 
     fallbackModel,
     async model => {
       calls.push(model);
-      if (model.startsWith('google/')) throw new ModelProviderError('Gemini unavailable', 503);
-      return { text: 'OpenAI backup answered' };
+      if (calls.length === 1) throw new ModelProviderError('Gemini unavailable', 503);
+      return { text: 'Gemini backup answered' };
     },
     provider => provider === 'google' || provider === 'openai',
   );
-  assert.deepEqual(calls, ['google/gemini-2.5-flash', 'openai/gpt-4o-mini']);
-  assert.equal(result.model, 'openai/gpt-4o-mini');
+  assert.deepEqual(calls, ['google/gemini-2.5-flash', 'google/gemini-3.8-flash']);
+  assert.equal(result.model, 'google/gemini-3.8-flash');
   assert.equal(result.fallback_used, true);
+});
+
+test('rejects non-Gemini fallback models even when they are configured', async () => {
+  await assert.rejects(generateWithExplicitFallback(
+    'google/gemini-3.8-flash',
+    'openai/gpt-4o-mini',
+    async () => { throw new ModelProviderError('Gemini unavailable', 503); },
+    () => true,
+  ), /Gemini unavailable/);
 });
 
 test('falls back to Gemini after primary provider authentication failure and does not expose error details in fallback logs', async () => {
@@ -99,7 +108,7 @@ test('falls back to Gemini after primary provider authentication failure and doe
       () => true,
     );
     assert.equal(result.fallback_used, true);
-    assert.deepEqual(calls, ['openai/gpt-4o-mini', 'google/gemini-3.8-flash']);
+    assert.deepEqual(calls, ['openai/gpt-4o-mini', 'google/gemini-2.5-flash']);
     assert.ok(logs.some(line => line.includes('leo.ai.fallback.start')));
     assert.ok(logs.some(line => line.includes('leo.ai.fallback.success')));
     assert.ok(logs.every(line => !line.includes('do-not-log-this')));

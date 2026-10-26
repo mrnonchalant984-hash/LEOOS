@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     const status = typeof error === 'object' && error && 'statusCode' in error ? Number((error as { statusCode: number }).statusCode) : 0;
     const message = error instanceof Error ? error.message : '';
     const isCredit = /credit|plan|subscription|entitled/i.test(message);
-    return NextResponse.json({ error: isCredit ? message : status === 409 ? message : 'Visual generation is temporarily unavailable. Any reserved credits were returned when possible.' }, { status: status === 409 ? 409 : isCredit ? 402 : /migration|accounting/i.test(message) ? 503 : 502 });
+    const isConfiguration = /configured model|image-capable|not configured|migration|accounting/i.test(message);
+    return NextResponse.json({ error: isCredit || status === 409 || isConfiguration ? message : 'Visual generation is temporarily unavailable. Any reserved credits were returned when possible.' }, { status: status === 409 ? 409 : isCredit ? 402 : isConfiguration ? 503 : 502 });
   }
 }

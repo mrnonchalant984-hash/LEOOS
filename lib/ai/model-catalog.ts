@@ -12,16 +12,12 @@ export class ModelProviderError extends Error {
 }
 
 const MODEL_PRESETS: Record<string, { provider: ModelProvider; model: string; capabilities: string[] }> = {
-  'openai/gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini', capabilities: ['text', 'tools'] },
-  'openai/gpt-5.6-luna': { provider: 'openai', model: 'gpt-5.6-luna', capabilities: ['text', 'reasoning'] },
-  'anthropic/claude-3-5-haiku-latest': { provider: 'anthropic', model: 'claude-3-5-haiku-latest', capabilities: ['text', 'tools'] },
   'google/gemini-3.8-flash': { provider: 'google', model: 'gemini-3.8-flash', capabilities: ['text', 'tools', 'multimodal'] },
 };
 
 const GEMINI_MODEL_ALIASES: Record<string, string> = {
   'gemini-1.5-flash': 'gemini-3.8-flash',
   'gemini-2.0-flash': 'gemini-3.8-flash',
-  'gemini-2.5-flash': 'gemini-3.8-flash',
 };
 
 export function normalizeGeminiModelId(modelName: string) {
@@ -66,48 +62,38 @@ export function resolveModel(modelName: string): { provider: ModelProvider; mode
   if (separator > 0) {
     const provider = normalized.slice(0, separator) as ModelProvider;
     const model = normalized.slice(separator + 1);
-    if (provider === 'local' && configuredProvider('local') && model === (process.env.LEO_LOCAL_MODEL_NAME?.trim() || 'local-model')) return { provider, model };
-    if (['openai', 'anthropic', 'google'].includes(provider) && MODEL_ID_RE.test(model)) {
+    if (provider === 'google' && MODEL_ID_RE.test(model)) {
       return { provider, model: provider === 'google' ? normalizeGeminiModelId(model) : model };
     }
   } else if (MODEL_ID_RE.test(normalized)) {
     // Google AI Studio model IDs are normally unqualified (e.g. gemini-3.8-flash).
     // Resolve them as Google models instead of silently reverting to OpenAI.
     if (normalized.startsWith('gemini-')) return { provider: 'google', model: normalizeGeminiModelId(normalized) };
-    const customModel = [process.env.LEO_AGENT_MODEL, process.env.LEO_MEETING_MODEL, process.env.LEO_REASONING_MODEL]
-      .find(value => value?.trim() === normalized);
-    if (customModel) return { provider: 'openai', model: normalized };
   }
   throw new ModelProviderError('Choose a supported model from the configured model registry.', 400);
 }
 
 export function getDefaultTextModel(mode: 'chat' | 'reasoning' = 'chat') {
-  if (process.env.LEO_LOCAL_MODEL_URL?.trim()) {
-    return `local/${process.env.LEO_LOCAL_MODEL_NAME?.trim() || 'local-model'}`;
-  }
   const configured = mode === 'reasoning'
-    ? process.env.LEO_REASONING_MODEL?.trim()
-    : process.env.LEO_CHAT_MODEL?.trim() || process.env.LEO_MEETING_MODEL?.trim() || process.env.LEO_AGENT_MODEL?.trim();
-  // If Gemini is the only configured hosted provider, select it directly instead
-  // of deliberately calling an unconfigured OpenAI endpoint and hoping a retry fires.
-  const hasOpenAI = configuredProvider('openai');
-  const hasGemini = configuredProvider('google');
-  const configuredGeminiModel = process.env.LEO_CHAT_MODEL?.trim().replace(/^google\//, '');
-  const safeDefault = !hasOpenAI && hasGemini
-    ? `google/${configuredGeminiModel?.startsWith('gemini-') ? configuredGeminiModel : 'gemini-3.8-flash'}`
-    : mode === 'reasoning' ? 'openai/gpt-5.6-luna' : 'openai/gpt-4o-mini';
-  if (!configured) return safeDefault;
-  const candidate = configured.includes('/')
-    ? configured
-    : (MODEL_PRESETS[`openai/${configured}`] ? `openai/${configured}` : configured);
-  try {
-    const resolved = resolveModel(candidate);
-    return `${resolved.provider}/${resolved.model}`;
-  } catch {
-    // A stale/unsupported deployment env value should not make the entire chat unusable.
-    // Fall back to the documented default and leave provider failures to the provider layer.
-    return safeDefault;
+    ? process.env.LEO_REASONING_MODEL?.trim() || process.env.LEO_CHAT_MODEL?.trim()
+    : process.env.LEO_CHAT_MODEL?.trim();
+  if (configured) {
+    try {
+      const configuredId = configured.includes('/') ? configured : `google/${configured}`;
+      const resolved = resolveModel(configuredId);
+      if (configuredProvider(resolved.provider)) return `${resolved.provider}/${resolved.model}`;
+    } catch { /* stale configuration falls through to the first configured model */ }
   }
+
+  // Gemini remains preferred when it is actually configured. Otherwise choose
+  // the first configured catalog entry; never manufacture an unavailable model.
+  const preferred = ['google/gemini-3.8-flash'];
+  const available = preferred.find(id => {
+    const preset = MODEL_PRESETS[id];
+    return preset && configuredProvider(preset.provider);
+  });
+  if (available) return available;
+  throw new ModelProviderError('Gemini is not configured. Set GEMINI_API_KEY or GOOGLE_API_KEY before using Leo chat.', 503);
 }
 
 export function isProviderConfigured(provider: ModelProvider) {

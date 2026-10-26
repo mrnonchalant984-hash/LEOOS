@@ -2,10 +2,21 @@ import { GoogleGenAI } from '@google/genai';
 
 type ImageInput = { bytes: Buffer; mimeType: string };
 
-export async function generateGeminiImage(prompt: string, inputImage?: ImageInput) {
+export function isGeminiImageModel(model: string) {
+  const id = model.replace(/^google\//, '').trim().toLowerCase();
+  return /^imagen(?:-|$)/.test(id) || /^gemini-[^/]*image(?:-|$)/.test(id);
+}
+
+export function resolveGeminiImageModel(requested?: string) {
+  const model = (requested?.trim() || process.env.LEO_GEMINI_IMAGE_MODEL?.trim() || 'gemini-2.5-flash-image-preview').replace(/^google\//, '');
+  if (!isGeminiImageModel(model)) throw new Error(`Configured model "${model}" is text-capable and cannot generate or edit images. Set LEO_GEMINI_IMAGE_MODEL to a Gemini image or Imagen model.`);
+  return model;
+}
+
+export async function generateGeminiImage(prompt: string, inputImage?: ImageInput, requestedModel?: string) {
   const apiKey = process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim();
   if (!apiKey) throw new Error('Gemini is not configured.');
-  const model = process.env.LEO_GEMINI_IMAGE_MODEL?.trim() || 'gemini-nano-banana-2.1';
+  const model = resolveGeminiImageModel(requestedModel);
   const input = inputImage
     ? [
       { type: 'text' as const, text: prompt },

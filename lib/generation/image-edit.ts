@@ -1,10 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { toFile } from 'openai/uploads';
 import { adminSupabase } from '@/lib/auth';
 import { accountAccess, consumeCredit } from '@/lib/access';
-import { getOpenAI } from '@/lib/openai';
 import { inspectImageUpload } from '@/lib/generation/image-input';
-import { generateGeminiImage } from '@/lib/generation/gemini-image';
+import { generateGeminiImage, resolveGeminiImageModel } from '@/lib/generation/gemini-image';
 
 const BUCKET = 'leo-files';
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -46,22 +44,27 @@ export async function editAndPersistImage(options: EditOptions) {
   if (options.bytes.length > MAX_IMAGE_BYTES) throw new ImageEditError('Choose an image no larger than 4 MB.', 413);
   const format = inspectImageUpload(options.bytes, options.mimeType);
   if (!format) throw new ImageEditError('Upload a valid PNG, JPEG, or WebP image.', 400);
-  const hasOpenAI = Boolean(process.env.OPENAI_API_KEY?.trim() || process.env.LEO_API_KEY?.trim());
   const hasGemini = Boolean(process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim());
-  if (!hasOpenAI && !hasGemini) throw new ImageEditError('Image editing is not configured. No credits were charged.', 503);
+  if (!hasGemini) throw new ImageEditError('Gemini image editing is not configured. No credits were charged.', 503);
   if (process.env.LEO_OFFLINE_MODE === 'true') throw new ImageEditError('Image editing is unavailable while hosted providers are disabled.', 503);
 
   const db = adminSupabase();
   const access = await accountAccess(options.userId, 'image_generation');
   if (!access.owner && !access.entitled) throw new ImageEditError('Image editing requires an eligible plan or image credits.', 403);
 
+  let imageModel: string;
+  try {
+    imageModel = resolveGeminiImageModel(process.env.LEO_GEMINI_IMAGE_EDIT_MODEL?.trim() || process.env.LEO_GEMINI_IMAGE_MODEL?.trim());
+  } catch (error) {
+    throw new ImageEditError(error instanceof Error ? error.message : 'Configured image model is unavailable.', 503);
+  }
   const requestKey = options.requestKey.trim();
   const { data: job, error: jobError } = await db.from('generation_jobs').insert({
     user_id: options.userId,
     request_key: requestKey,
     job_type: 'image',
-    provider: 'openai',
-    model: process.env.LEO_IMAGE_MODEL || 'gpt-image-2',
+    provider: 'google',
+    model: imageModel,
     status: 'queued',
     prompt: options.prompt,
     metadata: { mode: 'edit', input_filename: options.filename.slice(0, 160) },
@@ -143,30 +146,20 @@ export async function editAndPersistImage(options: EditOptions) {
     if (inputAssetError) throw new Error('The original image metadata could not be saved.');
     inputAssetId = inputAsset.id;
 
-    const inputFile = await toFile(options.bytes, `source.${format.extension}`, { type: format.mimeType });
-    let image: { b64_json?: string | null; output_format?: string | null } | undefined;
-    let provider = 'openai';
+    let image: { b64_json?: string | null; output_format?: string | null };
     let model = job.model;
     try {
-      const generated = await getOpenAI().images.edit({
-        model: job.model,
-        image: inputFile,
-        prompt: options.prompt,
-        size: '1024x1024',
-        quality: 'medium',
-        n: 1,
-        output_format: 'png',
-      });
-      image = generated.data?.[0];
-    } catch (primaryError) {
-      if (!hasGemini) throw primaryError;
-      const generated = await generateGeminiImage(options.prompt, { bytes: options.bytes, mimeType: format.mimeType });
+      const generated = await generateGeminiImage(options.prompt, { bytes: options.bytes, mimeType: format.mimeType }, model);
       image = generated.image;
-      provider = 'google';
+    } catch (primaryError) {
+      const fallbackModel = resolveGeminiImageModel(process.env.LEO_GEMINI_IMAGE_FALLBACK_MODEL?.trim() || 'gemini-2.5-flash-image-preview');
+      if (fallbackModel === model) throw primaryError;
+      const generated = await generateGeminiImage(options.prompt, { bytes: options.bytes, mimeType: format.mimeType }, fallbackModel);
+      image = generated.image;
       model = generated.model;
     }
     if (!image) throw new Error('The image provider returned no result.');
-    const { error: providerUpdateError } = await db.from('generation_jobs').update({ provider, model, updated_at: new Date().toISOString() }).eq('id', job.id).eq('user_id', options.userId);
+    const { error: providerUpdateError } = await db.from('generation_jobs').update({ provider: 'google', model, updated_at: new Date().toISOString() }).eq('id', job.id).eq('user_id', options.userId);
     if (providerUpdateError) throw new Error('Image edit provider could not be recorded.');
     const output = getImageBytes(image);
     outputStoragePath = `studio-edits/${options.userId}/${job.id}.${output.extension}`;
@@ -184,7 +177,7 @@ export async function editAndPersistImage(options: EditOptions) {
       storage_path: outputStoragePath,
       mime_type: output.mimeType,
       size_bytes: output.bytes.length,
-      metadata: { provider, model, role: 'result', source_asset_id: inputAsset.id, mode: 'edit' },
+      metadata: { provider: 'google', model, role: 'result', source_asset_id: inputAsset.id, mode: 'edit' },
     }).select('id').single();
     if (outputAssetError) throw new Error('The edited image metadata could not be saved.');
     outputAssetId = outputAsset.id;
@@ -198,14 +191,14 @@ export async function editAndPersistImage(options: EditOptions) {
         source_asset_id: inputAsset.id,
         asset_id: outputAsset.id,
         storage_path: outputStoragePath,
-        provider,
+        provider: 'google',
         model,
       },
       completed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq('id', job.id).eq('user_id', options.userId);
     if (completeError) throw new Error('The edit completed, but its job record could not be finalized.');
-    return { job_id: job.id, asset_id: outputAsset.id, source_asset_id: inputAsset.id, url, model, provider };
+    return { job_id: job.id, asset_id: outputAsset.id, source_asset_id: inputAsset.id, url, model, provider: 'google' };
   } catch (error) {
     if (outputAssetId) await db.from('media_assets').delete().eq('id', outputAssetId).eq('user_id', options.userId);
     if (outputStoragePath) await db.storage.from(BUCKET).remove([outputStoragePath]);

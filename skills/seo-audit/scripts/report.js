@@ -1,0 +1,16 @@
+const fs = require('node:fs');
+const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+const html = String(input.html || '');
+const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '').trim();
+const description = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)/i)?.[1] || '';
+const headings = [...html.matchAll(/<h([1-6])\b[^>]*>/gi)].map(m => `h${m[1]}`);
+const images = [...html.matchAll(/<img\b([^>]*)>/gi)].map(m => /\balt=["'][^"']*["']/i.test(m[1]));
+const issues = [];
+if (!title) issues.push('High: add a unique title element.');
+if (!description) issues.push('High: add a meta description.');
+if (!headings.includes('h1')) issues.push('High: add one descriptive H1.');
+if (images.some(ok => !ok)) issues.push('Medium: add alt text to every meaningful image.');
+const report = `# SEO audit\n\n- URL: ${input.url || 'supplied HTML'}\n- Retrieved: ${new Date().toISOString()}\n\n## Observed\n\n- Title: ${title || '(missing)'}\n- Description: ${description || '(missing)'}\n- Headings: ${headings.join(', ') || '(none)'}\n- Images missing alt: ${images.filter(ok => !ok).length}\n\n## Prioritized fixes\n\n${issues.length ? issues.map(item => `- ${item}`).join('\n') : '- No obvious metadata issues were found.'}\n`;
+fs.mkdirSync('outputs', { recursive: true });
+fs.writeFileSync('outputs/seo-audit.md', report);
+process.stdout.write(JSON.stringify({ file: 'seo-audit.md' }));

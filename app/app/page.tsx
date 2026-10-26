@@ -1,1 +1,7 @@
-import {LEOWidget} from '@/components/LEOWidget';export const metadata={title:'LEO AI — General AI Assistant'};export default function AppPage(){return <main className='min-h-[calc(100vh-73px)] px-3 py-3'><LEOWidget full/></main>}
+import { AppWorkspaceEntry } from '@/components/AppWorkspaceEntry';
+
+export const metadata = { title: 'LEO AI — General AI Assistant' };
+
+export default function AppPage() {
+  return <main className="min-h-screen overflow-hidden bg-[#0b0b0b]"><AppWorkspaceEntry /></main>;
+}
