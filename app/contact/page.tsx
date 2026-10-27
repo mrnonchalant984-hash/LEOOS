@@ -39,42 +39,11 @@ export default function ContactPage() {
         throw new Error(result.error || 'Your message could not be submitted. Please try again.');
       }
 
-      let emailSent = false;
-      let notificationError = 'Web3Forms is not configured for this deployment.';
-      const accessKey = process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY;
-      if (accessKey) {
-        try {
-          const emailResponse = await fetch('https://api.web3forms.com/submit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({
-              access_key: accessKey,
-              name: submission.name,
-              email: submission.email,
-              replyto: submission.email,
-              subject: `New LeonardX contact: ${submission.service}`,
-              from_name: 'LeonardX Contact Form',
-              message: `Service requested: ${submission.service}\n\n${submission.message}`,
-            }),
-            signal: AbortSignal.timeout(8_000),
-          });
-          const emailResult = await emailResponse.json().catch(() => ({}));
-          emailSent = emailResponse.ok && emailResult.success === true;
-          if (!emailSent) {
-            notificationError = emailResponse.status === 429
-              ? 'Web3Forms rate-limited the email. Wait one hour before trying again; your message is already saved.'
-              : emailResult.message || `Web3Forms could not send the email (HTTP ${emailResponse.status}).`;
-          }
-        } catch {
-          notificationError = 'Web3Forms could not be reached. Your message is already saved.';
-        }
-      }
-
       setStatus({
         type: 'success',
-        message: emailSent
-          ? 'Your message has been received and LeonardX has been notified by email.'
-          : `Your message was saved, but the email was not sent. ${notificationError}`,
+        message: result.emailSent || result.web3FormsSent
+          ? 'Your message has been received and LeonardX has been notified.'
+          : `Your message was saved, but notification delivery failed. ${result.web3FormsError || 'Configure Web3Forms or SMTP/Resend.'}`,
       });
       formElement.reset();
     } catch (error) {

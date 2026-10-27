@@ -16,7 +16,7 @@ The current `.github/workflows/ci.yml` intentionally uses **dummy CI values**. D
 
 ## Current contact and lead delivery behavior
 
-- The contact page submits the message to `/api/contact` and uses `NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY` to deliver it through Web3Forms.
+- The contact page submits the message to `/api/contact`. Web3Forms delivery runs server-side using `WEB3FORMS_ACCESS_KEY` (the legacy `NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY` is accepted for compatibility).
 - Lead capture persists a lead to Supabase. Resend email notification is optional: when `RESEND_API_KEY` is not configured or delivery fails, a successfully stored lead still returns success with `emailSent: false`.
 - Lead and contact notification now support an optional SMTP adapter using verified TLS: port 465 uses implicit TLS and port 587 requires STARTTLS. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, and `CONTACT_EMAIL` (or `OWNER_EMAIL`) on the server. Lead capture prefers SMTP when configured, then falls back to Resend; notification failure does not undo a successfully stored lead. Contact notifications are optional. `RESEND_API_KEY` remains used by other transactional notification paths that explicitly call the Resend API. Never place SMTP values in `NEXT_PUBLIC_` variables.
 - Paystack payments require the server-side `PAYSTACK_SECRET_KEY`; configure the public key only where the client integration actually needs it. Do not put the secret key in a client-side or `NEXT_PUBLIC_` variable.

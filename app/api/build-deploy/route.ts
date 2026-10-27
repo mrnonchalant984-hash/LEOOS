@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProfile, adminSupabase, isPlatformOwner } from '@/lib/auth';
 import { authenticateApiKey } from '@/lib/api-auth';
-import { getConfiguredModel } from '@/lib/openai';
+import { getDefaultTextModel } from '@/lib/ai/model-catalog';
 import { generateText } from '@/lib/ai/provider-registry';
 import { generateWithExplicitFallback, getSafeFallbackModel } from '@/lib/ai/provider-fallback';
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
@@ -303,7 +303,7 @@ export async function POST(req: NextRequest) {
     if (suppliedMcpFiles) {
       json = { files: suppliedMcpFiles };
     } else {
-      const primaryModel = process.env.LEO_BUILD_MODEL?.trim() || getConfiguredModel();
+      const primaryModel = process.env.LEO_BUILD_MODEL?.trim() || getDefaultTextModel('chat');
       const fallbackModel = getSafeFallbackModel(primaryModel, process.env.LEO_FALLBACK_MODEL?.trim());
       const baseSystem = 'Generate a coherent, tailored, production-oriented Next.js App Router website from the user’s requirements. Do not use a generic one-page template when the brief calls for a real multi-page product. Return ONLY JSON: {"files":[{"path":"...","content":"..."}],"missingRequirements":["..."]}. Follow the requested brand, design system, navigation, pages, content hierarchy, responsive behavior and accessibility requirements. Do not invent client facts. Use clearly marked placeholders only where the client has not supplied required assets, and list every missing asset in missingRequirements. The output MUST include package.json, app/layout.tsx, app/page.tsx, app/admin/page.tsx, app/sitemap.ts, app/robots.ts, secure server-side environment handling, a client-friendly admin area relevant to the selected website type, SEO metadata, and real error states. If chatbot is enabled, include app/api/chat/route.ts using only the client-owned AI credential. Never put secrets in NEXT_PUBLIC_* or source files.';
       const generateSite = async (userPrompt: string) => {
