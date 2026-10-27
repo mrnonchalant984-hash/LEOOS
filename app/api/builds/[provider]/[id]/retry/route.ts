@@ -13,8 +13,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
   const limited = await enforceUserRateLimit(ctx.user.id, 'cloud-build-retry', 6, 3600);
   if (limited) return limited;
   const { provider, id } = await params;
-  if (provider !== 'expo' && provider !== 'godot') return NextResponse.json({ error: 'Unsupported build provider.' }, { status: 400 });
-  const providerName = provider === 'expo' ? 'expo-eas' : 'godot-build-service';
+  if (provider !== 'expo') return NextResponse.json({ error: 'Unsupported build provider.' }, { status: 400 });
+  const providerName = 'expo-eas';
   const db = adminSupabase();
   const { data: job, error } = await db.from('cloud_build_jobs')
     .select('id,project_id,provider,provider_job_id,status,profile')
@@ -24,15 +24,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
   if (!['failed', 'cancelled'].includes(job.status)) return NextResponse.json({ error: 'Only failed or cancelled builds can be retried.' }, { status: 409 });
   if (job.provider_job_id) return NextResponse.json({ error: 'This job has a provider job ID. Check provider history before retrying.' }, { status: 409 });
   const profile = String(job.profile);
-  const body = provider === 'expo'
-    ? { project_id: job.project_id, platform: profile.split(':')[0], profile: profile.split(':')[1] || 'preview', idempotency_key: randomUUID() }
-    : { project_id: job.project_id, preset: profile, idempotency_key: randomUUID() };
+  const body = { project_id: job.project_id, platform: profile.split(':')[0], profile: profile.split(':')[1] || 'preview', idempotency_key: randomUUID() };
   const headers = new Headers(req.headers);
   headers.delete('content-length');
   const retryRequest = new NextRequest(new URL(`/api/builds/${provider}`, req.url), { method: 'POST', headers, body: JSON.stringify(body) });
-  const response = provider === 'expo'
-    ? await (await import('@/app/api/builds/expo/route')).POST(retryRequest)
-    : await (await import('@/app/api/builds/godot/route')).POST(retryRequest);
+  const response = await (await import('@/app/api/builds/expo/route')).POST(retryRequest);
   const result = await response.json().catch(() => null);
   return NextResponse.json(result, { status: response.status, headers: { 'Cache-Control': 'no-store' } });
 }

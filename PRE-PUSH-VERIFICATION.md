@@ -19,7 +19,6 @@ Set these in the terminal environment or a local, untracked `.env.local` file (n
 - `LEONARDX_MCP_URL`: staging MCP endpoint, ending in `/mcp`.
 - `LEONARDX_MCP_ACCESS_TOKEN`: short-lived staging MCP OAuth token with only `mcp:read` for the protocol smoke test.
 - `REPOSITORY_RUNNER_URL`: authenticated isolated runner service origin.
-- `GODOT_BUILD_SERVICE_URL`: Godot build service origin.
 - All configuration required by `scripts/production-preflight.mjs`, populated with staging-only values and correctly scoped tokens.
 
 Then run:
@@ -28,7 +27,7 @@ Then run:
 npm run verify:release
 ```
 
-This runs the local verification suite, deployment configuration preflight, Supabase migration dry-run, staging health/readiness checks, MCP discovery/capability invocation, and runner/Godot health probes. It does not deploy, create projects, submit paid build jobs, or apply migrations.
+This runs the local verification suite, deployment configuration preflight, Supabase migration dry-run, staging health/readiness checks, MCP discovery/capability invocation, and isolated repository-runner health probes. It does not deploy, create projects, submit paid build jobs, or apply migrations.
 
 ## 3. Live acceptance tests that require a staging user and provider access
 
@@ -38,7 +37,7 @@ The release gate must not claim these are proven by health checks alone. Execute
 2. **Tenant isolation:** Account B attempts to read, update, build, download, and delete A's project/artifact IDs. Every attempt must be denied without leaking data. Repeat with revoked/expired credentials.
 3. **Durable workers:** Enqueue a non-destructive test job; verify claim, lease/heartbeat, stage persistence, retry cap, stale-lease recovery, and final status. Confirm scheduler logs show successful authenticated invocations and no overlapping claims.
 4. **Android:** Submit an approved disposable Android project to the real configured worker. Confirm provider job ID, successful build exit status, APK magic/type, size and checksum, private storage, and authorized time-limited download. Verify B cannot download it.
-5. **Godot:** Submit an approved disposable Godot project to the real build service. Confirm export preset, provider job ID, exit status, artifact existence/type/checksum, authorized download, and cross-account denial.
+5. **Browser games:** Create a 2D Canvas project and a 3D Three.js project in staging. Verify actual keyboard/touch interaction in a browser, restart behavior, captured runtime errors, persistence after a fresh session, valid ZIP contents, and cross-account export denial. Do not count a starter-source unit test as a browser runtime test.
 6. **Deployment:** Deploy only to staging through the configured provider; verify the returned URL belongs to the expected project, responds successfully, and serves the expected build. Do not infer deployment success from source generation.
 7. **Provider failure:** In staging, use a deliberately invalid/non-billable provider configuration or a mocked adapter. Verify bounded timeout/retry, redacted diagnostics, stable correlation ID, no fake answer, and no automatic repeated expensive call.
 8. **Secrets:** Inspect application, worker, and provider logs and MCP tool results for token/key/password values. Confirm all are redacted.
@@ -62,7 +61,7 @@ Review the dry-run output manually. Do not apply migrations automatically from t
 - Cross-account access tests: PASS / FAIL / BLOCKED
 - Durable scheduler/worker recovery: PASS / FAIL / BLOCKED
 - Android artifact and download: PASS / FAIL / BLOCKED
-- Godot artifact and download: PASS / FAIL / BLOCKED
+- Browser gameplay + ZIP export: PASS / FAIL / BLOCKED
 - Staging deployment verification: PASS / FAIL / BLOCKED
 - Provider failure + secret redaction: PASS / FAIL / BLOCKED
 - Production deployed: NO (unless separately performed and verified)

@@ -22,11 +22,8 @@ async function probe(name, rawUrl, path, expected = 200) {
     const response = await fetch(new URL(path, url.toString().replace(/\/$/, '') + '/'), {
       cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(timeout),
     });
-    const body = await response.json().catch(() => ({}));
     const ok = response.status === expected;
-    const detail = name === 'godot-build-service'
-      ? `HTTP ${response.status}; service_ready=${body?.ok === true}; engine_configured=${body?.engine_configured === true}`
-      : `HTTP ${response.status}`;
+    const detail = `HTTP ${response.status}`;
     add(name, ok, detail);
   } catch (error) {
     add(name, false, error instanceof Error ? error.name : 'request_failed');
@@ -50,9 +47,6 @@ const runnerUrl = process.env.REPOSITORY_RUNNER_URL?.trim();
 if (runnerUrl) await probe('repository-runner', runnerUrl, '/health');
 else add('repository-runner', false, 'REPOSITORY_RUNNER_URL is not configured; runner-dependent builds remain blocked.');
 
-const godotUrl = process.env.GODOT_BUILD_SERVICE_URL?.trim();
-if (godotUrl) await probe('godot-build-service', godotUrl, '/healthz');
-else add('godot-build-service', false, 'GODOT_BUILD_SERVICE_URL is not configured; Godot builds remain blocked.');
 
 const report = {
   mode: 'read-only-live-smoke',
@@ -60,7 +54,7 @@ const report = {
   checks,
   passed: checks.filter((item) => item.ok).length,
   failed_or_blocked: checks.filter((item) => !item.ok).length,
-  note: 'Health checks do not prove successful project creation, Android/Godot artifact generation, cross-tenant security, or deployment. Those require isolated staging acceptance tests and real provider credentials.',
+  note: 'Health checks do not prove successful project creation, browser gameplay, cross-tenant security, or deployment. Those require isolated staging acceptance tests and real provider credentials.',
 };
 console.log(JSON.stringify(report, null, 2));
 if (checks.some((item) => !item.ok)) process.exitCode = 1;

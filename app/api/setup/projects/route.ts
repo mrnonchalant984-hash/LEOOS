@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { getEffectiveUserPlan, planAllows, planAllowsCloudProject } from '@/lib/plan-access';
 import { getBuilderAvailability, supportedProjectTypes } from '@/lib/builders/providers';
-import { createGodot3dStarter } from '@/lib/builders/godot-starter';
-import { createGodotFootballStarter } from '@/lib/builders/godot-football-starter';
-import { createGodotActionStarter } from '@/lib/builders/godot-action-starter';
+import { createBrowserGameStarter } from '@/lib/builders/browser-game-starter';
 import { createExpoMobileStarter } from '@/lib/builders/expo-starter';
 import type { ProjectType } from '@/lib/pricing';
 
@@ -30,10 +28,13 @@ export async function GET(req: NextRequest) {
   const { data: workspace, error: workspaceError } = await db.from('projects')
     .select('id,project_name,type,status,progress,files,created_at').eq('id', id).eq('user_id', ctx.user.id).maybeSingle();
   if (workspaceError) return NextResponse.json({ error: 'Project could not be loaded.' }, { status: 503 });
-  if (workspace && (workspace.type === 'mobile_app' || workspace.type === 'game')) {
+  if (workspace && workspace.type === 'game') {
+    return NextResponse.json({ project: workspace, builds: [] }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
+  }
+  if (workspace && workspace.type === 'mobile_app') {
     const { data: builds, error } = await db.from('cloud_build_jobs')
       .select('id,provider,status,profile,error,created_at,updated_at,completed_at')
-      .eq('project_id', id).eq('owner_user_id', ctx.user.id).order('created_at', { ascending: false }).limit(10);
+      .eq('project_id', id).eq('owner_user_id', ctx.user.id).eq('provider', 'expo-eas').order('created_at', { ascending: false }).limit(10);
     if (error) return NextResponse.json({ error: 'Project build history could not be loaded.' }, { status: 503 });
     return NextResponse.json({ project: workspace, builds: builds || [] }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
   }
@@ -75,13 +76,8 @@ export async function POST(req: NextRequest) {
       if (countError) return NextResponse.json({ error: 'Project capacity could not be checked.' }, { status: 503 });
       if (!owner && (count || 0) >= plan.limits.maxProjects) return NextResponse.json({ error: 'Project limit reached.', upgrade_url: '/pricing' }, { status: 409 });
       const provider = getBuilderAvailability(projectType);
-      const gameBrief = `${name} ${JSON.stringify(requirements)}`;
       const starter = projectType === 'game'
-        ? /\b(?:football|soccer)\b/i.test(gameBrief)
-          ? createGodotFootballStarter(name, requirements)
-          : /\b(?:action|shooter|combat|arena)\b/i.test(gameBrief)
-            ? createGodotActionStarter(name, requirements)
-            : createGodot3dStarter(name, requirements)
+        ? createBrowserGameStarter(name, requirements)
         : createExpoMobileStarter(name, requirements);
       const { data, error } = await db.from('projects').insert({ user_id: ctx.user.id, project_name: name, type: projectType, status: 'draft', progress: 0, files: starter })
         .select('id,project_name,type,status,progress,created_at').single();

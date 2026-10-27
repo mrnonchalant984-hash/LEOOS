@@ -23,7 +23,6 @@ function configured(env: NodeJS.ProcessEnv, names: string[]) {
 export function getApplicationCapabilities(env: NodeJS.ProcessEnv = process.env): ApplicationCapability[] {
   const webConfigured = configured(env, ['GITHUB_TOKEN', 'VERCEL_TOKEN']);
   const expoConfigured = configured(env, ['EXPO_TOKEN']);
-  const godotConfigured = configured(env, ['GODOT_BUILD_SERVICE_URL', 'GODOT_BUILD_SERVICE_TOKEN']);
   const runnerConfigured = configured(env, ['REPOSITORY_RUNNER_URL', 'RUNNER_HMAC_SECRET']);
   const androidToolchain = getAndroidBuildCapabilities(env);
   const androidStorageConfigured = configured(env, ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']);
@@ -57,11 +56,11 @@ export function getApplicationCapabilities(env: NodeJS.ProcessEnv = process.env)
       limitations: ['No native Kotlin or Java generator.', 'Expo account access and signing credentials remain provider-managed.', 'Verified artifacts are owner-scoped in private storage for 30 days.'],
     },
     {
-      id: 'game-godot', category: 'game', projectType: 'game', frameworks: ['Godot 4'],
-      generator: 'registered_starter', buildAdapter: 'Godot build service', buildMode: 'provider_async',
-      status: 'partially_available', configured: godotConfigured,
-      requirements: ['MCP write scope', 'Godot build service URL and token', 'eligible export preset', 'eligible plan'],
-      limitations: ['Registered starters cover selected single-player prototypes.', 'Multiplayer and arbitrary engine exports are not implemented.', 'Build service readiness and artifact download must be checked per job.'],
+      id: 'game-browser-native', category: 'game', projectType: 'game', frameworks: ['HTML5 Canvas', 'Three.js/WebGL'],
+      generator: 'registered_starter', buildAdapter: 'Sandboxed browser preview + static ZIP export', buildMode: 'none',
+      status: 'partially_available', configured: true,
+      requirements: ['MCP write scope or authenticated Studio session', 'eligible game-project plan', 'saved index.html entry point'],
+      limitations: ['The starter generator covers several 2D genres and a Three.js 3D racing/exploration starter; arbitrary custom mechanics require AI-generated project source.', 'A real browser QA run and static hosting publication must be verified separately.', 'Three.js starters load the runtime from jsDelivr unless bundled locally.'],
     },
     {
       id: 'backend-api-nextjs', category: 'backend_api', projectType: 'web_app', frameworks: ['Next.js Route Handlers'],

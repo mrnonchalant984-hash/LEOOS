@@ -48,15 +48,16 @@ test("web provider requires OpenAI, GitHub, and Vercel configuration", () => {
   }
 });
 
-test("mobile and game providers report not_configured until their credentials exist", () => {
-  const keys = ["EXPO_TOKEN", "GODOT_BUILD_SERVICE_URL", "GODOT_BUILD_SERVICE_TOKEN"];
+test("mobile cloud builds require Expo configuration while browser games need no native build service", () => {
+  const keys = ["EXPO_TOKEN"];
   const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   try {
     for (const key of keys) delete process.env[key];
     assert.equal(getBuilderAvailability("mobile_app").status, "not_configured");
     assert.equal(getBuilderAvailability("mobile_app").id, "expo-eas");
-    assert.equal(getBuilderAvailability("game").status, "not_configured");
-    assert.equal(getBuilderAvailability("game").id, "godot-build-service");
+    assert.equal(getBuilderAvailability("game").status, "ready");
+    assert.equal(getBuilderAvailability("game").id, "browser-native");
+    assert.deepEqual(getBuilderAvailability("game").requiredEnvironment, []);
   } finally {
     for (const key of keys) {
       if (original[key] === undefined) delete process.env[key];

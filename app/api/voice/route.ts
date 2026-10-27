@@ -6,6 +6,8 @@ import { normalizeGeminiModelId } from '@/lib/ai/model-catalog';
 import { getProfile } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 export const runtime = 'nodejs';
+const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
+const ALLOWED_AUDIO_TYPES = new Set(['audio/webm', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp4', 'audio/m4a', 'audio/aac', 'audio/flac']);
 
 const googleKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 function pcmToWav(pcm: Buffer, sampleRate = 24000) {
@@ -51,6 +53,10 @@ async function geminiSpeak(text: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const contentLength = Number(req.headers.get('content-length') || 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_AUDIO_BYTES + 256 * 1024) {
+    return NextResponse.json({ error: 'Audio uploads must be 15 MB or smaller.' }, { status: 413 });
+  }
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Please sign in to use voice features.' }, { status: 401 });
   const limited = await enforceUserRateLimit(ctx.user.id, 'leo-voice', 10, 60);
@@ -59,9 +65,13 @@ export async function POST(req: NextRequest) {
     const fd = await req.formData();
     const audio = fd.get('audio');
     if (!(audio instanceof File)) return NextResponse.json({ error: 'Audio file required' }, { status: 400 });
+    if (!audio.size || audio.size > MAX_AUDIO_BYTES) return NextResponse.json({ error: 'Audio uploads must be between 1 byte and 15 MB.' }, { status: 413 });
+    const audioType = (audio.type || 'audio/webm').split(';', 1)[0].trim().toLowerCase();
+    if (!ALLOWED_AUDIO_TYPES.has(audioType)) return NextResponse.json({ error: 'Use a supported audio format such as WebM, OGG, WAV, MP3, MP4/M4A, AAC, or FLAC.' }, { status: 415 });
     let transcript = '';
     let transcriptionProvider = 'google';
     transcript = await geminiTranscribe(audio);
+    if (transcript.length > 20_000) return NextResponse.json({ error: 'The transcript is too long to process in one voice request.' }, { status: 413 });
     const turnMode = fd.get('mode') === 'chat';
     let assistantReply = '';
     if (turnMode) {

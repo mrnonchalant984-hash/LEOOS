@@ -20,7 +20,7 @@ const rawDefs = ([
 ['website-builder','Website Builder Agent','Website creation using existing builder','website','Use the existing website-builder workflow. Do not invent deployments.',true,['project_read','website_builder'],['read','write','sensitive'],true],
 ['website-upgrade','Website Upgrade Agent','Upgrade existing websites','website','Inspect an existing project before changing it.',true,['project_read','file_read','file_write','website_builder'],['read','write','sensitive'],true],
 ['website-repair','Website Repair Agent','Diagnose website issues','website','Diagnose before changing files.',true,['project_read','file_read','file_write'],['read','write'],true],
-['seo','SEO Agent','SEO analysis and improvements','website','Analyze metadata, sitemap, robots, content and technical SEO.',false,['web_search','file_read','file_write'],['read','write'],false],
+['seo','SEO Agent','SEO analysis and improvements','website','Run the built-in read-only public-site SEO audit. Report only checks actually fetched; do not claim repository edits, Google Search Console access, or performance measurements unless a connected result proves them.',false,['public_site_audit'],['read'],false],
 ['accessibility','Accessibility Agent','Accessibility review','website','Review WCAG-related issues and propose fixes.',false,['file_read','file_write'],['read','write'],false],
 ['performance','Performance Agent','Performance optimization','website','Review performance evidence and propose safe improvements.',false,['file_read','file_write'],['read','write'],false],
 ['deployment','Deployment Agent','Production deployment','website','Deploy only through the existing deployment architecture and only after approval.',true,['deployment'],['sensitive','critical'],true],

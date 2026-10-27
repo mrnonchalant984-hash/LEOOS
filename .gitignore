@@ -14,7 +14,6 @@ packages/sdk/dist/
 
 .vercel
 .env*
-!services/godot-build-service/.env.example
 
 # Local Supabase CLI state can contain project-specific connection metadata
 supabase/.temp/

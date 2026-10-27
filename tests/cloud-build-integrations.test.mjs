@@ -28,19 +28,16 @@ test('cloud build entitlement cannot grant Standard and monthly reservation is a
   assert.match(migration, /project type does not match build provider/i);
 });
 
-test('Godot build proxy authenticates LeonardX owners and never returns its service token', async () => {
-  const submit = await source('app/api/builds/godot/route.ts');
-  const status = await source('app/api/builds/godot/[id]/route.ts');
-  const artifact = await source('app/api/builds/godot/[id]/artifact/route.ts');
-  const worker = await source('services/godot-build-service/server.py');
-  assert.match(submit, /GODOT_BUILD_SERVICE_TOKEN/);
-  assert.match(submit, /\.eq\('id', projectId\)\.eq\('user_id', ctx\.user\.id\)/);
-  assert.match(status, /\.eq\('owner_user_id', ctx\.user\.id\)/);
-  assert.match(artifact, /\.eq\('owner_user_id', ctx\.user\.id\)/);
-  assert.match(worker, /hmac\.compare_digest/);
-  assert.match(worker, /--unshare-all/);
-  assert.match(worker, /MAX_EXPANDED_BYTES/);
-  assert.doesNotMatch(submit, /NEXT_PUBLIC_GODOT_BUILD_SERVICE_TOKEN/);
+test('browser game workspaces use browser-native generation and have no native build endpoint', async () => {
+  const starter = await source('lib/builders/browser-game-starter.ts');
+  const setup = await source('app/api/setup/projects/route.ts');
+  const capabilities = await source('app/api/builds/capabilities/route.ts');
+  assert.match(setup, /createBrowserGameStarter/);
+  assert.match(starter, /requestAnimationFrame/);
+  assert.match(starter, /three\.module\.js/);
+  assert.match(capabilities, /nativeBuildRequired: false/);
+  assert.doesNotMatch(setup, /createGodot|api\/builds\/godot/);
+  assert.doesNotMatch(capabilities, /GODOT_BUILD_SERVICE_URL|Godot/);
 });
 
 test('MCP cloud build tools reuse scoped build APIs and the IDE exposes real job controls', async () => {
@@ -52,7 +49,7 @@ test('MCP cloud build tools reuse scoped build APIs and the IDE exposes real job
   assert.match(auth, /validateMcpAccessToken/);
   assert.match(auth, /token\.scopes\.includes\(requiredScope\)/);
   assert.match(mcp, /app\/api\/builds\/expo\/route/);
-  assert.match(mcp, /app\/api\/builds\/godot\/route/);
+  assert.doesNotMatch(mcp, /app\/api\/builds\/godot\/route/);
   assert.match(mcp, /new URL\(payload\[key\], request\.url\)/);
   assert.match(mcp, /'download_url', 'status_url', 'artifact_url'/);
   assert.match(tools, /start_cloud_build/);
@@ -64,7 +61,7 @@ test('MCP cloud build tools reuse scoped build APIs and the IDE exposes real job
   assert.match(route, /eq\('owner_user_id', ctx\.user\.id\)/);
   assert.match(tools, /get_cloud_build_status/);
   assert.match(tools, /confirm: z\.literal\(true\)/);
-  assert.match(panel, /api\/builds\/\$\{provider/);
+  assert.match(panel, /api\/builds\/expo/);
   assert.match(panel, /Download artifact/);
-  assert.match(panel, /Cancel queued build/);
+  assert.doesNotMatch(panel, /Godot|godot-build-service|game images/i);
 });

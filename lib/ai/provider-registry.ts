@@ -108,8 +108,8 @@ export async function generateTextWithTools(
   if (request.requiredToolName && !request.tools.some(tool => tool.name === request.requiredToolName)) {
     throw new ModelProviderError('The selected tool is not available for this request.', 400);
   }
-  const maxCalls = Math.max(1, Math.min(8, Math.trunc(request.maxToolCalls || 6)));
-  const maxTurns = 5;
+  const maxCalls = Math.max(1, Math.min(12, Math.trunc(request.maxToolCalls || 6)));
+  const maxTurns = 6;
   let callsMade = 0;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;

@@ -23,7 +23,7 @@ test('studio image edit is authenticated, rate limited, persists private assets,
   const history = await read('app/api/studio/history/route.ts');
   assert.match(route, /getProfile\(request\)/);
   assert.match(route, /enforceUserRateLimit/);
-  assert.match(edit, /images\.edit/);
+  assert.match(edit, /generateGeminiImage/);
   assert.match(edit, /inspectImageUpload/);
   assert.match(edit, /studio-inputs\//);
   assert.match(edit, /studio-edits\//);

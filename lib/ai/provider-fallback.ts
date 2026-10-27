@@ -18,7 +18,10 @@ function isTransientNetworkError(error: unknown) {
 
 export function isRetryableProviderFailure(error: unknown) {
   const status = providerStatus(error);
-  return status === 401 || status === 403 || status === 408 || status === 409 || status === 429 || status === 404 || (status !== null && status >= 500) || (status === null && isTransientNetworkError(error));
+  // Authentication/authorization (401/403), missing models (404), and malformed
+  // requests (4xx other than timeout/rate-limit) are configuration/request defects,
+  // not transient failures. Do not retry them against another provider.
+  return status === 408 || status === 429 || (status !== null && status >= 500) || (status === null && isTransientNetworkError(error));
 }
 
 
@@ -41,7 +44,9 @@ export function getSafeFallbackModel(
   }
 
   if (!configured('google')) return undefined;
-  const fallbackModel = primary.model === 'gemini-2.5-flash' ? 'gemini-3.8-flash' : 'gemini-2.5-flash';
+  // Gemini 2.5 access is restricted for some newer projects. Prefer the current
+  // stable Gemini 3.8 model, with Flash-Lite as the alternate if 3.8 is primary.
+  const fallbackModel = primary.model === 'gemini-3.8-flash' ? 'gemini-3.5-flash-lite' : 'gemini-3.8-flash';
   return `google/${fallbackModel}`;
 }
 

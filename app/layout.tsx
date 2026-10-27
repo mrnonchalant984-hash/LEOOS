@@ -7,6 +7,7 @@ import { Providers } from './providers';
 import VisualBackground from '@/components/VisualBackground';
 import { GlobalLEOWidget } from '@/components/GlobalLEOWidget';
 import { ObservabilityScripts } from './observability-scripts';
+import Script from 'next/script';
 import {
   SITE_DESCRIPTION,
   SITE_NAME,
@@ -100,6 +101,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <head>
+        <Script id="google-adsense" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8872751811502892" strategy="beforeInteractive" crossOrigin="anonymous" />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(organizationSchema) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(websiteSchema) }} />
       </head>

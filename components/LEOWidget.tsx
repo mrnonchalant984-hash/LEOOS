@@ -82,24 +82,8 @@ type VoiceStatus =
   | "Gemini voice ready · tap to speak";
 type ToolOption = { name: string; description: string };
 type CustomAgentOption = { id: string; name: string; description: string; allowed_tools: string[] };
-type ModelOption = { id: string; provider: string; model: string; capabilities: string[]; configured: boolean };
 type OfflineDraft = { text: string; mode: "normal" | "deep" | "tools"; selectedToolName?: string; selectedAgentId?: string; savedAt: string };
 const OFFLINE_DRAFT_KEY = "leo_offline_chat_draft_v1";
-const actions = [
-  {
-    label: "Let’s brainstorm",
-    prompt: "Let's brainstorm ideas with me",
-    icon: Lightbulb,
-  },
-  {
-    label: "Let’s create",
-    prompt: "Let's create something together",
-    icon: Sparkles,
-  },
-  { label: "Let’s deploy", prompt: "Let's deploy a website", icon: Rocket },
-  { label: "Let’s fix", prompt: "Let's fix my code", icon: Wrench },
-  { label: "Let’s code", prompt: "Let's code something", icon: Code2 },
-];
 function getBrowserSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -134,10 +118,6 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   const [platformCredits, setPlatformCredits] = useState<number | null>(null);
   const [toolOptions, setToolOptions] = useState<ToolOption[]>([]);
   const [customAgentOptions, setCustomAgentOptions] = useState<CustomAgentOption[]>([]);
-  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
-  const [selectedModel, setSelectedModel] = useState("auto");
-  const [modelLoadError, setModelLoadError] = useState("");
-  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [effort, setEffort] = useState<"standard" | "deep">("standard");
   const [chatSearch, setChatSearch] = useState("");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -236,17 +216,6 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         if (d.profile?.full_name)
           setWelcomeName(d.profile.full_name.split(/\s+/)[0]);
       } catch {}
-    })();
-    (async () => {
-      try {
-        const t = await token();
-        const response = await fetch('/api/models', { headers: t ? { Authorization: `Bearer ${t}` } : {}, cache: 'no-store' });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Models could not be loaded.');
-        const available = Array.isArray(data.models) ? data.models as ModelOption[] : [];
-        setModelOptions(available);
-        if (!available.some((item) => item.configured)) setSelectedModel("unavailable");
-      } catch (cause) { setModelLoadError(cause instanceof Error ? cause.message : 'Models could not be loaded.'); }
     })();
     const close = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node))
@@ -498,7 +467,6 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
           mode: effectiveMode,
           ...(attachedTool ? { tool_name: attachedTool.name } : {}),
           ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}),
-          ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}),
         }),
       });
       const d = await r.json();
@@ -848,11 +816,6 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
           <Plus size={20} />
         </button>
         {(selectedTool || selectedAgent) && <button type="button" onClick={() => { setSelectedTool(null); setSelectedAgent(null); }} aria-label="Remove selected tool or agent" className="flex max-w-[35%] shrink-0 items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-[10px] text-zinc-300"><Wrench size={11}/><span className="truncate">{selectedAgent ? `Agent: ${selectedAgent.name}` : selectedTool?.name}</span><X size={11}/></button>}
-        <label className="sr-only" htmlFor="leo-model-select">Leo model</label>
-        <select id="leo-model-select" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)} disabled={!modelOptions.some((item) => item.configured)} title={modelLoadError || (!modelOptions.some((item) => item.configured) ? 'No configured text model is available.' : 'Choose the model for this message')} className="order-3 max-w-[150px] shrink-0 rounded-xl border border-white/10 bg-white/[.04] px-2 py-2 text-[10px] text-zinc-300 outline-none focus:border-[var(--gold)] disabled:opacity-50 sm:order-none">
-          {modelOptions.some((item) => item.configured) ? <option value="auto">Auto</option> : <option value="unavailable">No model configured</option>}
-          {modelOptions.filter((item) => item.configured).map((item) => <option key={item.id} value={item.id}>{item.provider === 'google' ? 'Gemini' : item.provider} · {item.model}</option>)}
-        </select>
         <label className="order-4 inline-flex h-10 items-center gap-1 rounded-xl border border-white/10 px-2 text-[10px] text-zinc-400 sm:order-none">
           <span className="sr-only">Reasoning effort</span>
           <select value={effort} onChange={(event) => setEffort(event.target.value as "standard" | "deep")} className="max-w-[64px] bg-transparent outline-none"><option value="standard">Fast</option><option value="deep">Deep</option></select>
@@ -1116,7 +1079,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
               <p className="mt-1 text-xs text-zinc-400">{m.projectBuilder.message}</p>
               {m.projectBuilder.href && (
                 <a href={m.projectBuilder.href} className="mt-3 inline-flex rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-bold text-black">
-                  {m.projectBuilder.status === "plan_upgrade" ? "View plans" : m.projectBuilder.status === "sign_in_required" ? "Sign in" : "Start project setup"}
+                  {m.projectBuilder.status === "plan_upgrade" ? "View plans" : m.projectBuilder.status === "sign_in_required" ? "Sign in" : m.projectBuilder.status === "project_created" ? (m.projectBuilder.projectType === "game" ? "Open Game Studio" : "Review & Build") : m.projectBuilder.status === "creation_failed" ? "Retry project setup" : "Start project setup"}
                 </a>
               )}
               {m.projectBuilder.provider && <p className="mt-2 text-[10px] text-zinc-600">Provider: {m.projectBuilder.provider}</p>}
@@ -1253,38 +1216,20 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-8">
               {memoryOpen ? <div className="mx-auto max-w-2xl"><div className="mb-6 flex items-start gap-3"><div className="rounded-2xl bg-[var(--gold)]/10 p-3 text-[var(--gold)]"><Brain size={22}/></div><div><h1 className="text-2xl font-bold">Leo memory</h1><p className="mt-1 text-sm text-zinc-400">Saved notes help Leo retain useful context. Manage what is remembered.</p></div></div><form onSubmit={(event) => { event.preventDefault(); void addMemory(); }} className="mb-6 flex gap-2"><input value={memoryDraft} onChange={(event) => setMemoryDraft(event.target.value)} placeholder="Remember that I prefer…" maxLength={1000} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none focus:border-[var(--gold)]"/><button disabled={memoryBusy || !memoryDraft.trim()} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">Save</button></form>{memoryBusy ? <p className="text-sm text-zinc-500">Loading memories…</p> : memories.length ? <div className="space-y-2">{memories.map((memory) => <article key={memory.id} className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4"><div><p className="whitespace-pre-wrap text-sm text-zinc-200">{memory.memory}</p><p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-600">{memory.source || "saved"}</p></div><button type="button" onClick={() => void deleteMemory(memory.id)} className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-300" aria-label="Delete memory"><Trash size={15}/></button></article>)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center"><Bookmark className="mx-auto mb-3 text-zinc-500"/><p className="text-sm text-zinc-300">No saved memories yet</p><p className="mt-1 text-xs text-zinc-500">Add preferences, project context or instructions you want to keep.</p></div>}</div> : messages.length === 0 ? (
-                <div className="mx-auto flex min-h-[52vh] max-w-2xl flex-col justify-center py-10 text-center">
-                  <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--gold)]/40 text-[var(--gold)]">
-                    <Bot size={22} />
-                  </div>
-                  <h1 className="text-2xl font-semibold tracking-tight text-zinc-100 md:text-4xl">
-                    Welcome, {welcomeName} 👋
-                  </h1>
-                  <p className="mt-3 text-zinc-400">
-                    What are we building today?
-                  </p>
-                  <div className="mt-7 flex flex-wrap justify-center gap-3">
-                    {actions.map(({ label, prompt, icon: Icon }) => (
-                      <button
-                        key={label}
-                        onClick={() => send(prompt)}
-                        className="flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-3 text-sm hover:border-[var(--gold)]/50"
-                      >
-                        <Icon size={16} />
-                        {label}
-                      </button>
-                    ))}
+                <div className="mx-auto flex min-h-[62vh] w-full max-w-4xl flex-col justify-center py-8 md:min-h-[68vh] md:px-4">
+                  <div className="w-full rounded-3xl border border-white/[.08] bg-white/[.025] p-2 shadow-[0_24px_80px_rgba(0,0,0,.24)] md:p-4">
+                    {composer}
                   </div>
                 </div>
               ) : (
                 messagesView
               )}
             </div>
-            {!memoryOpen && <div className="border-t border-[#252525] bg-[#0b0b0b] p-3 md:p-4"><div className="mx-auto max-w-3xl">
+            {!memoryOpen && messages.length > 0 && <div className="border-t border-[#252525] bg-[#0b0b0b] p-3 md:p-4"><div className="mx-auto max-w-3xl">
               {videoConfirmationPanel}
               {videoStatus && <div className="mb-2 text-xs text-zinc-400" role="status" aria-live="polite"><p>{videoStatus}</p>{activeVideoJobId && !loading && <button type="button" onClick={refreshVideoStatus} className="mt-2 rounded-lg border border-white/10 px-3 py-2 text-white">Check status</button>}</div>}
               {composer}
-              {messages.length === 0 && <div className="mx-auto mt-2 flex max-w-3xl flex-wrap gap-1.5 px-1" aria-label="Quick starts">{[{label: "Write", prompt: "Help me write"}, {label: "Learn", prompt: "Teach me"}, {label: "Code", prompt: "Help me code"}, {label: "Brainstorm", prompt: "Let's brainstorm"}, {label: "Create", prompt: "Let's create"}].map((chip) => <button key={chip.label} type="button" onClick={() => send(chip.prompt)} className="rounded-full border border-white/10 px-3 py-1.5 text-[11px] text-zinc-500 hover:border-white/25 hover:text-zinc-200">{chip.label}</button>)}</div>}
+
             </div></div>}
             {voiceOpen && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xl">

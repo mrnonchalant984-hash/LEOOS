@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
+import JSZip from 'jszip';
 import { buildEngineeringOrchestrationPlan } from './orchestration.ts';
 import { WORKFLOW_STAGE_IDS, type WorkflowStageId, type WorkflowStatus } from '../engineering-workflow.ts';
 import { PROJECT_RUNNER_OPERATIONS, type ProjectRunnerOperation } from '../project-runner.ts';
@@ -64,17 +65,17 @@ export type McpProjectReader = {
   }): Promise<{ data: unknown; error: unknown }>;
   cancelEngineeringWorkflow?(userId: string, workflowId: string): Promise<{ data: unknown; error: unknown }>;
   runProjectOperation?(userId: string, projectId: string, operation: ProjectRunnerOperation): Promise<{ data: unknown; error: unknown }>;
-  retryCloudBuild?(userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string): Promise<{ data: unknown; error: unknown }>;
+  retryCloudBuild?(userId: string, provider: 'expo-eas', jobId: string): Promise<{ data: unknown; error: unknown }>;
   submitCloudBuild?(userId: string, input: {
     project_id: string;
-    provider: 'expo-eas' | 'godot-build-service';
+    provider: 'expo-eas';
     platform?: 'android' | 'ios';
     profile?: 'preview' | 'production';
     preset?: string;
     idempotency_key: string;
   }): Promise<{ data: unknown; error: unknown }>;
-  getCloudBuildStatus?(userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string): Promise<{ data: unknown; error: unknown }>;
-  getCloudBuildLogs?(userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string): Promise<{ data: unknown; error: unknown }>;
+  getCloudBuildStatus?(userId: string, provider: 'expo-eas', jobId: string): Promise<{ data: unknown; error: unknown }>;
+  getCloudBuildLogs?(userId: string, provider: 'expo-eas', jobId: string): Promise<{ data: unknown; error: unknown }>;
   getAndroidBuildCapabilities?(): Promise<{ data: unknown; error: unknown }>;
   buildAndroidCalculator?(userId: string, idempotencyKey: string): Promise<{ data: unknown; error: unknown }>;
   getAndroidBuildStatus?(userId: string, jobId: string): Promise<{ data: unknown; error: unknown }>;
@@ -257,9 +258,9 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     return { content: [{ type: 'text', text: JSON.stringify({ project_id, files: data }) }] };
   });
   server.registerTool('get_cloud_build_status', {
-    title: 'Get mobile or game build status',
+    title: 'Get mobile app build status',
     description: 'Read a cloud build owned by the authenticated account. Returns provider status and an owner-authorized artifact URL when one is available; does not expose credentials.',
-    inputSchema: { provider: z.enum(['expo-eas', 'godot-build-service']), job_id: z.string().uuid() },
+    inputSchema: { provider: z.enum(['expo-eas']), job_id: z.string().uuid() },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ provider, job_id }) => {
     if (!projects.getCloudBuildStatus) return toolError('Cloud build status is unavailable in this MCP deployment.');
@@ -268,9 +269,9 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     return { content: [{ type: 'text', text: JSON.stringify(data) }] };
   });
   server.registerTool('get_cloud_build_logs', {
-    title: 'Get mobile or game build logs',
+    title: 'Get mobile app build logs',
     description: 'Retrieve bounded, redacted logs for a provider build owned by the authenticated account. Logs are read-only and may not be available until the provider publishes them.',
-    inputSchema: { provider: z.enum(['expo-eas', 'godot-build-service']), job_id: z.string().uuid() },
+    inputSchema: { provider: z.enum(['expo-eas']), job_id: z.string().uuid() },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ provider, job_id }) => {
     if (!projects.getCloudBuildLogs) return toolError('Cloud build logs are unavailable in this MCP deployment.');
@@ -616,11 +617,11 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     });
 
     server.registerTool('start_cloud_build', {
-      title: 'Start a mobile or Godot cloud build',
-      description: 'Submit an owned mobile_app or game project to its configured provider. Expo automatically creates or reuses and verifies the EAS project from the server credential; callers never supply an Expo UUID. This consumes an existing monthly build allowance and may incur provider fees. Requires explicit approval and confirm=true. Reuse the same idempotency_key when retrying an uncertain request.',
+      title: 'Start a mobile cloud build',
+      description: 'Submit an owned mobile_app project to its configured provider. Browser games run in the browser and do not use this native build tool. Expo automatically creates or reuses and verifies the EAS project from the server credential; callers never supply an Expo UUID. This consumes an existing monthly build allowance and may incur provider fees. Requires explicit approval and confirm=true. Reuse the same idempotency_key when retrying an uncertain request.',
       inputSchema: {
         project_id: z.string().uuid(),
-        provider: z.enum(['expo-eas', 'godot-build-service']),
+        provider: z.enum(['expo-eas']),
         platform: z.enum(['android', 'ios']).optional().describe('Expo platform; defaults to android when omitted.'),
         profile: z.enum(['preview', 'production']).optional().describe('Expo profile; defaults to preview (APK) when omitted.'),
         preset: z.string().trim().min(1).max(80).optional(),
@@ -644,9 +645,9 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
 
     server.registerTool('retry_cloud_build', {
       title: 'Retry a failed cloud build safely',
-      description: 'Retry a failed Expo or Godot cloud build only when LeonardX can verify the previous job has no unresolved provider job. Creates a new idempotent build request and preserves the original job for audit. Requires explicit approval and confirm=true.',
+      description: 'Retry a failed Expo cloud build only when LeonardX can verify the previous job has no unresolved provider job. Creates a new idempotent build request and preserves the original job for audit. Requires explicit approval and confirm=true.',
       inputSchema: {
-        provider: z.enum(['expo-eas', 'godot-build-service']),
+        provider: z.enum(['expo-eas']),
         job_id: z.string().uuid(),
         confirm: z.literal(true),
       },
@@ -658,9 +659,66 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
       return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
     });
 
+    server.registerTool('create_browser_game', {
+      title: 'Create a browser-native game workspace',
+      description: 'Create an owned browser game project with runnable HTML/Canvas or Three.js starter source. No Godot, Unity, Unreal, Android SDK, or native build worker is required. This creates a starter workspace, not an assertion that arbitrary requested mechanics were already generated. Requires explicit approval and confirm=true.',
+      inputSchema: { name: z.string().trim().min(2).max(120), brief: z.string().trim().min(1).max(12000), confirm: z.literal(true) },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    }, async ({ name, brief }) => {
+      const { data, error } = await projects.createProject(userId, name, 'game');
+      if (error) return toolError(typeof error === 'string' ? error : 'Browser game project creation failed or is not allowed by the current plan.');
+      const project = data as { id?: string } | null;
+      if (!project?.id) return toolError('Project creation did not return a project ID; no browser-game files were saved.');
+      if (!projects.saveProjectFiles) return toolError('Workspace was created, but source saving is unavailable in this MCP deployment.');
+      const { createBrowserGameStarter } = await import('../builders/browser-game-starter.ts');
+      const starter = createBrowserGameStarter(name, { description: brief, source: 'mcp_browser_game_creation', runtime: 'browser' });
+      const saved = await projects.saveProjectFiles(userId, project.id, starter);
+      if (saved.error || !saved.data) return toolError('Workspace exists, but browser-game starter files could not be saved. Retry saving source files for the owned project.');
+      return { content: [{ type: 'text', text: JSON.stringify({ project: data, runtime: 'browser', files_saved: Object.keys(starter).length, preview_path: `/app/game-studio?project_id=${encodeURIComponent(project.id)}`, export_path: `/api/games/${encodeURIComponent(project.id)}/export`, note: 'A runnable starter was saved. Project-specific requested mechanics beyond this starter require AI-generated source files and validation.' }) }] };
+    });
+
+    server.registerTool('export_browser_game_project', {
+      title: 'Export an owned browser game ZIP',
+      description: 'Create a real ZIP archive from the actual saved source files of an owned browser game. Returns base64 ZIP data only when the compressed archive is at most 1 MB; larger projects should be exported from the authenticated Browser Game Studio UI. Never includes .env, credentials, .git, .vercel, or node_modules.',
+      inputSchema: { project_id: z.string().uuid(), confirm: z.literal(true) },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    }, async ({ project_id }) => {
+      if (!projects.getProjectFiles || !projects.getProject) return toolError('Browser game export is unavailable in this MCP deployment.');
+      const owned = await projects.getProject(userId, project_id);
+      if (owned.error || !owned.data || owned.data.type !== 'game') return toolError('Browser game project not found in this account.');
+      const loaded = await projects.getProjectFiles(userId, project_id);
+      if (loaded.error || !loaded.data || typeof loaded.data['index.html'] !== 'string') return toolError('A valid saved index.html entry point is required before export.');
+      const zip = new JSZip();
+      const folder = zip.folder((owned.data.project_name || 'browser-game').replace(/[^a-z0-9._-]+/gi, '-').slice(0,80) || 'browser-game')!;
+      let omittedSensitiveFiles = 0;
+      for (const [path, content] of Object.entries(loaded.data)) {
+        const unsafePath = /(^|\/)\.env(?:\.|$)|(^|\/)\.vercel(?:\/|$)|(^|\/)\.git(?:\/|$)|(^|\/)node_modules(?:\/|$)|(^|\/)(?:credentials?|secrets?)(?:\.|\/|$)|private[-_]?key/i.test(path);
+        const secretLike = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9_-]{24,}|xox[baprs]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16})\b/.test(content);
+        if (unsafePath || secretLike) { omittedSensitiveFiles += 1; continue; }
+        folder.file(path, content);
+      }
+      const bytes = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      if (bytes.byteLength > 1_000_000) return toolError('The ZIP is larger than the MCP inline export limit. Use Browser Game Studio → Export ZIP for a browser download.');
+      return { content: [{ type: 'text', text: JSON.stringify({ project_id, filename: `${(owned.data.project_name || 'browser-game').replace(/[^a-z0-9._-]+/gi, '-')}.zip`, mime_type: 'application/zip', size_bytes: bytes.byteLength, omitted_sensitive_files: omittedSensitiveFiles, encoding: 'base64', data: bytes.toString('base64') }) }] };
+    });
+
+    server.registerTool('start_browser_game_preview', {
+      title: 'Prepare a browser game preview',
+      description: 'Verify that an owned browser game has a saved HTML entry point and return the authenticated Studio preview route. The MCP call cannot open the user interface itself; do not claim a preview has been visually tested merely because this check succeeds.',
+      inputSchema: { project_id: z.string().uuid() },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    }, async ({ project_id }) => {
+      if (!projects.getProject || !projects.getProjectFiles) return toolError('Browser preview inspection is unavailable in this MCP deployment.');
+      const owned = await projects.getProject(userId, project_id);
+      if (owned.error || !owned.data || owned.data.type !== 'game') return toolError('Browser game project not found in this account.');
+      const loaded = await projects.getProjectFiles(userId, project_id);
+      if (loaded.error || !loaded.data || typeof loaded.data['index.html'] !== 'string') return toolError('Save an index.html entry point before opening the browser preview.');
+      return { content: [{ type: 'text', text: JSON.stringify({ project_id, preview_ready: true, preview_path: `/app/game-studio?project_id=${encodeURIComponent(project_id)}`, entry_point: 'index.html', sandbox: 'iframe sandbox=allow-scripts, without same-origin access', browser_tested: false }) }] };
+    });
+
     server.registerTool('create_project', {
       title: 'Create a plan-authorized project',
-      description: 'Create a typed project workspace under the authenticated account, including mobile_app Expo/React Native and game starters. The requested project_type is preserved; a mobile app is never created as web_app. Enforces project-type and project-count limits. Requires approval and confirm=true. Does not call Leo AI or use its credits.',
+      description: 'Create a typed project workspace under the authenticated account, including Expo/React Native mobile apps and browser-native game starters. The requested project_type is preserved; a mobile app is never created as web_app. Enforces project-type and project-count limits. Requires approval and confirm=true. Does not call Leo AI or use its credits.',
       inputSchema: {
         name: z.string().trim().min(2).max(120),
         project_type: z.enum(['website', 'web_app', 'saas', 'mobile_app', 'game']),

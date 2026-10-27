@@ -2,25 +2,29 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, ChevronDown, FolderKanban, Grid2X2, LayoutTemplate, MessageSquare, Plus, Search, Settings2, SlidersHorizontal, UserCircle } from "lucide-react";
+import { ArrowLeft, ChevronDown, FolderKanban, Gamepad2, Grid2X2, LayoutTemplate, MessageSquare, Plus, Search, Settings2, SlidersHorizontal, UserCircle } from "lucide-react";
 
 type ChatItem = { id: string; title: string };
 
-export function LeoWorkspaceSidebar({ active }: { active: "projects" | "artifacts" | "customize" }) {
+export function LeoWorkspaceSidebar({ active }: { active: "projects" | "artifacts" | "customize" | "games" }) {
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [query, setQuery] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem("leo_chat_sessions") || "[]");
-      if (Array.isArray(stored)) setChats(stored.filter((item): item is ChatItem => Boolean(item && typeof item.id === "string" && typeof item.title === "string")).slice(0, 30));
-    } catch { setChats([]); }
+    const timer = window.setTimeout(() => {
+      try {
+        const stored = JSON.parse(localStorage.getItem("leo_chat_sessions") || "[]");
+        if (Array.isArray(stored)) setChats(stored.filter((item): item is ChatItem => Boolean(item && typeof item.id === "string" && typeof item.title === "string")).slice(0, 30));
+      } catch { setChats([]); }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const visibleChats = chats.filter((chat) => !query.trim() || chat.title.toLowerCase().includes(query.trim().toLowerCase()));
   const nav = [
     ["projects", "Projects", "/app/projects", FolderKanban],
+    ["games", "Browser Game Studio", "/app/game-studio", Gamepad2],
     ["artifacts", "Artifacts", "/app/artifacts", Grid2X2],
     ["customize", "Customize", "/app/customize", Settings2],
   ] as const;
@@ -40,6 +44,6 @@ export function LeoWorkspaceSidebar({ active }: { active: "projects" | "artifact
   </aside>;
 }
 
-export function LeoWorkspaceFrame({ active, children }: { active: "projects" | "artifacts" | "customize"; children: React.ReactNode }) {
+export function LeoWorkspaceFrame({ active, children }: { active: "projects" | "artifacts" | "customize" | "games"; children: React.ReactNode }) {
   return <main className="flex min-h-screen overflow-hidden bg-[#0b0b0b] text-zinc-100"><LeoWorkspaceSidebar active={active}/><section className="min-w-0 flex-1 overflow-y-auto">{children}</section></main>;
 }

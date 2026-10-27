@@ -1,0 +1,791 @@
+    '        ? createBrowserGameStarter(name, requirements)\n' +
+    '        : createExpoMobileStarter(name, requirements);\n' +
+    "      const { data, error } = await db.from('projects').insert({ user_id: ctx.user.id, project_name: name, type: projectType, status: 'draft', progress: 0, files: starter })\n" +
+    "        .select('id,project_name,type,status,progress,created_at').single();\n" +
+    "      if (error) return NextResponse.json({ error: 'Project workspace could not be created.' }, { status: 500 });\n" +
+    "      return NextResponse.json({ project: data, buildSetupRequired: provider.status !== 'ready', provider: provider.id }, { status: 201 });\n" +
+    '    }\n' +
+    '\n' +
+    "    const websiteType = typeof body.website_type === 'string' ? body.website_type.trim() : '';\n" +
+    "    if (!websiteTypes.has(websiteType)) return NextResponse.json({ error: 'Choose a valid website type.' }, { status: 400 });\n" +
+    '    const provider = getBuilderAvailability(projectType);\n' +
+    "    if (provider.status !== 'ready') return NextResponse.json({ error: provider.message || 'Build provider is not configured.', provider: provider.id, requiredEnvironment: provider.requiredEnvironment }, { status: 503 });\n" +
+    "    if (typeof body.chatbot_enabled !== 'boolean') return NextResponse.json({ error: 'Choose whether to enable the chatbot.' }, { status: 400 });\n" +
+    "    const paymentMode = typeof body.payment_mode === 'string' ? body.payment_mode : 'manual_email';\n" +
+    "    if (!paymentModes.has(paymentMode)) return NextResponse.json({ error: 'Choose a valid payment option.' }, { status: 400 });\n" +
+    "    if (body.requirements !== undefined && (!body.requirements || typeof body.requirements !== 'object' || Array.isArray(body.requirements))) return NextResponse.json({ error: 'Project requirements must be an object.' }, { status: 400 });\n" +
+    "    const requiredFeature = projectType === 'saas' ? 'saas-builder' : projectType === 'web_app' ? 'web-app-builder' : 'website-builder';\n" +
+    "    if (!planAllows(plan, requiredFeature) || !plan.projectTypes.includes(projectType)) return NextResponse.json({ error: 'This project type is not included in your current plan.', upgrade_url: '/pricing' }, { status: 403 });\n" +
+    "    const { data: projectId, error } = await db.rpc('create_customer_project', {\n" +
+    '      p_owner_user_id: ctx.user.id, p_project_type: projectType, p_website_type: websiteType, p_business_name: name,\n' +
+    '      p_chatbot_enabled: body.chatbot_enabled, p_payment_mode: paymentMode, p_requirements: body.requirements || {}, p_project_limit: plan.limits.maxProjects,\n' +
+    '    });\n' +
+    '    if (error) {\n' +
+    "      const status = error.message?.includes('Project limit reached') ? 409 : 500;\n" +
+    "      return NextResponse.json({ error: error.message, upgrade_url: status === 409 ? '/pricing' : undefined }, { status });\n" +
+    '    }\n' +
+    "    const { data, error: readError } = await db.from('website_projects').select('*').eq('id', projectId).eq('owner_user_id', ctx.user.id).single();\n" +
+    "    if (readError) return NextResponse.json({ error: 'Project was created but could not be loaded.' }, { status: 500 });\n" +
+    '    return NextResponse.json({ project: data }, { status: 201 });\n' +
+    '  } catch (error) {\n' +
+    "    return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid project submission.' }, "... 24 more characters
+  
+      at TestContext.<anonymous> (file:///C:/Users/MFONOBONG/Desktop/My%20Porfoilo/tests/godot-starter.test.mjs:26:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "import { NextRequest, NextResponse } from 'next/server';\nimport { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';\nimport { getEffectiveUserPlan, planAllows, planAllowsCloudProject } from '@/lib/plan-access';\nimport { getBuilderAvailability, supportedProjectTypes } from '@/lib/builders/providers';\nimport { createBrowserGameStarter } from '@/lib/builders/browser-game-starter';\nimport { createExpoMobileStarter } from '@/lib/builders/expo-starter';\nimport type { ProjectType } from '@/lib/pricing';\n\nconst websiteTypes = new Set(['company','portfolio','agency','restaurant','real_estate','ecommerce','digital_products','booking','membership','saas','blog','magazine','forum','event','school','course','church_ngo','government','landing','cv']);\nconst paymentModes = new Set(['automatic_paystack','manual_email']);\nconst projectTypes = new Set<ProjectType>(['website','web_app','saas','mobile_app','game']);\n\nexport async function GET(req: NextRequest) {\n  const ctx = await getProfile(req);\n  if (!ctx) return NextResponse.json({ error: 'Login required' }, { status: 401 });\n  const id = req.nextUrl.searchParams.get('project_id');\n  const owner = isPlatformOwner(ctx.profile);\n  const plan = await getEffectiveUserPlan(ctx.user.id, owner);\n  const db = adminSupabase();\n  if (!id) {\n    const providers = Object.fromEntries(supportedProjectTypes.map(type => [type, getBuilderAvailability(type)]));\n    const cloudTypes = (['mobile_app', 'game'] as const).filter(type=> planAllowsCloudProject(plan, type, owner));\n    const planProjectTypes = [...new Set([...plan.projectTypes, ...cloudTypes])];\n    const projectTypes = planProjectTypes.filter(type => type === 'mobile_app' || type === 'game' || getBuilderAvailability(type).status === 'ready');\n    const buildableProjectTypes = projectTypes.filter(type => getBuilderAvailability(type).status === 'ready');\n    return NextResponse.json({ capabilities: { plan: plan.key, projectTypes, buildableProjectTypes, planProjectTypes, limits: plan.limits, providers } });\n  }\n  const { data: workspace, error: workspaceError } = await db.from('projects')\n    .select('id,project_name,type,status,progress,files,created_at').eq('id', id).eq('user_id', ctx.user.id).maybeSingle();\n  if (workspaceError) return NextResponse.json({ error: 'Project could not be loaded.' }, { status: 503 });\n  if (workspace && workspace.type === 'game') {\n    return NextResponse.json({ project: workspace, builds: [] }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });\n  }\n  if (workspace && workspace.type === 'mobile_app') {\n    const { data: builds, error } = await db.from('cloud_build_jobs')\n      .select('id,provider,status,profile,error,created_at,updated_at,completed_at')\n      .eq('project_id', id).eq('owner_user_id', ctx.user.id).eq('provider', 'expo-eas').order('created_at', { ascending: false }).limit(10);\n    if (error) return NextResponse.json({ error: 'Project build history could not be loaded.' }, { status: 503 });\n    return NextResponse.json({ project: workspace, builds: builds || [] }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });\n  }\n  const { data, error } = await db.from('website_projects')\n    .select('id,owner_user_id,project_type,website_type,business_name,chatbot_enabled,payment_mode,requirements,status,live_url,admin_url,github_repo,vercel_project_id,custom_domain,build_provider,build_status,build_step,last_build_at,created_at,updated_at')\n    .eq('id', id).eq('owner_user_id', ctx.user.id).maybeSingle();\n  if (error) return NextResponse.json({ error: 'Project could not be loaded.' }, { status: 500 });\n  if (!data) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });\n  const [builds, deployments, hosting] = await Promise.all([\n    db.from('project_builds').select('id,provider,status,step,logs,error,deployment_id,deployment_url,created_at,started_at,completed_at').eq('website_project_id', id).eq('owner_user_id', ctx.user.id).order('created_at', { ascending: false }).limit(10),\n    db.from('deployment_events').select('id,event_type,status,message,metadata,created_at').eq('website_project_id', id).order('created_at', { ascending: false }).limit(10),\n    db.from('hosting_subscriptions').select('id,status,plan,starts_at,ends_at,next_renewal_at,last_reminder_at').eq('website_project_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle(),\n  ]);\n  if (builds.error || deployments.error || hosting.error) return NextResponse.json({ error:'Project history could not be loaded.' }, { status: 500 });\n  return NextResponse.json({ project: data, builds: builds.data || [], deployments: deployments.data || [], hosting: hosting.data || null }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });\n}\n\nexport async function POST(req: NextRequest) {\n  const ctx = await getProfile(req);\n  if (!ctx) return NextResponse.json({ error: 'Login required' }, { status: 401 });\n  try {\n    const body = await req.json();\n    const projectType = typeof body.project_type === 'string' ? body.project_type as ProjectType : 'website';\n    const name = typeof body.business_name === 'string' ? body.business_name.trim().slice(0, 160) : '';\n    if (!projectTypes.has(projectType)) return NextResponse.json({ error: 'Choose a valid project type.' }, { status: 400 });\n if (!name) return NextResponse.json({ error: projectType === 'mobile_app' || projectType === 'game' ? 'Project name is required.' : 'Business or project name is required.' }, { status: 400 });\n    const owner = isPlatformOwner(ctx.profile);\n    const plan = await getEffectiveUserPlan(ctx.user.id, owner);\n    const db = adminSupabase();\n    const cloudType = projectType === 'mobile_app' || projectType === 'game';\n\n    if (cloudType) {\n      if (!planAllowsCloudProject(plan, projectType, owner)) return NextResponse.json({ error: 'This project type is not included in your current plan.', upgrade_url: '/pricing' }, { status: 403 });\n      const requirements = body.requirements === undefined ? {} : body.requirements;\n      if (!requirements || typeof requirements !== 'object' || Array.isArray(requirements) || JSON.stringify(requirements).length > 12_000) {\n        return NextResponse.json({ error: 'Project requirements must be a JSON object smaller than 12 KB.' }, { status: 400 });\n      }\n      const { count, error: countError } = await db.from('projects').select('id', { count:'exact', head: true }).eq('user_id', ctx.user.id);\n      if (countError) return NextResponse.json({ error: 'Project capacity could not be checked.' }, { status: 503 });\n      if (!owner && (count || 0) >= plan.limits.maxProjects) return NextResponse.json({ error: 'Project limit reached.', upgrade_url: '/pricing' }, { status: 409 });\n      const provider = getBuilderAvailability(projectType);\n      const starter = projectType === 'game'\n        ? createBrowserGameStarter(name, requirements)\n        : createExpoMobileStarter(name, requirements);\n      const { data, error } = await db.from('projects').insert({ user_id: ctx.user.id, project_name: name, type: projectType, status: 'draft', progress: 0, files: starter })\n        .select('id,project_name,type,status,progress,created_at').single();\n      if (error) return NextResponse.json({ error: 'Project workspace could not be created.' }, { status: 500 });\n      return NextResponse.json({ project: data, buildSetupRequired: provider.status !== 'ready', provider: provider.id }, { status: 201 });\n    }\n\n    const websiteType = typeof body.website_type === 'string' ? body.website_type.trim() : '';\n    if (!websiteTypes.has(websiteType)) return NextResponse.json({ error: 'Choose a valid website type.' }, { status: 400 });\n    const provider = getBuilderAvailability(projectType);\n    if (provider.status !== 'ready') return NextResponse.json({ error: provider.message || 'Build provider is not configured.', provider: provider.id, requiredEnvironment: provider.requiredEnvironment }, { status: 503 });\n    if (typeof body.chatbot_enabled !== 'boolean') return NextResponse.json({ error: 'Choose whether to enable the chatbot.' }, { status: 400 });\n    const paymentMode = typeof body.payment_mode === 'string' ? body.payment_mode : 'manual_email';\n    if (!paymentModes.has(paymentMode)) return NextResponse.json({ error: 'Choose a valid payment option.' }, { status: 400 });\n    if (body.requirements !== undefined && (!body.requirements || typeof body.requirements !== 'object' || Array.isArray(body.requirements))) return NextResponse.json({ error: 'Project requirements must be an object.' }, { status: 400 });\n    const requiredFeature = projectType === 'saas' ? 'saas-builder' : projectType === 'web_app' ? 'web-app-builder' : 'website-builder';\n    if (!planAllows(plan, requiredFeature) || !plan.projectTypes.includes(projectType)) return NextResponse.json({ error: 'This project type is not included in your current plan.', upgrade_url: '/pricing' }, { status: 403 });\n    const { data: projectId, error } = await db.rpc('create_customer_project', {\n      p_owner_user_id: ctx.user.id, p_project_type: projectType, p_website_type: websiteType, p_business_name: name,\n      p_chatbot_enabled: body.chatbot_enabled, p_payment_mode: paymentMode, p_requirements: body.requirements || {}, p_project_limit: plan.limits.maxProjects,\n    });\n    if (error) {\n      const status = error.message?.includes('Project limit reached') ? 409 : 500;\n   return NextResponse.json({ error: error.message, upgrade_url: status === 409 ? '/pricing' : undefined }, { status });\n    }\n    const { data, error: readError } = await db.from('website_projects').select('*').eq('id', projectId).eq('owner_user_id', ctx.user.id).single();\n    if (readError) return NextResponse.json({ error: 'Project was created but could not be loaded.' }, { status: 500 });\n    return NextResponse.json({ project: data }, { status: 201 });\n  } catch (error) {\n    return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid project submission.' }, "... 24 more characters,
+    expected: /createGodotActionStarter/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\leo-chat-build-workflow.test.mjs:8:1
+✖ Leo chat creates project then continues into generation instead of returning only a draft notice (248.9385ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /createUserAssistantTools\(ctx\.user\.id, \{ request: req, allowProjectWrites: projectWriteWorkflow, activeProjectId \}\)/. Input:
+  
+  "import { randomUUID } from 'node:crypto';\n" +
+    'import { NextRequest, NextResponse } from "next/server";\n' +
+    'import { getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from "@/lib/openai";\n' +
+    'import { generateText, generateTextWithTools, getDefaultTextModel, ModelProviderError } from "@/lib/ai/provider-registry";\n' +
+    'import { generateWithExplicitFallback, getSafeFallbackModel } from "@/lib/ai/provider-fallback";\n' +
+    'import type { ModelMessage } from "@/lib/ai/provider-registry";\n' +
+    'import { createUserAssistantTools } from "@/lib/ai/tool-orchestrator";\n' +
+    'import { adminSupabase, getProfile, isPlatformOwner } from "@/lib/auth";\n' +
+    'import { getPlanPriceNgn } from "@/lib/pricing";\n' +
+    'import { classifyAgents } from "@/lib/agents/manager";\n' +
+    'import { getAllowedAgentIds } from "@/lib/agents/entitlements";\n' +
+    'import type { ProjectType } from "@/lib/pricing";\n' +
+    'import { getBuilderAvailability } from "@/lib/builders/providers";\n' +
+    'import { getEffectiveUserPlan, planAllows } from "@/lib/plan-access";\n' +
+    "import { withOperationalMonitoring } from '@/lib/monitoring';\n" +
+    "import { enforceUserRateLimit } from '@/lib/rate-limit';\n" +
+    "import { getActiveDeveloperPlan, getUserDeveloperAgent } from '@/lib/developer-agents';\n" +
+    "import { calculateApiCredits, type ApiModel } from '@/lib/api-plan-catalog';\n" +
+    "import { getModelProviderStatus, isProviderConfigured, resolveModel } from '@/lib/ai/model-catalog';\n" +
+    "import { listSkills } from '@/lib/skills/registry';\n" +
+    'export const runtime = "nodejs";\n' +
+    'const PROJECT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n' +
+    '\n' +
+    'function inferProjectType(message: string): ProjectType | null {\n' +
+    '  const text = message.toLowerCase();\n' +
+    '  if (/\\b(mobile app|mobile application|android app|ios app|iphone app|react native|expo app|build me an app|create an app)\\b/.test(text)) return "mobile_app";\n' +
+    '  if (/\\b(game|video game|2d platformer|racing game|puzzle game|godot)\\b/.test(text)) return "game";\n' +
+    '  if (/\\b(saas|crm|marketplace|social platform|booking platform|school management system)\\b/.test(text)) return "saas";\n' +
+    '  if (/\\b(web app|web application|management system|dashboard app|build me a system|build me an application)\\b/.test(text)) return"web_app";\n' +
+    '  if (/\\b(website|web site|landing page|restaurant site|e-commerce site|portfolio site)\\b/.test(text)) return "website";\n' +
+    '  return null;\n' +
+    '}\n' +
+    '\n' +
+    'function isExplicitBuildIntent(message: string) {\n' +
+    '  return /\\b(build|create|make|develop|generate|start|implement|code)\\b/i.test(message) &&\n' +
+    '    /\\b(website|web site|web app|web application|saas|game|platformer|racing|puzzle|browser game|landing page|portfolio|e-commerce|marketplace|dashboard)\\b/i.test(message);\n' +
+    '}\n' +
+    '\n' +
+    'function isRepositoryTask(message: string) {\n' +
+    '  return /\\b(github|git\\s?hub|repository|repo)\\b/i.test(message);\n' +
+    '}\n' +
+    'function isRepositoryWriteIntent(message: string) {\n' +
+    '  return isRepositoryTask(message) && /\\b(edit|write|commit|push|fix|change|update|modify|repair|deploy|redeploy|publish)\\b/i.test(message);\n' +
+    '}\n' +
+    '\n' +
+    'function suggestedProjectName(message: string, projectType: ProjectType) {\n' +
+    "  const cleaned = message.replace(/https?:\\/\\/\\S+/g, '').replace(/\\s+/g, ' ').trim();\n" +
+    '  const quoted = cleaned.match(/["“]([^"”]{2,70})["”]/)?.[1];\n' +
+    '  if (quoted) return quoted.slice(0, 120);\n' +
+    "  const candidate = cleaned.match(/\\b(?:called|named|for)\\s+([A-Z][\\w&' -]{1,60}?)(?=\\s+(?:with|that|which|and|using|for|including|featuring)\\b|[,.!?]|$)/i)?.[1]?.trim();\n" +
+    '  if (candidate) return candidate.slice(0, 120);\n' +
+    "  if (projectType === 'game') {\n" +
+    "    if (/racing|race|car/i.test(cleaned)) return 'Browser Racing Game';\n" +
+    "    if (/puzzle/i.test(cleaned)) return 'Browser Puzzle Game';\n" +
+    "    if (/platform/i.test(cleaned)) return 'Browser Platformer';\n" +
+    "    return 'Browser Game';\n" +
+    '  }\n' +
+    "  if (projectType === 'saas') return 'New SaaS Project';\n" +
+    "  if (projectType === 'web_app') return 'New Web App';\n" +
+    "  if (/restaurant/i.test(cleaned)) return 'Restaurant Website';\n" +
+    "  if (/portfolio/i.test(cleaned)) return 'Portfolio Website';\n" +
+    "  if (/e-?commerce|online store|shop/i.test(cleaned)) return 'Online Store';\n" +
+    "  return 'New Website';\n" +
+    '}\n' +
+    '\n' +
+    'function suggestedWebsiteType(message: string) {\n' +
+    "  if (/restaurant|caterer|food business/i.test(message)) return 'restaurant';\n" +
+    "  if (/portfolio|personal site|cv|resume/i.test(message)) return 'portfolio';\n" +
+    "  if (/e-?commerce|online store|shop|marketplace/i.test(message)) return 'ecommerce';\n" +
+    "  if (/blog|news|magazine/i.test(message)) return 'blog';\n" +
+    "  if (/booking|appointment/i.test(message)) return 'booking';\n" +
+    "  return 'landing';\n" +
+    '}\n' +
+    '\n' +
+    'export async function GET(req: NextRequest) {\n' +
+    '  const sid = req.nextUrl.searchParams.get("session_id");\n' +
+    '  if (!sid) return NextResponse.json({ messages: [] });\n' +
+    '  const ctx = await getProfile(req);\n' +
+    '  if (!ctx) return NextResponse.json({ messages: [] });\n' +
+    '  const db = adminSupabase();\n' +
+    '  const { data } = await db\n' +
+    '    .from("chats_v2")\n' +
+    '    .select("messages")\n' +
+    '    .eq("id", sid)\n' +
+    '    .eq("user_id", ctx.user.id)\n' +
+    '    .maybeSingle();\n' +
+    '  const { data: sub } = await db\n' +
+    '    .from("subscriptions")\n' +
+    '    .select("plan,status,current_period_end")\n' +
+    '    .eq("user_id", ctx.user.id)\n' +
+    '    .eq("status", "active")\n' +
+    '    .order("created_at", { ascending: false })\n' +
+    '    .limit(1)\n' +
+    '    .maybeSingle();\n' +
+    '  const active =\n' +
+    '    sub &&\n' +
+    '    (!sub.current_period_end || new Date(sub.current_period_end) > new Date());\n' +
+    '  return NextResponse.json({\n' +
+    '    messages: data?.messages || [],\n' +
+    '    profile: { full_name: ctx.profile.full_name },\n' +
+    '    plan: active ? sub?.plan : null,\n' +
+    '  });\n' +
+    '}\n' +
+    'export async function POST(req: NextRequest) {\n' +
+    "  return withOperationalMonitoring(req, 'leo.ai.request', async ({ reportFailure }) => {\n" +
+    '  let customAgentUsageId: string | null = null;\n' +
+    '  let customAgentReservedCredits: number | null = null;\n' +
+    '  let customAgentBillingModel: ApiModel | null = null;\n' +
+    '  let customAgentProviderStarted = false;\n' +
+    '  async function refundCustomAgentUsage() {\n' +
+    '    if (!customAgentUsageId) return;\n' +
+    '    const usageId = customAgentUsageId;\n' +
+    '    customAgentUsageId = null;\n' +
+    "    const { error } = await adminSupabase().rpc('refund_api_request_credit', { p_usage_id: usageId });\n" +
+    "    if (error) console.error('Custom agent credit refund failed', { usageId });\n" +
+    '  }\n' +
+    '  async function settleCustomAgentUsage(credits: number) {\n' +
+    '    if (!customAgentUsageId) return false;\n' +
+    '    const usageId = customAgentUsageId;\n' +
+    '    try {\n' +
+    "      const { data, error } = await adminSupabase().rpc('settle_api_request_credit', {\n" +
+    '        p_usage_id: usageId,\n' +
+    '        p_actual_credits: credits,\n' +
+    '      });\n' +
+    '      if (error || data !== true) {\n' +
+    "        console.error('Custom agent credit settlement failed; reservation remains held', { usageId, error: error?.message });\n" +
+    '        return false;\n' +
+    '      }\n' +
+    '      customAgentUsageId = null;\n' +
+    '      return true;\n' +
+    '    } catch (error) {\n' +
+    "      console.error('Custom agent credit settlement failed; reservation remains held', {\n" +
+    '        usageId,\n' +
+    "        error: error instanceof Error ? error.message : 'unknown',\n" +
+    '      });\n' +
+    '      return false;\n' +
+    '    }\n' +
+    '  }\n' +
+    '  try {\n' +
+    '    const { session_id, message, mode = "normal", project_id = null, model: requestedModel, tool_name: requestedToolName, custom_agent_id: requestedCustomAgentId } = await req.json();\n' +
+    '    if (!session_id || typeof message !== "string" || !message.trim())\n' +
+    '      return NextResponse.json(\n' +
+    '        { error: "Missing session or message" },\n' +
+    '        { status: 400 },\n' +
+    '      );\n' +
+    '    if (!["normal", "deep", "tools"].includes(mode)) return NextResponse.json({ error: "Choose a supported chat mode." }, { status: 400 });\n' +
+    '    if (requestedToolName !== undefined && (typeof requestedToolName !== "string" || !/^[A-Za-z0-9_-]{1,96}$/.test(requestedToolName))) {\n' +
+    '      return NextResponse.json({ error: "Choose an available tool." }, { status: 400 });\n' +
+    '    }\n' +
+    '    if (requestedCustomAgentId !== undefined && (typeof requestedCustomAgentId !== "string" || !PROJECT_ID_RE.test(requestedCustomAgentId))) {\n' +
+    '      return NextResponse.json({ error: "Choose a valid custom agent." }, { status: 400 });\n' +
+    '    }\n' +
+    '    if (requestedToolName && requestedCustomAgentId) return NextResponse.json({ error: "Attach one custom agent or one tool, not both." }, { status: 400 });\n' +
+    '    if (requestedToolName && mode !== "tools") return NextResponse.json({ error: "Selected tools require tool mode." }, { status: 400 });\n' +
+    "    if (requestedModel !== undefined && (typeof requestedModel !== 'string' || requestedModel.length > 160)) {\n" +
+    '      return NextResponse.json({ error: "Choose a valid model from the available model list." }, { status: 400 });\n' +
+    '    }\n' +
+    '    const ctx = await getProfile(req);\n' +
+    '    const owner = isPlatformOwner(ctx?.profile);\n' +
+    '    let customAgent: Awaited<ReturnType<typeof getUserDeveloperAgent>> = null;\n' +
+    '    if (requestedCustomAgentId) {\n' +
+    '      if (!ctx) return NextResponse.json({ error: "Sign in to use a custom agent." }, { status: 401 });\n' +
+    '      try {\n' +
+    '        if (!owner && !await getActiveDeveloperPlan(ctx.user.id)) return NextResponse.json({ error: "An active paid Developer API plan is required to use custom agents." }, { status: 403 });\n' +
+    '        customAgent = await getUserDeveloperAgent(ctx.user.id, requestedCustomAgentId);\n' +
+    '      } catch (cause) {\n' +
+    "        console.error('Custom agent access check failed', cause instanceof Error ? cause.message : 'Unknown error');\n" +
+    '        return NextResponse.json({ error: "Custom agent access could not be verified. Check the Developer Agent Studio migration andplan." }, { status: 503 });\n' +
+    '      }\n' +
+    '      if (!customAgent) return NextResponse.json({ error: "Custom agent not found." }, { status: 404 });\n' +
+    '      if (customAgent.allowed_tools.length && mode !== "tools") return NextResponse.json({ error: "This custom agent requires read-only tool mode." }, { status: 400 });\n' +
+    '    }\n' +
+    '    if (mode === "tools" || requestedCustomAgentId) {\n' +
+    '      if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });\n' +
+    "      const limited = await enforceUserRateLimit(ctx.user.id, requestedCustomAgentId ? 'leo-custom-agent-run' : 'leo-chat-tools', 10, 60);\n" +
+    '      if (limited) return limited;\n' +
+    '    }\n' +
+    '    const db = ctx ? adminSupabase() : null;\n' +
+    '    if (project_id !== null && (typeof proj'... 25645 more characters
+  
+      at TestContext.<anonymous> (file:///C:/Users/MFONOBONG/Desktop/My%20Porfoilo/tests/leo-chat-build-workflow.test.mjs:14:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: `import { randomUUID } from 'node:crypto';\nimport { NextRequest, NextResponse } from "next/server";\nimport { getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from "@/lib/openai";\nimport { generateText, generateTextWithTools, getDefaultTextModel, ModelProviderError }from "@/lib/ai/provider-registry";\nimport { generateWithExplicitFallback, getSafeFallbackModel } from "@/lib/ai/provider-fallback";\nimport type { ModelMessage } from "@/lib/ai/provider-registry";\nimport { createUserAssistantTools } from "@/lib/ai/tool-orchestrator";\nimport { adminSupabase, getProfile, isPlatformOwner } from "@/lib/auth";\nimport { getPlanPriceNgn } from "@/lib/pricing";\nimport { classifyAgents } from "@/lib/agents/manager";\nimport { getAllowedAgentIds } from "@/lib/agents/entitlements";\nimport type { ProjectType } from "@/lib/pricing";\nimport { getBuilderAvailability } from "@/lib/builders/providers";\nimport { getEffectiveUserPlan, planAllows } from "@/lib/plan-access";\nimport { withOperationalMonitoring } from '@/lib/monitoring';\nimport { enforceUserRateLimit } from '@/lib/rate-limit';\nimport { getActiveDeveloperPlan, getUserDeveloperAgent } from '@/lib/developer-agents';\nimport { calculateApiCredits, type ApiModel } from '@/lib/api-plan-catalog';\nimport { getModelProviderStatus, isProviderConfigured, resolveModel } from '@/lib/ai/model-catalog';\nimport { listSkills } from '@/lib/skills/registry';\nexport const runtime = "nodejs";\nconst PROJECT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n\nfunction inferProjectType(message: string): ProjectType | null {\n  const text = message.toLowerCase();\n  if (/\\b(mobile app|mobile application|android app|ios app|iphone app|react native|expo app|build me an app|create an app)\\b/.test(text)) return "mobile_app";\n  if (/\\b(game|video game|2d platformer|racing game|puzzle game|godot)\\b/.test(text)) return "game";\n  if (/\\b(saas|crm|marketplace|social platform|booking platform|school management system)\\b/.test(text)) return "saas";\n  if (/\\b(web app|web application|management system|dashboard app|build me a system|build me an application)\\b/.test(text)) return "web_app";\n  if (/\\b(website|web site|landing page|restaurant site|e-commerce site|portfolio site)\\b/.test(text)) return "website";\n  return null;\n}\n\nfunction isExplicitBuildIntent(message: string) {\n  return /\\b(build|create|make|develop|generate|start|implement|code)\\b/i.test(message) &&\n    /\\b(website|web site|web app|web application|saas|game|platformer|racing|puzzle|browser game|landing page|portfolio|e-commerce|marketplace|dashboard)\\b/i.test(message);\n}\n\nfunction isRepositoryTask(message: string) {\n  return /\\b(github|git\\s?hub|repository|repo)\\b/i.test(message);\n}\nfunction isRepositoryWriteIntent(message: string) {\n  return isRepositoryTask(message) && /\\b(edit|write|commit|push|fix|change|update|modify|repair|deploy|redeploy|publish)\\b/i.test(message);\n}\n\nfunction suggestedProjectName(message: string, projectType: ProjectType) {\n  const cleaned = message.replace(/https?:\\/\\/\\S+/g, '').replace(/\\s+/g, ' ').trim();\n  const quoted = cleaned.match(/["“]([^"”]{2,70})["”]/)?.[1];\n  if (quoted) return quoted.slice(0, 120);\n  const candidate = cleaned.match(/\\b(?:called|named|for)\\s+([A-Z][\\w&' -]{1,60}?)(?=\\s+(?:with|that|which|and|using|for|including|featuring)\\b|[,.!?]|$)/i)?.[1]?.trim();\n  if(candidate) return candidate.slice(0, 120);\n  if (projectType === 'game') {\n    if (/racing|race|car/i.test(cleaned)) return 'Browser Racing Game';\n    if (/puzzle/i.test(cleaned)) return 'Browser Puzzle Game';\n    if (/platform/i.test(cleaned)) return 'Browser Platformer';\n    return 'Browser Game';\n  }\n  if (projectType === 'saas') return 'New SaaS Project';\n  if (projectType === 'web_app') return 'New Web App';\n  if (/restaurant/i.test(cleaned)) return 'Restaurant Website';\n  if (/portfolio/i.test(cleaned)) return 'Portfolio Website';\n  if (/e-?commerce|online store|shop/i.test(cleaned)) return 'Online Store';\n  return 'New Website';\n}\n\nfunction suggestedWebsiteType(message: string) {\n  if (/restaurant|caterer|food business/i.test(message)) return 'restaurant';\n  if (/portfolio|personal site|cv|resume/i.test(message)) return 'portfolio';\n  if (/e-?commerce|online store|shop|marketplace/i.test(message)) return 'ecommerce';\n  if (/blog|news|magazine/i.test(message)) return 'blog';\n  if (/booking|appointment/i.test(message)) return 'booking';\n  return 'landing';\n}\n\nexport async function GET(req: NextRequest) {\n  const sid = req.nextUrl.searchParams.get("session_id");\n  if (!sid) return NextResponse.json({ messages: [] });\n  const ctx = await getProfile(req);\n  if (!ctx) return NextResponse.json({ messages: [] });\n  const db = adminSupabase();\n  const { data } = await db\n    .from("chats_v2")\n    .select("messages")\n    .eq("id", sid)\n    .eq("user_id", ctx.user.id)\n    .maybeSingle();\n  const { data: sub } = await db\n    .from("subscriptions")\n    .select("plan,status,current_period_end")\n   .eq("user_id", ctx.user.id)\n    .eq("status", "active")\n    .order("created_at", { ascending: false })\n    .limit(1)\n    .maybeSingle();\n  const active =\n    sub &&\n    (!sub.current_period_end || new Date(sub.current_period_end) > new Date());\n  return NextResponse.json({\n    messages: data?.messages || [],\n    profile: { full_name: ctx.profile.full_name },\n    plan: active ? sub?.plan : null,\n });\n}\nexport async function POST(req: NextRequest) {\n  return withOperationalMonitoring(req, 'leo.ai.request', async ({ reportFailure}) => {\n  let customAgentUsageId: string | null = null;\n  let customAgentReservedCredits: number | null = null;\n  let customAgentBillingModel: ApiModel | null = null;\n  let customAgentProviderStarted = false;\n  async function refundCustomAgentUsage() {\n    if (!customAgentUsageId) return;\n    const usageId = customAgentUsageId;\n    customAgentUsageId = null;\n    const { error } = await adminSupabase().rpc('refund_api_request_credit', { p_usage_id: usageId });\n    if (error) console.error('Custom agent credit refund failed', { usageId });\n  }\n  async function settleCustomAgentUsage(credits: number) {\n    if (!customAgentUsageId) return false;\n    const usageId = customAgentUsageId;\n    try {\n      const { data, error } = await adminSupabase().rpc('settle_api_request_credit', {\n        p_usage_id: usageId,\n        p_actual_credits: credits,\n      });\n      if (error || data !== true) {\n        console.error('Custom agent credit settlement failed; reservation remains held', { usageId, error: error?.message });\n        return false;\n      }\n      customAgentUsageId =null;\n      return true;\n    } catch (error) {\n      console.error('Custom agent credit settlement failed; reservation remains held', {\n        usageId,\n        error: error instanceof Error ? error.message : 'unknown',\n      });\n      return false;\n    }\n  }\n  try{\n    const { session_id, message, mode = "normal", project_id = null, model: requestedModel, tool_name: requestedToolName, custom_agent_id: requestedCustomAgentId } = await req.json();\n    if (!session_id || typeof message !== "string" || !message.trim())\n      return NextResponse.json(\n        { error: "Missing session or message" },\n        { status: 400 },\n      );\n    if (!["normal", "deep", "tools"].includes(mode)) return NextResponse.json({ error: "Choose a supported chat mode." }, { status: 400 });\n    if (requestedToolName !== undefined && (typeof requestedToolName !== "string" || !/^[A-Za-z0-9_-]{1,96}$/.test(requestedToolName))) {\n      return NextResponse.json({ error: "Choose an available tool." }, { status: 400 });\n    }\n    if (requestedCustomAgentId !== undefined && (typeof requestedCustomAgentId !== "string" || !PROJECT_ID_RE.test(requestedCustomAgentId))) {\n      return NextResponse.json({ error: "Choose a valid custom agent." }, { status: 400 });\n    }\n    if (requestedToolName && requestedCustomAgentId) return NextResponse.json({ error: "Attach one custom agent or one tool, not both." }, { status: 400 });\n    if (requestedToolName && mode !== "tools") return NextResponse.json({ error: "Selected tools require tool mode." }, { status: 400 });\n    if (requestedModel !== undefined && (typeof requestedModel !== 'string' || requestedModel.length > 160)) {\n      return NextResponse.json({ error: "Choose a valid model from the available model list." }, { status: 400 });\n    }\n    const ctx = await getProfile(req);\n    const owner = isPlatformOwner(ctx?.profile);\n    let customAgent: Awaited<ReturnType<typeof getUserDeveloperAgent>> = null;\n    if (requestedCustomAgentId) {\n      if (!ctx) return NextResponse.json({ error: "Sign in to use a custom agent." }, { status: 401 });\n      try {\n        if (!owner && !await getActiveDeveloperPlan(ctx.user.id)) return NextResponse.json({ error: "An active paid Developer API plan is required to use custom agents." }, { status: 403 });\n        customAgent = await getUserDeveloperAgent(ctx.user.id, requestedCustomAgentId);\n      } catch (cause) {\n        console.error('Custom agent access check failed', cause instanceof Error ? cause.message : 'Unknown error');\n        return NextResponse.json({ error: "Custom agent access could not be verified. Check the Developer Agent Studio migration and plan." }, { status: 503 });\n      }\n      if (!customAgent) return NextResponse.json({ error: "Custom agent not found." }, { status: 404 });\n      if (customAgent.allowed_tools.length && mode !== "tools") return NextResponse.json({ error: "This custom agent requires read-only tool mode." }, { status: 400 });\n    }\n    if (mode === "tools" || requestedCustomAgentId) {\n      if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });\n      const limited = await enforceUserRateLimit(ctx.user.id, requestedCustomAgentId ? 'leo-custom-agent-run' : 'leo-chat-tools', 10, 60);\n      if (limited) return limited;\n    }\n    const db = ctx ? adminSupabase() : null;\n    if (project_id !== null && (typeof proj`... 25645 more characters,
+    expected: /createUserAssistantTools\(ctx\.user\.id, \{ request: req, allowProjectWrites: projectWriteWorkflow, activeProjectId \}\)/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\leo-chat-build-workflow.test.mjs:17:1
+✖ project write, run and deployment tools are gated behind an explicit project workflow (11.6995ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /options\.allowProjectWrites \? projectWriteTools : \[\]/. Input:
+  
+  "import { createHash, randomUUID } from 'node:crypto';\n" +
+    "import { NextRequest } from 'next/server';\n" +
+    "import { adminSupabase } from '@/lib/auth';\n" +
+    "import { decryptMcpCredential } from '@/lib/mcp/outbound-security';\n" +
+    "import { callMcpTool } from '@/lib/mcp/remote-clients';\n" +
+    "import type { AssistantTool, AssistantToolExecutor } from '@/lib/ai/provider-registry';\n" +
+    "import { listSkills, loadSkill, readSkillFile, runSkillScript } from '@/lib/skills/registry';\n" +
+    "import { normalizeIdePath, validateIdeFiles } from '@/lib/ide-files';\n" +
+    '\n' +
+    'type RemoteToolReference = {\n' +
+    "  kind: 'remote';\n" +
+    '  serverId: string;\n' +
+    '  remoteName: string;\n' +
+    '};\n' +
+    '\n' +
+    "type LocalToolReference = { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'read_project_files' } | { kind: 'save_project_files' } | { kind: 'run_project_operation' } | { kind: 'deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repo' } | { kind: 'vercel_deployment_status' } | { kind: 'vercel_deploy_git_repo' } | { kind: 'build_and_deploy_website' } | { kind: 'inspect_website_deployment' } | { kind: 'validate_browser_game' } | { kind: 'publish_browser_game' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'run_skill_script' };\n" +
+    'type ToolReference = RemoteToolReference | LocalToolReference;\n' +
+    '\n' +
+    'function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {\n' +
+    "  if (!input || typeof input !== 'object' || Array.isArray(input) || depth > 8) return null;\n" +
+    '  const source = input as Record<string, unknown>;\n' +
+    "  if (source.type !== 'object' || source.$ref !== undefined || source.$defs !== undefined) return null;\n" +
+    '  const properties = source.properties;\n' +
+    "  if (properties !== undefined && (!properties || typeof properties !== 'object' || Array.isArray(properties))) return null;\n" +
+    "  const result: Record<string, unknown> = { type: 'object' };\n" +
+    "  if (typeof source.description === 'string') result.description = source.description.slice(0, 1000);\n" +
+    "  if (Array.isArray(source.required) && source.required.every(value => typeof value === 'string')) {\n" +
+    '    result.required = source.required.slice(0, 64);\n' +
+    '  }\n' +
+    '  if (source.additionalProperties === false) result.additionalProperties = false;\n' +
+    '  if (properties) {\n' +
+    '    const sanitized: Record<string, unknown> = {};\n' +
+    '    for (const [name, value] of Object.entries(properties as Record<string, unknown>).slice(0, 64)) {\n' +
+    "      if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name) || !value || typeof value !== 'object' || Array.isArray(value)) return null;\n" +
+    '      const property = value as Record<string, unknown>;\n' +
+    '      if (property.$ref !== undefined || property.$defs !== undefined) return null;\n' +
+    "      if (property.type === 'object') {\n" +
+    '        const nested = schemaObject(property, depth + 1);\n' +
+    '        if (!nested) return null;\n' +
+    '        sanitized[name] = nested;\n' +
+    "      } else if (property.type === 'array') {\n" +
+    '        const items = property.items;\n' +
+    "        if (!items || typeof items !== 'object' || Array.isArray(items)) return null;\n" +
+    '        const itemType = (items as Record<string, unknown>).type;\n' +
+    "        if (!['string', 'number', 'integer', 'boolean', 'object'].includes(String(itemType))) return null;\n" +
+    "        const itemShape = itemType === 'object' ? schemaObject(items, depth + 1) : { type: itemType };\n" +
+    '        if (!itemShape) return null;\n' +
+    "        sanitized[name] = { type: 'array', items: itemShape };\n" +
+    "      } else if (['string', 'number', 'integer', 'boolean'].includes(String(property.type))) {\n" +
+    '        sanitized[name] = {\n' +
+    '          type: property.type,\n' +
+    "          ...(typeof property.description === 'string' ? { description: property.description.slice(0, 500) } : {}),\n" +
+    '          ...(Array.isArray(property.enum) && property.enum.length <= 50 ? { enum: property.enum } : {}),\n' +
+    '        };\n' +
+    '      } else {\n' +
+    '        return null;\n' +
+    '      }\n' +
+    '    }\n' +
+    '    result.properties = sanitized;\n' +
+    '  }\n' +
+    '  return result;\n' +
+    '}\n' +
+    '\n' +
+    'const localTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [\n' +
+    '  {\n' +
+    "    name: 'list_projects',\n" +
+    "    description: 'Read project names, types, statuses, and progress belonging to this account.',\n" +
+    "    inputSchema: { type: 'object', properties: { limit: { type: 'integer', description: 'Maximum number of projects (1 to 50).' } } },\n" +
+    '  },\n' +
+    '  {\n' +
+    "    name: 'get_project_status',\n" +
+    "    description: 'Read the status and progress of one project owned by this account.',\n" +
+    "    inputSchema: { type: 'object', properties: { project_id: { type: 'string', description: 'UUID of the project.' } }, required: ['project_id'], additionalProperties: false },\n" +
+    '  },\n' +
+    '  {\n' +
+    "    name: 'read_project_files',\n" +
+    "    description: 'Read source files from a LeonardX project workspace owned by this account. Environment files, credentials, keys and generated dependency folders are excluded. Use only when the user asks to inspect or continue an owned project.',\n" +
+    "    inputSchema: { type: 'object', properties: { project_id: { type: 'string', description: 'UUID of the owned project.' }, paths: {type: 'array', items: { type: 'string' }, description: 'Optional relative paths to read.' } }, required: ['project_id'], additionalProperties: false },\n" +
+    '  },\n' +
+    '  {\n' +
+    "    name: 'save_project_files',\n" +
+    "    description: 'Save source-file changes to an owned LeonardX project workspace. Only use when the user explicitly requests editing or saving project files. Files are merged by path; this does not push to GitHub or deploy. Requires confirm=true and never accepts environment or credential files.',\n" +
+    "    inputSchema: { type: 'object', properties: { project_id: { type: 'string', description: 'UUID of the owned project.' }, files: {type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } }, confirm: { type: 'boolean', description: 'Set true only when the user explicitly asked to save thesefile changes.' } }, required: ['project_id', 'files', 'confirm'], additionalProperties: false },\n" +
+    '  },\n' +
+    '  {\n' +
+    "    name: 'load_skill',\n" +
+    "    description: 'Load the full instructions for an enabled skill only when it matches the task.',\n" +
+    "    inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'Skill name.' } }, required: ['name'], additionalProperties: false },\n" +
+    '  },\n' +
+    '  {\n' +
+    "    name: 'read_skill_file',\n" +
+    "    description: 'Read an authorized reference or asset file from an enabled skill. Path traversal is blocked.',\n" +
+    "    inputSchema: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string' } }, required: ['name', 'path'], additionalProperties: false },\n" +
+    '  },\n' +
+    '  {\n' +
+    "    name: 'run_skill_script',\n" +
+    "    description: 'Run an approved .py or .js helper from an enabled skill in the restricted skill sandbox.',\n" +
+    "    inputSchema: { type: 'object', properties: { name: { type: 'string' }, script: { type: 'string' }, args: { type: 'array', items:{ type: 'string' } } }, required: ['name', 'script'], additionalProperties: false },\n" +
+    '  },\n' +
+    "  { name: 'github_repository_tree', description: 'Inspect the file paths and sizes in a repository connected by this user. Use before editing so Leo understands the actual repo structure.', inputSchema: { type:'object', properties:{ repo:{type:'string'}, branch:{type:'string'} }, required:['repo'], additionalProperties:false } },\n" +
+    "  { name: 'github_read_file', description: 'Read one UTF-8 source file from a repository connected by this user. Never read secrets or environment files. Use actual file contents before proposing code changes.', inputSchema: { type:'object', properties:{ repo:{type:'string'}, path:{type:'string'}, branch:{type:'string'} }, required:['repo','path'], additionalProperties:false } },\n" +
+    "  { name: 'github_commit_status', description: 'Inspect real GitHub check-runs and combined commit status for a source commit. Use after committing generated code and report failed or pending checks honestly.', inputSchema: { type:'object', properties:{repo:{type:'string'},sha:{type:'string'}}, required:['repo','sha'], additionalProperties:false } },\n" +
+    "  { name: 'vercel_deployment_status', description: 'Inspect a real Vercel deployment and recent build events from the user-connectedVercel account. Report actual status/error logs only.', inputSchema: { type:'object', properties:{ deploymentId:{type:'string'} }, required:['deploymentId'], additionalProperties:false } },\n" +
+    '];\n' +
+    '\n' +
+    'const projectWriteTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [\n' +
+    '  {\n' +
+    "    name: 'save_project_files',\n" +
+    "    description: 'Write generated or edited source files into an owned LeonardX project. Use this to actually save the code you generated, not merely describe it. Files are merged by path, ownership and secret-path checks are enforced, and confirm=true is required.',\n"+
+    "    inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } }, confirm: { type: 'boolean' } }, required: ['project_id', 'files', 'confirm'], additionalProperties: false },\n" +
+    '  },\n' +
+    '  {\n' +
+    "    name: 'run_project_operation',\n" +
+    "    description: 'Run the real isolated project runner on the latest saved files. Use after saving generated code to run test, typecheck, lint, or build and report actual results. This may contact the configured isolated runner. Requires confirm=true.',\n" +
+    "    inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, operation: { type: 'string', enum: ['test', 'typecheck', 'lint', 'build'] }, confirm: { type: 'boolean' } }, required: ['project_id', 'operation', 'confirm'], additionalProperties: false },\n" +
+    '  },\n' +
+    '  {\n' +
+    "    name: 'deploy_project',\n" +
+    "    description: 'Deploy the latest saved website/web-app/SaaS project through the existing LeonardX GitHub/Vercel deployment pipeline. Use only for a newly requested build that includes deployment, or when the user "... 30903 more characters
+  
+      at TestContext.<anonymous> (file:///C:/Users/MFONOBONG/Desktop/My%20Porfoilo/tests/leo-chat-build-workflow.test.mjs:19:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "import { createHash, randomUUID } from 'node:crypto';\nimport { NextRequest } from 'next/server';\nimport { adminSupabase } from '@/lib/auth';\nimport { decryptMcpCredential } from '@/lib/mcp/outbound-security';\nimport { callMcpTool } from '@/lib/mcp/remote-clients';\nimport type { AssistantTool, AssistantToolExecutor } from '@/lib/ai/provider-registry';\nimport { listSkills, loadSkill, readSkillFile, runSkillScript } from '@/lib/skills/registry';\nimport { normalizeIdePath, validateIdeFiles } from '@/lib/ide-files';\n\ntype RemoteToolReference = {\n  kind: 'remote';\n  serverId: string;\n  remoteName: string;\n};\n\ntype LocalToolReference = { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'read_project_files' } | { kind: 'save_project_files' } | { kind: 'run_project_operation' } |{ kind: 'deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repo' } | { kind: 'vercel_deployment_status' } | { kind: 'vercel_deploy_git_repo' } | { kind: 'build_and_deploy_website' } | { kind: 'inspect_website_deployment' } | { kind: 'validate_browser_game' } | { kind: 'publish_browser_game' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'run_skill_script' };\ntype ToolReference = RemoteToolReference | LocalToolReference;\n\nfunction schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {\n  if (!input || typeof input !== 'object' || Array.isArray(input) || depth > 8) return null;\n  const source = input as Record<string, unknown>;\n  if (source.type !== 'object' || source.$ref !== undefined || source.$defs !== undefined) return null;\n  const properties = source.properties;\n  if (properties !== undefined && (!properties || typeof properties !== 'object' || Array.isArray(properties))) return null;\n  const result: Record<string, unknown> = { type: 'object' };\n  if (typeof source.description === 'string') result.description = source.description.slice(0, 1000);\n  if (Array.isArray(source.required) && source.required.every(value => typeof value === 'string')) {\n    result.required = source.required.slice(0, 64);\n  }\n  if (source.additionalProperties === false) result.additionalProperties = false;\n  if (properties) {\n    const sanitized: Record<string, unknown> = {};\n    for (const [name, value] of Object.entries(properties as Record<string, unknown>).slice(0, 64)) {\n      if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name) || !value || typeof value !== 'object' || Array.isArray(value)) return null;\n      const property = value as Record<string, unknown>;\n      if (property.$ref !== undefined || property.$defs !== undefined) return null;\n      if (property.type === 'object') {\n        const nested = schemaObject(property, depth + 1);\n        if (!nested) return null;\n        sanitized[name] = nested;\n      } else if (property.type === 'array') {\n        const items = property.items;\n        if (!items || typeof items !== 'object' || Array.isArray(items)) return null;\n        const itemType = (items as Record<string, unknown>).type;\n        if (!['string', 'number', 'integer', 'boolean', 'object'].includes(String(itemType))) return null;\n        const itemShape =itemType === 'object' ? schemaObject(items, depth + 1) : { type: itemType };\n        if (!itemShape) return null;\n        sanitized[name] = { type: 'array', items: itemShape };\n      } else if (['string', 'number', 'integer', 'boolean'].includes(String(property.type))) {\n        sanitized[name] = {\n          type: property.type,\n          ...(typeof property.description === 'string' ? { description: property.description.slice(0, 500) } : {}),\n          ...(Array.isArray(property.enum) && property.enum.length <= 50 ? { enum: property.enum } : {}),\n        };\n      } else {\n        return null;\n      }\n    }\n    result.properties = sanitized;\n  }\n  return result;\n}\n\nconst localTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [\n  {\n    name: 'list_projects',\n    description: 'Read project names, types, statuses, and progress belonging to this account.',\n    inputSchema: { type: 'object', properties: { limit: { type: 'integer', description: 'Maximum number of projects (1 to 50).' } } },\n  },\n  {\n    name: 'get_project_status',\n    description: 'Read the status and progress of one project owned by this account.',\n    inputSchema: { type: 'object', properties: { project_id: { type: 'string', description: 'UUID of the project.' } }, required: ['project_id'], additionalProperties: false },\n  },\n  {\n    name: 'read_project_files',\n    description: 'Read source files from a LeonardX project workspace owned by this account. Environment files, credentials, keys and generated dependency folders are excluded. Use only when the user asks to inspect or continue an owned project.',\n    inputSchema: { type: 'object', properties: { project_id: { type: 'string', description: 'UUID of the owned project.' }, paths: { type: 'array', items: { type: 'string' }, description: 'Optional relative paths to read.' } }, required: ['project_id'], additionalProperties: false },\n  },\n  {\n    name: 'save_project_files',\n    description: 'Save source-file changes to an owned LeonardX project workspace. Only use when the user explicitly requests editing or saving project files. Files are merged by path; this does not push to GitHub or deploy. Requires confirm=true and never accepts environment or credential files.',\n    inputSchema: { type: 'object', properties: { project_id: { type: 'string', description: 'UUID of the owned project.' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } }, confirm: { type: 'boolean', description: 'Set true only when the user explicitly asked to save these file changes.' } }, required: ['project_id', 'files', 'confirm'], additionalProperties: false },\n  },\n  {\n    name: 'load_skill',\n    description: 'Load the full instructions for an enabled skill only when it matches the task.',\n    inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'Skill name.' } }, required: ['name'], additionalProperties: false },\n  },\n  {\n    name: 'read_skill_file',\n    description: 'Read an authorized reference or asset file from an enabled skill. Path traversal is blocked.',\n    inputSchema: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string' } }, required: ['name', 'path'], additionalProperties: false },\n  },\n  {\n    name: 'run_skill_script',\n    description: 'Run an approved .py or .js helper from an enabled skill in the restricted skill sandbox.',\n    inputSchema: { type: 'object', properties: { name: { type: 'string' }, script: { type: 'string' }, args: { type: 'array', items: { type: 'string' } } }, required: ['name', 'script'], additionalProperties: false },\n  },\n  { name: 'github_repository_tree', description: 'Inspect the file paths and sizes in a repository connected by this user. Use before editing so Leo understands the actual repo structure.', inputSchema: { type:'object', properties:{ repo:{type:'string'}, branch:{type:'string'} }, required:['repo'], additionalProperties:false } },\n  { name: 'github_read_file', description: 'Read one UTF-8 source file from a repository connected by this user. Never read secrets or environment files. Use actual file contents before proposing code changes.', inputSchema: { type:'object', properties:{ repo:{type:'string'}, path:{type:'string'}, branch:{type:'string'} }, required:['repo','path'], additionalProperties:false } },\n  { name: 'github_commit_status', description: 'Inspect real GitHub check-runs and combined commit status for a source commit. Use after committing generated code and report failed or pending checks honestly.', inputSchema: { type:'object', properties:{repo:{type:'string'},sha:{type:'string'}}, required:['repo','sha'], additionalProperties:false } },\n  { name: 'vercel_deployment_status', description: 'Inspect a real Vercel deployment and recent build events from the user-connected Vercel account. Report actual status/error logs only.', inputSchema: { type:'object', properties:{ deploymentId:{type:'string'} }, required:['deploymentId'], additionalProperties:false } },\n];\n\nconst projectWriteTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [\n  {\n    name: 'save_project_files',\n    description: 'Write generated oredited source files into an owned LeonardX project. Use this to actually save the code you generated, not merely describe it. Files are merged by path, ownership and secret-path checks are enforced, and confirm=true is required.',\n    inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } }, confirm: { type: 'boolean' } }, required: ['project_id', 'files', 'confirm'], additionalProperties: false },\n  },\n  {\n    name: 'run_project_operation',\n    description: 'Run the real isolated project runner on the latest saved files. Use after saving generated code to run test, typecheck, lint, or build and report actual results. This may contact the configured isolated runner. Requires confirm=true.',\n    inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, operation: { type: 'string', enum: ['test', 'typecheck', 'lint', 'build'] }, confirm: { type: 'boolean' } }, required: ['project_id', 'operation', 'confirm'], additionalProperties: false },\n  },\n  {\n    name: 'deploy_project',\n    description: 'Deploy the latest saved website/web-app/SaaS project through the existing LeonardX GitHub/Vercel deployment pipeline. Use only for a newly requested build that includes deployment, or when the user "... 30903 more characters,
+    expected: /options\.allowProjectWrites \? projectWriteTools : \[\]/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\leo-project-workflow.test.mjs:5:1
+✖ Leo project intent stays truthful until the real setup workflow confirms creation (8.5985ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /I have not created or deployed a project yet/. Input:
+  
+  "import { randomUUID } from 'node:crypto';\n" +
+    'import { NextRequest, NextResponse } from "next/server";\n' +
+    'import { getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from "@/lib/openai";\n' +
+    'import { generateText, generateTextWithTools, getDefaultTextModel, ModelProviderError } from "@/lib/ai/provider-registry";\n' +
+    'import { generateWithExplicitFallback, getSafeFallbackModel } from "@/lib/ai/provider-fallback";\n' +
+    'import type { ModelMessage } from "@/lib/ai/provider-registry";\n' +
+    'import { createUserAssistantTools } from "@/lib/ai/tool-orchestrator";\n' +
+    'import { adminSupabase, getProfile, isPlatformOwner } from "@/lib/auth";\n' +
+    'import { getPlanPriceNgn } from "@/lib/pricing";\n' +
+    'import { classifyAgents } from "@/lib/agents/manager";\n' +
+    'import { getAllowedAgentIds } from "@/lib/agents/entitlements";\n' +
+    'import type { ProjectType } from "@/lib/pricing";\n' +
+    'import { getBuilderAvailability } from "@/lib/builders/providers";\n' +
+    'import { getEffectiveUserPlan, planAllows } from "@/lib/plan-access";\n' +
+    "import { withOperationalMonitoring } from '@/lib/monitoring';\n" +
+    "import { enforceUserRateLimit } from '@/lib/rate-limit';\n" +
+    "import { getActiveDeveloperPlan, getUserDeveloperAgent } from '@/lib/developer-agents';\n" +
+    "import { calculateApiCredits, type ApiModel } from '@/lib/api-plan-catalog';\n" +
+    "import { getModelProviderStatus, isProviderConfigured, resolveModel } from '@/lib/ai/model-catalog';\n" +
+    "import { listSkills } from '@/lib/skills/registry';\n" +
+    'export const runtime = "nodejs";\n' +
+    'const PROJECT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n' +
+    '\n' +
+    'function inferProjectType(message: string): ProjectType | null {\n' +
+    '  const text = message.toLowerCase();\n' +
+    '  if (/\\b(mobile app|mobile application|android app|ios app|iphone app|react native|expo app|build me an app|create an app)\\b/.test(text)) return "mobile_app";\n' +
+    '  if (/\\b(game|video game|2d platformer|racing game|puzzle game|godot)\\b/.test(text)) return "game";\n' +
+    '  if (/\\b(saas|crm|marketplace|social platform|booking platform|school management system)\\b/.test(text)) return "saas";\n' +
+    '  if (/\\b(web app|web application|management system|dashboard app|build me a system|build me an application)\\b/.test(text)) return"web_app";\n' +
+    '  if (/\\b(website|web site|landing page|restaurant site|e-commerce site|portfolio site)\\b/.test(text)) return "website";\n' +
+    '  return null;\n' +
+    '}\n' +
+    '\n' +
+    'function isExplicitBuildIntent(message: string) {\n' +
+    '  return /\\b(build|create|make|develop|generate|start|implement|code)\\b/i.test(message) &&\n' +
+    '    /\\b(website|web site|web app|web application|saas|game|platformer|racing|puzzle|browser game|landing page|portfolio|e-commerce|marketplace|dashboard)\\b/i.test(message);\n' +
+    '}\n' +
+    '\n' +
+    'function isRepositoryTask(message: string) {\n' +
+    '  return /\\b(github|git\\s?hub|repository|repo)\\b/i.test(message);\n' +
+    '}\n' +
+    'function isRepositoryWriteIntent(message: string) {\n' +
+    '  return isRepositoryTask(message) && /\\b(edit|write|commit|push|fix|change|update|modify|repair|deploy|redeploy|publish)\\b/i.test(message);\n' +
+    '}\n' +
+    '\n' +
+    'function suggestedProjectName(message: string, projectType: ProjectType) {\n' +
+    "  const cleaned = message.replace(/https?:\\/\\/\\S+/g, '').replace(/\\s+/g, ' ').trim();\n" +
+    '  const quoted = cleaned.match(/["“]([^"”]{2,70})["”]/)?.[1];\n' +
+    '  if (quoted) return quoted.slice(0, 120);\n' +
+    "  const candidate = cleaned.match(/\\b(?:called|named|for)\\s+([A-Z][\\w&' -]{1,60}?)(?=\\s+(?:with|that|which|and|using|for|including|featuring)\\b|[,.!?]|$)/i)?.[1]?.trim();\n" +
+    '  if (candidate) return candidate.slice(0, 120);\n' +
+    "  if (projectType === 'game') {\n" +
+    "    if (/racing|race|car/i.test(cleaned)) return 'Browser Racing Game';\n" +
+    "    if (/puzzle/i.test(cleaned)) return 'Browser Puzzle Game';\n" +
+    "    if (/platform/i.test(cleaned)) return 'Browser Platformer';\n" +
+    "    return 'Browser Game';\n" +
+    '  }\n' +
+    "  if (projectType === 'saas') return 'New SaaS Project';\n" +
+    "  if (projectType === 'web_app') return 'New Web App';\n" +
+    "  if (/restaurant/i.test(cleaned)) return 'Restaurant Website';\n" +
+    "  if (/portfolio/i.test(cleaned)) return 'Portfolio Website';\n" +
+    "  if (/e-?commerce|online store|shop/i.test(cleaned)) return 'Online Store';\n" +
+    "  return 'New Website';\n" +
+    '}\n' +
+    '\n' +
+    'function suggestedWebsiteType(message: string) {\n' +
+    "  if (/restaurant|caterer|food business/i.test(message)) return 'restaurant';\n" +
+    "  if (/portfolio|personal site|cv|resume/i.test(message)) return 'portfolio';\n" +
+    "  if (/e-?commerce|online store|shop|marketplace/i.test(message)) return 'ecommerce';\n" +
+    "  if (/blog|news|magazine/i.test(message)) return 'blog';\n" +
+    "  if (/booking|appointment/i.test(message)) return 'booking';\n" +
+    "  return 'landing';\n" +
+    '}\n' +
+    '\n' +
+    'export async function GET(req: NextRequest) {\n' +
+    '  const sid = req.nextUrl.searchParams.get("session_id");\n' +
+    '  if (!sid) return NextResponse.json({ messages: [] });\n' +
+    '  const ctx = await getProfile(req);\n' +
+    '  if (!ctx) return NextResponse.json({ messages: [] });\n' +
+    '  const db = adminSupabase();\n' +
+    '  const { data } = await db\n' +
+    '    .from("chats_v2")\n' +
+    '    .select("messages")\n' +
+    '    .eq("id", sid)\n' +
+    '    .eq("user_id", ctx.user.id)\n' +
+    '    .maybeSingle();\n' +
+    '  const { data: sub } = await db\n' +
+    '    .from("subscriptions")\n' +
+    '    .select("plan,status,current_period_end")\n' +
+    '    .eq("user_id", ctx.user.id)\n' +
+    '    .eq("status", "active")\n' +
+    '    .order("created_at", { ascending: false })\n' +
+    '    .limit(1)\n' +
+    '    .maybeSingle();\n' +
+    '  const active =\n' +
+    '    sub &&\n' +
+    '    (!sub.current_period_end || new Date(sub.current_period_end) > new Date());\n' +
+    '  return NextResponse.json({\n' +
+    '    messages: data?.messages || [],\n' +
+    '    profile: { full_name: ctx.profile.full_name },\n' +
+    '    plan: active ? sub?.plan : null,\n' +
+    '  });\n' +
+    '}\n' +
+    'export async function POST(req: NextRequest) {\n' +
+    "  return withOperationalMonitoring(req, 'leo.ai.request', async ({ reportFailure }) => {\n" +
+    '  let customAgentUsageId: string | null = null;\n' +
+    '  let customAgentReservedCredits: number | null = null;\n' +
+    '  let customAgentBillingModel: ApiModel | null = null;\n' +
+    '  let customAgentProviderStarted = false;\n' +
+    '  async function refundCustomAgentUsage() {\n' +
+    '    if (!customAgentUsageId) return;\n' +
+    '    const usageId = customAgentUsageId;\n' +
+    '    customAgentUsageId = null;\n' +
+    "    const { error } = await adminSupabase().rpc('refund_api_request_credit', { p_usage_id: usageId });\n" +
+    "    if (error) console.error('Custom agent credit refund failed', { usageId });\n" +
+    '  }\n' +
+    '  async function settleCustomAgentUsage(credits: number) {\n' +
+    '    if (!customAgentUsageId) return false;\n' +
+    '    const usageId = customAgentUsageId;\n' +
+    '    try {\n' +
+    "      const { data, error } = await adminSupabase().rpc('settle_api_request_credit', {\n" +
+    '        p_usage_id: usageId,\n' +
+    '        p_actual_credits: credits,\n' +
+    '      });\n' +
+    '      if (error || data !== true) {\n' +
+    "        console.error('Custom agent credit settlement failed; reservation remains held', { usageId, error: error?.message });\n" +
+    '        return false;\n' +
+    '      }\n' +
+    '      customAgentUsageId = null;\n' +
+    '      return true;\n' +
+    '    } catch (error) {\n' +
+    "      console.error('Custom agent credit settlement failed; reservation remains held', {\n" +
+    '        usageId,\n' +
+    "        error: error instanceof Error ? error.message : 'unknown',\n" +
+    '      });\n' +
+    '      return false;\n' +
+    '    }\n' +
+    '  }\n' +
+    '  try {\n' +
+    '    const { session_id, message, mode = "normal", project_id = null, model: requestedModel, tool_name: requestedToolName, custom_agent_id: requestedCustomAgentId } = await req.json();\n' +
+    '    if (!session_id || typeof message !== "string" || !message.trim())\n' +
+    '      return NextResponse.json(\n' +
+    '        { error: "Missing session or message" },\n' +
+    '        { status: 400 },\n' +
+    '      );\n' +
+    '    if (!["normal", "deep", "tools"].includes(mode)) return NextResponse.json({ error: "Choose a supported chat mode." }, { status: 400 });\n' +
+    '    if (requestedToolName !== undefined && (typeof requestedToolName !== "string" || !/^[A-Za-z0-9_-]{1,96}$/.test(requestedToolName))) {\n' +
+    '      return NextResponse.json({ error: "Choose an available tool." }, { status: 400 });\n' +
+    '    }\n' +
+    '    if (requestedCustomAgentId !== undefined && (typeof requestedCustomAgentId !== "string" || !PROJECT_ID_RE.test(requestedCustomAgentId))) {\n' +
+    '      return NextResponse.json({ error: "Choose a valid custom agent." }, { status: 400 });\n' +
+    '    }\n' +
+    '    if (requestedToolName && requestedCustomAgentId) return NextResponse.json({ error: "Attach one custom agent or one tool, not both." }, { status: 400 });\n' +
+    '    if (requestedToolName && mode !== "tools") return NextResponse.json({ error: "Selected tools require tool mode." }, { status: 400 });\n' +
+    "    if (requestedModel !== undefined && (typeof requestedModel !== 'string' || requestedModel.length > 160)) {\n" +
+    '      return NextResponse.json({ error: "Choose a valid model from the available model list." }, { status: 400 });\n' +
+    '    }\n' +
+    '    const ctx = await getProfile(req);\n' +
+    '    const owner = isPlatformOwner(ctx?.profile);\n' +
+    '    let customAgent: Awaited<ReturnType<typeof getUserDeveloperAgent>> = null;\n' +
+    '    if (requestedCustomAgentId) {\n' +
+    '      if (!ctx) return NextResponse.json({ error: "Sign in to use a custom agent." }, { status: 401 });\n' +
+    '      try {\n' +
+    '        if (!owner && !await getActiveDeveloperPlan(ctx.user.id)) return NextResponse.json({ error: "An active paid Developer API plan is required to use custom agents." }, { status: 403 });\n' +
+    '        customAgent = await getUserDeveloperAgent(ctx.user.id, requestedCustomAgentId);\n' +
+    '      } catch (cause) {\n' +
+    "        console.error('Custom agent access check failed', cause instanceof Error ? cause.message : 'Unknown error');\n" +
+    '        return NextResponse.json({ error: "Custom agent access could not be verified. Check the Developer Agent Studio migration andplan." }, { status: 503 });\n' +
+    '      }\n' +
+    '      if (!customAgent) return NextResponse.json({ error: "Custom agent not found." }, { status: 404 });\n' +
+    '      if (customAgent.allowed_tools.length && mode !== "tools") return NextResponse.json({ error: "This custom agent requires read-only tool mode." }, { status: 400 });\n' +
+    '    }\n' +
+    '    if (mode === "tools" || requestedCustomAgentId) {\n' +
+    '      if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });\n' +
+    "      const limited = await enforceUserRateLimit(ctx.user.id, requestedCustomAgentId ? 'leo-custom-agent-run' : 'leo-chat-tools', 10, 60);\n" +
+    '      if (limited) return limited;\n' +
+    '    }\n' +
+    '    const db = ctx ? adminSupabase() : null;\n' +
+    '    if (project_id !== null && (typeof proj'... 25645 more characters
+  
+      at TestContext.<anonymous> (file:///C:/Users/MFONOBONG/Desktop/My%20Porfoilo/tests/leo-project-workflow.test.mjs:7:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: `import { randomUUID } from 'node:crypto';\nimport { NextRequest, NextResponse } from "next/server";\nimport { getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from "@/lib/openai";\nimport { generateText, generateTextWithTools, getDefaultTextModel, ModelProviderError }from "@/lib/ai/provider-registry";\nimport { generateWithExplicitFallback, getSafeFallbackModel } from "@/lib/ai/provider-fallback";\nimport type { ModelMessage } from "@/lib/ai/provider-registry";\nimport { createUserAssistantTools } from "@/lib/ai/tool-orchestrator";\nimport { adminSupabase, getProfile, isPlatformOwner } from "@/lib/auth";\nimport { getPlanPriceNgn } from "@/lib/pricing";\nimport { classifyAgents } from "@/lib/agents/manager";\nimport { getAllowedAgentIds } from "@/lib/agents/entitlements";\nimport type { ProjectType } from "@/lib/pricing";\nimport { getBuilderAvailability } from "@/lib/builders/providers";\nimport { getEffectiveUserPlan, planAllows } from "@/lib/plan-access";\nimport { withOperationalMonitoring } from '@/lib/monitoring';\nimport { enforceUserRateLimit } from '@/lib/rate-limit';\nimport { getActiveDeveloperPlan, getUserDeveloperAgent } from '@/lib/developer-agents';\nimport { calculateApiCredits, type ApiModel } from '@/lib/api-plan-catalog';\nimport { getModelProviderStatus, isProviderConfigured, resolveModel } from '@/lib/ai/model-catalog';\nimport { listSkills } from '@/lib/skills/registry';\nexport const runtime = "nodejs";\nconst PROJECT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n\nfunction inferProjectType(message: string): ProjectType | null {\n  const text = message.toLowerCase();\n  if (/\\b(mobile app|mobile application|android app|ios app|iphone app|react native|expo app|build me an app|create an app)\\b/.test(text)) return "mobile_app";\n  if (/\\b(game|video game|2d platformer|racing game|puzzle game|godot)\\b/.test(text)) return "game";\n  if (/\\b(saas|crm|marketplace|social platform|booking platform|school management system)\\b/.test(text)) return "saas";\n  if (/\\b(web app|web application|management system|dashboard app|build me a system|build me an application)\\b/.test(text)) return "web_app";\n  if (/\\b(website|web site|landing page|restaurant site|e-commerce site|portfolio site)\\b/.test(text)) return "website";\n  return null;\n}\n\nfunction isExplicitBuildIntent(message: string) {\n  return /\\b(build|create|make|develop|generate|start|implement|code)\\b/i.test(message) &&\n    /\\b(website|web site|web app|web application|saas|game|platformer|racing|puzzle|browser game|landing page|portfolio|e-commerce|marketplace|dashboard)\\b/i.test(message);\n}\n\nfunction isRepositoryTask(message: string) {\n  return /\\b(github|git\\s?hub|repository|repo)\\b/i.test(message);\n}\nfunction isRepositoryWriteIntent(message: string) {\n  return isRepositoryTask(message) && /\\b(edit|write|commit|push|fix|change|update|modify|repair|deploy|redeploy|publish)\\b/i.test(message);\n}\n\nfunction suggestedProjectName(message: string, projectType: ProjectType) {\n  const cleaned = message.replace(/https?:\\/\\/\\S+/g, '').replace(/\\s+/g, ' ').trim();\n  const quoted = cleaned.match(/["“]([^"”]{2,70})["”]/)?.[1];\n  if (quoted) return quoted.slice(0, 120);\n  const candidate = cleaned.match(/\\b(?:called|named|for)\\s+([A-Z][\\w&' -]{1,60}?)(?=\\s+(?:with|that|which|and|using|for|including|featuring)\\b|[,.!?]|$)/i)?.[1]?.trim();\n  if(candidate) return candidate.slice(0, 120);\n  if (projectType === 'game') {\n    if (/racing|race|car/i.test(cleaned)) return 'Browser Racing Game';\n    if (/puzzle/i.test(cleaned)) return 'Browser Puzzle Game';\n    if (/platform/i.test(cleaned)) return 'Browser Platformer';\n    return 'Browser Game';\n  }\n  if (projectType === 'saas') return 'New SaaS Project';\n  if (projectType === 'web_app') return 'New Web App';\n  if (/restaurant/i.test(cleaned)) return 'Restaurant Website';\n  if (/portfolio/i.test(cleaned)) return 'Portfolio Website';\n  if (/e-?commerce|online store|shop/i.test(cleaned)) return 'Online Store';\n  return 'New Website';\n}\n\nfunction suggestedWebsiteType(message: string) {\n  if (/restaurant|caterer|food business/i.test(message)) return 'restaurant';\n  if (/portfolio|personal site|cv|resume/i.test(message)) return 'portfolio';\n  if (/e-?commerce|online store|shop|marketplace/i.test(message)) return 'ecommerce';\n  if (/blog|news|magazine/i.test(message)) return 'blog';\n  if (/booking|appointment/i.test(message)) return 'booking';\n  return 'landing';\n}\n\nexport async function GET(req: NextRequest) {\n  const sid = req.nextUrl.searchParams.get("session_id");\n  if (!sid) return NextResponse.json({ messages: [] });\n  const ctx = await getProfile(req);\n  if (!ctx) return NextResponse.json({ messages: [] });\n  const db = adminSupabase();\n  const { data } = await db\n    .from("chats_v2")\n    .select("messages")\n    .eq("id", sid)\n    .eq("user_id", ctx.user.id)\n    .maybeSingle();\n  const { data: sub } = await db\n    .from("subscriptions")\n    .select("plan,status,current_period_end")\n   .eq("user_id", ctx.user.id)\n    .eq("status", "active")\n    .order("created_at", { ascending: false })\n    .limit(1)\n    .maybeSingle();\n  const active =\n    sub &&\n    (!sub.current_period_end || new Date(sub.current_period_end) > new Date());\n  return NextResponse.json({\n    messages: data?.messages || [],\n    profile: { full_name: ctx.profile.full_name },\n    plan: active ? sub?.plan : null,\n });\n}\nexport async function POST(req: NextRequest) {\n  return withOperationalMonitoring(req, 'leo.ai.request', async ({ reportFailure}) => {\n  let customAgentUsageId: string | null = null;\n  let customAgentReservedCredits: number | null = null;\n  let customAgentBillingModel: ApiModel | null = null;\n  let customAgentProviderStarted = false;\n  async function refundCustomAgentUsage() {\n    if (!customAgentUsageId) return;\n    const usageId = customAgentUsageId;\n    customAgentUsageId = null;\n    const { error } = await adminSupabase().rpc('refund_api_request_credit', { p_usage_id: usageId });\n    if (error) console.error('Custom agent credit refund failed', { usageId });\n  }\n  async function settleCustomAgentUsage(credits: number) {\n    if (!customAgentUsageId) return false;\n    const usageId = customAgentUsageId;\n    try {\n      const { data, error } = await adminSupabase().rpc('settle_api_request_credit', {\n        p_usage_id: usageId,\n        p_actual_credits: credits,\n      });\n      if (error || data !== true) {\n        console.error('Custom agent credit settlement failed; reservation remains held', { usageId, error: error?.message });\n        return false;\n      }\n      customAgentUsageId =null;\n      return true;\n    } catch (error) {\n      console.error('Custom agent credit settlement failed; reservation remains held', {\n        usageId,\n        error: error instanceof Error ? error.message : 'unknown',\n      });\n      return false;\n    }\n  }\n  try{\n    const { session_id, message, mode = "normal", project_id = null, model: requestedModel, tool_name: requestedToolName, custom_agent_id: requestedCustomAgentId } = await req.json();\n    if (!session_id || typeof message !== "string" || !message.trim())\n      return NextResponse.json(\n        { error: "Missing session or message" },\n        { status: 400 },\n      );\n    if (!["normal", "deep", "tools"].includes(mode)) return NextResponse.json({ error: "Choose a supported chat mode." }, { status: 400 });\n    if (requestedToolName !== undefined && (typeof requestedToolName !== "string" || !/^[A-Za-z0-9_-]{1,96}$/.test(requestedToolName))) {\n      return NextResponse.json({ error: "Choose an available tool." }, { status: 400 });\n    }\n    if (requestedCustomAgentId !== undefined && (typeof requestedCustomAgentId !== "string" || !PROJECT_ID_RE.test(requestedCustomAgentId))) {\n      return NextResponse.json({ error: "Choose a valid custom agent." }, { status: 400 });\n    }\n    if (requestedToolName && requestedCustomAgentId) return NextResponse.json({ error: "Attach one custom agent or one tool, not both." }, { status: 400 });\n    if (requestedToolName && mode !== "tools") return NextResponse.json({ error: "Selected tools require tool mode." }, { status: 400 });\n    if (requestedModel !== undefined && (typeof requestedModel !== 'string' || requestedModel.length > 160)) {\n      return NextResponse.json({ error: "Choose a valid model from the available model list." }, { status: 400 });\n    }\n    const ctx = await getProfile(req);\n    const owner = isPlatformOwner(ctx?.profile);\n    let customAgent: Awaited<ReturnType<typeof getUserDeveloperAgent>> = null;\n    if (requestedCustomAgentId) {\n      if (!ctx) return NextResponse.json({ error: "Sign in to use a custom agent." }, { status: 401 });\n      try {\n        if (!owner && !await getActiveDeveloperPlan(ctx.user.id)) return NextResponse.json({ error: "An active paid Developer API plan is required to use custom agents." }, { status: 403 });\n        customAgent = await getUserDeveloperAgent(ctx.user.id, requestedCustomAgentId);\n      } catch (cause) {\n        console.error('Custom agent access check failed', cause instanceof Error ? cause.message : 'Unknown error');\n        return NextResponse.json({ error: "Custom agent access could not be verified. Check the Developer Agent Studio migration and plan." }, { status: 503 });\n      }\n      if (!customAgent) return NextResponse.json({ error: "Custom agent not found." }, { status: 404 });\n      if (customAgent.allowed_tools.length && mode !== "tools") return NextResponse.json({ error: "This custom agent requires read-only tool mode." }, { status: 400 });\n    }\n    if (mode === "tools" || requestedCustomAgentId) {\n      if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });\n      const limited = await enforceUserRateLimit(ctx.user.id, requestedCustomAgentId ? 'leo-custom-agent-run' : 'leo-chat-tools', 10, 60);\n      if (limited) return limited;\n    }\n    const db = ctx ? adminSupabase() : null;\n    if (project_id !== null && (typeof proj`... 25645 more characters,
+    expected: /I have not created or deployed a project yet/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\mcp-protocol.test.mjs:146:1
+✖ MCP write tools require the write scope and explicit confirmation input (121.886ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  ... Skipped lines
+  
+    [
+      'advance_engineering_workflow',
+      'approve_agent_execution',
+      'build_and_deploy_project',
+      'build_android_calculator',
+      'cancel_agent_execution',
+      'cancel_engineering_workflow',
+  +   'create_browser_game',
+      'create_engineering_workflow',
+  -   'create_browser_game',
+  -   'export_browser_game_project',
+  -   'start_browser_game_preview',
+      'create_project',
+      'discover_application_capabilities',
+  +   'export_browser_game_project',
+      'get_account_plan',
+      'get_agent_details',
+      'get_agent_execution_status',
+      'get_android_build_capabilities',
+      'get_android_build_status',
+  ...
+      'save_project_files',
+  +   'start_browser_game_preview',
+      'start_cloud_build'
+    ]
+  
+      at TestContext.<anonymous> (file:///C:/Users/MFONOBONG/Desktop/My%20Porfoilo/tests/mcp-protocol.test.mjs:175:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [
+      'advance_engineering_workflow',    'approve_agent_execution',
+      'build_and_deploy_project',        'build_android_calculator',
+      'cancel_agent_execution',          'cancel_engineering_workflow',
+      'create_browser_game',             'create_engineering_workflow',
+      'create_project',                  'discover_application_capabilities',
+      'export_browser_game_project',     'get_account_plan',
+      'get_agent_details',               'get_agent_execution_status',
+      'get_android_build_capabilities',  'get_android_build_status',
+      'get_capability_alternatives',     'get_cloud_build_logs',
+      'get_cloud_build_status',          'get_configuration_status',
+      'get_engineering_workflow_status', 'get_project_hosting_status',
+      'get_project_status',              'invoke_agent',
+      'leo_ai_chat',                     'leo_ai_external_assist',
+      'leo_ai_external_assist_complete', 'leo_ai_get_execution_status',
+      'list_agent_executions',           'list_ai_providers',
+      'list_available_agents',           'list_projects',
+      'plan_engineering_workflow',       'read_project_files',
+      'rename_project',                  'retry_cloud_build',
+      'run_project_operation',           'save_project_files',
+      'start_browser_game_preview',      'start_cloud_build'
+    ],
+    expected: [
+      'advance_engineering_workflow', 'approve_agent_execution',
+      'build_and_deploy_project',     'build_android_calculator',
+      'cancel_agent_execution',       'cancel_engineering_workflow',
+      'create_engineering_workflow',  'create_browser_game',
+      'export_browser_game_project',  'start_browser_game_preview',
+      'create_project',               'discover_application_capabilities',
+      'get_account_plan',             'get_agent_details',
+      'get_agent_execution_status',   'get_android_build_capabilities',
+      'get_android_build_status',     'get_capability_alternatives',
+      'get_cloud_build_logs',         'get_cloud_build_status',
+      'get_configuration_status',     'get_engineering_workflow_status',
+      'get_project_hosting_status',   'get_project_status',
+      'invoke_agent',                 'leo_ai_chat',
+      'leo_ai_external_assist',       'leo_ai_external_assist_complete',
+      'leo_ai_get_execution_status',  'list_agent_executions',
+      'list_ai_providers',            'list_available_agents',
+      'list_projects',                'plan_engineering_workflow',
+      'read_project_files',           'rename_project',
+      'retry_cloud_build',            'run_project_operation',
+      'save_project_files',           'start_cloud_build'
+    ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+PS C:\Users\MFONOBONG\Desktop\My Porfoilo> 
+
+npx tsc --noEmit
+PS C:\Users\MFONOBONG\Desktop\My Porfoilo> npx tsc --noEmit    
+app/api/chat/route.ts:255:39 - error TS2304: Cannot find name 'createSetupProject'.
+
+255           const setupResponse = await createSetupProject(setupRequest);
+                                          ~~~~~~~~~~~~~~~~~~
+
+app/api/games/[id]/generate/route.ts:83:497 - error TS2339: Property 'catch' does not exist on type 'PromiseLike<undefined>'.
+
+83       await db.from('ai_usage').insert({ user_id: ctx.user.id, feature: mode === 'repair' ? 'browser_game_repair' : 'browser_game_generation', model: `${outcome.result.provider}/${outcome.result.model}`, prompt_tokens: outcome.result.usage.inputTokens, completion_tokens: outcome.result.usage.outputTokens, total_tokens: outcome.result.usage.totalTokens, credits_used: 0, metadata: { project_id: id, provider: outcome.result.provider, repair_attempt: mode === 'repair' } }).then(() => undefined).catch(() => undefined);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   ~~~~~
+
+app/api/games/[id]/publish/route.ts:168:100 - error TS2339: Property 'repo_url' does not exist on type '{ state: string; live_url: null; deployment_state: string; updated_at: string; }'.
+
+168     return NextResponse.json({ unpublished: true, deployment_id: deploymentId, repository: updated.repo_url || null }, { headers: { 'Cache-Control': 'private, no-store' } });
+                                                                                                       ~~~~~~~~
+
+lib/ai/tool-orchestrator.ts:364:27 - error TS2339: Property 'serverId' does not exist on type 'RemoteToolReference | { kind: "github_repository_tree"; } | { kind: "github_read_file"; } | { kind: "github_commit_status"; } | { kind: "github_commit_files"; } | { ...; } | { ...; } | { ...; } | { ...; }'.
+  Property 'serverId' does not exist on type '{ kind: "github_repository_tree"; }'.
+
+364       .eq('id', reference.serverId)
+                              ~~~~~~~~
+
+lib/ai/tool-orchestrator.ts:372:34 - error TS2339: Property 'serverId' does not exist on type 'RemoteToolReference | { kind: "github_repository_tree"; } | { kind: "github_read_file"; } | { kind: "github_commit_status"; } | { kind: "github_commit_files"; } | { ...; } | { ...; } | { ...; } | { ...; }'.
+  Property 'serverId' does not exist on type '{ kind: "github_repository_tree"; }'.
+
+372       .eq('server_id', reference.serverId)
+                                     ~~~~~~~~
+
+lib/ai/tool-orchestrator.ts:373:34 - error TS2339: Property 'remoteName' does not exist on type 'RemoteToolReference | { kind: "github_repository_tree"; } | { kind: "github_read_file"; } | { kind: "github_commit_status"; } | { kind: "github_commit_files"; } | { ...; } | { ...; } | { ...; } | { ...; }'.
+  Property 'remoteName' does not exist on type '{ kind: "github_repository_tree"; }'.
+
+373       .eq('tool_name', reference.remoteName)
+                                     ~~~~~~~~~~
+
+lib/ai/tool-orchestrator.ts:377:45 - error TS2339: Property 'remoteName' does not exist on type 'RemoteToolReference | { kind: "github_repository_tree"; } | { kind: "github_read_file"; } | { kind: "github_commit_status"; } | { kind: "github_commit_files"; } | { ...; } | { ...; } | { ...; } | { ...; }'.
+  Property 'remoteName' does not exist on type '{ kind: "github_repository_tree"; }'.
+
+377       .find(item => item.name === reference.remoteName);
+                                                ~~~~~~~~~~
+
+lib/ai/tool-orchestrator.ts:391:77 - error TS2339: Property 'remoteName' does not exist on type 'RemoteToolReference | { kind: "github_repository_tree"; } | { kind: "github_read_file"; } | { kind: "github_commit_status"; } | { kind: "github_commit_files"; } | { ...; } | { ...; } | { ...; } | { ...; }'.
+  Property 'remoteName' does not exist on type '{ kind: "github_repository_tree"; }'.
+
+391       result = await callMcpTool(server.endpoint_url, credential, reference.remoteName, args);
+                                                                                ~~~~~~~~~~
+
+lib/ai/tool-orchestrator.ts:395:30 - error TS2339: Property 'serverId' does not exist on type 'RemoteToolReference | { kind: "github_repository_tree"; } | { kind: "github_read_file"; } | { kind: "github_commit_status"; } | { kind: "github_commit_files"; } | { ...; } | { ...; } | { ...; } | { ...; }'.
+  Property 'serverId' does not exist on type '{ kind: "github_repository_tree"; }'.
+
+395         server_id: reference.serverId,
+                                 ~~~~~~~~
+
+lib/ai/tool-orchestrator.ts:396:30 - error TS2339: Property 'remoteName' does not exist on type 'RemoteToolReference | { kind: "github_repository_tree"; } | { kind: "github_read_file"; } | { kind: "github_commit_status"; } | { kind: "github_commit_files"; } | { ...; } | { ...; } | { ...; } | { ...; }'.
+  Property 'remoteName' does not exist on type '{ kind: "github_repository_tree"; }'.
+
+396         tool_name: reference.remoteName,
+                                 ~~~~~~~~~~
+
+lib/ai/tool-orchestrator.ts:405:28 - error TS2339: Property 'serverId' does not exist on type 'RemoteToolReference | { kind: "github_repository_tree"; } | { kind: "github_read_file"; } | { kind: "github_commit_status"; } | { kind: "github_commit_files"; } | { ...; } | { ...; } | { ...; } | { ...; }'.
+  Property 'serverId' does not exist on type '{ kind: "github_repository_tree"; }'.
+
+405       server_id: reference.serverId,
+                               ~~~~~~~~
+
+lib/ai/tool-orchestrator.ts:406:28 - error TS2339: Property 'remoteName' does not exist on type 'RemoteToolReference | { kind: "github_repository_tree"; } | { kind: "github_read_file"; } | { kind: "github_commit_status"; } | { kind: "github_commit_files"; } | { ...; } | { ...; } | { ...; } | { ...; }'.
+  Property 'remoteName' does not exist on type '{ kind: "github_repository_tree"; }'.
+
+406       tool_name: reference.remoteName,
+                               ~~~~~~~~~~
+
+
+Found 12 errors in 4 files.
+
+Errors  Files
+     1  app/api/chat/route.ts:255
+     1  app/api/games/[id]/generate/route.ts:83
+     1  app/api/games/[id]/publish/route.ts:168
+     9  lib/ai/tool-orchestrator.ts:364
+     npm run lint
+PS C:\Users\MFONOBONG\Desktop\My Porfoilo> npm run lint                      
+               
+> leo-portfolio-os@1.0.0 lint
+> eslint .      
+
+
+C:\Users\MFONOBONG\Desktop\My Porfoilo\components\LEOWidget.tsx
+   226:6     warning  React Hook useEffect has a missing dependency: 'initialSessionId'. Either include it or remove the dependency array                                                                                                                                                 react-hooks/exhaustive-deps
+  1151:1620  warning  Do not use `window.location.href` to navigate to internal Next.js pages. Use `redirect()` in the render phase, or `useRouter().push()` in Client Components' event handlers instead. See: https://nextjs.org/docs/messages/no-location-assign-relative-destination  @next/next/no-location-assign-relative-destination
+
+C:\Users\MFONOBONG\Desktop\My Porfoilo\components\LeoWorkspaceSidebar.tsx
+  17:34  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\MFONOBONG\Desktop\My Porfoilo\components\LeoWorkspaceSidebar.tsx:17:34
+  15 |     try {
+  16 |       const stored = JSON.parse(localStorage.getItem("leo_chat_sessions") || "[]");
+> 17 |       if (Array.isArray(stored)) setChats(stored.filter((item): item is ChatItem => Boolean(item && typeof item.id === "string" && typeof item.title === "string")).slice(0, 30));
+     |                                  ^^^^^^^^ Avoid calling setState() directly within an effect
+  18 |     } catch { setChats([]); }
+  19 |   }, []);
+  20 |  react-hooks/set-state-in-effect
+
+C:\Users\MFONOBONG\Desktop\My Porfoilo\components\WorkspaceArtifacts.tsx
+  17:473  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+C:\Users\MFONOBONG\Desktop\My Porfoilo\components\games\BrowserGameStudio.tsx
+   52:26   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\MFONOBONG\Desktop\My Porfoilo\components\games\BrowserGameStudio.tsx:52:26
+  50 |     finally { setLoading(false); }
+  51 |   }, []);
+> 52 |   useEffect(() => { void loadProject(selectedId); }, [selectedId, loadProject]);
+     |                          ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  53 |   useEffect(() => {
+  54 |     const onMessage = (event: MessageEvent) => {
+  55 |       if (event.source !== frameRef.current?.contentWindow || !event.data || event.data.source !== 'leonardx-game-preview') return;  react-hooks/set-state-in-effect
+  176:6    warning  React Hook useMemo has an unnecessary dependency: 'frameKey'. Either exclude it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          react-hooks/exhaustive-deps
+  188:984  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 @next/next/no-img-element
+
+✖ 7 problems (2 errors, 5 warnings)
+
+

@@ -172,7 +172,11 @@ export async function POST(req: NextRequest) {
     const userPrompt = String(body.prompt || '').trim();
     const customerProjectId = String(body.project_id || '');
     let suppliedMcpFiles: GeneratedFile[] | null = null;
-    if (mcpExternalModel) {
+    // Authenticated Leo chat may pass its actual saved source files through the same
+    // existing deployment pipeline; it still uses this user's session, plan checks,
+    // ownership validation, build idempotency, and GitHub/Vercel verification.
+    const useSuppliedFiles = mcpExternalModel || body.source === 'leo_chat_build_workflow';
+    if (useSuppliedFiles) {
       if (!Array.isArray(body.generated_files) || body.generated_files.length === 0 || body.generated_files.length > 250 ||
           body.generated_files.some((file: unknown) => !file || typeof file !== 'object' ||
             typeof (file as { path?: unknown }).path !== 'string' || typeof (file as { content?: unknown }).content !== 'string')) {

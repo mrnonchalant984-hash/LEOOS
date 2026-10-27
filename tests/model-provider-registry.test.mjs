@@ -112,7 +112,7 @@ test('invalid explicit fallback configuration safely uses configured Gemini for 
   const configured = provider => provider === 'google' || provider === 'openai';
   assert.equal(
     getSafeFallbackModel('openai/gpt-4o-mini', 'unsupported/fallback-model', false, configured),
-    'google/gemini-2.5-flash',
+    'google/gemini-3.8-flash',
   );
 });
 
@@ -124,15 +124,15 @@ test('valid explicit fallback is normalized and requires a configured provider',
   );
   assert.equal(
     getSafeFallbackModel('openai/gpt-4o-mini', 'anthropic/claude-3-5-haiku-latest', false, configured),
-    'google/gemini-2.5-flash',
+    'google/gemini-3.8-flash',
   );
 });
 
 test('Gemini is the only automatic fallback, including for a Gemini primary', () => {
   const configured = provider => provider === 'google';
-  assert.equal(getSafeFallbackModel('openai/gpt-4o-mini', 'bad/model', true, configured), 'google/gemini-2.5-flash');
+  assert.equal(getSafeFallbackModel('openai/gpt-4o-mini', 'bad/model', true, configured), 'google/gemini-3.8-flash');
   assert.equal(getSafeFallbackModel('google/gemini-2.5-flash', 'bad/model', false, configured), 'google/gemini-3.8-flash');
-  assert.equal(getSafeFallbackModel('google/gemini-3.8-flash', undefined, false, configured), 'google/gemini-2.5-flash');
+  assert.equal(getSafeFallbackModel('google/gemini-3.8-flash', undefined, false, configured), 'google/gemini-3.5-flash-lite');
 });
 
 test('OpenAI credentials never make OpenAI the default text model', () => {

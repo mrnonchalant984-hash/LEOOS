@@ -24,26 +24,22 @@ import { inspectMainWebsite, pushMainWebsiteChanges, type MainWebsiteFile } from
 
 async function invokeCloudBuildRoute(
   request: NextRequest,
-  provider: 'expo-eas' | 'godot-build-service',
+  provider: 'expo-eas',
   method: 'GET' | 'POST',
   body?: Record<string, unknown>,
   jobId?: string,
 ) {
   const authorization = request.headers.get('authorization');
   if (!authorization) return { data: null, error: 'MCP authorization is missing.' };
-  const apiUrl = new URL(`/api/builds/${provider === 'expo-eas' ? 'expo' : 'godot'}${jobId ? `/${encodeURIComponent(jobId)}` : ''}`, request.url);
+  const apiUrl = new URL(`/api/builds/expo${jobId ? `/${encodeURIComponent(jobId)}` : ''}`, request.url);
   const apiRequest = new NextRequest(apiUrl, {
     method,
     headers: { Authorization: authorization, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  const response = provider === 'expo-eas'
-    ? await (method === 'POST'
-      ? (await import('@/app/api/builds/expo/route')).POST(apiRequest)
-      : (await import('@/app/api/builds/expo/[id]/route')).GET(apiRequest, { params: Promise.resolve({ id: jobId || '' }) }))
-    : await (method === 'POST'
-      ? (await import('@/app/api/builds/godot/route')).POST(apiRequest)
-      : (await import('@/app/api/builds/godot/[id]/route')).GET(apiRequest, { params: Promise.resolve({ id: jobId || '' }) }));
+  const response = await (method === 'POST'
+    ? (await import('@/app/api/builds/expo/route')).POST(apiRequest)
+    : (await import('@/app/api/builds/expo/[id]/route')).GET(apiRequest, { params: Promise.resolve({ id: jobId || '' }) }));
   const data = await response.json().catch(() => null);
   if (response.ok && data && typeof data === 'object') {
     const payload = data as Record<string, unknown>;
@@ -51,9 +47,7 @@ async function invokeCloudBuildRoute(
       if (typeof payload[key] === 'string' && payload[key].startsWith('/')) payload[key] = new URL(payload[key], request.url).toString();
     }
   }
-  return response.ok
-    ? { data, error: null }
-    : { data: null, error: typeof data?.error === 'string' ? data.error : `Cloud build request failed (${response.status}).` };
+  return response.ok ? { data, error: null } : { data, error: typeof data?.error === 'string' ? data.error : `Build request failed (${response.status}).` };
 }
 
 async function invokeAndroidBuildRoute(request: NextRequest, method: 'GET' | 'POST', jobId?: string, idempotencyKey?: string) {
@@ -226,27 +220,19 @@ export async function POST(request: NextRequest) {
       },
       async submitCloudBuild(_userId: string, input: {
         project_id: string;
-        provider: 'expo-eas' | 'godot-build-service';
+        provider: 'expo-eas';
         platform?: 'android' | 'ios';
         profile?: 'preview' | 'production';
         preset?: string;
         idempotency_key: string;
       }) {
-        const body = input.provider === 'expo-eas'
-          ? { project_id: input.project_id, platform: input.platform, profile: input.profile, idempotency_key: input.idempotency_key }
-          : { project_id: input.project_id, preset: input.preset, idempotency_key: input.idempotency_key };
+        const body = { project_id: input.project_id, platform: input.platform, profile: input.profile, idempotency_key: input.idempotency_key };
         return invokeCloudBuildRoute(request, input.provider, 'POST', body);
       },
-      async getCloudBuildStatus(_userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string) {
+      async getCloudBuildStatus(_userId: string, provider: 'expo-eas', jobId: string) {
         return invokeCloudBuildRoute(request, provider, 'GET', undefined, jobId);
       },
-      async getCloudBuildLogs(_userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string) {
-        if (provider === 'godot-build-service') {
-          const result = await invokeCloudBuildRoute(request, provider, 'GET', undefined, jobId);
-          if (result.error || !result.data) return result;
-          const payload = result.data as Record<string, unknown>;
-          return { data: { job_id: jobId, logs: payload.logs || null, error: payload.error || null }, error: null };
-        }
+      async getCloudBuildLogs(_userId: string, provider: 'expo-eas', jobId: string) {
         const authorization = request.headers.get('authorization');
         if (!authorization) return { data: null, error: 'MCP authorization is missing.' };
         const target = new URL(`/api/builds/expo/${encodeURIComponent(jobId)}/logs`, request.url);
@@ -504,9 +490,21 @@ export async function POST(request: NextRequest) {
             }).eq('id', run.id).eq('user_id', userId);
             if (resultError) return { data: null, error: 'Agent finished but its result could not be persisted.' };
             return { data: { run_id: run.id, agent_id: staticAgent.id, status: finalStatus, result: parsed?.result || result, session_id: parsed?.session_id, approvals: parsed?.approvals }, error: null };
-          } catch {
-            await db.from('agent_runs').update({ status: 'failed', error: 'Agent execution failed. Review provider configuration and retry.', completed_at: new Date().toISOString() }).eq('id', run.id).eq('user_id', userId);
-            return { data: { run_id: run.id, agent_id: staticAgent.id, status: 'failed' }, error: 'Agent execution failed. Review provider configuration and retry.' };
+          } catch (error) {
+            // Persist a useful, sanitized provider diagnostic instead of discarding the
+            // underlying failure behind the same generic message for every exception.
+            const safeError = error instanceof ModelProviderError
+              ? error.message
+              : 'Agent execution failed with an unexpected runtime error. Check sanitized server logs and provider health.';
+            console.error(JSON.stringify({
+              event: 'mcp.agent.execution_failed',
+              run_id: run.id,
+              agent_id: staticAgent.id,
+              error_type: error instanceof Error ? error.name : 'UnknownError',
+              provider_status: error instanceof ModelProviderError ? error.statusCode : undefined,
+            }));
+            await db.from('agent_runs').update({ status: 'failed', error: safeError, completed_at: new Date().toISOString() }).eq('id', run.id).eq('user_id', userId);
+            return { data: { run_id: run.id, agent_id: staticAgent.id, status: 'failed', error: safeError }, error: safeError };
           }
         }
 
@@ -776,7 +774,7 @@ export async function POST(request: NextRequest) {
             return { data: null, error: `The ${projectType === 'mobile_app' ? 'mobile app' : 'game'} builder is not enabled for this account. Configure the server-side plan entitlement before retrying.` };
           }
           const starterFiles = projectType === 'game'
-            ? (await import('@/lib/builders/godot-starter')).createGodot3dStarter(name, { source: 'mcp_project_creation' })
+            ? (await import('@/lib/builders/browser-game-starter')).createBrowserGameStarter(name, { description: 'Created through LeonardX MCP. Replace or extend this brief with the user’s requested gameplay.', source: 'mcp_project_creation', runtime: 'browser' })
             : (await import('@/lib/builders/expo-starter')).createExpoMobileStarter(name, { source: 'mcp_project_creation' });
           const { data, error } = await db.from('projects').insert({ user_id: userId, project_name: name, type: projectType, status: 'draft', progress: 0, files: starterFiles })
             .select('id,project_name,type,status,progress,created_at').single();
@@ -984,23 +982,15 @@ export async function POST(request: NextRequest) {
         const { runProjectRunnerOperation } = await import('@/lib/project-runner');
         return runProjectRunnerOperation({ ownerId: userId, files: project.files, operation });
       },
-      async retryCloudBuild(userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string) {
+      async retryCloudBuild(userId: string, provider: 'expo-eas', jobId: string) {
         const { data: job, error } = await db.from('cloud_build_jobs')
           .select('id,project_id,provider,provider_job_id,status,profile')
           .eq('id', jobId).eq('owner_user_id', userId).eq('provider', provider).maybeSingle();
         if (error || !job) return { data: null, error: error || 'Build job not found.' };
         if (!['failed', 'cancelled'].includes(job.status)) return { data: null, error: 'Only failed or cancelled builds can be retried.' };
-        if (job.provider_job_id) return { data: null, error: 'This build has a provider job ID. Check provider history before retrying to avoid duplicate charges.' };
-        const body = provider === 'expo-eas'
-          ? { project_id: job.project_id, platform: String(job.profile).split(':')[0], profile: String(job.profile).split(':')[1] || 'preview', idempotency_key: randomUUID() }
-          : { project_id: job.project_id, preset: job.profile, idempotency_key: randomUUID() };
-        const target = new URL(`/api/builds/${provider === 'expo-eas' ? 'expo' : 'godot'}`, request.url);
-        const retryRequest = new NextRequest(target, { method: 'POST', headers: request.headers, body: JSON.stringify(body) });
-        const response = provider === 'expo-eas'
-          ? await (await import('@/app/api/builds/expo/route')).POST(retryRequest)
-          : await (await import('@/app/api/builds/godot/route')).POST(retryRequest);
-        const data = await response.json().catch(() => null);
-        return response.ok ? { data, error: null } : { data, error: data?.error || 'Cloud build retry failed.' };
+        if (job.provider_job_id) return { data: null, error: 'This job has a provider job ID. Check provider history before retrying to avoid duplicate charges.' };
+        const body = { project_id: job.project_id, platform: String(job.profile).split(':')[0], profile: String(job.profile).split(':')[1] || 'preview', idempotency_key: randomUUID() };
+        return invokeCloudBuildRoute(request, provider, 'POST', body);
       },
       async planEngineeringWorkflow(_userId: string, input: Parameters<typeof import('@/lib/mcp/orchestration').buildEngineeringOrchestrationPlan>[0]) {
         const { buildEngineeringOrchestrationPlan } = await import('@/lib/mcp/orchestration');
@@ -1084,7 +1074,7 @@ export async function POST(request: NextRequest) {
     headers.set('Cache-Control', 'no-store');
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   } catch (error) {
-    console.error('MCP request failed:', error instanceof Error ? error.message : 'Unknown MCP error');
+    console.error(JSON.stringify({ event: 'mcp.request.failed', error_type: error instanceof Error ? error.name : 'UnknownError' }));
     return NextResponse.json({ error: 'The MCP request could not be completed.' }, { status: 503, headers: corsHeaders(request) });
   }
 }

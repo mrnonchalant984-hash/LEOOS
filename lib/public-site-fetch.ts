@@ -2,10 +2,10 @@ import { lookup } from 'node:dns/promises';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import type { RequestOptions as HttpRequestOptions } from 'node:http';
-import { isPrivateIp } from '@/lib/webhooks-core';
-import { PublicSiteFetchError, validatePublicSiteUrl } from '@/lib/public-site-url';
+import { isPrivateIp } from './webhooks-core.ts';
+import { PublicSiteFetchError, validatePublicSiteUrl } from './public-site-url.ts';
 
-export { PublicSiteFetchError, validatePublicSiteUrl } from '@/lib/public-site-url';
+export { PublicSiteFetchError, validatePublicSiteUrl } from './public-site-url.ts';
 
 const MAX_HTML_BYTES = 800_000;
 const MAX_REDIRECTS = 3;
@@ -39,7 +39,7 @@ async function resolvePublicAddress(url: URL, deadline: number): Promise<PinnedA
   }
 }
 
-async function requestPinned(url: URL, address: PinnedAddress, timeoutMs: number): Promise<FetchResult> {
+async function requestPinned(url: URL, address: PinnedAddress, timeoutMs: number, accept: string, acceptedContentTypes: RegExp): Promise<FetchResult> {
   return new Promise((resolve, reject) => {
     const pinnedLookup: NonNullable<HttpRequestOptions['lookup']> = (_hostname, options, callback) => {
       if (options.all) callback(null, [{ address: address.address, family: address.family }]);
@@ -51,7 +51,7 @@ async function requestPinned(url: URL, address: PinnedAddress, timeoutMs: number
       lookup: pinnedLookup,
       maxHeaderSize: 16_384,
       headers: {
-        Accept: 'text/html,application/xhtml+xml',
+        Accept: accept,
         'Accept-Encoding': 'identity',
         'User-Agent': 'LEO-Website-Auditor/1.0',
         Connection: 'close',
@@ -96,7 +96,7 @@ async function requestPinned(url: URL, address: PinnedAddress, timeoutMs: number
   });
 }
 
-export async function fetchPublicHtml(rawUrl: string) {
+async function fetchPublicResource(rawUrl: string, accept: string, acceptedContentTypes: RegExp) {
   let url = validatePublicSiteUrl(rawUrl);
   const deadline = Date.now() + MAX_FETCH_MS;
 
@@ -104,11 +104,11 @@ export async function fetchPublicHtml(rawUrl: string) {
     const address = await resolvePublicAddress(url, deadline);
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw new PublicSiteFetchError('The website did not respond in time.', 504);
-    const result = await requestPinned(url, address, remaining);
+    const result = await requestPinned(url, address, remaining, accept, acceptedContentTypes);
     if (!result.location) {
       const contentType = result.headers['content-type'];
-      if (contentType && !/text\/html|application\/xhtml\+xml/i.test(contentType)) {
-        throw new PublicSiteFetchError('The URL did not return an HTML page.', 415);
+      if (contentType && !acceptedContentTypes.test(contentType)) {
+        throw new PublicSiteFetchError('The URL did not return a supported text resource.', 415);
       }
       return { ...result, url: url.toString() };
     }
@@ -122,4 +122,15 @@ export async function fetchPublicHtml(rawUrl: string) {
   }
 
   throw new PublicSiteFetchError('The website could not be loaded.', 502);
+}
+
+
+/** Fetch a public HTML page using DNS-pinned requests and redirect revalidation. */
+export function fetchPublicHtml(rawUrl: string) {
+  return fetchPublicResource(rawUrl, 'text/html,application/xhtml+xml', /text\/html|application\/xhtml\+xml/i);
+}
+
+/** Fetch public plain-text/XML resources such as robots.txt and sitemap.xml safely. */
+export function fetchPublicText(rawUrl: string) {
+  return fetchPublicResource(rawUrl, 'text/plain,application/xml,text/xml,*/*', /text\/plain|application\/xml|text\/xml/i);
 }

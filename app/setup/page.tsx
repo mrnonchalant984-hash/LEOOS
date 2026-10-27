@@ -391,19 +391,17 @@ export default function Setup() {
                   if (!r.ok || !j.project) throw new Error(j.error || "Could not save project.");
                   if (buildPolicy === "always") window.localStorage.setItem("leonardx_build_policy", "always");
                   else window.localStorage.removeItem("leonardx_build_policy");
-                  if (isCloudProject && buildPolicy !== "ask") {
-                    const buildRequest = projectType === "mobile_app"
-                      ? { project_id: j.project.id, platform: "android", profile: "preview", idempotency_key: window.crypto.randomUUID() }
-                      : { project_id: j.project.id, preset: "Windows Desktop", idempotency_key: window.crypto.randomUUID() };
-                    const buildResponse = await fetch(projectType === "mobile_app" ? "/api/builds/expo" : "/api/builds/godot", {
+                  if (projectType === "mobile_app" && buildPolicy !== "ask") {
+                    const buildRequest = { project_id: j.project.id, platform: "android", profile: "preview", idempotency_key: window.crypto.randomUUID() };
+                    const buildResponse = await fetch("/api/builds/expo", {
                       method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify(buildRequest),
                     });
                     const buildResult = await buildResponse.json().catch(() => ({}));
-                    if (!buildResponse.ok) alert(`Project saved, but the build could not start: ${buildResult.error || "Check provider setup and project identifiers."}`);
-                    else alert(`Build submitted. Status: ${buildResult.status || "queued"}. Open the workspace to follow progress.`);
+                    if (!buildResponse.ok) alert(`Project saved, but the mobile build could not start: ${buildResult.error || "Check Expo setup and project identifiers."}`);
+                    else alert(`Mobile build submitted. Status: ${buildResult.status || "queued"}. Open the workspace to follow progress.`);
                   }
                   const canAutoBuild = !isCloudProject && buildPolicy !== "ask";
-                  router.push(canAutoBuild ? `/dashboard/websites/${j.project.id}?auto_build=1` : isCloudProject ? `/ide/${j.project.id}` : `/dashboard/websites/${j.project.id}`);
+                  router.push(projectType === "game" ? `/app/game-studio?project_id=${encodeURIComponent(j.project.id)}` : canAutoBuild ? `/dashboard/websites/${j.project.id}?auto_build=1` : projectType === "mobile_app" ? `/ide/${j.project.id}` : `/dashboard/websites/${j.project.id}`);
                 } catch (error) {
                   alert(error instanceof Error ? error.message : "Could not save project.");
                   setSaving(false);
@@ -411,7 +409,7 @@ export default function Setup() {
               }}
               className="mt-6 w-full rounded-full bg-orange-500 p-3 font-bold disabled:opacity-40"
             >
-              {saving ? "Saving project…" : buildPolicy === "ask" ? "Save project brief" : "Save, build & deploy"}
+              {saving ? "Saving project…" : projectType === "game" ? "Create browser game" : buildPolicy === "ask" ? "Save project brief" : "Save, build & deploy"}
             </button>
           </GlassCard>
         </div>
