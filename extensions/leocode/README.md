@@ -28,8 +28,8 @@ Active editor context is sent to LeonardX when you submit a chat or specialist-a
 
 The default server origin is `https://leoos-omega.vercel.app`. A local development origin can be configured through `leocode.baseUrl`; non-local HTTP origins are rejected.
 
-## Marketplace release status
+## Install from the Marketplace
 
-This source package is not yet a Marketplace-ready or published release. The repository does not establish an authorized Visual Studio Marketplace publisher ID. Do not add a guessed publisher identifier or publish under another party. A verified publisher ID and owner-authorized publishing credentials are required before setting the manifest publisher, packaging a VSIX, or publishing.
+LeoCode is published by the verified `leonardx` publisher. In VS Code, open Extensions (`Ctrl+Shift+X`), search for **LeoCode by LeonardX**, and install it. You can also install it from a terminal with `code --install-extension leonardx.leocode`.
 
-For production, also validate authentication and AI behavior against an authorized staging LeonardX environment and test the extension in the supported VS Code versions.
+After installation, select the LeoCode icon in the Activity Bar, open **Leo Chat**, and choose **Connect** to sign in to your LeonardX account.

@@ -2,7 +2,7 @@
   "name": "leocode",
   "displayName": "LeoCode by LeonardX",
   "description": "Workspace-aware AI coding assistance from your LeonardX account.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
@@ -58,7 +58,8 @@
       "leocode": [
         {
           "id": "leocode.chat",
-          "name": "Leo Chat"
+          "name": "Leo Chat",
+          "type": "webview"
         }
       ]
     },
