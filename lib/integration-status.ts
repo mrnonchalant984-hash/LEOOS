@@ -1,13 +1,13 @@
 import 'server-only';
 
 export type IntegrationState = 'connected' | 'configured' | 'not_configured' | 'connection_failed' | 'coming_soon' | 'checking';
-export type IntegrationId = 'openai' | 'supabase' | 'paystack' | 'web3forms' | 'resend' | 'vercel' | 'github' | 'google' | 'stripe' | 'whatsapp';
+export type IntegrationId = 'gemini' | 'google' | 'supabase' | 'paystack' | 'web3forms' | 'resend' | 'vercel' | 'github' | 'stripe' | 'whatsapp';
 export type IntegrationStatus = { id: IntegrationId; name: string; purpose: string; state: IntegrationState; message: string; required: string[]; checkedAt: string | null; canTest: boolean };
 type Definition = Omit<IntegrationStatus, 'state' | 'message' | 'checkedAt'> & { env: string[]; check?: () => Promise<void> };
 const timeout = (ms = 5000) => AbortSignal.timeout(ms);
 async function expectOk(url: string, init?: RequestInit) { const response = await fetch(url, { ...init, signal: timeout(), cache: 'no-store' }); if (!response.ok) throw new Error(`Provider returned HTTP ${response.status}.`); }
 const definitions: Definition[] = [
-  { id: 'openai', name: 'OpenAI', purpose: 'Powers Leo and enabled AI features.', env: ['OPENAI_API_KEY'], required: ['OPENAI_API_KEY'], canTest: true, check: async () => expectOk('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } }) },
+  { id: 'gemini', name: 'Google Gemini', purpose: 'Exclusive provider for platform AI text, tools and agent execution.', env: ['GEMINI_API_KEY'], required: ['GEMINI_API_KEY or GOOGLE_API_KEY'], canTest: true, check: async () => expectOk('https://generativelanguage.googleapis.com/v1beta/models', { headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '' } }) },
   { id: 'supabase', name: 'Supabase', purpose: 'Provides authentication, database, storage, and realtime services.', env: ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'], required: ['Supabase URL', 'Supabase anon key', 'Supabase service role key'], canTest: true, check: async () => expectOk(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! } }) },
   { id: 'paystack', name: 'Paystack', purpose: 'Handles Nigerian payment initialization and server-side verification.', env: ['PAYSTACK_PUBLIC_KEY', 'PAYSTACK_SECRET_KEY'], required: ['PAYSTACK_PUBLIC_KEY', 'PAYSTACK_SECRET_KEY'], canTest: true, check: async () => expectOk('https://api.paystack.co/bank?perPage=1', { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } }) },
   { id: 'web3forms', name: 'Web3Forms', purpose: 'Delivers contact-page submissions.', env: ['NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY'], required: ['NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY'], canTest: false },
@@ -24,7 +24,9 @@ export async function getIntegrationStatuses(target?: IntegrationId): Promise<In
   const now = new Date().toISOString();
   return Promise.all(selected.map(async (item): Promise<IntegrationStatus> => {
     if (item.id === 'stripe' || item.id === 'whatsapp') return { ...item, state: 'coming_soon', message: 'This provider has no supported implementation in the current deployment.', checkedAt: null };
-    const missing = item.env.filter((name) => !present(name));
+    const missing = item.id === 'gemini'
+      ? (present('GEMINI_API_KEY') || present('GOOGLE_API_KEY') ? [] : ['GEMINI_API_KEY or GOOGLE_API_KEY'])
+      : item.env.filter((name) => !present(name));
     if (missing.length) return { ...item, state: 'not_configured', message: `Missing ${missing.join(', ')}.`, checkedAt: now };
     if (!item.check) return { ...item, state: 'configured', message: 'Configuration is present; no safe live check is available.', checkedAt: now };
     try { await item.check(); return { ...item, state: 'connected', message: 'A safe server-side check succeeded.', checkedAt: now }; }

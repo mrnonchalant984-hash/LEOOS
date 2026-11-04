@@ -15,9 +15,9 @@ test('public model and message endpoints enforce scope, bounded input, active bi
   assert.match(messages, /authorizeBillableUsage/);
   assert.match(messages, /settleBillableUsage/);
   assert.match(messages, /text\/event-stream/);
-  assert.match(messages, /stream_options: \{ include_usage: true \}/);
-  assert.match(messages, /completion\.usage/);
-  assert.match(messages, /providerStreamAccepted && auth\.reservedCredits/);
+  assert.match(messages, /generateContentStream/);
+  assert.match(messages, /usageMetadata/);
+  assert.match(messages, /providerAccepted && auth\.reservedCredits/);
   assert.match(auth, /!ctx\.providerUsageMeasured/);
   assert.match(auth, /consume_api_request_credit/);
   assert.match(auth, /settle_api_request_credit/);

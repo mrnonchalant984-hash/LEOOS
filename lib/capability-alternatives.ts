@@ -48,7 +48,7 @@ export function capabilityCatalog(existing: {
   hasWeb3Forms: boolean;
   hasSupabase: boolean;
   hasPaystack: boolean;
-  hasOpenAI: boolean;
+  hasGemini: boolean;
   hasVercel: boolean;
 }): CapabilityRequirement[] {
   return [
@@ -111,26 +111,15 @@ export function capabilityCatalog(existing: {
       description: 'Model-backed planning, chat, and generation.',
       options: [
         {
-          id: 'openai',
-          title: 'OpenAI (existing LeonardX path)',
-          costLabel: 'Usage-based; explain recurring cost before enabling.',
-          advantages: ['Already integrated for Leo chat and generation.'],
-          limitations: ['Requires an API key and usage budget.', 'Never purchase without explicit authorization.'],
+          id: 'google_gemini',
+          title: 'Google Gemini (platform provider)',
+          costLabel: 'Usage-based; check current Google AI pricing and quota before enabling.',
+          advantages: ['Matches the platform-wide Gemini-only execution policy.'],
+          limitations: ['Requires a server-side Gemini API key and an active usage budget.', 'Image, audio and other modalities must use separately supported model workflows.'],
           requiresPaidService: true,
-          alreadyImplemented: existing.hasOpenAI,
-          envVars: ['OPENAI_API_KEY'],
+          alreadyImplemented: existing.hasGemini,
+          envVars: ['GEMINI_API_KEY'],
           minimumBudget: 'low',
-        },
-        {
-          id: 'local_model',
-          title: 'Local OpenAI-compatible endpoint',
-          costLabel: 'Hardware and self-hosting costs only.',
-          advantages: ['Works with LEO_LOCAL_MODEL_URL and offline mode.', 'Avoids hosted API spend.'],
-          limitations: ['Vercel-hosted apps cannot reach localhost on a laptop.', 'Quality and latency depend on the local model.'],
-          requiresPaidService: false,
-          alreadyImplemented: false,
-          envVars: ['LEO_LOCAL_MODEL_URL', 'LEO_LOCAL_MODEL_NAME'],
-          minimumBudget: 'free',
         },
       ],
     },
@@ -244,7 +233,7 @@ export function detectExistingCapabilities(env: NodeJS.ProcessEnv = process.env)
       && env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
     ),
     hasPaystack: Boolean(env.PAYSTACK_SECRET_KEY?.trim() && env.PAYSTACK_PUBLIC_KEY?.trim()),
-    hasOpenAI: Boolean(env.OPENAI_API_KEY?.trim() || env.LEO_API_KEY?.trim()),
+    hasGemini: Boolean(env.GEMINI_API_KEY?.trim() || env.GOOGLE_API_KEY?.trim()),
     hasVercel: Boolean(env.VERCEL_TOKEN?.trim()),
   };
 }

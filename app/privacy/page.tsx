@@ -34,7 +34,7 @@ export default function Privacy() {
               3. Service providers and hosting
             </h2>
             <p className="mt-2">
-              Depending on enabled features, LEO OS uses Supabase for authentication, database, and storage; OpenAI for AI and image generation; GitHub for customer project source repositories; Vercel for project builds, deployments, analytics, and Speed Insights; Paystack for payments; Sentry for application error monitoring when configured; and configured email providers for notifications. Each provider processes data under its own terms. Customer project repositories and deployments are separate from the LEO OS production application.
+              Depending on enabled features, LEO OS uses Supabase for authentication, database, and storage; Google Gemini for platform AI and image generation; GitHub for customer project source repositories; Vercel for project builds, deployments, analytics, and Speed Insights; Paystack for payments; Sentry for application error monitoring when configured; and configured email providers for notifications. Each provider processes data under its own terms. Customer project repositories and deployments are separate from the LEO OS production application.
             </p>
           </section>
           <section>

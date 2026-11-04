@@ -19,8 +19,8 @@ async function runWorker(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized worker.' }, { status: 401 });
   }
   if (process.env.WORKFORCE_WORKER_ENABLED !== 'true') return NextResponse.json({ processed: 0, disabled: true }, { status: 503 });
-  if (!isProviderConfigured('openai') && !isProviderConfigured('google') && !isProviderConfigured('local')) {
-    return NextResponse.json({ error: 'No AI provider or local model endpoint is configured.' }, { status: 503 });
+  if (!isProviderConfigured('google')) {
+    return NextResponse.json({ error: 'Gemini is not configured for the workforce worker.' }, { status: 503 });
   }
   const db = adminSupabase();
   const workerId = `workforce-${randomUUID()}`;

@@ -15,8 +15,8 @@ test('production owner email is documented without exposing it as a public varia
 test('CI uses placeholders instead of production credentials', () => {
   const ci = read('.github/workflows/ci.yml');
   assert.match(ci, /SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key/);
-  assert.match(ci, /OPENAI_API_KEY: ci-placeholder-key/);
-  assert.doesNotMatch(ci, /\$\{\{\s*secrets\.(PAYSTACK_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY)\s*\}\}/);
+  assert.match(ci, /GEMINI_API_KEY: ci-placeholder-key/);
+  assert.doesNotMatch(ci, /\$\{\{\s*secrets\.(PAYSTACK_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY|GEMINI_API_KEY)\s*\}\}/);
 });
 
 test('lead capture treats Resend as optional after successful database persistence', () => {

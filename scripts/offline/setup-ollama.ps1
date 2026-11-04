@@ -22,6 +22,6 @@ ollama pull $model
 if ($LASTEXITCODE -ne 0) { throw "ollama pull failed with exit code $LASTEXITCODE" }
 Write-Host 'Model is installed. Add these lines to the project .env.local:' -ForegroundColor Green
 Write-Host 'LEO_OFFLINE_MODE=true'
-Write-Host 'LEO_LOCAL_MODEL_URL=http://127.0.0.1:11434/v1'
+Write-Host 'LeonardX platform local inference is disabled; this helper does not configure production AI.'
 Write-Host "LEO_LOCAL_MODEL_NAME=$model"
 Write-Host 'Then restart npm run dev. Once the model is downloaded, text chat can run without mobile data while the local app and Ollama are running.'

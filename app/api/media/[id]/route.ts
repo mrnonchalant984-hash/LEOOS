@@ -15,6 +15,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   if (!asset) return NextResponse.json({ error: 'Asset not found.' }, { status: 404 });
   const { data: signed, error: signError } = await db.storage.from(asset.bucket).createSignedUrl(asset.storage_path, 60 * 60);
   if (signError || !signed?.signedUrl) return NextResponse.json({ error: 'A secure asset URL could not be created.' }, { status: 502 });
-  if (request.nextUrl.searchParams.get('download') === '1') return NextResponse.redirect(signed.signedUrl, { headers: { 'Cache-Control': 'private, no-store' } });
+  if (request.nextUrl.searchParams.get('download') === '1' || request.nextUrl.searchParams.get('view') === '1') {
+    return NextResponse.redirect(signed.signedUrl, { headers: { 'Cache-Control': 'private, no-store' } });
+  }
   return NextResponse.json({ id: asset.id, url: signed.signedUrl, mime_type: asset.mime_type, url_expires_in: 3600 }, { headers: { 'Cache-Control': 'private, no-store' } });
 }

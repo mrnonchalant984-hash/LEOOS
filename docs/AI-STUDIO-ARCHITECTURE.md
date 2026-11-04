@@ -1,50 +1,45 @@
-# AI Studio architecture
+# LeonardX AI Studio Architecture
 
-## Repository baseline
+Updated: 2026-10-29
 
-LeonardX is a Next.js 16.3.6 App Router application using React 19, TypeScript, Supabase Auth/Postgres/Storage, OpenAI's Node SDK, and an existing Runway integration. The workspace shell lives in `components/LEOAppShell.tsx`. Image generation already uses `generation_jobs`, `media_assets`, private `leo-files` storage, platform credits, and the `image_generation` feature allowance. Text-to-video already uses Runway Gen-4.5 with persisted jobs and status polling.
+## Existing architecture
 
-The Studio composes these existing systems and adds an authenticated image-edit operation. It does not introduce a second billing system, storage bucket, project model, or job queue.
+LeonardX is a Next.js App Router application using React, TypeScript, Supabase Auth/Postgres/Storage, Google Gemini for platform text/image workflows, and the existing Runway video integration. The Studio reuses the existing `generation_jobs`, `media_assets`, private `leo-files` storage, platform credits, and image-generation entitlement; it does not create a second billing system or public storage bucket.
 
-## Request and data flow
+## Current workflow map
 
-1. `/studio` renders the workspace within the standard LeonardX app shell.
-2. The client calls authenticated App Router handlers. It never receives provider credentials or chooses arbitrary provider URLs.
-3. Text-to-image delegates to `/api/generate-image`.
-4. Text-to-video delegates to `/api/generate-video`; the client polls `/api/generate-video/status` for its persisted Runway job.
-5. Image editing posts a multipart image and prompt to `/api/studio/edit-image`. The server checks authentication, rate limits, prompt length, image size, declared MIME type and file signature before calling the configured OpenAI-compatible image API.
-6. Source and result images are written as separate user-owned rows in `media_assets` and stored under non-public paths in the existing `leo-files` bucket. Jobs are associated to the authenticated user. The result route issues short-lived signed URLs only after checking asset ownership.
-7. `/api/studio/history` returns a bounded page of the current user's generation jobs and freshly signed URLs for their stored assets. Storage paths and provider secrets are not returned.
-8. Platform credit reservation and legacy feature-credit fallback reuse the existing server-side accounting RPCs. Provider failures attempt the existing idempotent refund paths.
+1. `/studio` renders within the existing application shell.
+2. The client calls authenticated App Router handlers; it never receives provider credentials or selects arbitrary provider URLs.
+3. Text-to-image delegates to `/api/generate-image`, which uses the image-capable Gemini model configured by `LEO_GEMINI_IMAGE_MODEL` (default `gemini-nano-banana-2.1`). Explicit image-generation requests in normal Leo Chat use the same server-side generation and credit path.
+4. Image editing posts a multipart image and prompt to `/api/studio/edit-image`. The server validates authentication, rate limits, prompt length, image size, declared MIME type and file signature before calling the Gemini image model.
+5. Source and result images are stored as user-owned rows in `media_assets` under private paths in the existing `leo-files` bucket. Jobs and assets are associated with the authenticated user; signed URLs are created only after checking ownership.
+6. `/api/studio/history` returns a bounded page of the current user's generation jobs and signed URLs for that user's stored assets.
+7. Credit reservation and refund use existing server-side accounting functions. Provider failures check the idempotent refund result and job-state updates; uncertain recovery is returned as an explicit support-required error rather than a success-shaped refund claim.
+8. Text-to-video delegates to the existing `/api/generate-video` Runway workflow and polls its persisted job status.
 
-## Provider capability matrix
+## Capability matrix
 
 | Capability | Provider | Status and limits |
 | --- | --- | --- |
-| Text-to-image | OpenAI Images API | Existing synchronous workflow. Uses `LEO_IMAGE_MODEL` or the existing default; output is stored privately. |
-| Image edit | OpenAI Images API `images.edit` | Implemented synchronously for one PNG, JPEG, or WebP source no larger than 4 MB. Uses the configured image model and saves source and result separately. |
-| Text-to-video | Runway Gen-4.5 | Existing asynchronous workflow; 2–10 seconds, landscape or portrait. Requires provider configuration and applicable plan/credit access. |
-| Image-to-video | None exposed | Not implemented by the existing Runway adapter. |
-| Project save/reuse | Not exposed in Studio | Existing website projects are not a suitable creative-project/media relationship; no fake save action is presented. |
-| Masks, multiple references, templates, prompt enhancement | Not exposed | Not currently implemented and not advertised as supported. |
-
-Provider capability availability still depends on server-side credentials, account access, plan/credit configuration, and provider service availability. A local text-model URL is not used for image or video operations.
+| Text-to-image | Gemini image model | Implemented in source; live provider, storage, credit, and RLS tests still required. |
+| Image edit | Gemini image model | Synchronous for one PNG, JPEG, or WebP source up to 4 MB; live provider, storage, credit, and RLS tests still required. |
+| Text-to-video | Runway | Existing asynchronous workflow; requires provider configuration and applicable plan/credit access. |
+| Image-to-video | Not verified | Do not advertise as available until a supported provider workflow is confirmed. |
+| Live audio/realtime | Gemini audio | Currently unavailable; no end-to-end workflow is certified. |
+| Hosted browser/computer use | Not available | Disabled; the owner console shows this state rather than claiming execution. |
+| Project media save/reuse | Not exposed in Studio | No fake save action is presented. |
 
 ## Security boundaries
 
-- All provider calls and service-role database access run server-side.
-- The caller's user ID comes from `getProfile`; request payloads cannot select another owner or asset.
+- Provider calls and service-role database access run server-side.
+- The caller's user ID comes from authenticated server context, not request payloads.
 - Generation history, jobs, and media queries constrain by authenticated user ID.
-- Storage remains private; client access uses asset IDs routed through the ownership-checked media endpoint.
-- Image edits are limited to 4 MB and PNG/JPEG/WebP with matching file signatures and declared MIME type. Filenames are not used as storage paths.
+- Storage remains private; clients use short-lived signed URLs after ownership checks.
+- Chat history stores an authenticated media-asset reference; the media route rechecks ownership before issuing a fresh short-lived URL.
+- Image edits are limited to 4 MB and PNG/JPEG/WebP with matching file signatures and declared MIME type.
 - Image-edit requests are rate-limited and use idempotency keys.
-- Prompt, image, and user identifiers are not written to application logs by this feature.
-- Credit reservation/refund uses the existing database functions. Refund failures are reported to the caller for support reconciliation.
+- Prompts, images, and user identifiers are not logged by the image workflow.
 
-## Deployment and operations
+## Deployment gates
 
-Required server configuration is the existing `OPENAI_API_KEY` (or supported `LEO_API_KEY`), Supabase URL and service-role key, plus the existing private `leo-files` bucket and the generation/credit migration. `LEO_IMAGE_MODEL` optionally selects the server-side image model. Video additionally requires `RUNWAYML_API_SECRET`, supported `RUNWAY_VIDEO_MODEL`, and configured credit conversion for non-owner accounts.
-
-No new database migration was added. Before enabling this feature in an environment, verify that `20261013110000_leonardx_generation_credits.sql` has been applied and the `leo-files` bucket exists and is private. Do not enable public storage access.
-
-The image edit runs synchronously inside a bounded Node.js route (maximum duration 120 seconds). It is not a durable queued edit workflow. Monitor the existing generation job records and provider usage. For rollback, revert the Studio route/page and navigation entry; existing image/video APIs and their tables remain unchanged.
+Before enabling or certifying Studio in production, run credentialed staging checks for Gemini generation/edit, private storage, per-account isolation, idempotency, credit reserve/settlement/refund, and migration presence. Static tests alone are not proof of live provider or database correctness. This implementation has not been verified against live Gemini credentials, production Supabase storage, or a staging database. Local tests and static checks do not certify provider access, credit accounting, storage policies, or production readiness.

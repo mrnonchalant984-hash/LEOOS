@@ -11,7 +11,7 @@ export type BuilderAvailability = {
 const webProvider = {
   id: "vercel-nextjs",
   label: "Next.js on GitHub and Vercel",
-  requiredEnvironment: ["OPENAI_API_KEY", "GITHUB_TOKEN", "VERCEL_TOKEN"],
+  requiredEnvironment: ["GEMINI_API_KEY", "GITHUB_TOKEN", "VERCEL_TOKEN"],
 };
 
 export const supportedProjectTypes: ProjectType[] = [
@@ -22,9 +22,9 @@ export const supportedProjectTypes: ProjectType[] = [
   "game",
 ];
 
-export function getBuilderAvailability(projectType: ProjectType): BuilderAvailability {
+export function getBuilderAvailability(projectType: ProjectType, environment: NodeJS.ProcessEnv = process.env): BuilderAvailability {
   if (["website", "web_app", "saas"].includes(projectType)) {
-    const missing = webProvider.requiredEnvironment.filter((key) => !process.env[key]);
+    const missing = webProvider.requiredEnvironment.filter((key) => !environment[key]?.trim());
     return {
       ...webProvider,
       status: missing.length ? "not_configured" : "ready",
@@ -36,7 +36,7 @@ export function getBuilderAvailability(projectType: ProjectType): BuilderAvailab
 
   if (projectType === "mobile_app") {
     const requiredEnvironment = ["EXPO_TOKEN"];
-    const missing = requiredEnvironment.filter((key) => !process.env[key]?.trim());
+    const missing = requiredEnvironment.filter((key) => !environment[key]?.trim());
     return {
       id: "expo-eas",
       label: "Expo / EAS",
@@ -46,11 +46,14 @@ export function getBuilderAvailability(projectType: ProjectType): BuilderAvailab
     };
   }
 
+  const requiredEnvironment = ["GODOT_BUILD_SERVICE_URL", "GODOT_BUILD_SERVICE_TOKEN"];
+  const missing = requiredEnvironment.filter((key) => !environment[key]?.trim());
   return {
-    id: "browser-native",
-    label: "Browser-native game runtime",
-    status: "ready",
-    requiredEnvironment: [],
+    id: "godot-build-service",
+    label: "Godot build service",
+    status: missing.length ? "not_configured" : "ready",
+    requiredEnvironment,
+    ...(missing.length ? { message: `Configure ${missing.join(", ")} on the server to enable Godot builds.` } : {}),
   };
 }
 

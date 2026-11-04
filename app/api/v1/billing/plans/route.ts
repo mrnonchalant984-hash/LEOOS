@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   API_CREDIT_PROVIDER_COST_USD,
-  API_MODEL_PRICING,
+  getCurrentApiModelPricingCatalog,
   API_MODEL_PRICING_REVIEWED_ON,
   API_MODEL_PRICING_SOURCE,
   API_PLAN_CATALOG,
@@ -16,7 +16,7 @@ export async function GET() {
     currencies: API_PLAN_CURRENCIES,
     usage_metering: {
       credit_provider_cost_usd: API_CREDIT_PROVIDER_COST_USD,
-      provider_rates_usd_per_million_tokens: API_MODEL_PRICING,
+      provider_rates_usd_per_million_tokens: getCurrentApiModelPricingCatalog(),
       rates_reviewed_on: API_MODEL_PRICING_REVIEWED_ON,
       rates_source: API_MODEL_PRICING_SOURCE,
       formula: 'credits = max(1, ceil((input_tokens * input_rate + output_tokens * output_rate) / 1000000 / credit_provider_cost_usd))',

@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const owner = true;
   const plan = await getEffectiveUserPlan(ctx.user.id, owner);
   if (!canUseManualAgents(plan.key, owner)) return NextResponse.json({ error: 'AI workforce meetings require a Pro or Business plan.' }, { status: 403 });
-  if (!isProviderConfigured('openai') && !isProviderConfigured('google') && !isProviderConfigured('local')) return NextResponse.json({ error: 'Configure an AI provider or a reachable local text-model endpoint before running a meeting.' }, { status: 503 });
+  if (!isProviderConfigured('google')) return NextResponse.json({ error: 'Configure GEMINI_API_KEY before running a meeting.' }, { status: 503 });
   const parsed = inputSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: 'Invalid meeting request.' }, { status: 400 });
   const limited = await enforceUserRateLimit(ctx.user.id, 'workforce-meeting-discuss', 6, 3600);

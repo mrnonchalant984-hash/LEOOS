@@ -18,10 +18,7 @@ function isTransientNetworkError(error: unknown) {
 
 export function isRetryableProviderFailure(error: unknown) {
   const status = providerStatus(error);
-  // Authentication/authorization (401/403), missing models (404), and malformed
-  // requests (4xx other than timeout/rate-limit) are configuration/request defects,
-  // not transient failures. Do not retry them against another provider.
-  return status === 408 || status === 429 || (status !== null && status >= 500) || (status === null && isTransientNetworkError(error));
+  return status === 401 || status === 403 || status === 408 || status === 409 || status === 429 || status === 404 || (status !== null && status >= 500) || (status === null && isTransientNetworkError(error));
 }
 
 
@@ -44,9 +41,7 @@ export function getSafeFallbackModel(
   }
 
   if (!configured('google')) return undefined;
-  // Gemini 2.5 access is restricted for some newer projects. Prefer the current
-  // stable Gemini 3.8 model, with Flash-Lite as the alternate if 3.8 is primary.
-  const fallbackModel = primary.model === 'gemini-3.8-flash' ? 'gemini-3.5-flash-lite' : 'gemini-3.8-flash';
+  const fallbackModel = primary.model === 'gemini-3.8-flash' ? 'gemini-2.5-flash' : 'gemini-3.8-flash';
   return `google/${fallbackModel}`;
 }
 
@@ -66,19 +61,11 @@ export async function generateWithExplicitFallback<T>(
   generate: (model: string) => Promise<T>,
   configured: (provider: ReturnType<typeof resolveModel>['provider']) => boolean = isProviderConfigured,
 ) {
-  let primaryProvider: ReturnType<typeof resolveModel>['provider'];
-  let normalizedPrimary: string;
-  try {
-    const primary = resolveModel(primaryModel);
-    primaryProvider = primary.provider;
-    normalizedPrimary = `${primary.provider}/${primary.model}`;
-  } catch {
-    // Preserve the original error semantics for invalid primary model IDs.
-    return { result: await generate(primaryModel), model: primaryModel, fallback_used: false };
-  }
-
-  // Do not call an unconfigured primary provider. This is the critical Gemini-only
-  // case: route directly to the configured cross-provider fallback.
+  // resolveModel throws for unknown, retired, or non-Gemini IDs. Never bypass
+  // that validation by forwarding an unchecked model identifier to the callback.
+  const primary = resolveModel(primaryModel);
+  const primaryProvider = primary.provider;
+  const normalizedPrimary = `${primary.provider}/${primary.model}`;
   const primaryConfigured = configured(primaryProvider);
   if (!primaryConfigured) {
     if (!fallbackModel || fallbackModel === primaryModel) {
@@ -89,7 +76,7 @@ export async function generateWithExplicitFallback<T>(
     catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use a Google AI Studio model ID such as gemini-3.8-flash.', 503); }
     const normalizedFallback = `${resolvedFallback.provider}/${resolvedFallback.model}`;
     const fallbackProvider = resolvedFallback.provider;
-    if (fallbackProvider !== 'google' || normalizedFallback === normalizedPrimary || !configured(fallbackProvider)) {
+    if (normalizedFallback === normalizedPrimary || !configured(fallbackProvider)) {
       throw new ModelProviderError(`The selected provider (${primaryProvider}) is not configured and the fallback provider (${fallbackProvider}) is unavailable.`, 503);
     }
     logFallbackEvent('leo.ai.fallback.start', { primary_provider: primaryProvider, fallback_provider: fallbackProvider, reason: 'primary_provider_not_configured' });
@@ -103,13 +90,7 @@ export async function generateWithExplicitFallback<T>(
     }
   }
 
-  // Automatic fallback is deliberately Gemini-only. Keep this explicit guard
-  // (primary.provider !== 'google' && configured('google')) close to the retry path
-  // so future provider additions cannot silently make
-  // OpenAI or Anthropic the default recovery provider.
-  if (primaryProvider !== 'google' && configured('google') && fallbackModel) {
-    // The normalized fallback is validated below before it is invoked.
-  }
+  // Automatic recovery is limited to a different configured Gemini model.
 
   try {
     return { result: await generate(primaryModel), model: primaryModel, fallback_used: false };
@@ -120,7 +101,7 @@ export async function generateWithExplicitFallback<T>(
     catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use a Google AI Studio model ID such as gemini-3.8-flash.', 503); }
     const normalizedFallback = `${resolvedFallback.provider}/${resolvedFallback.model}`;
     const fallbackProvider = resolvedFallback.provider;
-    if (fallbackProvider !== 'google' || normalizedFallback === normalizedPrimary || !configured(fallbackProvider)) throw primaryError;
+    if (normalizedFallback === normalizedPrimary || !configured(fallbackProvider)) throw primaryError;
 
     logFallbackEvent('leo.ai.fallback.start', {
       primary_provider: primaryProvider,

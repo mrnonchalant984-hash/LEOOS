@@ -4,7 +4,7 @@ import { adminSupabase, isPlatformOwner } from '@/lib/auth';
 import { getEffectiveUserPlan } from '@/lib/plan-access';
 import { canUseManualAgents, getAllowedAgentIds } from '@/lib/agents/entitlements';
 import { classifyAgents, runAgent } from '@/lib/agents/manager';
-import { isBrowserAgent } from '@/lib/agents/openai-browser';
+import { isBrowserAgent } from '@/lib/agents/browser-agent-disabled';
 import { topologicallySortWorkflowSteps, workflowDependencyError, type WorkflowDependencyStep } from '@/lib/workflow-dependencies';
 
 export const runtime = 'nodejs';

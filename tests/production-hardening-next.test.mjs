@@ -29,7 +29,8 @@ test('offline sync is owner-gated for workforce tasks and uses an idempotency ke
 });
 test('realtime meetings and generated avatar clips require platform-owner authentication', () => {
   assert.match(read('app/api/meetings/[id]/realtime-session/route.ts'), /requireOwner/);
-  assert.match(read('app/api/meetings/[id]/realtime-session/route.ts'), /realtime\.clientSecrets\.create/);
+  assert.match(read('app/api/meetings/[id]/realtime-session/route.ts'), /GEMINI_AUDIO_WORKFLOW_NOT_VERIFIED/);
+  assert.doesNotMatch(read('app/api/meetings/[id]/realtime-session/route.ts'), /realtime\.clientSecrets\.create|api\.openai\.com/);
   assert.match(read('app/api/workforce/avatars/route.ts'), /requireOwner/);
   assert.match(read('app/api/workforce/avatars/route.ts'), /createRunwayVideo/);
 });
@@ -55,7 +56,7 @@ test('offline outbox UI keeps drafts local and preserves rejected events for rev
   assert.match(outbox, /\['accepted', 'queued'\]/);
 });
 test('offline mode blocks hosted fallback when local inference is missing', () => {
-  const model = read('lib/openai.ts');
-  assert.match(model, /LEO_OFFLINE_MODE === 'true'/);
-  assert.match(model, /no hosted fallback is permitted/);
+  const model = read('lib/leo-system-prompt.ts');
+  assert.match(read('app/api/offline/chat/route.ts'), /LOCAL_MODEL_DISABLED/);
+  assert.doesNotMatch(model, /from ['"]openai['"]|LEO_LOCAL_MODEL_URL/);
 });

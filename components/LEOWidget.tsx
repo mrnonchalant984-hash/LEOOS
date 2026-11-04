@@ -49,6 +49,7 @@ import {
 import { createBrowserClient } from "@supabase/ssr";
 import type { LucideIcon } from "lucide-react";
 
+type BuildProgressState = { status: string; step: string; message: string; liveUrl?: string | null; events?: Array<{ id: string; message: string; status: string; created_at: string }> };
 type ProjectBuilderAction = {
   projectType: string;
   status: string;
@@ -82,8 +83,24 @@ type VoiceStatus =
   | "Gemini voice ready · tap to speak";
 type ToolOption = { name: string; description: string };
 type CustomAgentOption = { id: string; name: string; description: string; allowed_tools: string[] };
+type ModelOption = { id: string; name: string; provider: string; model: string; capabilities: string[]; configured: boolean };
 type OfflineDraft = { text: string; mode: "normal" | "deep" | "tools"; selectedToolName?: string; selectedAgentId?: string; savedAt: string };
 const OFFLINE_DRAFT_KEY = "leo_offline_chat_draft_v1";
+const actions = [
+  {
+    label: "Let’s brainstorm",
+    prompt: "Let's brainstorm ideas with me",
+    icon: Lightbulb,
+  },
+  {
+    label: "Let’s create",
+    prompt: "Let's create something together",
+    icon: Sparkles,
+  },
+  { label: "Let’s deploy", prompt: "Let's deploy a website", icon: Rocket },
+  { label: "Let’s fix", prompt: "Let's fix my code", icon: Wrench },
+  { label: "Let’s code", prompt: "Let's code something", icon: Code2 },
+];
 function getBrowserSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -116,8 +133,15 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     [voiceLocked, setVoiceLocked] = useState(false),
     [voiceFallbackMode, setVoiceFallbackMode] = useState(false);
   const [platformCredits, setPlatformCredits] = useState<number | null>(null);
+  const [buildProgress, setBuildProgress] = useState<BuildProgressState | null>(null);
+  const [trackBuildProgress, setTrackBuildProgress] = useState(false);
+  const [buildTrackingSince, setBuildTrackingSince] = useState("");
   const [toolOptions, setToolOptions] = useState<ToolOption[]>([]);
   const [customAgentOptions, setCustomAgentOptions] = useState<CustomAgentOption[]>([]);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [selectedModel, setSelectedModel] = useState("auto");
+  const [modelLoadError, setModelLoadError] = useState("");
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [effort, setEffort] = useState<"standard" | "deep">("standard");
   const [chatSearch, setChatSearch] = useState("");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -156,6 +180,30 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       window.removeEventListener("offline", updateNetworkState);
     };
   }, []);
+  useEffect(() => {
+    if (!trackBuildProgress) return;
+    let cancelled = false;
+    const startedAt = Date.now();
+    const poll = async () => {
+      try {
+        const t = await token();
+        const response = await fetch(`/api/chat/build-progress?since=${encodeURIComponent(buildTrackingSince)}`, { headers: t ? { Authorization: `Bearer ${t}` } : {}, cache: 'no-store' });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled || !data.job) return;
+        const job = data.job as { status?: string; error_code?: string; attempts?: number };
+        const build = data.build as { status?: string; step?: string; error?: string; deployment_url?: string | null } | null;
+        const events = Array.isArray(data.events) ? data.events.filter((event: { message?: unknown }) => typeof event.message === 'string').slice(0, 6).map((event: { id: string; message: string; status: string; created_at: string }) => ({ id: event.id, message: event.message, status: event.status, created_at: event.created_at })) : [];
+        const terminal = ['succeeded', 'failed'].includes(String(job.status)) || (!['queued', 'running'].includes(String(job.status)) && ['live', 'build_failed', 'deploy_failed'].includes(String(build?.status)));
+        const queueRetrying = job.status === 'queued' && Number(job.attempts || 0) > 1;
+        setBuildProgress({ status: ['queued', 'running'].includes(String(job.status)) ? String(job.status) : String(build?.status || job.status || 'queued'), step: String(job.status === 'queued' ? (queueRetrying ? 'Retry scheduled' : 'Waiting for a background worker') : job.status === 'running' ? (build?.step || 'Worker is processing the build') : (build?.step || 'Build status')), message: String(job.status === 'queued' && queueRetrying ? 'A transient provider failure was recorded. A bounded retry is scheduled.' : build?.error || (job.status === 'failed' ? `Build failed (${job.error_code || 'unknown error'}).` : events[0]?.message || 'Waiting for the next persisted build event.')), liveUrl: build?.deployment_url || null, events });
+        if (terminal || Date.now() - startedAt > 10 * 60 * 1000) setTrackBuildProgress(false);
+      } catch { /* transient polling failures do not cancel the durable job */ }
+    };
+    void poll();
+    const timer = window.setInterval(() => { void poll(); }, 3000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [trackBuildProgress, buildTrackingSince]);
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(OFFLINE_DRAFT_KEY);
@@ -216,6 +264,17 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         if (d.profile?.full_name)
           setWelcomeName(d.profile.full_name.split(/\s+/)[0]);
       } catch {}
+    })();
+    (async () => {
+      try {
+        const t = await token();
+        const response = await fetch('/api/models', { headers: t ? { Authorization: `Bearer ${t}` } : {}, cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Models could not be loaded.');
+        const available = Array.isArray(data.models) ? data.models as ModelOption[] : [];
+        setModelOptions(available);
+        if (!available.some((item) => item.configured)) setSelectedModel("unavailable");
+      } catch (cause) { setModelLoadError(cause instanceof Error ? cause.message : 'Models could not be loaded.'); }
     })();
     const close = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node))
@@ -451,6 +510,8 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     setMessages((m) => [...m, { role: "user", content: next, ...((attachedTool || attachedAgent) ? { selectedToolLabel: attachedTool?.name || attachedAgent?.name } : {}) }]);
     setSelectedTool(null);
     setSelectedAgent(null);
+    const buildIntent = /\b(build|create|make|deploy|publish|launch|website|web\s?app|saas)\b/i.test(next) && /\b(build|create|make|deploy|publish|launch|website|web\s?app|saas)\b/i.test(next);
+    if (buildIntent) { setBuildTrackingSince(new Date().toISOString()); setBuildProgress({ status: 'preparing', step: 'Preparing your build request', message: 'Leo is preparing the project and will show persisted build events here.' }); setTrackBuildProgress(true); }
     setLoading(true);
     setError("");
     try {
@@ -465,13 +526,16 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
           session_id: sidRef.current,
           message: next,
           mode: effectiveMode,
+          request_id: crypto.randomUUID(),
           ...(attachedTool ? { tool_name: attachedTool.name } : {}),
           ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}),
+          ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}),
         }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Leo is unavailable");
-      setMessages((m) => [...m, { role: "assistant", content: d.reply, projectBuilder: d.projectBuilder }]);
+      setMessages((m) => [...m, { role: "assistant", content: d.reply, projectBuilder: d.projectBuilder, ...(typeof d.image === "string" ? { image: d.image } : {}), ...(typeof d.assetId === "string" ? { assetId: d.assetId } : {}) }]);
+      if (Number.isSafeInteger(d.platformCreditsRemaining)) setPlatformCredits(d.platformCreditsRemaining);
       if (offlineDraft?.text === next && offlineDraft.mode === effectiveMode) {
         setOfflineDraft(null);
         window.localStorage.removeItem(OFFLINE_DRAFT_KEY);
@@ -520,7 +584,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       if (Number.isSafeInteger(d.platform_credits_remaining)) setPlatformCredits(d.platform_credits_remaining);
       setMessages((m) => [
         ...m,
-        { role: "assistant", content: `Image saved to your private assets. ${Number.isSafeInteger(d.platform_credits_charged) && d.platform_credits_charged > 0 ? `${d.platform_credits_charged} platform credit${d.platform_credits_charged === 1 ? '' : 's'} charged.` : 'Your plan image allowance was used.'}`, image: d.url },
+        { role: "assistant", content: `Image saved to your private assets. ${Number.isSafeInteger(d.platform_credits_charged) && d.platform_credits_charged > 0 ? `${d.platform_credits_charged} platform credit${d.platform_credits_charged === 1 ? '' : 's'} charged.` : 'Your plan image allowance was used.'}`, image: typeof d.asset_id === "string" ? `/api/media/${encodeURIComponent(d.asset_id)}?view=1` : d.url, assetId: d.asset_id },
       ]);
       setInput("");
     } catch (e) {
@@ -816,6 +880,11 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
           <Plus size={20} />
         </button>
         {(selectedTool || selectedAgent) && <button type="button" onClick={() => { setSelectedTool(null); setSelectedAgent(null); }} aria-label="Remove selected tool or agent" className="flex max-w-[35%] shrink-0 items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-[10px] text-zinc-300"><Wrench size={11}/><span className="truncate">{selectedAgent ? `Agent: ${selectedAgent.name}` : selectedTool?.name}</span><X size={11}/></button>}
+        <label className="sr-only" htmlFor="leo-model-select">Leo model</label>
+        <select id="leo-model-select" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)} disabled={!modelOptions.some((item) => item.configured)} title={modelLoadError || (!modelOptions.some((item) => item.configured) ? 'No configured text model is available.' : 'Choose the model for this message')} className="order-3 max-w-[150px] shrink-0 rounded-xl border border-white/10 bg-white/[.04] px-2 py-2 text-[10px] text-zinc-300 outline-none focus:border-[var(--gold)] disabled:opacity-50 sm:order-none">
+          {modelOptions.some((item) => item.configured) ? <option value="auto">Auto</option> : <option value="unavailable">No model configured</option>}
+          {modelOptions.filter((item) => item.configured).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.model}</option>)}
+        </select>
         <label className="order-4 inline-flex h-10 items-center gap-1 rounded-xl border border-white/10 px-2 text-[10px] text-zinc-400 sm:order-none">
           <span className="sr-only">Reasoning effort</span>
           <select value={effort} onChange={(event) => setEffort(event.target.value as "standard" | "deep")} className="max-w-[64px] bg-transparent outline-none"><option value="standard">Fast</option><option value="deep">Deep</option></select>
@@ -1079,7 +1148,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
               <p className="mt-1 text-xs text-zinc-400">{m.projectBuilder.message}</p>
               {m.projectBuilder.href && (
                 <a href={m.projectBuilder.href} className="mt-3 inline-flex rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-bold text-black">
-                  {m.projectBuilder.status === "plan_upgrade" ? "View plans" : m.projectBuilder.status === "sign_in_required" ? "Sign in" : m.projectBuilder.status === "project_created" ? (m.projectBuilder.projectType === "game" ? "Open Game Studio" : "Review & Build") : m.projectBuilder.status === "creation_failed" ? "Retry project setup" : "Start project setup"}
+                  {m.projectBuilder.status === "plan_upgrade" ? "View plans" : m.projectBuilder.status === "sign_in_required" ? "Sign in" : "Start project setup"}
                 </a>
               )}
               {m.projectBuilder.provider && <p className="mt-2 text-[10px] text-zinc-600">Provider: {m.projectBuilder.provider}</p>}
@@ -1101,6 +1170,16 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
           {m.assetId && <a href={`/api/media/${encodeURIComponent(m.assetId)}?download=1`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-[var(--gold)] underline">Open saved private asset</a>}
         </div>
       ))}
+      {buildProgress && (
+        <div className="max-w-[92%] rounded-2xl border border-[var(--gold)]/25 bg-black/35 p-3 text-sm" role="status" aria-live="polite">
+          <div className="flex items-center gap-2 font-semibold text-[var(--gold)]"><Rocket size={15} /> Build progress · {buildProgress.status.replaceAll('_', ' ')}</div>
+          <p className="mt-1 text-zinc-200">{buildProgress.step}</p>
+          <p className="mt-1 text-xs text-zinc-400">{buildProgress.message}</p>
+          {buildProgress.events?.slice(0, 4).map((event) => <p key={event.id} className="mt-1 text-xs text-zinc-500">{event.message}</p>)}
+          {buildProgress.liveUrl && <a href={buildProgress.liveUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-bold text-black">Open verified live website</a>}
+          {trackBuildProgress && <p className="mt-2 text-[10px] text-zinc-600">Updating from saved build events…</p>}
+        </div>
+      )}
       {loading && (
         <div className="flex max-w-fit items-center gap-2 rounded-3xl bg-black/40 p-3 text-sm text-zinc-400">
           <Loader2 size={15} className="animate-spin" />
@@ -1216,20 +1295,38 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-8">
               {memoryOpen ? <div className="mx-auto max-w-2xl"><div className="mb-6 flex items-start gap-3"><div className="rounded-2xl bg-[var(--gold)]/10 p-3 text-[var(--gold)]"><Brain size={22}/></div><div><h1 className="text-2xl font-bold">Leo memory</h1><p className="mt-1 text-sm text-zinc-400">Saved notes help Leo retain useful context. Manage what is remembered.</p></div></div><form onSubmit={(event) => { event.preventDefault(); void addMemory(); }} className="mb-6 flex gap-2"><input value={memoryDraft} onChange={(event) => setMemoryDraft(event.target.value)} placeholder="Remember that I prefer…" maxLength={1000} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none focus:border-[var(--gold)]"/><button disabled={memoryBusy || !memoryDraft.trim()} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">Save</button></form>{memoryBusy ? <p className="text-sm text-zinc-500">Loading memories…</p> : memories.length ? <div className="space-y-2">{memories.map((memory) => <article key={memory.id} className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4"><div><p className="whitespace-pre-wrap text-sm text-zinc-200">{memory.memory}</p><p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-600">{memory.source || "saved"}</p></div><button type="button" onClick={() => void deleteMemory(memory.id)} className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-300" aria-label="Delete memory"><Trash size={15}/></button></article>)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center"><Bookmark className="mx-auto mb-3 text-zinc-500"/><p className="text-sm text-zinc-300">No saved memories yet</p><p className="mt-1 text-xs text-zinc-500">Add preferences, project context or instructions you want to keep.</p></div>}</div> : messages.length === 0 ? (
-                <div className="mx-auto flex min-h-[62vh] w-full max-w-4xl flex-col justify-center py-8 md:min-h-[68vh] md:px-4">
-                  <div className="w-full rounded-3xl border border-white/[.08] bg-white/[.025] p-2 shadow-[0_24px_80px_rgba(0,0,0,.24)] md:p-4">
-                    {composer}
+                <div className="mx-auto flex min-h-[52vh] max-w-2xl flex-col justify-center py-10 text-center">
+                  <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--gold)]/40 text-[var(--gold)]">
+                    <Bot size={22} />
+                  </div>
+                  <h1 className="text-2xl font-semibold tracking-tight text-zinc-100 md:text-4xl">
+                    Welcome, {welcomeName} 👋
+                  </h1>
+                  <p className="mt-3 text-zinc-400">
+                    What are we building today?
+                  </p>
+                  <div className="mt-7 flex flex-wrap justify-center gap-3">
+                    {actions.map(({ label, prompt, icon: Icon }) => (
+                      <button
+                        key={label}
+                        onClick={() => send(prompt)}
+                        className="flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-3 text-sm hover:border-[var(--gold)]/50"
+                      >
+                        <Icon size={16} />
+                        {label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               ) : (
                 messagesView
               )}
             </div>
-            {!memoryOpen && messages.length > 0 && <div className="border-t border-[#252525] bg-[#0b0b0b] p-3 md:p-4"><div className="mx-auto max-w-3xl">
+            {!memoryOpen && <div className="border-t border-[#252525] bg-[#0b0b0b] p-3 md:p-4"><div className="mx-auto max-w-3xl">
               {videoConfirmationPanel}
               {videoStatus && <div className="mb-2 text-xs text-zinc-400" role="status" aria-live="polite"><p>{videoStatus}</p>{activeVideoJobId && !loading && <button type="button" onClick={refreshVideoStatus} className="mt-2 rounded-lg border border-white/10 px-3 py-2 text-white">Check status</button>}</div>}
               {composer}
-
+              {messages.length === 0 && <div className="mx-auto mt-2 flex max-w-3xl flex-wrap gap-1.5 px-1" aria-label="Quick starts">{[{label: "Write", prompt: "Help me write"}, {label: "Learn", prompt: "Teach me"}, {label: "Code", prompt: "Help me code"}, {label: "Brainstorm", prompt: "Let's brainstorm"}, {label: "Create", prompt: "Let's create"}].map((chip) => <button key={chip.label} type="button" onClick={() => send(chip.prompt)} className="rounded-full border border-white/10 px-3 py-1.5 text-[11px] text-zinc-500 hover:border-white/25 hover:text-zinc-200">{chip.label}</button>)}</div>}
             </div></div>}
             {voiceOpen && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xl">

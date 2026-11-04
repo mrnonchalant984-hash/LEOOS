@@ -70,12 +70,13 @@ async function closeDispatcher(dispatcher: Agent, destroy = false) {
   else await dispatcher.close();
 }
 
-export function createSafeMcpFetch(endpoint: string, bearerToken?: string) {
+export function createSafeMcpFetch(endpoint: string, bearerToken?: string, allowSameOriginPaths = false) {
   const approvedEndpoint = validateMcpEndpointUrl(endpoint);
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const target = new URL(input instanceof Request ? input.url : input.toString());
-    if (target.origin !== approvedEndpoint.origin || target.pathname !== approvedEndpoint.pathname ||
-        target.search !== approvedEndpoint.search || target.hash || target.username || target.password) {
+    const sameEndpointPath = target.pathname === approvedEndpoint.pathname && target.search === approvedEndpoint.search;
+    if (target.origin !== approvedEndpoint.origin || (!allowSameOriginPaths && !sameEndpointPath) ||
+        target.hash || target.username || target.password) {
       throw new Error('Outbound MCP request escaped its registered endpoint.');
     }
     const addresses = await resolvePublicAddresses(approvedEndpoint.hostname);

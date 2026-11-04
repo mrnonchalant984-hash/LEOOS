@@ -27,22 +27,20 @@ test('API checkout is enabled and all non-free tiers use monthly subscriptions w
   assert.ok(API_PLAN_CATALOG.slice(1).every(p => p.includedCredits > 0));
 });
 
-test('published model prices are costed from official OpenAI standard input/output rates', () => {
-  assert.equal(API_MODEL_PRICING_REVIEWED_ON, '2026-10-16');
-  assert.deepEqual(API_MODEL_PRICING['gpt-4o-mini'], {
-    inputUsdPerMillionTokens: 0.15,
-    outputUsdPerMillionTokens: 0.6,
-  });
+test('published model prices use the official Gemini Standard rates and switch on the scheduled date', () => {
+  assert.equal(API_MODEL_PRICING_REVIEWED_ON, '2026-10-29');
+  assert.deepEqual(API_MODEL_PRICING['gemini-3.8-flash'], { inputUsdPerMillionTokens: 0.75, outputUsdPerMillionTokens: 3.75 });
   assert.equal(API_CREDIT_PROVIDER_COST_USD, 0.0006);
-  assert.equal(calculateApiCredits('gpt-4o-mini', 1_000_000, 0), 250);
-  assert.equal(calculateApiCredits('gpt-4o-mini', 0, 1_000_000), 1_000);
-  assert.equal(calculateApiCredits('gpt-4o-mini', 1_000_000, 1_000_000), 1_250);
+  assert.equal(calculateApiCredits('gemini-3.8-flash', 1_000_000, 0, new Date('2026-10-29T00:00:00Z')), 1_250);
+  assert.equal(calculateApiCredits('gemini-3.8-flash', 0, 1_000_000, new Date('2026-10-29T00:00:00Z')), 6_250);
+  assert.equal(calculateApiCredits('gemini-3.8-flash', 1_000_000, 1_000_000, new Date('2026-10-29T00:00:00Z')), 7_500);
+  assert.equal(calculateApiCredits('gemini-3.8-flash', 1_000_000, 0, new Date('2027-01-01T00:00:00Z')), 2_500);
   assert.equal(calculateApiCredits('unpriced-model', 1_000_000, 1_000_000), null);
-  assert.deepEqual(getSupportedApiModels('gpt-4o-mini,unpriced-model'), ['gpt-4o-mini']);
+  assert.deepEqual(getSupportedApiModels('gemini-3.8-flash,unpriced-model'), ['gemini-3.8-flash']);
   assert.deepEqual(getSupportedApiModels('unpriced-model'), []);
-  assert.equal(isApiModel('gpt-4o-mini'), true);
-  assert.equal(isApiModel('gpt-4o'), false);
-  assert.ok(calculateApiCredits('gpt-4o-mini', 160_000 + 50 * 16, 4096) <= 100);
+  assert.equal(isApiModel('gemini-3.8-flash'), true);
+  assert.equal(isApiModel('gpt-4o-mini'), false);
+  assert.ok(calculateApiCredits('gemini-3.8-flash', 160_000 + 50 * 16, 4096) <= 1000);
 });
 
 test('provider-priced monthly usage remains below each plan price under a conservative NGN FX stress rate', () => {

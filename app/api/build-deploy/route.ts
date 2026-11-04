@@ -7,6 +7,7 @@ import { generateWithExplicitFallback, getSafeFallbackModel } from '@/lib/ai/pro
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import type { ProjectType } from '@/lib/pricing';
 import { getBuilderAvailability, getExternalModelBuilderAvailability } from '@/lib/builders/providers';
+import { getAccountBuilderAvailability } from '@/lib/builders/account-availability';
 import { withOperationalMonitoring } from '@/lib/monitoring';
 import { validateMcpAccessToken, MCP_WRITE_SCOPE } from '@/lib/mcp/oauth';
 import { normalizeIdePath, validateIdeFiles } from '@/lib/ide-files';
@@ -17,6 +18,7 @@ import { decryptMcpCredential } from '@/lib/mcp/outbound-security';
 import type { DeploymentProvider } from '@/lib/provider-http';
 
 export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 type GeneratedFile = { path: string; content: string };
 
@@ -128,6 +130,14 @@ async function recordBuildState(
     updated_at: now,
   }).eq('id', context.projectId).eq('owner_user_id', context.userId);
   if (projectError) throw projectError;
+  const { error: eventError } = await db.from('deployment_events').insert({
+    website_project_id: context.projectId,
+    event_type: `build_${status}`,
+    status: status === 'live' ? 'success' : status === 'build_failed' || status === 'deploy_failed' ? 'error' : 'running',
+    message: details.message || step,
+    metadata: { build_id: context.id, step, deployment_id: details.deploymentId || null },
+  });
+  if (eventError) console.error('Could not persist build progress event:', eventError.message);
 }
 
 export async function POST(req: NextRequest) {
@@ -136,11 +146,25 @@ export async function POST(req: NextRequest) {
   let mainDomainFailure: string | null = null;
   let buildContext: (BuildContext & { stage: 'building' | 'testing' | 'deploying' | 'live' }) | null = null;
   let mcpExternalModel = false;
+  let suppliedMcpFiles: GeneratedFile[] | null = null;
   try {
-    const browserContext = await getProfile(req);
+    const workerSecret = process.env.CRON_SECRET;
+    const workerHeader = req.headers.get('x-leonardx-build-worker');
+    const workerJobId = req.headers.get('x-leonardx-build-job-id');
+    const workerLeaseId = req.headers.get('x-leonardx-build-worker-id');
+    const internalBuildWorker = Boolean(workerSecret && workerHeader === workerSecret && workerJobId && /^[0-9a-f-]{36}$/i.test(workerJobId) && workerLeaseId && /^[0-9a-f-]{36}$/i.test(workerLeaseId));
+    const browserContext = internalBuildWorker ? null : await getProfile(req);
     let ctx: { user: { id: string; email?: string | null }; profile: { role?: string | null; email?: string | null } } | null = browserContext
       ? { user: { id: browserContext.user.id, email: browserContext.user.email }, profile: browserContext.profile }
       : null;
+    if (internalBuildWorker) {
+      const { data: queuedJob, error: queuedJobError } = await adminSupabase().from('leo_build_jobs')
+        .select('id,user_id,status,lease_owner,request_payload').eq('id', workerJobId).eq('status', 'running').eq('lease_owner', workerLeaseId).maybeSingle();
+      if (queuedJobError || !queuedJob || !queuedJob.lease_owner) return NextResponse.json({ error: 'The claimed build job could not be verified.' }, { status: 403 });
+      const { data: workerProfile, error: workerProfileError } = await adminSupabase().from('profiles').select('id,email,role').eq('id', queuedJob.user_id).maybeSingle();
+      if (workerProfileError || !workerProfile) return NextResponse.json({ error: 'Build owner profile could not be loaded.' }, { status: 503 });
+      ctx = { user: { id: queuedJob.user_id, email: workerProfile.email }, profile: workerProfile };
+    }
     if (!ctx) {
       const authorization = req.headers.get('authorization') || '';
       const mcpBearer = /^Bearer\s+([A-Za-z0-9_-]{32,256})$/i.exec(authorization);
@@ -168,15 +192,19 @@ export async function POST(req: NextRequest) {
     if (!parsedBody || typeof parsedBody !== 'object' || Array.isArray(parsedBody)) {
       return NextResponse.json({ error: 'A deployment request body is required.' }, { status: 400 });
     }
-    const body = parsedBody as Record<string, any>;
+    let body = parsedBody as Record<string, any>;
+    if (internalBuildWorker) {
+      const { data: queuedJob } = await adminSupabase().from('leo_build_jobs').select('request_payload').eq('id', workerJobId).eq('user_id', ctx!.user.id).eq('status', 'running').eq('lease_owner', workerLeaseId).maybeSingle();
+      if (!queuedJob || !queuedJob.request_payload || typeof queuedJob.request_payload !== 'object') return NextResponse.json({ error: 'Queued build payload is unavailable.' }, { status: 409 });
+      body = queuedJob.request_payload as Record<string, any>;
+      body.background = false;
+    }
     const userPrompt = String(body.prompt || '').trim();
     const customerProjectId = String(body.project_id || '');
-    let suppliedMcpFiles: GeneratedFile[] | null = null;
-    // Authenticated Leo chat may pass its actual saved source files through the same
-    // existing deployment pipeline; it still uses this user's session, plan checks,
-    // ownership validation, build idempotency, and GitHub/Vercel verification.
-    const useSuppliedFiles = mcpExternalModel || body.source === 'leo_chat_build_workflow';
-    if (useSuppliedFiles) {
+    // Leo chat can pass source files already generated in its tool conversation.
+    // The normal authenticated session, project ownership, plan and file checks still apply.
+    const suppliedFilesFromLeoChat = !mcpExternalModel && body.source === 'leo_chat';
+    if (mcpExternalModel || suppliedFilesFromLeoChat) {
       if (!Array.isArray(body.generated_files) || body.generated_files.length === 0 || body.generated_files.length > 250 ||
           body.generated_files.some((file: unknown) => !file || typeof file !== 'object' ||
             typeof (file as { path?: unknown }).path !== 'string' || typeof (file as { content?: unknown }).content !== 'string')) {
@@ -216,11 +244,37 @@ export async function POST(req: NextRequest) {
     }
     const provider = mcpExternalModel
       ? getExternalModelBuilderAvailability(projectType)
-      : getBuilderAvailability(projectType);
+      : await getAccountBuilderAvailability(projectType, ctx.user.id);
     if (provider.status !== 'ready') return NextResponse.json({ error: provider.message || 'Build provider is not configured.', provider: provider.id, requiredEnvironment: provider.requiredEnvironment }, { status: 503 });
     const requestHash = buildDeployRequestHash(ctx.user.id, customerProjectId, body);
     const idempotency = resolveBuildDeployIdempotencyKey(req.headers.get('idempotency-key'), body.idempotency_key, requestHash);
     if (idempotency.error) return NextResponse.json({ error: idempotency.error }, { status: 400 });
+    if (body.background === true && !internalBuildWorker) {
+      if (body.source !== 'leo_chat' || body.env && Object.keys(body.env).length) return NextResponse.json({ error: 'Background queuing is currently restricted to Leo-chat generated source; do not place secrets in queued payloads.' }, { status: 400 });
+      const queuedPayload = { ...body, background: false };
+      const { data: queued, error: queueError } = await db.from('leo_build_jobs').insert({
+        user_id: ctx.user.id, website_project_id: customerProjectId,
+        idempotency_key: idempotency.key, request_hash: requestHash,
+        request_payload: queuedPayload, status: 'queued',
+      }).select('id,status,created_at').single();
+      if (queueError) {
+        if (queueError.code === '23505') {
+          const { data: duplicate } = await db.from('leo_build_jobs').select('id,status,project_build_id,error_code').eq('user_id', ctx.user.id).eq('website_project_id', customerProjectId).eq('idempotency_key', idempotency.key).maybeSingle();
+          if (duplicate?.status === 'succeeded' && duplicate.project_build_id) {
+            const { data: completedBuild } = await db.from('project_builds').select('status,deployment_url').eq('id', duplicate.project_build_id).eq('owner_user_id', ctx.user.id).eq('website_project_id', customerProjectId).maybeSingle();
+            if (completedBuild?.status === 'live' && typeof completedBuild.deployment_url === 'string' && /^https:\/\//.test(completedBuild.deployment_url)) return NextResponse.json({ success: true, status: 'deployed', liveUrl: completedBuild.deployment_url, jobId: duplicate.project_build_id, duplicate: true, requestId }, { headers: { 'Cache-Control': 'no-store' } });
+          }
+          if (duplicate?.status === 'failed') return NextResponse.json({ success: false, status: 'failed', error: 'The previous background attempt failed. Submit a new deployment request to retry safely.', code: duplicate.error_code || 'BUILD_JOB_FAILED', retryable: true, jobId: duplicate.id, requestId }, { status: 409, headers: { 'Cache-Control': 'no-store' } });
+          if (duplicate) return NextResponse.json({ success: true, status: duplicate.status, queued: true, jobId: duplicate.id, projectBuildId: duplicate.project_build_id || null, duplicate: true, requestId }, { status: 202, headers: { 'Cache-Control': 'no-store' } });
+        }
+        console.error('Could not enqueue Leo build job:', queueError.message);
+        return NextResponse.json({ error: 'The build could not be queued safely. No deployment was started.', code: 'BUILD_QUEUE_FAILED', retryable: true, requestId }, { status: 503 });
+      }
+      const { error: eventError } = await db.from('deployment_events').insert({ website_project_id: customerProjectId, event_type: 'build_queued', status: 'queued', message: 'Leo queued this build for background execution.', metadata: { queue_job_id: queued.id } });
+      if (eventError) console.error('Build queue event could not be persisted:', eventError.message);
+      await db.from('website_projects').update({ build_status: 'building', build_step: 'Queued for background execution', last_build_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', customerProjectId).eq('owner_user_id', ctx.user.id);
+      return NextResponse.json({ success: true, status: 'queued', queued: true, jobId: queued.id, step: 'Queued for background execution', requestId, message: 'Build safely queued. Leo will update this chat as persisted build events arrive.' }, { status: 202, headers: { 'Cache-Control': 'no-store' } });
+    }
     const { data: startedResult, error: startError } = await db.rpc('start_customer_project_build_idempotent', {
       p_project_id: customerProjectId,
       p_owner_user_id: ctx.user.id,
@@ -570,7 +624,7 @@ export async function POST(req: NextRequest) {
     const providerError = e instanceof ProviderHttpError ? e : null;
     const failureProvider: DeploymentProvider | 'openai' = providerError?.provider || (buildContext?.stage === 'deploying' || buildContext?.stage === 'live'
       ? 'vercel'
-      : mcpExternalModel ? 'github' : 'openai');
+      : suppliedMcpFiles ? 'github' : 'openai');
     reportFailure(e, failureProvider === 'openai' ? undefined : failureProvider);
     if (providerError) {
       console.warn(JSON.stringify({

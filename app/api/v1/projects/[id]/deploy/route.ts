@@ -9,7 +9,7 @@ export const maxDuration = 60;
 
 /**
  * API-key entry point for the existing production builder. It creates only the
- * missing linkage record, then delegates to the same OpenAI/GitHub/Vercel flow
+ * missing linkage record, then delegates to the same Gemini/GitHub/Vercel flow
  * used by the authenticated web dashboard.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

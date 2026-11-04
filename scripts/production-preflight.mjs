@@ -2,14 +2,14 @@ import { existsSync, readFileSync } from 'node:fs';
 
 const required = [
   'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY',
-  'OWNER_EMAIL', 'CRON_SECRET', 'OPENAI_API_KEY',
+  'OWNER_EMAIL', 'CRON_SECRET', 'GEMINI_API_KEY',
   'WORKFORCE_WORKER_ENABLED', 'WORKFLOW_WORKER_ENABLED',
   'ANDROID_BUILD_WORKER_ENABLED', 'ANDROID_BUILD_WORKER_SECRET',
   'GITHUB_TOKEN', 'VERCEL_TOKEN',
 ];
 const missing = required.filter((key) => {
   const value = process.env[key]?.trim();
-  if (key === 'OPENAI_API_KEY') return !value && !process.env.LEO_API_KEY?.trim() && !process.env.LEO_LOCAL_MODEL_URL?.trim();
+  if (key === 'GEMINI_API_KEY') return !value && !process.env.GOOGLE_API_KEY?.trim();
   if (key === 'CRON_SECRET') return !value || value.length < 32;
   if (key === 'ANDROID_BUILD_WORKER_SECRET') return !value || value.length < 32;
   if (key.endsWith('_ENABLED')) return value !== 'true';

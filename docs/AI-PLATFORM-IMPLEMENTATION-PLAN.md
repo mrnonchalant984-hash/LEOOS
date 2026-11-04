@@ -1,37 +1,24 @@
-# AI platform implementation plan
+# AI Platform Implementation Plan — Gemini-only
 
-## Milestone 1 — Creative vertical slice (implemented; release verification incomplete)
+Updated 2026-10-29. This replaces the earlier multi-provider plan.
 
-- Reuse the authenticated LeonardX shell and existing private storage, image/video providers, job history, and credit controls.
-- Expose configured text-to-image, validated image-edit, and text-to-video workflows only.
-- Persist source and output media separately, show truthful job states, and provide private history/downloads.
-- Validate with upload tests, project tests, type checking, linting, and a production build where the build pipeline completes.
+## Target architecture
 
-## Milestone 2 — Provider-neutral model layer
+- Use `@google/genai` behind `lib/ai/model-catalog.ts` and `lib/ai/provider-registry.ts` for platform text generation and tool calling.
+- Use `GEMINI_API_KEY` as the server-side key; `GOOGLE_API_KEY` remains a compatibility alias.
+- Use dedicated Gemini image model IDs for image generation/editing and verify model capability before enabling a workflow.
+- Do not route platform inference to OpenAI, Anthropic, or local-model endpoints.
+- Do not advertise hosted browser/computer-use, live audio, or research/search capabilities as operational until their Gemini-backed workflows and authorization boundaries are implemented and verified.
+- Public Developer API metering must use measured Gemini token usage and the reviewed Gemini pricing catalog; unsupported models must be rejected before provider invocation.
 
-- Define typed provider/model capability contracts and a server-only registry.
-- Add accurate configured/unconfigured status without exposing credential values.
-- Wrap OpenAI text first, then add official Anthropic and Google SDK adapters only after environment, request, streaming, tool-call, and error contracts are established.
-- Preserve current chat behavior; add explicit model selection and bounded, visible fallback policy.
-- Record usage only when provider responses actually report it; do not invent prices.
+## Release gates
 
-## Milestone 3 — Secure outbound MCP
+1. `npm ci`, typecheck, lint, and the entire test suite pass in CI.
+2. A production build completes with the same lockfile and runtime as deployment.
+3. Gemini text/tool, image create/edit, and Developer API flows pass with non-production credentials.
+4. Credit reservation, settlement/refund, duplicate request handling, and private asset persistence pass with a staging database.
+5. MCP authentication, account isolation, tool approval, agent persistence, and owner-only workflows pass with separate test accounts.
+6. Audio/live/research/browser capabilities remain explicitly unavailable until each has an end-to-end verified implementation.
+7. Production deployment is performed only after all release gates pass and the owner approves the release.
 
-- Select the official MCP SDK and transports supported by the hosting/runtime.
-- Store server registrations and per-user/per-tool grants securely; require review before enabling newly discovered tools.
-- Restrict outbound destinations and redirects, block private/link-local addresses, defend against DNS rebinding and SSRF, and prevent credential forwarding.
-- Validate tool input schemas, enforce timeouts/rate limits, record redacted execution metadata, and gate consequential writes.
-
-## Milestone 4 — Inbound MCP and orchestration
-
-- Evaluate stateless Streamable HTTP for the Vercel deployment. Confirm protocol/version behavior before exposing an endpoint.
-- Implement real authentication, scopes, user resolution, per-tool authorization, ownership checks, and revocation. Do not label existing bearer/session handling OAuth.
-- Reuse the existing workforce job model with a bounded execution plan, limited delegation/retries, cancellation, and supported worker scheduling.
-- Expose only operations that already have real backend implementations and user-level permissions.
-
-## Release gates and blockers
-
-- Apply reviewed migrations to staging before production; keep RLS and the private bucket enabled.
-- Use a deployment plan or external protected scheduler that supports the required worker cadence. A daily Hobby cron is not adequate for queue processing.
-- Verify provider adapters against live non-production accounts without claiming mock tests as live proof.
-- Do not claim the whole platform upgrade complete until inbound and outbound MCP, all promised model adapters, worker recovery, security tests, build, and deployment have each been verified.
+No release gate is considered complete based on static source inspection alone.

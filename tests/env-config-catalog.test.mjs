@@ -30,15 +30,15 @@ test('missing required env names are listed by name only', () => {
 });
 
 test('validateEnvSubmission rejects unknown variables and empty values', () => {
-  assert.equal(isValidEnvVariableName('OPENAI_API_KEY'), true);
+  assert.equal(isValidEnvVariableName('GEMINI_API_KEY'), true);
   assert.equal(isValidEnvVariableName('openai-key'), false);
   const bad = validateEnvSubmission({ name: 'NOT_A_REAL_VAR', value: 'x', target: 'production' });
   assert.equal(bad.ok, false);
-  const empty = validateEnvSubmission({ name: 'OPENAI_API_KEY', value: '   ', target: 'production' });
+  const empty = validateEnvSubmission({ name: 'GEMINI_API_KEY', value: '   ', target: 'production' });
   assert.equal(empty.ok, false);
-  const tooLong = validateEnvSubmission({ name: 'OPENAI_API_KEY', value: 'x'.repeat(16_385), target: 'production' });
+  const tooLong = validateEnvSubmission({ name: 'GEMINI_API_KEY', value: 'x'.repeat(16_385), target: 'production' });
   assert.equal(tooLong.ok, false);
-  const ok = validateEnvSubmission({ name: 'OPENAI_API_KEY', value: 'sk-test', target: 'production' });
+  const ok = validateEnvSubmission({ name: 'GEMINI_API_KEY', value: 'gemini-test-key', target: 'production' });
   assert.equal(ok.ok, true);
 });
 

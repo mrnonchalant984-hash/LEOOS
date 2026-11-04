@@ -1,7 +1,7 @@
 import {NextRequest,NextResponse} from 'next/server';
 import {requireOwner,adminSupabase} from '@/lib/auth';
 import {getAgent} from '@/lib/agents/manager';
-import {getHostedBrowserSession,respondToHostedBrowserApproval,continueHostedBrowserSession,deleteHostedBrowserSession} from '@/lib/agents/openai-browser';
+import {getHostedBrowserSession,respondToHostedBrowserApproval,continueHostedBrowserSession,deleteHostedBrowserSession} from '@/lib/agents/browser-agent-disabled';
 
 export const runtime='nodejs';
 
@@ -26,7 +26,7 @@ export async function POST(req:NextRequest){
 
     const db=adminSupabase();
     let resolvedSessionId=sessionId;
-    let run:any=null;
+    let run: { id: string; user_id: string; agent_id: string; status: string; task: string; metadata: Record<string, unknown> | null } | null = null;
     if(runId){
       const q=await ownedRun(ctx.user.id,runId);
       if(q.error) throw q.error;

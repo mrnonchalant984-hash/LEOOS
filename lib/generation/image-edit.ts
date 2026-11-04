@@ -152,7 +152,7 @@ export async function editAndPersistImage(options: EditOptions) {
       const generated = await generateGeminiImage(options.prompt, { bytes: options.bytes, mimeType: format.mimeType }, model);
       image = generated.image;
     } catch (primaryError) {
-      const fallbackModel = resolveGeminiImageModel(process.env.LEO_GEMINI_IMAGE_FALLBACK_MODEL?.trim() || 'gemini-2.5-flash-image-preview');
+      const fallbackModel = resolveGeminiImageModel(process.env.LEO_GEMINI_IMAGE_FALLBACK_MODEL?.trim() || 'gemini-nano-banana-2.1');
       if (fallbackModel === model) throw primaryError;
       const generated = await generateGeminiImage(options.prompt, { bytes: options.bytes, mimeType: format.mimeType }, fallbackModel);
       image = generated.image;

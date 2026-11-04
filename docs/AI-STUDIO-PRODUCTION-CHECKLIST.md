@@ -6,7 +6,7 @@ Status definitions: **Implemented** means code exists; **Automated test** means 
 | --- | --- |
 | Uses the existing Next.js App Router, authentication, credit controls, and private Supabase media bucket | Implemented |
 | Text-to-image workflow and existing generation persistence | Implemented; live provider use not verified in this change |
-| OpenAI image edit with upload size, MIME, and file-signature validation | Implemented; automated upload validation test added |
+| Gemini image edit with upload size, MIME, and file-signature validation | Implemented in source; staging provider/storage/credit tests still required |
 | Original and edited images stored separately in private storage | Implemented; requires configured Supabase storage |
 | User-scoped image history and signed asset access | Implemented; no cross-user live test performed |
 | Runway Gen-4.5 text-to-video and status polling | Existing implementation reused; live provider use not verified in this change |
@@ -24,8 +24,8 @@ Configure these values in the server environment, not in client variables:
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only Supabase admin operations |
-| `OPENAI_API_KEY` or `LEO_API_KEY` | Yes for image operations | Server-side image generation/edit provider credential |
-| `LEO_IMAGE_MODEL` | Optional | Server-side model override; provider must support the selected Images API operation |
+| `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Yes for image operations | Server-side Gemini image generation/edit credential |
+| `LEO_GEMINI_IMAGE_MODEL` | Optional | Server-side Gemini image model; must be image-capable and enabled for the configured Gemini key |
 | `LEO_IMAGE_PLATFORM_CREDITS` | Optional | Server-side platform credit reservation per image request |
 | `RUNWAYML_API_SECRET` | Required for video | Server-side Runway credential |
 | `RUNWAY_VIDEO_MODEL` | Optional | Existing video workflow currently supports `gen4.5` only |

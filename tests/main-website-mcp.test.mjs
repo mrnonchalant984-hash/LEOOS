@@ -48,15 +48,24 @@ test('MCP exposes production main-branch writes only to owners with write scope 
   assert.match(route, /if \(!platformOwner \|\| userId !== token\.userId\)/);
   assert.match(route, /\.eq\('provider', 'github'\)\.eq\('status', 'verified'\)/);
   assert.match(route, /\.eq\('provider', 'vercel'\)\.eq\('status', 'verified'\)/);
+  assert.match(route, /getGitHubAppConfigurationMode\(\)/);
+  assert.match(route, /githubAppMode === 'fallback'/);
+  assert.match(route, /githubAppMode === 'app'/);
 });
 
 test('main-branch writes refuse stale commits and verify the linked Vercel GitHub project', async () => {
   const implementation = await source('lib/mcp/main-website.ts');
   assert.match(implementation, /branch\.commit\.sha !== input\.expectedCommitSha/);
   assert.match(implementation, /linked\.repoOwner.*linked\.repo/s);
+  assert.match(implementation, /if \(!linkedRepository \|\| linkedRepository\.toLowerCase\(\) !== expectedRepository\.toLowerCase\(\)\)/);
   assert.match(implementation, /force: false/);
   assert.match(implementation, /github_actions/);
   assert.match(implementation, /error_message: deployment\.errorMessage/);
+  assert.match(implementation, /getMainWebsiteGitHubToken/);
+  const auth = await source('lib/mcp/github-app-auth.ts');
+  assert.match(auth, /createSign\('RSA-SHA256'\)/);
+  assert.match(auth, /repository_names: \[target\.repository\]/);
+  assert.match(auth, /TOKEN_REFRESH_SKEW_MS/);
 });
 
 test('workforce queue execution is owner-triggered and the dashboards poll only while visible', async () => {

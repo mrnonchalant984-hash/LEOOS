@@ -1,7 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
-import OpenAI from 'openai';
-import { getOpenAI, getTextOpenAI } from '@/lib/openai';
 import { ModelProviderError, isProviderConfigured, resolveModel, type ModelMessage, type ModelProvider } from './model-catalog';
 import { FunctionCallingConfigMode, type Content, type Part } from '@google/genai';
 
@@ -13,6 +10,8 @@ export type TextGenerationRequest = {
   maxOutputTokens?: number;
   temperature?: number;
   reasoning?: { effort: 'low' | 'medium' | 'high' };
+  /** Enable Gemini's grounded Google Search tool for current or explicitly researched questions. */
+  webSearch?: boolean;
 };
 export type TextGenerationResult = {
   text: string;
@@ -38,16 +37,15 @@ async function withProviderError<T>(provider: ModelProvider, model: string, requ
     const candidate = error && typeof error === 'object' ? error as { status?: unknown; statusCode?: unknown } : {};
     const status = typeof candidate.status === 'number' ? candidate.status
       : typeof candidate.statusCode === 'number' ? candidate.statusCode : null;
-    const safeStatus = status && status >= 400 && status <= 599 ? status : 502;
-    const providerName = provider === 'google' ? 'Gemini'
-      : provider === 'openai' ? 'OpenAI'
-        : provider === 'anthropic' ? 'Anthropic' : 'Local model';
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const safeStatus = status && status >= 400 && status <= 599 ? status : /timeout|timed out|aborterror|aborted/.test(message) ? 504 : 502;
+    const providerName = 'Gemini';
     const cause = safeStatus === 401 || safeStatus === 403 ? 'rejected the configured credential or denied model access'
       : safeStatus === 404 ? 'could not find the configured model'
         : safeStatus === 429 ? 'reached a rate or quota limit'
           : safeStatus >= 500 ? 'is temporarily unavailable'
             : 'rejected the generation request';
-    throw new ModelProviderError(`${providerName} model ${model} ${cause} (HTTP ${safeStatus}). Check the model ID, provider key, and quota.`, safeStatus);
+    throw new ModelProviderError(`${providerName} model ${model} ${safeStatus === 504 ? 'timed out before completing the request' : cause} (HTTP ${safeStatus}). ${safeStatus === 504 ? 'Retry once; if it repeats, reduce the request size.' : 'Check the model ID, provider key, and quota.'}`, safeStatus);
   }
 }
 
@@ -82,273 +80,170 @@ async function executeProviderTool(
   }
 }
 
-function providerTools(tools: AssistantTool[]) {
-  return tools.map(tool => ({
-    type: 'function' as const,
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.inputSchema as OpenAI.Chat.Completions.ChatCompletionFunctionTool['function']['parameters'],
-    },
-  }));
-}
-
 export async function generateTextWithTools(
   request: TextGenerationRequest & { tools: AssistantTool[]; executeTool: AssistantToolExecutor; maxToolCalls?: number; requiredToolName?: string },
 ): Promise<TextGenerationResult> {
+  // This execution boundary intentionally supports Gemini only. resolveModel
+  // rejects non-Gemini identifiers before any request.
   const resolved = resolveModel(request.model);
-  if (!isProviderConfigured(resolved.provider)) {
-    const environmentName = resolved.provider === 'anthropic' ? 'ANTHROPIC_API_KEY'
-      : resolved.provider === 'google' ? 'GEMINI_API_KEY or GOOGLE_API_KEY'
-        : resolved.provider === 'local' ? 'LEO_LOCAL_MODEL_URL' : 'OPENAI_API_KEY or LEO_API_KEY';
-    throw new ModelProviderError(`${resolved.provider} is not configured. Set ${environmentName} on the server.`, 503);
+  if (resolved.provider !== 'google') {
+    throw new ModelProviderError('Only Gemini model execution is enabled. Configure GEMINI_API_KEY.', 503);
   }
-  if (resolved.provider === 'local') throw new ModelProviderError('Tool orchestration is not supported by the configured local model endpoint.', 400);
+  if (!isProviderConfigured('google')) {
+    throw new ModelProviderError('Gemini is not configured. Set GEMINI_API_KEY on the server.', 503);
+  }
   if (!request.tools.length) return generateText(request);
   if (request.requiredToolName && !request.tools.some(tool => tool.name === request.requiredToolName)) {
     throw new ModelProviderError('The selected tool is not available for this request.', 400);
   }
-  const maxCalls = Math.max(1, Math.min(12, Math.trunc(request.maxToolCalls || 6)));
-  const maxTurns = 6;
+
+  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '', httpOptions: { timeout: 45_000 } });
+  const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
+  const contents: Content[] = asProviderMessages(request.messages).map(message => ({
+    role: message.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: message.content }],
+  }));
+  const definitions = request.tools.map(tool => ({
+    name: tool.name,
+    description: tool.description,
+    parametersJsonSchema: tool.inputSchema,
+  }));
+  const maxCalls = Math.max(1, Math.min(8, Math.trunc(request.maxToolCalls || 6)));
+  const maxTurns = 5;
   let callsMade = 0;
+  let toolErrors = 0;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let usageReported = false;
   let finalText = '';
   const temperature = Math.max(0, Math.min(2, request.temperature ?? 0.3));
   const maxOutputTokens = Math.max(64, Math.min(20_000, Math.trunc(request.maxOutputTokens || 1200)));
-
-    if (resolved.provider === 'openai') {
-      const client = getOpenAI();
-      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = request.messages.map(message => ({
-        role: message.role === 'developer' ? 'system' : message.role,
-        content: message.content,
-      }));
-      const definitions = providerTools(request.tools);
-      for (let turn = 0; turn < maxTurns; turn += 1) {
-        const response = await withProviderError(resolved.provider, resolved.model, () => client.chat.completions.create({
-          model: resolved.model,
-          messages,
-          tools: definitions,
-          tool_choice: request.requiredToolName && callsMade === 0
-            ? { type: 'function', function: { name: request.requiredToolName } }
-            : 'auto',
-          temperature,
-          max_tokens: maxOutputTokens,
-        }));
-        const message = response.choices[0]?.message;
-        finalText = message?.content || '';
-        if (response.usage) {
-          usageReported = true;
-          totalInputTokens += response.usage.prompt_tokens;
-          totalOutputTokens += response.usage.completion_tokens;
-        }
-        const calls = message?.tool_calls || [];
-        if (!calls.length) break;
-        messages.push(message);
-        for (const call of calls) {
-          if (call.type !== 'function') continue;
-          callsMade += 1;
-          const args = (() => {
-            try { return JSON.parse(call.function.arguments) as unknown; } catch { return null; }
-          })();
-          const result = callsMade <= maxCalls
-            ? await executeProviderTool(call.function.name, args, request.tools, request.executeTool)
-            : { text: 'The maximum tool-call limit has been reached.', isError: true };
-          messages.push({ role: 'tool', tool_call_id: call.id, content: result.text });
-        }
-      }
-    } else if (resolved.provider === 'anthropic') {
-      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-      const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
-      const messages: Anthropic.MessageParam[] = asProviderMessages(request.messages).map(message => ({ ...message }));
-      const definitions: Anthropic.Tool[] = request.tools.map(tool => ({
-        name: tool.name,
-        description: tool.description,
-        input_schema: tool.inputSchema as Anthropic.Tool['input_schema'],
-      }));
-      for (let turn = 0; turn < maxTurns; turn += 1) {
-        const response = await withProviderError(resolved.provider, resolved.model, () => client.messages.create({
-          model: resolved.model,
-          max_tokens: maxOutputTokens,
-          temperature,
-          ...(system ? { system } : {}),
-          messages,
-          tools: definitions,
-          ...(request.requiredToolName && callsMade === 0 ? { tool_choice: { type: 'tool' as const, name: request.requiredToolName } } : {}),
-        }));
-        finalText = response.content.filter(block => block.type === 'text').map(block => block.text).join('');
-        usageReported = true;
-        totalInputTokens += response.usage.input_tokens;
-        totalOutputTokens += response.usage.output_tokens;
-        const calls = response.content.filter(block => block.type === 'tool_use');
-        if (!calls.length) break;
-        messages.push({ role: 'assistant', content: response.content });
-        const results: Anthropic.ToolResultBlockParam[] = [];
-        for (const call of calls) {
-          callsMade += 1;
-          const result = callsMade <= maxCalls
-            ? await executeProviderTool(call.name, call.input, request.tools, request.executeTool)
-            : { text: 'The maximum tool-call limit has been reached.', isError: true };
-          results.push({ type: 'tool_result', tool_use_id: call.id, content: result.text, is_error: result.isError });
-        }
-        messages.push({ role: 'user', content: results });
-      }
-    } else {
-      const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY });
-      const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
-      const contents: Content[] = asProviderMessages(request.messages).map(message => ({
-        role: message.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: message.content }],
-      }));
-      const definitions = request.tools.map(tool => ({
-        name: tool.name,
-        description: tool.description,
-        parametersJsonSchema: tool.inputSchema,
-      }));
-      for (let turn = 0; turn < maxTurns; turn += 1) {
-        const response = await withProviderError(resolved.provider, resolved.model, () => client.models.generateContent({
-          model: resolved.model,
-          contents,
-          config: {
-            maxOutputTokens,
-            temperature,
-            ...(system ? { systemInstruction: system } : {}),
-            tools: [{ functionDeclarations: definitions }],
-            ...(request.requiredToolName && callsMade === 0 ? { toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [request.requiredToolName] } } } : {}),
-          },
-        }));
-        const content = response.candidates?.[0]?.content;
-        const parts: Part[] = content?.parts || [];
-        finalText = parts.filter(part => typeof part.text === 'string').map(part => part.text || '').join('');
-        const usage = response.usageMetadata;
-        if (usage?.promptTokenCount !== undefined && usage.candidatesTokenCount !== undefined) {
-          usageReported = true;
-          totalInputTokens += usage.promptTokenCount;
-          totalOutputTokens += usage.candidatesTokenCount;
-        }
-        const calls = parts.filter(part => part.functionCall).map(part => part.functionCall!).filter(call => typeof call.name === 'string');
-        if (!calls.length || !content) break;
-        contents.push(content);
-        const resultParts: Part[] = [];
-        for (const call of calls) {
-          callsMade += 1;
-          const result = callsMade <= maxCalls
-            ? await executeProviderTool(call.name || '', call.args, request.tools, request.executeTool)
-            : { text: 'The maximum tool-call limit has been reached.', isError: true };
-          resultParts.push({
-            functionResponse: {
-              name: call.name || '',
-              ...(call.id ? { id: call.id } : {}),
-              response: { result: result.text, is_error: Boolean(result.isError) },
-            },
-          });
-        }
-        contents.push({ role: 'user', parts: resultParts });
-      }
+  const addUsage = (response: { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } | null }) => {
+    const usage = response.usageMetadata;
+    if (usage?.promptTokenCount !== undefined && usage.candidatesTokenCount !== undefined) {
+      usageReported = true;
+      totalInputTokens += usage.promptTokenCount;
+      totalOutputTokens += usage.candidatesTokenCount;
     }
+  };
 
-    if (request.requiredToolName && callsMade === 0) {
-      throw new ModelProviderError('The selected tool was not called. Please retry or choose another approved tool.', 502);
-    }
-    return {
-      text: finalText || (callsMade ? 'The read-only tools completed, but the model did not provide a final text response.' : 'I could not generate a reply.'),
+  for (let turn = 0; turn < maxTurns; turn += 1) {
+    const response = await withProviderError('google', resolved.model, () => client.models.generateContent({
       model: resolved.model,
-      provider: resolved.provider,
-      usage: usageReported ? normalizeUsage(totalInputTokens, totalOutputTokens) : null,
-    };
-}
-
-export async function generateText(request: TextGenerationRequest): Promise<TextGenerationResult> {
-  const resolved = resolveModel(request.model);
-  if (!isProviderConfigured(resolved.provider)) {
-    const environmentName = resolved.provider === 'anthropic' ? 'ANTHROPIC_API_KEY'
-      : resolved.provider === 'google' ? 'GEMINI_API_KEY or GOOGLE_API_KEY'
-        : resolved.provider === 'local' ? 'LEO_LOCAL_MODEL_URL' : 'OPENAI_API_KEY or LEO_API_KEY';
-    throw new ModelProviderError(`${resolved.provider} is not configured. Set ${environmentName} on the server.`, 503);
-  }
-  const maxOutputTokens = Math.max(64, Math.min(20_000, Math.trunc(request.maxOutputTokens || 1200)));
-  const temperature = Math.max(0, Math.min(2, request.temperature ?? 0.3));
-
-  if (resolved.provider === 'anthropic') {
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
-    const response = await withProviderError(resolved.provider, resolved.model, () => client.messages.create({
-      model: resolved.model,
-      max_tokens: maxOutputTokens,
-      temperature,
-      ...(system ? { system } : {}),
-      messages: asProviderMessages(request.messages),
-    }));
-    const text = response.content.filter(block => block.type === 'text').map(block => block.text).join('');
-    return {
-      text,
-      model: response.model,
-      provider: resolved.provider,
-      usage: normalizeUsage(response.usage.input_tokens, response.usage.output_tokens),
-    };
-  }
-
-  if (resolved.provider === 'google') {
-    const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY });
-    const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
-    const response = await withProviderError(resolved.provider, resolved.model, () => client.models.generateContent({
-      model: resolved.model,
-      contents: asProviderMessages(request.messages).map(message => ({
-        role: message.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: message.content }],
-      })),
+      contents,
       config: {
         maxOutputTokens,
         temperature,
         ...(system ? { systemInstruction: system } : {}),
+        tools: [{ functionDeclarations: definitions }],
+        ...(request.requiredToolName && callsMade === 0 ? { toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [request.requiredToolName] } } } : {}),
       },
     }));
-    const usage = response.usageMetadata;
-    return {
-      text: response.text || '',
-      model: resolved.model,
-      provider: resolved.provider,
-      usage: normalizeUsage(usage?.promptTokenCount, usage?.candidatesTokenCount),
-    };
+    addUsage(response);
+    const candidate = response.candidates?.[0];
+    const content = candidate?.content;
+    const parts: Part[] = content?.parts || [];
+    const text = parts.filter(part => typeof part.text === 'string').map(part => part.text || '').join('').trim();
+    const calls = parts.filter(part => part.functionCall).map(part => part.functionCall!).filter(call => typeof call.name === 'string');
+
+    if (candidate?.finishReason === 'MAX_TOKENS' && !calls.length) {
+      throw new ModelProviderError('Gemini reached the output-token limit before returning a complete answer. Shorten the request or ask for a smaller result.', 502);
+    }
+    if (!calls.length) {
+      finalText = text;
+      break;
+    }
+
+    // Keep the model's function-call turn immediately before its matching
+    // function responses, as required by Gemini's conversation sequencing.
+    if (content) contents.push(content);
+    const resultParts: Part[] = [];
+    for (const call of calls) {
+      callsMade += 1;
+      const result = callsMade <= maxCalls
+        ? await executeProviderTool(call.name || '', call.args, request.tools, request.executeTool)
+        : { text: 'Tool-call limit reached. No further tools were executed; summarize completed results and tell the user what remains.', isError: true };
+      if (result.isError) toolErrors += 1;
+      resultParts.push({
+        functionResponse: {
+          name: call.name || '',
+          ...(call.id ? { id: call.id } : {}),
+          response: { result: result.text.slice(0, 12_000), is_error: Boolean(result.isError) },
+        },
+      });
+    }
+    contents.push({ role: 'user', parts: resultParts });
   }
 
-  const client: OpenAI = resolved.provider === 'local' ? getTextOpenAI() : getOpenAI();
-  if (request.reasoning && resolved.provider === 'openai' && !process.env.LEO_LOCAL_MODEL_URL?.trim()) {
-    const response = await withProviderError(resolved.provider, resolved.model, () => client.responses.create({
+  if (request.requiredToolName && callsMade === 0) {
+    throw new ModelProviderError('The selected tool was not called. Please retry or choose another approved tool.', 502);
+  }
+
+  // If the final permitted tool turn produced no user-facing answer, ask for
+  // one text-only synthesis from the already-recorded tool results. This call
+  // cannot re-run side effects because no function declarations are supplied.
+  if (!finalText && callsMade > 0) {
+    const response = await withProviderError('google', resolved.model, () => client.models.generateContent({
       model: resolved.model,
-      reasoning: request.reasoning,
-      input: request.messages.map(message => ({
-        role: message.role === 'developer' ? 'system' as const : message.role,
-        content: [{ type: 'input_text' as const, text: message.content }],
-      })),
-      max_output_tokens: maxOutputTokens,
+      contents,
+      config: { maxOutputTokens, temperature: 0.2, ...(system ? { systemInstruction: system } : {}) },
     }));
-    return {
-      text: response.output_text || '',
-      model: resolved.model,
-      provider: resolved.provider,
-      usage: normalizeUsage(response.usage?.input_tokens, response.usage?.output_tokens),
-    };
+    addUsage(response);
+    finalText = (response.text || response.candidates?.[0]?.content?.parts?.filter(part => typeof part.text === 'string').map(part => part.text || '').join('') || '').trim();
   }
 
-  if (resolved.provider === 'local' && process.env.LEO_OFFLINE_MODE === 'true' && !process.env.LEO_LOCAL_MODEL_URL?.trim()) {
-    throw new ModelProviderError('Offline mode requires LEO_LOCAL_MODEL_URL; no hosted fallback is permitted.', 503);
+  if (!finalText) {
+    throw new ModelProviderError(callsMade
+      ? `Gemini executed ${callsMade} tool call(s), but could not produce a final answer${toolErrors ? `; ${toolErrors} tool result(s) reported errors` : ''}. The tool results were not re-executed. Retry with a shorter request or inspect the affected tool status before retrying any action.`
+      : 'Gemini returned an empty response. Retry once; if it repeats, shorten the request or check provider availability.', 502);
   }
-  const response = await withProviderError(resolved.provider, resolved.model, () => client.chat.completions.create({
-    model: resolved.model,
-    messages: request.messages.map(message => ({
-      role: message.role === 'developer' ? 'system' as const : message.role,
-      content: message.content,
-    })),
-    max_tokens: maxOutputTokens,
-    temperature,
-  }));
-  const resultUsage = response.usage;
   return {
-    text: response.choices[0]?.message?.content || '',
-    model: response.model,
-    provider: resolved.provider,
-    usage: normalizeUsage(resultUsage?.prompt_tokens, resultUsage?.completion_tokens),
+    text: finalText,
+    model: resolved.model,
+    provider: 'google',
+    usage: usageReported ? normalizeUsage(totalInputTokens, totalOutputTokens) : null,
+  };
+}
+
+export async function generateText(request: TextGenerationRequest): Promise<TextGenerationResult> {
+  const resolved = resolveModel(request.model);
+  if (resolved.provider !== 'google') {
+    throw new ModelProviderError('Only Gemini model execution is enabled. Configure GEMINI_API_KEY.', 503);
+  }
+  if (!isProviderConfigured('google')) {
+    throw new ModelProviderError('Gemini is not configured. Set GEMINI_API_KEY on the server.', 503);
+  }
+
+  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '', httpOptions: { timeout: 45_000 } });
+  const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
+  const maxOutputTokens = Math.max(64, Math.min(20_000, Math.trunc(request.maxOutputTokens || 1200)));
+  const temperature = Math.max(0, Math.min(2, request.temperature ?? 0.3));
+  const response = await withProviderError('google', resolved.model, () => client.models.generateContent({
+    model: resolved.model,
+    contents: asProviderMessages(request.messages).map(message => ({
+      role: message.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: message.content }],
+    })),
+    config: {
+      maxOutputTokens,
+      temperature,
+      ...(system ? { systemInstruction: system } : {}),
+      ...(request.webSearch ? { tools: [{ googleSearch: {} }] } : {}),
+    },
+  }));
+  const usage = response.usageMetadata;
+  const grounded = response as typeof response & { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { title?: string; uri?: string } }> } }> };
+  const sources = (grounded.candidates?.[0]?.groundingMetadata?.groundingChunks || [])
+    .map(chunk => chunk.web)
+    .filter((web): web is { title?: string; uri?: string } => Boolean(web?.uri && /^https?:\/\//i.test(web.uri)))
+    .filter((web, index, all) => all.findIndex(item => item.uri === web.uri) === index)
+    .slice(0, 8);
+  const baseText = (response.text || '').trim();
+  const sourceText = sources.length ? `\n\nSources\n${sources.map(source => `- ${source.title || source.uri}: ${source.uri}`).join('\n')}` : '';
+  return {
+    text: `${baseText}${sourceText}`.trim(),
+    model: resolved.model,
+    provider: 'google',
+    usage: normalizeUsage(usage?.promptTokenCount, usage?.candidatesTokenCount),
   };
 }

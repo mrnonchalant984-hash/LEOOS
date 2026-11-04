@@ -24,6 +24,7 @@ test('studio image edit is authenticated, rate limited, persists private assets,
   assert.match(route, /getProfile\(request\)/);
   assert.match(route, /enforceUserRateLimit/);
   assert.match(edit, /generateGeminiImage/);
+  assert.doesNotMatch(edit, /from ['"]openai['"]|images\.edit/);
   assert.match(edit, /inspectImageUpload/);
   assert.match(edit, /studio-inputs\//);
   assert.match(edit, /studio-edits\//);

@@ -5,7 +5,7 @@ import { enforceUserRateLimit } from '@/lib/rate-limit';
 import { getEffectiveUserPlan } from '@/lib/plan-access';
 import { canUseManualAgents } from '@/lib/agents/entitlements';
 import { PROFESSIONAL_ROLES } from '@/lib/agents/professional-roles';
-import { getConfiguredModel } from '@/lib/openai';
+import { getConfiguredModel } from '@/lib/leo-system-prompt';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

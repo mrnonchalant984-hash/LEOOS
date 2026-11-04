@@ -39,7 +39,7 @@ async function generateImageWithProviderFallback(prompt: string, preferredModel:
   try {
     return await generate(primaryModel);
   } catch (primaryError) {
-    const fallbackModel = resolveGeminiImageModel(process.env.LEO_GEMINI_IMAGE_FALLBACK_MODEL?.trim() || 'gemini-2.5-flash-image-preview');
+    const fallbackModel = resolveGeminiImageModel(process.env.LEO_GEMINI_IMAGE_FALLBACK_MODEL?.trim() || 'gemini-nano-banana-2.1');
     if (fallbackModel === primaryModel) throw primaryError;
     return generate(fallbackModel);
   }
@@ -60,13 +60,25 @@ function safeMessage(error: unknown) {
 }
 
 async function refund(db: ReturnType<typeof adminSupabase>, userId: string, jobId: string, source: string | null, cost: number) {
-  if (!source) return;
-  if (source === 'platform') {
-    await db.rpc('refund_platform_credits', { p_user_id: userId, p_job_id: jobId, p_cost: cost });
-    return;
-  }
-  if (source === 'legacy_feature') {
-    await db.rpc('refund_user_feature_credit', { p_user_id: userId, p_feature: 'image_generation', p_job_id: jobId, p_cost: 1 });
+  if (!source) return true;
+  try {
+    const result = source === 'platform'
+      ? await db.rpc('refund_platform_credits', { p_user_id: userId, p_job_id: jobId, p_cost: cost })
+      : source === 'legacy_feature'
+        ? await db.rpc('refund_user_feature_credit', { p_user_id: userId, p_feature: 'image_generation', p_job_id: jobId, p_cost: 1 })
+        : null;
+    if (!result || result.error || !Number.isSafeInteger(result.data) || result.data < 0) {
+      console.error('Image generation credit refund could not be confirmed', { jobId, source, error: result?.error?.message });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error('Image generation credit refund could not be confirmed', {
+      jobId,
+      source,
+      error: error instanceof Error ? error.message : 'unknown',
+    });
+    return false;
   }
 }
 
@@ -93,6 +105,12 @@ async function getImageBytes(image: any): Promise<{ bytes: Buffer; mime: string 
 }
 
 export async function generateAndPersistImage(options: ImageJobOptions) {
+  if (process.env.LEO_OFFLINE_MODE === 'true') {
+    throw Object.assign(new Error('Image generation is unavailable while hosted providers are disabled.'), { statusCode: 503 });
+  }
+  if (options.prompt.trim().length < 3 || options.prompt.trim().length > 2000) {
+    throw Object.assign(new Error('Enter an image prompt between 3 and 2,000 characters.'), { statusCode: 400 });
+  }
   const db = adminSupabase();
   const access = await accountAccess(options.userId, 'image_generation');
   if (!access.owner && !access.entitled) throw new Error('Image generation is not included in your current plan.');
@@ -134,30 +152,44 @@ export async function generateAndPersistImage(options: ImageJobOptions) {
   }
 
   let creditSource: string | null = null;
+  let platformReservationAttempted = false;
   let storagePath: string | null = null;
   let assetId: string | null = null;
   let platformCost = Math.max(1, Number.parseInt(process.env.LEO_IMAGE_PLATFORM_CREDITS || '1', 10) || 1);
   let creditsRemaining: number | null = null;
   try {
+    platformReservationAttempted = true;
     const reserve = await db.rpc('reserve_platform_credits', { p_user_id: options.userId, p_job_id: job.id, p_cost: platformCost });
     if (!reserve.error) {
       creditSource = 'platform';
-      creditsRemaining = Number(reserve.data);
+      const balance = reserve.data;
+      if (typeof balance !== 'number' || !Number.isSafeInteger(balance) || balance < 0) throw new Error('Platform credit reservation could not be confirmed.');
+      creditsRemaining = balance;
     } else if (/insufficient platform credits/i.test(reserve.error.message || '')) {
+      platformReservationAttempted = false;
       const legacy = await consumeCredit(options.userId, 'image_generation');
       const isOwner = 'owner' in legacy && legacy.owner === true;
       creditSource = isOwner ? null : 'legacy_feature';
       creditsRemaining = 'remaining' in legacy ? legacy.remaining : legacy.credits;
       platformCost = 0;
     } else {
+      creditSource = 'platform';
       throw new Error('Platform credit accounting is unavailable. Apply the required database migration before generating images.');
     }
-    await db.from('generation_jobs').update({ status: 'processing', credit_source: creditSource, platform_credits_reserved: platformCost, updated_at: new Date().toISOString() }).eq('id', job.id).eq('user_id', options.userId);
+    const { data: processingJob, error: processingError } = await db.from('generation_jobs')
+      .update({ status: 'processing', credit_source: creditSource, platform_credits_reserved: platformCost, updated_at: new Date().toISOString() })
+      .eq('id', job.id).eq('user_id', options.userId)
+      .select('id').maybeSingle();
+    if (processingError || !processingJob) throw new Error('Image generation job tracking is unavailable.');
 
     const finalPrompt = visualDirection ? `${visualDirection}\n\n${options.prompt}` : options.prompt;
     const generated = await generateImageWithProviderFallback(finalPrompt, model);
     const image = generated.image;
-    await db.from('generation_jobs').update({ provider: generated.provider, model: generated.model, updated_at: new Date().toISOString() }).eq('id', job.id).eq('user_id', options.userId);
+    const { data: providerJob, error: providerUpdateError } = await db.from('generation_jobs')
+      .update({ provider: generated.provider, model: generated.model, updated_at: new Date().toISOString() })
+      .eq('id', job.id).eq('user_id', options.userId)
+      .select('id').maybeSingle();
+    if (providerUpdateError || !providerJob) throw new Error('Image generation provider could not be recorded.');
     const { bytes, mime } = await getImageBytes(image);
     const extension = mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'png';
     storagePath = `generated-images/${options.userId}/${job.id}.${extension}`;
@@ -183,19 +215,64 @@ export async function generateAndPersistImage(options: ImageJobOptions) {
     if (signError || !signed?.signedUrl) throw new Error('Generated image was saved but a secure preview URL could not be issued.');
 
     const metadata = { mode, asset_id: asset.id, storage_path: storagePath, mime_type: mime, size_bytes: bytes.length };
-    const { error: completeError } = await db.from('generation_jobs').update({
+    const { data: completedJob, error: completeError } = await db.from('generation_jobs').update({
       status: 'completed', platform_credits_charged: platformCost, completed_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata,
-    }).eq('id', job.id).eq('user_id', options.userId);
-    if (completeError) throw new Error('Generation completed but job history could not be finalized.');
+    }).eq('id', job.id).eq('user_id', options.userId)
+      .select('id').maybeSingle();
+    if (completeError || !completedJob) throw new Error('Generation completed but job history could not be finalized.');
 
     const { data: platformAccount } = await db.from('platform_credit_accounts').select('balance').eq('user_id', options.userId).maybeSingle();
     return { job_id: job.id, asset_id: asset.id, url: signed.signedUrl, credits_remaining: creditsRemaining, platform_credits_remaining: platformAccount?.balance ?? null, platform_credits_charged: platformCost, url_expires_in: SIGNED_URL_SECONDS };
   } catch (error) {
-    if (assetId) await db.from('media_assets').delete().eq('id', assetId).eq('user_id', options.userId);
-    if (storagePath) await db.storage.from(BUCKET).remove([storagePath]);
-    await refund(db, options.userId, job.id, creditSource, creditSource === 'legacy_feature' ? 1 : platformCost);
+    let cleanupFailed = false;
+    if (assetId) {
+      try {
+        const { error: assetCleanupError } = await db.from('media_assets').delete().eq('id', assetId).eq('user_id', options.userId);
+        if (assetCleanupError) throw assetCleanupError;
+      } catch (cleanupError) {
+        cleanupFailed = true;
+        console.error('Failed image-generation asset cleanup', { jobId: job.id, error: cleanupError instanceof Error ? cleanupError.message : 'unknown' });
+      }
+    }
+    if (storagePath) {
+      try {
+        const { error: storageCleanupError } = await db.storage.from(BUCKET).remove([storagePath]);
+        if (storageCleanupError) throw storageCleanupError;
+      } catch (cleanupError) {
+        cleanupFailed = true;
+        console.error('Failed image-generation storage cleanup', { jobId: job.id, error: cleanupError instanceof Error ? cleanupError.message : 'unknown' });
+      }
+    }
+    const refundSource = creditSource || (platformReservationAttempted ? 'platform' : null);
+    const refundConfirmed = await refund(db, options.userId, job.id, refundSource, refundSource === 'legacy_feature' ? 1 : platformCost);
     const statusCode = (error as { statusCode?: number })?.statusCode;
-    await db.from('generation_jobs').update({ status: 'failed', error_code: statusCode === 409 ? 'duplicate_request' : 'generation_failed', error_message: safeMessage(error), updated_at: new Date().toISOString(), completed_at: new Date().toISOString() }).eq('id', job.id).eq('user_id', options.userId);
+    const failureMessage = refundConfirmed
+      ? safeMessage(error)
+      : 'Image generation failed and the credit refund could not be confirmed. Contact support.';
+    let failureStatePersisted = false;
+    try {
+      const { data: failedJob, error: failureUpdateError } = await db.from('generation_jobs')
+        .update({ status: 'failed', error_code: statusCode === 409 ? 'duplicate_request' : 'generation_failed', error_message: failureMessage, updated_at: new Date().toISOString(), completed_at: new Date().toISOString() })
+        .eq('id', job.id).eq('user_id', options.userId)
+        .select('id').maybeSingle();
+      failureStatePersisted = !failureUpdateError && Boolean(failedJob);
+      if (failureUpdateError) console.error('Image-generation failure state could not be persisted', { jobId: job.id, error: failureUpdateError.message });
+    } catch (failureUpdateError) {
+      console.error('Image-generation failure state could not be persisted', {
+        jobId: job.id,
+        error: failureUpdateError instanceof Error ? failureUpdateError.message : 'unknown',
+      });
+    }
+    if (!failureStatePersisted) {
+      cleanupFailed = true;
+      console.error('Image-generation failure state was not confirmed', { jobId: job.id });
+    }
+    if (!refundConfirmed) {
+      throw Object.assign(new Error('Image generation failed and the credit refund could not be confirmed. Contact support.'), { statusCode: 503 });
+    }
+    if (cleanupFailed) {
+      throw Object.assign(new Error('Image generation failed and recovery could not be confirmed. Contact support.'), { statusCode: 503 });
+    }
     throw error;
   }
 }

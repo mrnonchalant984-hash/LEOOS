@@ -252,6 +252,7 @@ export default function WebsiteManagementPage() {
   const template = LEO_TEMPLATES.find((item) => item.id === project.requirements?.template_id);
   const requirements = Object.entries(project.requirements || {}).filter(([key, value]) => key !== "template_id" && key !== "template_name" && value);
   const buildIsActive = deploying || ["building", "testing", "deploying"].includes(project.build_status || "");
+  const buildProgressVisible = buildIsActive || ["build_failed", "deploy_failed", "cancelled"].includes(project.build_status || "");
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
@@ -288,7 +289,7 @@ export default function WebsiteManagementPage() {
           {deploying ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />}
           {deploying ? "Building and deploying…" : project.live_url ? "Build and deploy update" : "Build and deploy website"}
         </button>
-        {buildIsActive && <BuildProgressVisualizer status={project.build_status || "building"} step={project.build_step} />}
+        {buildProgressVisible && <BuildProgressVisualizer status={project.build_status || "building"} step={project.build_step} />}
         {buildIsActive && progressRefreshError && <p role="alert" className="mt-3 text-xs text-amber-200">{progressRefreshError}</p>}
         {error && <p role="alert" className="mt-4 text-sm text-red-300">{error}</p>}
         {hostingWarning && <p role="alert" className="mt-4 text-sm text-amber-200">The site is live, but hosting trial setup needs attention: {hostingWarning}</p>}

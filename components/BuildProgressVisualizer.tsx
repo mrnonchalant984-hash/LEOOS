@@ -27,6 +27,10 @@ export function BuildProgressVisualizer({
   step: string | null;
 }) {
   const reduceMotion = useReducedMotion();
+  const failed = status === "build_failed" || status === "deploy_failed" || status === "failed";
+  const cancelled = status === "cancelled";
+  const completed = status === "live" || status === "completed";
+  const terminal = failed || cancelled || completed;
   const activeIndex = milestones.findIndex((milestone) => milestone.status === status);
   const currentIndex = activeIndex < 0 ? 0 : activeIndex;
 
@@ -34,25 +38,25 @@ export function BuildProgressVisualizer({
     <section
       aria-label="Live project build progress"
       aria-live="polite"
-      aria-busy="true"
+      aria-busy={!terminal}
       role="status"
       className="mt-5 overflow-hidden rounded-2xl border border-[var(--gold)]/20 bg-[radial-gradient(ellipse_at_28%_42%,rgba(212,175,55,.12),transparent_45%),linear-gradient(135deg,rgba(255,255,255,.055),rgba(255,255,255,.018))] p-5 sm:p-7"
     >
       <div className="grid items-center gap-7 md:grid-cols-[minmax(0,1fr)_220px]">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[.2em] text-[var(--gold-bright)]">
-            Live build · production deployment
+            {completed ? "Verified deployment" : failed ? "Build stopped" : cancelled ? "Build cancelled" : "Live build · production deployment"}
           </p>
           <h3 className="mt-2 text-xl font-bold text-white sm:text-2xl">
-            Bringing your project to life
+            {completed ? "Your project is live" : failed ? "The build could not be completed" : cancelled ? "The build was cancelled" : "Bringing your project to life"}
           </h3>
-          <p className="mt-2 min-h-6 text-sm text-zinc-300">
-            {step || "Preparing the project workspace"}
+          <p className={`mt-2 min-h-6 text-sm ${failed ? "text-red-200" : cancelled ? "text-amber-200" : "text-zinc-300"}`}>
+            {step || (completed ? "The deployment provider confirmed readiness." : failed ? "Review the failure details and correct the reported issue before retrying." : cancelled ? "No further build stages will be scheduled." : "Preparing the project workspace")}
           </p>
           <ol aria-label="Deployment milestones" className="mt-5 grid gap-2 sm:grid-cols-2">
             {milestones.map((milestone, index) => {
-              const complete = status === "live" || index < currentIndex;
-              const current = status !== "live" && index === currentIndex;
+              const complete = completed || (!failed && !cancelled && index < currentIndex);
+              const current = !terminal && index === currentIndex;
               return (
                 <li
                   key={milestone.status}
@@ -67,8 +71,8 @@ export function BuildProgressVisualizer({
                 >
                   {complete ? (
                     <Check size={14} aria-hidden="true" className="shrink-0 text-emerald-300" />
-                  ) : current ? (
-                    <LoaderCircle size={14} aria-hidden="true" className="shrink-0 animate-spin text-[var(--gold-bright)]" />
+                  ) : current && !terminal ? (
+                    <LoaderCircle size={14} aria-hidden="true" className={`shrink-0 text-[var(--gold-bright)] ${reduceMotion ? "" : "animate-spin"}`} />
                   ) : (
                     <Circle size={14} aria-hidden="true" className="shrink-0 opacity-50" />
                   )}
@@ -86,19 +90,19 @@ export function BuildProgressVisualizer({
           <motion.div
             className="absolute inset-3 rounded-full border border-[var(--gold)]/20"
             style={{ transform: "rotateX(66deg)" }}
-            animate={reduceMotion !== false ? undefined : { rotate: 360 }}
+            animate={terminal || reduceMotion !== false ? undefined : { rotate: 360 }}
             transition={{ duration: 18, repeat: Infinity, ease: "linear" }}
           />
           <motion.div
             className="absolute inset-6 rounded-full border border-cyan-300/15"
             style={{ transform: "rotateY(67deg) rotateX(18deg)" }}
-            animate={reduceMotion !== false ? undefined : { rotate: -360 }}
+            animate={terminal || reduceMotion !== false ? undefined : { rotate: -360 }}
             transition={{ duration: 24, repeat: Infinity, ease: "linear" }}
           />
           <motion.div
             className="relative h-[68px] w-[68px]"
             style={{ transformStyle: "preserve-3d" }}
-            animate={reduceMotion !== false ? undefined : { rotateX: 360, rotateY: 360 }}
+            animate={terminal || reduceMotion !== false ? undefined : { rotateX: 360, rotateY: 360 }}
             transition={{ duration: 16, repeat: Infinity, ease: "linear" }}
           >
             {cubeFaces.map((face) => (
@@ -113,13 +117,19 @@ export function BuildProgressVisualizer({
           </motion.div>
           <motion.div
             className="absolute h-28 w-28 rounded-full bg-[var(--gold)]/10 blur-2xl"
-            animate={reduceMotion !== false ? undefined : { opacity: [0.3, 0.8, 0.3], scale: [0.8, 1.12, 0.8] }}
+            animate={terminal || reduceMotion !== false ? undefined : { opacity: [0.3, 0.8, 0.3], scale: [0.8, 1.12, 0.8] }}
             transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
           />
         </div>
       </div>
       <p className="mt-5 border-t border-white/[.07] pt-3 text-xs text-zinc-500">
-        The main link appears only after Vercel confirms the production build and the project domain is verified and reachable.
+        {completed
+          ? "Deployment is marked live only after provider readiness and the configured main domain have been verified."
+          : failed
+            ? "No successful deployment is being reported. Review the error above, then retry only after the cause is resolved."
+            : cancelled
+              ? "The operation has stopped; unfinished stages are not marked complete."
+              : "The main link appears only after Vercel confirms the production build and the project domain is verified and reachable."}
       </p>
     </section>
   );

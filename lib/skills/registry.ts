@@ -1,8 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import os from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
 import { z } from 'zod';
 import { adminSupabase } from '../auth';
 
@@ -96,33 +94,6 @@ export async function readSkillFile(name: string, relative: string, userId?: str
   const stat = await fs.stat(file);
   if (!stat.isFile() || stat.size > MAX_FILE_BYTES) throw new Error('Skill file is missing or exceeds the size limit.');
   return fs.readFile(file, 'utf8');
-}
-
-export async function runSkillScript(name: string, script: string, args: string[] = [], userId?: string) {
-  skillNameSchema.parse(name);
-  if (!/^scripts\/[A-Za-z0-9._-]+\.(py|js)$/.test(script.replaceAll('\\', '/'))) throw new Error('Only .py and .js files inside scripts/ can run.');
-  const source = await readSkillFile(name, script, userId);
-  if (/fetch\s*\(|https?:\/\/|process\.env|os\.environ|child_process|subprocess|\.\.[/\\]/i.test(source)) throw new Error('This skill script contains a blocked network, secret, or unsafe filesystem pattern.');
-  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'leo-skill-'));
-  const output = path.join(temp, 'outputs');
-  await fs.mkdir(output);
-  const scriptPath = path.join(temp, path.basename(script));
-  await fs.writeFile(scriptPath, source, { mode: 0o700 });
-  const interpreter = script.endsWith('.py') ? 'python3' : process.execPath;
-  const started = Date.now();
-  try {
-    const result = await new Promise<{ stdout: string; stderr: string; code: number | null }>((resolve, reject) => {
-      const child = spawn(interpreter, [scriptPath, ...args.slice(0, 20)], { cwd: temp, env: { PATH: process.env.PATH || '', NODE_ENV: 'production' }, stdio: ['ignore', 'pipe', 'pipe'] }) as any;
-      let stdout = ''; let stderr = '';
-      child.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); if (stdout.length > 100_000) child.kill('SIGKILL'); });
-      child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); if (stderr.length > 50_000) child.kill('SIGKILL'); });
-      const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('Skill script exceeded the 60-second limit.')); }, 60_000);
-      child.on('error', (error: Error) => { clearTimeout(timer); reject(error); });
-      child.on('close', (code: number | null) => { clearTimeout(timer); resolve({ stdout, stderr, code }); });
-    });
-    const files = await fs.readdir(output).then(async names => Promise.all(names.slice(0, 50).map(async file => ({ path: file, content: (await fs.readFile(path.join(output, file))).toString('base64') }))));
-    return { ...result, files, durationMs: Date.now() - started };
-  } finally { await fs.rm(temp, { recursive: true, force: true }); }
 }
 
 export function newSkillId() { return randomUUID(); }

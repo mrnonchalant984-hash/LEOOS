@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireOwner } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 import { getIntegrationStatuses, type IntegrationId } from '@/lib/integration-status';
-const ids = new Set<IntegrationId>(['openai', 'supabase', 'paystack', 'web3forms', 'resend', 'vercel', 'github', 'google', 'stripe', 'whatsapp']);
+const ids = new Set<IntegrationId>(['gemini', 'google', 'supabase', 'paystack', 'web3forms', 'resend', 'vercel', 'github', 'stripe', 'whatsapp']);
 export async function GET(request: NextRequest) {
   const owner = await requireOwner(request);
   if (!owner) return NextResponse.json({ error: 'Owner access required.' }, { status: 403, headers: { 'Cache-Control': 'no-store' } });

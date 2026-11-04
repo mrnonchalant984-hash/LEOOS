@@ -1,107 +1,58 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { getDefaultTextModel, getModelProviderStatus, resolveModel } from '../lib/ai/model-catalog.ts';
 import { getSafeFallbackModel } from '../lib/ai/provider-fallback.ts';
-import {
-  getDefaultTextModel,
-  getModelProviderStatus,
-  resolveModel,
-} from '../lib/ai/model-catalog.ts';
-import { getExternalModelBuilderAvailability } from '../lib/builders/providers.ts';
 
-test('provider registry resolves its supported named models to concrete providers', () => {
-  assert.deepEqual(resolveModel('openai/gpt-4o-mini'), { provider: 'openai', model: 'gpt-4o-mini' });
-  assert.deepEqual(resolveModel('openai/gpt-5.6-luna'), { provider: 'openai', model: 'gpt-5.6-luna' });
-  assert.deepEqual(resolveModel('anthropic/claude-3-5-haiku-latest'), { provider: 'anthropic', model: 'claude-3-5-haiku-latest' });
-  assert.deepEqual(resolveModel('google/gemini-2.5-flash'), { provider: 'google', model: 'gemini-2.5-flash' });
+test('model registry accepts supported Gemini models and rejects other providers', () => {
+  assert.deepEqual(resolveModel('google/gemini-3.8-flash'), { provider: 'google', model: 'gemini-3.8-flash' });
   assert.deepEqual(resolveModel('gemini-2.5-flash'), { provider: 'google', model: 'gemini-2.5-flash' });
-  assert.deepEqual(resolveModel('gemini-3.8-flash'), { provider: 'google', model: 'gemini-3.8-flash' });
-  assert.deepEqual(resolveModel('gpt-4o-mini'), { provider: 'openai', model: 'gpt-4o-mini' });
+  assert.throws(() => resolveModel('openai/gpt-4o-mini'), /only Gemini/i);
+  assert.throws(() => resolveModel('anthropic/claude-3-5-haiku-latest'), /only Gemini/i);
+  assert.throws(() => resolveModel('gemini-2.0-flash'), /supported model/i);
 });
 
-test('model registry rejects unknown and malformed caller-selected models', () => {
-  assert.throws(() => resolveModel('not-a-model'), /supported model/i);
-  assert.throws(() => resolveModel('openai/'), /supported model/i);
-  assert.throws(() => resolveModel('anthropic/model with spaces'), /supported model/i);
-});
-
-test('unsupported configured default safely falls back instead of breaking chat model resolution', () => {
-  const previous = process.env.LEO_CHAT_MODEL;
+test('unsupported configured default falls back only to configured Gemini', () => {
+  const names = ['LEO_CHAT_MODEL', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'];
+  const previous = Object.fromEntries(names.map(name => [name, process.env[name]]));
   try {
     process.env.LEO_CHAT_MODEL = 'provider-model-that-is-not-registered';
+    process.env.GEMINI_API_KEY = 'test-key';
+    delete process.env.GOOGLE_API_KEY;
     assert.equal(getDefaultTextModel('chat'), 'google/gemini-3.8-flash');
   } finally {
-    if (previous === undefined) delete process.env.LEO_CHAT_MODEL;
-    else process.env.LEO_CHAT_MODEL = previous;
+    for (const name of names) previous[name] === undefined ? delete process.env[name] : process.env[name] = previous[name];
   }
 });
 
-test('provider status reveals availability without returning configured secrets', () => {
+test('provider status advertises only Gemini without exposing credentials', () => {
   const status = getModelProviderStatus();
-  assert.deepEqual(status.map(({ provider }) => provider), ['openai', 'openai', 'anthropic', 'google']);
+  assert.equal(status.length, 5);
+  assert.ok(status.every(({ provider }) => provider === 'google'));
   assert.ok(status.every(({ configured }) => typeof configured === 'boolean'));
   assert.doesNotMatch(JSON.stringify(status), /sk-[A-Za-z0-9_-]{12,}|api.?key/i);
 });
 
-test('model defaults preserve local-model preference and support an explicit cross-provider default', () => {
-  const oldLocalUrl = process.env.LEO_LOCAL_MODEL_URL;
-  const oldLocalName = process.env.LEO_LOCAL_MODEL_NAME;
-  const oldChatModel = process.env.LEO_CHAT_MODEL;
+test('model defaults ignore local and alternative-provider settings', () => {
+  const names = ['LEO_LOCAL_MODEL_URL', 'LEO_LOCAL_MODEL_NAME', 'LEO_CHAT_MODEL', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY'];
+  const previous = Object.fromEntries(names.map(name => [name, process.env[name]]));
   try {
     process.env.LEO_LOCAL_MODEL_URL = 'http://127.0.0.1:11434/v1';
     process.env.LEO_LOCAL_MODEL_NAME = 'qwen-local';
-    assert.equal(getDefaultTextModel(), 'local/qwen-local');
-    delete process.env.LEO_LOCAL_MODEL_URL;
-    delete process.env.LEO_LOCAL_MODEL_NAME;
-    process.env.LEO_CHAT_MODEL = 'gemini-2.5-flash';
+    process.env.GEMINI_API_KEY = 'test-key';
+    delete process.env.GOOGLE_API_KEY;
+    assert.equal(getDefaultTextModel(), 'google/gemini-3.8-flash');
+    process.env.LEO_CHAT_MODEL = 'google/gemini-2.5-flash';
     assert.equal(getDefaultTextModel(), 'google/gemini-2.5-flash');
+    process.env.LEO_CHAT_MODEL = 'openai/gpt-4o-mini';
+    assert.equal(getDefaultTextModel(), 'google/gemini-3.8-flash');
   } finally {
-    if (oldLocalUrl === undefined) delete process.env.LEO_LOCAL_MODEL_URL;
-    else process.env.LEO_LOCAL_MODEL_URL = oldLocalUrl;
-    if (oldLocalName === undefined) delete process.env.LEO_LOCAL_MODEL_NAME;
-    else process.env.LEO_LOCAL_MODEL_NAME = oldLocalName;
-    if (oldChatModel === undefined) delete process.env.LEO_CHAT_MODEL;
-    else process.env.LEO_CHAT_MODEL = oldChatModel;
+    for (const name of names) previous[name] === undefined ? delete process.env[name] : process.env[name] = previous[name];
   }
 });
 
-test('external-model deployments require GitHub and Vercel but not a LeonardX AI key', () => {
-  assert.deepEqual(
-    getExternalModelBuilderAvailability('website', { GITHUB_TOKEN: 'configured', VERCEL_TOKEN: 'configured' }),
-    {
-      id: 'vercel-nextjs',
-      label: 'Next.js on GitHub and Vercel',
-      requiredEnvironment: ['GITHUB_TOKEN', 'VERCEL_TOKEN'],
-      status: 'ready',
-    },
-  );
-  const missing = getExternalModelBuilderAvailability('website', { GITHUB_TOKEN: 'configured' });
-  assert.equal(missing.status, 'not_configured');
-  assert.deepEqual(missing.requiredEnvironment, ['GITHUB_TOKEN', 'VERCEL_TOKEN']);
-});
-
-
-test('invalid explicit fallback configuration safely uses configured Gemini for OpenAI chat', () => {
-  const configured = provider => provider === 'google' || provider === 'openai';
-  assert.equal(
-    getSafeFallbackModel('openai/gpt-4o-mini', 'unsupported/fallback-model', false, configured),
-    'google/gemini-3.8-flash',
-  );
-});
-
-test('valid explicit fallback is normalized and requires a configured provider', () => {
+test('Gemini fallback selection never invokes non-Gemini providers', () => {
   const configured = provider => provider === 'google';
-  assert.equal(
-    getSafeFallbackModel('openai/gpt-4o-mini', 'gemini-2.5-flash', false, configured),
-    'google/gemini-2.5-flash',
-  );
-  assert.equal(
-    getSafeFallbackModel('openai/gpt-4o-mini', 'anthropic/claude-3-5-haiku-latest', false, configured),
-    'google/gemini-3.8-flash',
-  );
-});
-
-test('configured Gemini fallback is also available to custom agents; Google primary has no automatic same-provider fallback', () => {
-  const configured = provider => provider === 'google';
-  assert.equal(getSafeFallbackModel('openai/gpt-4o-mini', 'bad/model', true, configured), 'google/gemini-3.8-flash');
-  assert.equal(getSafeFallbackModel('google/gemini-2.5-flash', 'bad/model', false, configured), 'google/gemini-3.8-flash');
+  assert.equal(getSafeFallbackModel('google/gemini-3.8-flash', 'unsupported/fallback-model', false, configured), 'google/gemini-2.5-flash');
+  assert.equal(getSafeFallbackModel('google/gemini-3.8-flash', 'gemini-2.5-flash', false, configured), 'google/gemini-2.5-flash');
+  assert.equal(getSafeFallbackModel('google/gemini-2.5-flash', undefined, false, configured), 'google/gemini-3.8-flash');
 });

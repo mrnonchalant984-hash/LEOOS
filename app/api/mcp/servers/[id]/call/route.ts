@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile } from '@/lib/auth';
 import { decryptMcpCredential } from '@/lib/mcp/outbound-security';
 import { callMcpTool } from '@/lib/mcp/remote-clients';
+import { validateMcpToolArguments } from '@/lib/mcp/tool-arguments';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
@@ -32,6 +33,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!server || !server.enabled) return NextResponse.json({ error: 'MCP connection not found or disabled.' }, { status: 404 });
   const tool = (Array.isArray(server.discovered_tools) ? server.discovered_tools : []).find(item => item.name === toolName);
   if (!tool) return NextResponse.json({ error: 'That tool is not available on this connection.' }, { status: 404 });
+  if (!validateMcpToolArguments(tool.inputSchema, args)) {
+    return NextResponse.json({ error: 'Tool arguments do not match the currently discovered input schema.' }, { status: 400 });
+  }
   const { data: approval, error: approvalError } = await db.from('mcp_remote_tool_approvals')
     .select('tool_name')
     .eq('server_id', id)
@@ -50,7 +54,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const requestId = request.headers.get('x-request-id') || randomUUID();
   let result: { isError: boolean; text: string };
   try {
-    result = await callMcpTool(server.endpoint_url, bearerToken, toolName, args as Record<string, unknown>);
+    result = await callMcpTool(server.endpoint_url, bearerToken, toolName, args as Record<string, unknown>, tool.inputSchema);
   } catch {
     const { error } = await db.from('mcp_tool_audit').insert({
       user_id: ctx.user.id,

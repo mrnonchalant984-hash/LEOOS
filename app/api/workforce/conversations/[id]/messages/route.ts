@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const owner = true;
   const plan = await getEffectiveUserPlan(ctx.user.id, owner);
   if (!canUseManualAgents(plan.key, owner)) return NextResponse.json({ error: 'Individual specialist conversations require a Pro or Business plan.' }, { status: 403 });
-  if (!isProviderConfigured('openai') && !isProviderConfigured('google') && !isProviderConfigured('local')) return NextResponse.json({ error: 'Configure an AI provider or a reachable local text-model endpoint before sending messages.' }, { status: 503 });
+  if (!isProviderConfigured('google')) return NextResponse.json({ error: 'Configure GEMINI_API_KEY before sending workforce messages.' }, { status: 503 });
   const limited = await enforceUserRateLimit(ctx.user.id, 'workforce-conversation-message', 30, 3600);
   if (limited) return limited;
   const parsed = messageSchema.safeParse(await req.json().catch(() => null));

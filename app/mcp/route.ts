@@ -10,7 +10,7 @@ import { normalizeIdePath, validateIdeFiles } from '@/lib/ide-files';
 import { POST as buildDeploy } from '@/app/api/build-deploy/route';
 import type { ProjectRunnerOperation } from '@/lib/project-runner';
 import { generateText, generateTextWithTools, getDefaultTextModel, ModelProviderError } from '@/lib/ai/provider-registry';
-import { getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from '@/lib/openai';
+import { getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from '@/lib/leo-system-prompt';
 import { getAgent, parseAgentExecutionResult, publicAgentSummary, runAgent } from '@/lib/agents/manager';
 import { agentAllowed, canUseManualAgents, getAllowedAgentIds } from '@/lib/agents/entitlements';
 import { getActiveDeveloperPlan, getUserDeveloperAgent } from '@/lib/developer-agents';
@@ -21,25 +21,36 @@ import { isProviderConfigured } from '@/lib/ai/model-catalog';
 import { generateWithExplicitFallback, getSafeFallbackModel } from '@/lib/ai/provider-fallback';
 import { openConnectionConfig } from '@/lib/integrations/customer-connections';
 import { inspectMainWebsite, pushMainWebsiteChanges, type MainWebsiteFile } from '@/lib/mcp/main-website';
+import { getGitHubAppConfigurationMode } from '@/lib/mcp/github-app-auth';
+import {
+  agentApprovalMatchesRun,
+  claimPendingAgentApproval,
+  expirePendingAgentApproval,
+  isAgentApprovalExpired,
+} from '@/lib/agents/approval-policy';
 
 async function invokeCloudBuildRoute(
   request: NextRequest,
-  provider: 'expo-eas',
+  provider: 'expo-eas' | 'godot-build-service',
   method: 'GET' | 'POST',
   body?: Record<string, unknown>,
   jobId?: string,
 ) {
   const authorization = request.headers.get('authorization');
   if (!authorization) return { data: null, error: 'MCP authorization is missing.' };
-  const apiUrl = new URL(`/api/builds/expo${jobId ? `/${encodeURIComponent(jobId)}` : ''}`, request.url);
+  const apiUrl = new URL(`/api/builds/${provider === 'expo-eas' ? 'expo' : 'godot'}${jobId ? `/${encodeURIComponent(jobId)}` : ''}`, request.url);
   const apiRequest = new NextRequest(apiUrl, {
     method,
     headers: { Authorization: authorization, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  const response = await (method === 'POST'
-    ? (await import('@/app/api/builds/expo/route')).POST(apiRequest)
-    : (await import('@/app/api/builds/expo/[id]/route')).GET(apiRequest, { params: Promise.resolve({ id: jobId || '' }) }));
+  const response = provider === 'expo-eas'
+    ? await (method === 'POST'
+      ? (await import('@/app/api/builds/expo/route')).POST(apiRequest)
+      : (await import('@/app/api/builds/expo/[id]/route')).GET(apiRequest, { params: Promise.resolve({ id: jobId || '' }) }))
+    : await (method === 'POST'
+      ? (await import('@/app/api/builds/godot/route')).POST(apiRequest)
+      : (await import('@/app/api/builds/godot/[id]/route')).GET(apiRequest, { params: Promise.resolve({ id: jobId || '' }) }));
   const data = await response.json().catch(() => null);
   if (response.ok && data && typeof data === 'object') {
     const payload = data as Record<string, unknown>;
@@ -47,7 +58,9 @@ async function invokeCloudBuildRoute(
       if (typeof payload[key] === 'string' && payload[key].startsWith('/')) payload[key] = new URL(payload[key], request.url).toString();
     }
   }
-  return response.ok ? { data, error: null } : { data, error: typeof data?.error === 'string' ? data.error : `Build request failed (${response.status}).` };
+  return response.ok
+    ? { data, error: null }
+    : { data: null, error: typeof data?.error === 'string' ? data.error : `Cloud build request failed (${response.status}).` };
 }
 
 async function invokeAndroidBuildRoute(request: NextRequest, method: 'GET' | 'POST', jobId?: string, idempotencyKey?: string) {
@@ -220,19 +233,27 @@ export async function POST(request: NextRequest) {
       },
       async submitCloudBuild(_userId: string, input: {
         project_id: string;
-        provider: 'expo-eas';
+        provider: 'expo-eas' | 'godot-build-service';
         platform?: 'android' | 'ios';
         profile?: 'preview' | 'production';
         preset?: string;
         idempotency_key: string;
       }) {
-        const body = { project_id: input.project_id, platform: input.platform, profile: input.profile, idempotency_key: input.idempotency_key };
+        const body = input.provider === 'expo-eas'
+          ? { project_id: input.project_id, platform: input.platform, profile: input.profile, idempotency_key: input.idempotency_key }
+          : { project_id: input.project_id, preset: input.preset, idempotency_key: input.idempotency_key };
         return invokeCloudBuildRoute(request, input.provider, 'POST', body);
       },
-      async getCloudBuildStatus(_userId: string, provider: 'expo-eas', jobId: string) {
+      async getCloudBuildStatus(_userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string) {
         return invokeCloudBuildRoute(request, provider, 'GET', undefined, jobId);
       },
-      async getCloudBuildLogs(_userId: string, provider: 'expo-eas', jobId: string) {
+      async getCloudBuildLogs(_userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string) {
+        if (provider === 'godot-build-service') {
+          const result = await invokeCloudBuildRoute(request, provider, 'GET', undefined, jobId);
+          if (result.error || !result.data) return result;
+          const payload = result.data as Record<string, unknown>;
+          return { data: { job_id: jobId, logs: payload.logs || null, error: payload.error || null }, error: null };
+        }
         const authorization = request.headers.get('authorization');
         if (!authorization) return { data: null, error: 'MCP authorization is missing.' };
         const target = new URL(`/api/builds/expo/${encodeURIComponent(jobId)}/logs`, request.url);
@@ -490,21 +511,9 @@ export async function POST(request: NextRequest) {
             }).eq('id', run.id).eq('user_id', userId);
             if (resultError) return { data: null, error: 'Agent finished but its result could not be persisted.' };
             return { data: { run_id: run.id, agent_id: staticAgent.id, status: finalStatus, result: parsed?.result || result, session_id: parsed?.session_id, approvals: parsed?.approvals }, error: null };
-          } catch (error) {
-            // Persist a useful, sanitized provider diagnostic instead of discarding the
-            // underlying failure behind the same generic message for every exception.
-            const safeError = error instanceof ModelProviderError
-              ? error.message
-              : 'Agent execution failed with an unexpected runtime error. Check sanitized server logs and provider health.';
-            console.error(JSON.stringify({
-              event: 'mcp.agent.execution_failed',
-              run_id: run.id,
-              agent_id: staticAgent.id,
-              error_type: error instanceof Error ? error.name : 'UnknownError',
-              provider_status: error instanceof ModelProviderError ? error.statusCode : undefined,
-            }));
-            await db.from('agent_runs').update({ status: 'failed', error: safeError, completed_at: new Date().toISOString() }).eq('id', run.id).eq('user_id', userId);
-            return { data: { run_id: run.id, agent_id: staticAgent.id, status: 'failed', error: safeError }, error: safeError };
+          } catch {
+            await db.from('agent_runs').update({ status: 'failed', error: 'Agent execution failed. Review provider configuration and retry.', completed_at: new Date().toISOString() }).eq('id', run.id).eq('user_id', userId);
+            return { data: { run_id: run.id, agent_id: staticAgent.id, status: 'failed' }, error: 'Agent execution failed. Review provider configuration and retry.' };
           }
         }
 
@@ -513,9 +522,9 @@ export async function POST(request: NextRequest) {
         if (customAgent) {
           const chars = customAgent.instructions.length + input.task.length + (input.context || '').length;
           if (chars > 40_000) return { data: null, error: 'Custom-agent requests are limited to 40,000 input characters.' };
-          const model = 'openai/gpt-4o-mini';
+          const model = 'google/gemini-3.8-flash';
           const billable = !platformOwner;
-          if (!isProviderConfigured('openai') && !isProviderConfigured('google')) return { data: null, error: 'No supported AI provider is configured for Developer Agent execution.' };
+          if (!isProviderConfigured('google')) return { data: null, error: 'No supported AI provider is configured for Developer Agent execution.' };
           const { tools, execute } = await createUserAssistantTools(userId);
           const selectedTools = tools.filter(tool => customAgent.allowed_tools.includes(tool.name));
           if (customAgent.allowed_tools.length && selectedTools.length !== customAgent.allowed_tools.length) {
@@ -523,7 +532,7 @@ export async function POST(request: NextRequest) {
           }
           const maxOutputTokens = 1200;
           const inputTokenCeiling = Math.ceil(chars / 3) + 256;
-          const reservedCredits = billable ? calculateApiCredits('gpt-4o-mini', inputTokenCeiling, maxOutputTokens) : 0;
+          const reservedCredits = billable ? calculateApiCredits('gemini-3.8-flash', inputTokenCeiling, maxOutputTokens) : 0;
           if (reservedCredits === null) return { data: null, error: 'No verified provider rate is available for this agent model.' };
           const { data: run, error: runError } = await db.from('agent_runs').insert({
             user_id: userId, agent_id: input.agent_id, task: input.task, status: 'running',
@@ -569,7 +578,7 @@ export async function POST(request: NextRequest) {
             return { data: null, error: 'Provider did not return measurable usage. The credit reservation remains held pending reconciliation.' };
           }
           const actualCredits = billable && response.usage
-            ? calculateApiCredits('gpt-4o-mini', response.usage.inputTokens, response.usage.outputTokens)
+            ? calculateApiCredits('gemini-3.8-flash', response.usage.inputTokens, response.usage.outputTokens)
             : 0;
           if (actualCredits === null) {
             await db.rpc('settle_api_request_credit', { p_usage_id: usageId, p_actual_credits: reservedCredits });
@@ -643,12 +652,23 @@ export async function POST(request: NextRequest) {
         const limited = await enforceUserRateLimit(userId, 'mcp-agent-approve', 5, 60);
         if (limited) return { data: null, error: 'Agent approval rate limit reached. Retry shortly.' };
         const { data: approval, error: approvalError } = await db.from('agent_approvals')
-          .select('id,run_id,metadata,status').eq('id', approvalId).eq('user_id', userId).eq('status', 'pending').maybeSingle();
+          .select('id,run_id,action,metadata,status,created_at').eq('id', approvalId).eq('user_id', userId).eq('status', 'pending').maybeSingle();
         if (approvalError) return { data: null, error: 'Agent approval could not be loaded.' };
         if (!approval) return { data: null, error: 'Approval not found or already resolved.' };
+        if (isAgentApprovalExpired(approval.created_at)) {
+          const { error } = await expirePendingAgentApproval(db, approvalId, userId);
+          return { data: null, error: error ? 'Expired agent approval could not be recorded.' : 'Agent approval has expired. Start a new request to continue.' };
+        }
         const agentId = typeof approval.metadata?.agent_id === 'string' ? approval.metadata.agent_id : '';
         const agent = getAgent(agentId);
         if (!agent || agent.id === 'image' || agent.id === 'video') return { data: null, error: 'This agent is unavailable for MCP approval. Use its dedicated authorized flow.' };
+        if (!approval.run_id || typeof approval.metadata?.task !== 'string') return { data: null, error: 'Approval is not bound to a valid agent run.' };
+        const { data: run, error: runError } = await db.from('agent_runs')
+          .select('id,agent_id,task,status').eq('id', approval.run_id).eq('user_id', userId).eq('status', 'waiting_approval').maybeSingle();
+        if (runError) return { data: null, error: 'Approved agent run could not be checked.' };
+        if (!run || !agentApprovalMatchesRun(approval, run, `Run ${agent.name}`)) {
+          return { data: null, error: 'Approval does not match an active agent run.' };
+        }
         const plan = await getEffectiveUserPlan(userId, platformOwner);
         if (!canUseManualAgents(plan.key, platformOwner) || !agentAllowed(agent.id, plan.key, platformOwner) || (agent.ownerOnly && !platformOwner)) {
           return { data: null, error: 'Current plan or owner permissions do not allow this agent.' };
@@ -656,26 +676,34 @@ export async function POST(request: NextRequest) {
         const providerLimit = platformOwner ? 120 : plan.key === 'pro' ? 40 : plan.key === 'business' || plan.key === 'unlimited' ? 80 : 15;
         const providerLimited = await enforceUserRateLimit(userId, `mcp-agent-provider-${agent.id}`, providerLimit, 3600);
         if (providerLimited) return { data: null, error: `The ${agent.name} provider quota has been reached.` };
-        const { data: claimed, error: claimError } = await db.from('agent_approvals').update({ status: 'approved', approved_at: new Date().toISOString() })
-          .eq('id', approvalId).eq('user_id', userId).eq('status', 'pending').select('id').maybeSingle();
+        const { data: claimed, error: claimError } = await claimPendingAgentApproval(db, approvalId, userId);
         if (claimError || !claimed) return { data: null, error: 'Approval was resolved by another request or could not be claimed.' };
-        const { error: startError } = await db.from('agent_runs').update({ status: 'running', started_at: new Date().toISOString() })
-          .eq('id', approval.run_id).eq('user_id', userId).eq('status', 'waiting_approval');
-        if (startError) return { data: null, error: 'Approved agent run could not be started.' };
+        const { data: startedRun, error: startError } = await db.from('agent_runs').update({ status: 'running', started_at: new Date().toISOString() })
+          .eq('id', approval.run_id).eq('user_id', userId).eq('status', 'waiting_approval').select('id').maybeSingle();
+        if (startError || !startedRun) {
+          const { error: approvalFailure } = await db.from('agent_approvals').update({ status: 'failed' })
+            .eq('id', approvalId).eq('user_id', userId).eq('status', 'approved');
+          if (approvalFailure) console.error('MCP agent approval failure state could not be persisted', approvalFailure.message);
+          return { data: null, error: 'Approved agent run could not be started.' };
+        }
         try {
           const result = await runAgent(agent, String(approval.metadata?.task || ''), String(approval.metadata?.context || ''), platformOwner, { runId: approval.run_id, userId });
           const parsed = parseAgentExecutionResult(result);
           const waiting = parsed?.status === 'waiting_owner_input';
-          const { error: resultError } = await db.from('agent_runs').update({
+          const { data: completedRun, error: resultError } = await db.from('agent_runs').update({
             status: waiting ? 'waiting_approval' : 'completed',
             result: parsed?.result || result,
             completed_at: waiting ? null : new Date().toISOString(),
-          }).eq('id', approval.run_id).eq('user_id', userId);
-          if (resultError) return { data: null, error: 'Agent ran but its result could not be persisted.' };
+          }).eq('id', approval.run_id).eq('user_id', userId).eq('status', 'running').select('id').maybeSingle();
+          if (resultError || !completedRun) return { data: null, error: 'Agent ran but its result could not be persisted.' };
           return { data: { run_id: approval.run_id, agent_id: agent.id, status: waiting ? 'waiting_owner_input' : 'completed', result: parsed?.result || result, session_id: parsed?.session_id, approvals: parsed?.approvals }, error: null };
         } catch {
-          await db.from('agent_runs').update({ status: 'failed', error: 'Agent execution failed after approval.', completed_at: new Date().toISOString() }).eq('id', approval.run_id).eq('user_id', userId);
-          await db.from('agent_approvals').update({ status: 'failed' }).eq('id', approvalId).eq('user_id', userId);
+          const [{ error: runFailure }, { error: approvalFailure }] = await Promise.all([
+            db.from('agent_runs').update({ status: 'failed', error: 'Agent execution failed after approval.', completed_at: new Date().toISOString() })
+              .eq('id', approval.run_id).eq('user_id', userId).eq('status', 'running'),
+            db.from('agent_approvals').update({ status: 'failed' }).eq('id', approvalId).eq('user_id', userId).eq('status', 'approved'),
+          ]);
+          if (runFailure || approvalFailure) console.error('MCP agent approval failure state could not be fully persisted', { run: runFailure?.message, approval: approvalFailure?.message });
           return { data: null, error: 'Agent execution failed after approval. Review run status and provider availability.' };
         }
       },
@@ -774,7 +802,7 @@ export async function POST(request: NextRequest) {
             return { data: null, error: `The ${projectType === 'mobile_app' ? 'mobile app' : 'game'} builder is not enabled for this account. Configure the server-side plan entitlement before retrying.` };
           }
           const starterFiles = projectType === 'game'
-            ? (await import('@/lib/builders/browser-game-starter')).createBrowserGameStarter(name, { description: 'Created through LeonardX MCP. Replace or extend this brief with the user’s requested gameplay.', source: 'mcp_project_creation', runtime: 'browser' })
+            ? (await import('@/lib/builders/godot-starter')).createGodot3dStarter(name, { source: 'mcp_project_creation' })
             : (await import('@/lib/builders/expo-starter')).createExpoMobileStarter(name, { source: 'mcp_project_creation' });
           const { data, error } = await db.from('projects').insert({ user_id: userId, project_name: name, type: projectType, status: 'draft', progress: 0, files: starterFiles })
             .select('id,project_name,type,status,progress,created_at').single();
@@ -875,6 +903,9 @@ export async function POST(request: NextRequest) {
       },
       async getMainWebsiteStatus(userId: string) {
         if (!platformOwner || userId !== token.userId) return { data: null, error: 'Platform owner access is required.' };
+        let githubAppMode: 'app' | 'fallback';
+        try { githubAppMode = getGitHubAppConfigurationMode(); }
+        catch (error) { return { data: null, error: error instanceof Error ? error.message : 'GitHub App configuration is invalid.' }; }
         const [githubResult, vercelResult] = await Promise.all([
           db.from('user_integrations').select('credential_ciphertext')
             .eq('user_id', userId).eq('provider', 'github').eq('status', 'verified')
@@ -883,14 +914,20 @@ export async function POST(request: NextRequest) {
             .eq('user_id', userId).eq('provider', 'vercel').eq('status', 'verified')
             .order('created_at', { ascending: false }).limit(1).maybeSingle(),
         ]);
-        if (githubResult.error || vercelResult.error) return { data: null, error: 'Verified owner GitHub and Vercel integrations could not be loaded.' };
-        if (!githubResult.data?.credential_ciphertext || !vercelResult.data?.credential_ciphertext) {
-          return { data: null, error: 'Connect and verify both GitHub and Vercel in Integrations before managing the main website.' };
+        if (vercelResult.error || (githubAppMode === 'fallback' && githubResult.error)) {
+          return { data: null, error: 'The required owner GitHub/Vercel integrations could not be loaded.' };
+        }
+        if (!vercelResult.data?.credential_ciphertext || (githubAppMode === 'fallback' && !githubResult.data?.credential_ciphertext)) {
+          return { data: null, error: githubAppMode === 'app'
+            ? 'Connect and verify the owner Vercel integration before managing the main website.'
+            : 'Connect and verify both GitHub and Vercel in Integrations, or configure all three GitHub App environment variables.' };
         }
         try {
-          const githubToken = openConnectionConfig(githubResult.data.credential_ciphertext).token;
+          const githubToken = githubAppMode === 'fallback' && githubResult.data?.credential_ciphertext
+            ? openConnectionConfig(githubResult.data.credential_ciphertext).token
+            : undefined;
           const vercelToken = openConnectionConfig(vercelResult.data.credential_ciphertext).token;
-          if (!githubToken || !vercelToken) return { data: null, error: 'Reconnect the owner GitHub and Vercel integrations.' };
+          if ((githubAppMode === 'fallback' && !githubToken) || !vercelToken) return { data: null, error: 'Reconnect the required owner GitHub/Vercel integrations.' };
           return { data: await inspectMainWebsite({ githubToken, vercelToken }), error: null };
         } catch (error) {
           return { data: null, error: error instanceof Error ? error.message : 'Main website status could not be loaded.' };
@@ -904,6 +941,9 @@ export async function POST(request: NextRequest) {
         if (!platformOwner || userId !== token.userId) return { data: null, error: 'Platform owner access is required.' };
         const limited = await enforceUserRateLimit(userId, 'mcp-main-website-push', 10, 3600);
         if (limited) return { data: null, error: 'Main website push rate limit reached. Try again later.' };
+        let githubAppMode: 'app' | 'fallback';
+        try { githubAppMode = getGitHubAppConfigurationMode(); }
+        catch (error) { return { data: null, error: error instanceof Error ? error.message : 'GitHub App configuration is invalid.' }; }
         const [githubResult, vercelResult] = await Promise.all([
           db.from('user_integrations').select('credential_ciphertext')
             .eq('user_id', userId).eq('provider', 'github').eq('status', 'verified')
@@ -912,14 +952,20 @@ export async function POST(request: NextRequest) {
             .eq('user_id', userId).eq('provider', 'vercel').eq('status', 'verified')
             .order('created_at', { ascending: false }).limit(1).maybeSingle(),
         ]);
-        if (githubResult.error || vercelResult.error) return { data: null, error: 'Verified owner GitHub and Vercel integrations could not be loaded.' };
-        if (!githubResult.data?.credential_ciphertext || !vercelResult.data?.credential_ciphertext) {
-          return { data: null, error: 'Connect and verify both GitHub and Vercel in Integrations before changing the main website.' };
+        if (vercelResult.error || (githubAppMode === 'fallback' && githubResult.error)) {
+          return { data: null, error: 'The required owner GitHub/Vercel integrations could not be loaded.' };
+        }
+        if (!vercelResult.data?.credential_ciphertext || (githubAppMode === 'fallback' && !githubResult.data?.credential_ciphertext)) {
+          return { data: null, error: githubAppMode === 'app'
+            ? 'Connect and verify the owner Vercel integration before changing the main website.'
+            : 'Connect and verify the owner GitHub and Vercel integrations, or configure all three GitHub App environment variables.' };
         }
         try {
-          const githubToken = openConnectionConfig(githubResult.data.credential_ciphertext).token;
+          const githubToken = githubAppMode === 'fallback' && githubResult.data?.credential_ciphertext
+            ? openConnectionConfig(githubResult.data.credential_ciphertext).token
+            : undefined;
           const vercelToken = openConnectionConfig(vercelResult.data.credential_ciphertext).token;
-          if (!githubToken || !vercelToken) return { data: null, error: 'Reconnect the owner GitHub and Vercel integrations.' };
+          if ((githubAppMode === 'fallback' && !githubToken) || !vercelToken) return { data: null, error: 'Reconnect the required owner GitHub/Vercel integrations.' };
           return {
             data: await pushMainWebsiteChanges({
               githubToken,
@@ -982,15 +1028,23 @@ export async function POST(request: NextRequest) {
         const { runProjectRunnerOperation } = await import('@/lib/project-runner');
         return runProjectRunnerOperation({ ownerId: userId, files: project.files, operation });
       },
-      async retryCloudBuild(userId: string, provider: 'expo-eas', jobId: string) {
+      async retryCloudBuild(userId: string, provider: 'expo-eas' | 'godot-build-service', jobId: string) {
         const { data: job, error } = await db.from('cloud_build_jobs')
           .select('id,project_id,provider,provider_job_id,status,profile')
           .eq('id', jobId).eq('owner_user_id', userId).eq('provider', provider).maybeSingle();
         if (error || !job) return { data: null, error: error || 'Build job not found.' };
         if (!['failed', 'cancelled'].includes(job.status)) return { data: null, error: 'Only failed or cancelled builds can be retried.' };
-        if (job.provider_job_id) return { data: null, error: 'This job has a provider job ID. Check provider history before retrying to avoid duplicate charges.' };
-        const body = { project_id: job.project_id, platform: String(job.profile).split(':')[0], profile: String(job.profile).split(':')[1] || 'preview', idempotency_key: randomUUID() };
-        return invokeCloudBuildRoute(request, provider, 'POST', body);
+        if (job.provider_job_id) return { data: null, error: 'This build has a provider job ID. Check provider history before retrying to avoid duplicate charges.' };
+        const body = provider === 'expo-eas'
+          ? { project_id: job.project_id, platform: String(job.profile).split(':')[0], profile: String(job.profile).split(':')[1] || 'preview', idempotency_key: randomUUID() }
+          : { project_id: job.project_id, preset: job.profile, idempotency_key: randomUUID() };
+        const target = new URL(`/api/builds/${provider === 'expo-eas' ? 'expo' : 'godot'}`, request.url);
+        const retryRequest = new NextRequest(target, { method: 'POST', headers: request.headers, body: JSON.stringify(body) });
+        const response = provider === 'expo-eas'
+          ? await (await import('@/app/api/builds/expo/route')).POST(retryRequest)
+          : await (await import('@/app/api/builds/godot/route')).POST(retryRequest);
+        const data = await response.json().catch(() => null);
+        return response.ok ? { data, error: null } : { data, error: data?.error || 'Cloud build retry failed.' };
       },
       async planEngineeringWorkflow(_userId: string, input: Parameters<typeof import('@/lib/mcp/orchestration').buildEngineeringOrchestrationPlan>[0]) {
         const { buildEngineeringOrchestrationPlan } = await import('@/lib/mcp/orchestration');
@@ -1074,7 +1128,7 @@ export async function POST(request: NextRequest) {
     headers.set('Cache-Control', 'no-store');
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   } catch (error) {
-    console.error(JSON.stringify({ event: 'mcp.request.failed', error_type: error instanceof Error ? error.name : 'UnknownError' }));
+    console.error('MCP request failed:', error instanceof Error ? error.message : 'Unknown MCP error');
     return NextResponse.json({ error: 'The MCP request could not be completed.' }, { status: 503, headers: corsHeaders(request) });
   }
 }

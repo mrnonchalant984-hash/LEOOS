@@ -1,0 +1,45 @@
+name: LeonardX Leo build queue worker
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leonardx-leo-build-queue-worker
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Validate protected worker configuration
+        env:
+          LEONARDX_BASE_URL: ${{ secrets.LEONARDX_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$LEONARDX_BASE_URL" && "$LEONARDX_BASE_URL" == https://* ]] || { echo 'LEONARDX_BASE_URL must be an HTTPS URL.' >&2; exit 1; }
+          [[ -n "$CRON_SECRET" && ${#CRON_SECRET} -ge 32 ]] || { echo 'CRON_SECRET must be configured and at least 32 characters.' >&2; exit 1; }
+      - name: Claim and process one durable Leo build
+        env:
+          LEONARDX_BASE_URL: ${{ secrets.LEONARDX_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$RUNNER_TEMP/leonardx-build-worker-response.json"
+          http_code="$(curl --silent --show-error --connect-timeout 10 --max-time 310 \
+            --output "$response_file" --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --header 'Cache-Control: no-store' \
+            "${LEONARDX_BASE_URL%/}/api/internal/builds/worker")"
+          printf 'Leo build worker HTTP status: %s\n' "$http_code"
+          cat "$response_file"
+          printf '\n'
+          [[ "$http_code" =~ ^2[0-9][0-9]$ ]] || { echo 'Leo build worker poll failed.' >&2; exit 1; }

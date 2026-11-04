@@ -10,6 +10,7 @@ test('Auto chooses the configured Gemini model', () => {
     for (const name of names) delete process.env[name];
     process.env.GEMINI_API_KEY = 'configured';
     assert.equal(getDefaultTextModel('chat'), 'google/gemini-3.8-flash');
+    assert.equal(getDefaultTextModel('reasoning'), 'google/gemini-4-argon');
     assert.equal(getModelProviderStatus().find(item => item.provider === 'google')?.configured, true);
   } finally {
     for (const name of names) {
@@ -19,13 +20,12 @@ test('Auto chooses the configured Gemini model', () => {
   }
 });
 
-test('Auto stays Gemini-first when only OpenAI is configured; execution still checks provider readiness', () => {
+test('Auto reports no configured model instead of defaulting to Google', () => {
   const previous = Object.fromEntries(names.map(name => [name, process.env[name]]));
   try {
     for (const name of names) delete process.env[name];
     process.env.OPENAI_API_KEY = 'configured';
-    assert.equal(getDefaultTextModel('chat'), 'google/gemini-3.8-flash');
-    assert.equal(getModelProviderStatus().find(item => item.provider === 'google')?.configured, false);
+    assert.throws(() => getDefaultTextModel('chat'), /Gemini is not configured/i);
   } finally {
     for (const name of names) {
       if (previous[name] === undefined) delete process.env[name];

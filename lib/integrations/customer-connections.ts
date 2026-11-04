@@ -1,7 +1,7 @@
 import { decryptMcpCredential, encryptMcpCredential } from '@/lib/mcp/outbound-security';
 
 export const CUSTOMER_PROVIDERS = [
-  'github', 'vercel', 'supabase', 'firebase', 'openai', 'anthropic',
+  'github', 'vercel', 'supabase', 'firebase',
   'google_gemini', 'whatsapp_business', 'meta', 'youtube', 'custom_mcp',
 ] as const;
 export type CustomerProvider = typeof CUSTOMER_PROVIDERS[number];
@@ -32,7 +32,7 @@ export function validateConnectionConfig(provider: CustomerProvider, config: unk
     if (url.protocol !== 'https:' || !url.hostname.endsWith('.supabase.co')) throw new Error('Supabase project URL must be an HTTPS *.supabase.co URL.');
   }
   if (provider === 'firebase') requireFields(['project_id', 'access_token']);
-  if (provider === 'openai' || provider === 'anthropic' || provider === 'google_gemini') requireFields(['api_key']);
+  if (provider === 'google_gemini') requireFields(['api_key']);
   if (provider === 'whatsapp_business') requireFields(['access_token', 'phone_number_id']);
   if (provider === 'meta') requireFields(['access_token']);
   if (provider === 'youtube') requireFields(['access_token']);
@@ -64,15 +64,11 @@ export async function verifyCustomerConnection(provider: CustomerProvider, confi
     url = `https://api.supabase.com/v1/projects/${encodeURIComponent(projectRef)}`;
     headers.set('Authorization', `Bearer ${config.access_token}`);
   } else if (provider === 'google_gemini') {
-    url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(config.api_key)}`;
+    url = 'https://generativelanguage.googleapis.com/v1beta/models'; headers.set('x-goog-api-key', config.api_key);
   } else if (provider === 'firebase' || provider === 'youtube') {
     url = 'https://www.googleapis.com/oauth2/v3/userinfo'; headers.set('Authorization', `Bearer ${config.access_token}`);
   } else if (provider === 'meta' || provider === 'whatsapp_business') {
     url = `https://graph.facebook.com/${process.env.META_GRAPH_VERSION || 'v23.0'}/me?fields=id,name`; headers.set('Authorization', `Bearer ${config.access_token}`);
-  } else if (provider === 'openai') {
-    url = 'https://api.openai.com/v1/models'; headers.set('Authorization', `Bearer ${config.api_key}`);
-  } else if (provider === 'anthropic') {
-    url = 'https://api.anthropic.com/v1/models'; headers.set('x-api-key', config.api_key); headers.set('anthropic-version', '2023-06-01');
   } else if (provider === 'custom_mcp') {
     return { status: 'configured' as const, message: 'Endpoint saved. Run MCP tool discovery and approve tools in the MCP manager before use.' };
   }

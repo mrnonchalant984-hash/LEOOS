@@ -4,11 +4,11 @@ type ImageInput = { bytes: Buffer; mimeType: string };
 
 export function isGeminiImageModel(model: string) {
   const id = model.replace(/^google\//, '').trim().toLowerCase();
-  return /^imagen(?:-|$)/.test(id) || /^gemini-[^/]*image(?:-|$)/.test(id);
+  return /^imagen(?:-|$)/.test(id) || /^gemini-[^/]*image(?:-|$)/.test(id) || /^gemini-nano-banana(?:-|$|\.)/.test(id);
 }
 
 export function resolveGeminiImageModel(requested?: string) {
-  const model = (requested?.trim() || process.env.LEO_GEMINI_IMAGE_MODEL?.trim() || 'gemini-2.5-flash-image-preview').replace(/^google\//, '');
+  const model = (requested?.trim() || process.env.LEO_GEMINI_IMAGE_MODEL?.trim() || 'gemini-nano-banana-2.1').replace(/^google\//, '');
   if (!isGeminiImageModel(model)) throw new Error(`Configured model "${model}" is text-capable and cannot generate or edit images. Set LEO_GEMINI_IMAGE_MODEL to a Gemini image or Imagen model.`);
   return model;
 }

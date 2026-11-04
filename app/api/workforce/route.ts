@@ -5,6 +5,7 @@ import { publicAgentSummary } from '@/lib/agents/manager';
 import { getEffectiveUserPlan } from '@/lib/plan-access';
 import { getAllowedAgentIds } from '@/lib/agents/entitlements';
 import { isProviderConfigured } from '@/lib/ai/model-catalog';
+import { AGENT_APPROVAL_TTL_MS } from '@/lib/agents/approval-policy';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,8 @@ export async function GET(req: NextRequest) {
     const db = adminSupabase();
     const [runs, approvals, meetings, tasks] = await Promise.all([
       db.from('agent_runs').select('id,agent_id,task,status,created_at,started_at,completed_at,error').eq('user_id', ctx.user.id).order('created_at', { ascending: false }).limit(30),
-      db.from('agent_approvals').select('id,status,created_at,action').eq('user_id', ctx.user.id).eq('status', 'pending').order('created_at', { ascending: false }).limit(30),
+      db.from('agent_approvals').select('id,status,created_at,action').eq('user_id', ctx.user.id).eq('status', 'pending')
+        .gt('created_at', new Date(Date.now() - AGENT_APPROVAL_TTL_MS).toISOString()).order('created_at', { ascending: false }).limit(30),
       db.from('workforce_meetings').select('id,title,status,created_at,updated_at,completed_at').eq('user_id', ctx.user.id).order('updated_at', { ascending: false }).limit(10),
       db.from('workflows').select('id,status').eq('user_id', ctx.user.id).limit(100),
     ]);
@@ -50,9 +52,9 @@ export async function GET(req: NextRequest) {
       manual_agent_access: allowed === null || allowed.length > 0,
       limitations: {
         role_catalog_is_not_tool_authorization: true,
-        local_inference_configured: Boolean(process.env.LEO_LOCAL_MODEL_URL),
+        gemini_provider_configured: Boolean(process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim()),
         durable_agent_worker_enabled: process.env.WORKFORCE_WORKER_ENABLED === 'true' && Boolean(process.env.CRON_SECRET),
-        meeting_model_configured: isProviderConfigured('openai') || isProviderConfigured('google') || isProviderConfigured('local'),
+        meeting_model_configured: isProviderConfigured('google'),
       },
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch {

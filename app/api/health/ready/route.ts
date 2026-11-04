@@ -11,27 +11,14 @@ export async function GET() {
     supabaseAnonKey: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
     serviceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     ownerIdentity: Boolean(process.env.OWNER_EMAIL),
-    modelProvider: Boolean(process.env.LEO_LOCAL_MODEL_URL || process.env.OPENAI_API_KEY || process.env.LEO_API_KEY),
+    modelProvider: Boolean(process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim()),
     agentWorkerEnabled: true,
     workforceWorkerEnabled: process.env.WORKFORCE_WORKER_ENABLED === 'true',
     workflowWorkerEnabled: process.env.WORKFLOW_WORKER_ENABLED === 'true',
     cronSecretStrong: Boolean(process.env.CRON_SECRET && process.env.CRON_SECRET.length >= 32),
   };
   const checks: Record<string, boolean> = { configuration: Object.values(env).every(Boolean) };
-  if (process.env.LEO_LOCAL_MODEL_URL?.trim()) {
-    try {
-      const base = process.env.LEO_LOCAL_MODEL_URL.trim().replace(/\/+$/, '');
-      const response = await fetch(`${base}/models`, {
-        signal: AbortSignal.timeout(2500),
-        headers: process.env.LEO_LOCAL_MODEL_API_KEY ? { Authorization: `Bearer ${process.env.LEO_LOCAL_MODEL_API_KEY}` } : undefined,
-      });
-      checks.localModelReachable = response.ok;
-    } catch {
-      checks.localModelReachable = false;
-    }
-  } else {
-    checks.hostedProviderConfigured = Boolean(process.env.OPENAI_API_KEY || process.env.LEO_API_KEY);
-  }
+  checks.geminiProviderConfigured = Boolean(process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim());
   try {
     const db = adminSupabase();
     const results = await Promise.all([

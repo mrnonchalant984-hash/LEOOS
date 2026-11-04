@@ -52,7 +52,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
   const model = getDefaultTextModel('chat');
   const fallback = getSafeFallbackModel(model, process.env.LEO_FALLBACK_MODEL?.trim());
-  if (!isProviderConfigured(model.split('/')[0] as 'google' | 'openai' | 'anthropic' | 'local') && !fallback) {
+  if (!isProviderConfigured('google') && !fallback) {
     return NextResponse.json({ error: 'The configured Leo AI provider is unavailable. Configure the existing server-side model provider; no game files were changed.' }, { status: 503 });
   }
   const currentFiles = Object.fromEntries(Object.entries(project.files).filter(([path]) => path !== 'leonardx.publication.json' && !/(^|\/)(?:\.env|\.vercel|\.git|node_modules)(?:\/|$)/i.test(path)));

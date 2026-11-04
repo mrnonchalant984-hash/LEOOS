@@ -1,0 +1,2 @@
+export const LEOCODE_DAILY_REQUEST_LIMIT = 40;
+export const LEOCODE_DAILY_WINDOW_SECONDS = 24 * 60 * 60;

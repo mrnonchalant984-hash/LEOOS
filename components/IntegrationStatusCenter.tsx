@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Activity, CheckCircle2, CreditCard, Database, Github, Globe2, KeyRound, Mail, MessageCircle, RefreshCw, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react';
 import type { IntegrationId, IntegrationState, IntegrationStatus } from '@/lib/integration-status';
-const icons: Record<IntegrationId, typeof Activity> = { openai: Sparkles, supabase: Database, paystack: CreditCard, web3forms: MessageCircle, resend: Mail, vercel: Globe2, github: Github, google: Globe2, stripe: CreditCard, whatsapp: MessageCircle };
+const icons: Record<IntegrationId, typeof Activity> = { gemini: Sparkles, supabase: Database, paystack: CreditCard, web3forms: MessageCircle, resend: Mail, vercel: Globe2, github: Github, google: Globe2, stripe: CreditCard, whatsapp: MessageCircle };
 const labels: Record<IntegrationState, string> = { connected: 'Connected', configured: 'Configured', not_configured: 'Not configured', connection_failed: 'Connection failed', coming_soon: 'Coming soon', checking: 'Checking' };
 const filters = [['all', 'All'], ['connected', 'Connected'], ['needs', 'Needs configuration'], ['connection_failed', 'Connection failed'], ['coming_soon', 'Coming soon']] as const;
 const summaryCards = [['connected', 'Connected', CheckCircle2], ['configured', 'Configured', KeyRound], ['not_configured', 'Not configured', TriangleAlert], ['connection_failed', 'Failures', Activity], ['coming_soon', 'Coming soon', Globe2]] as const;

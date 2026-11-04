@@ -12,6 +12,7 @@ HOST = os.getenv('RUNNER_HOST', '127.0.0.1')
 PORT = int(os.getenv('RUNNER_PORT', '8787'))
 TOKEN = os.getenv('RUNNER_HMAC_SECRET', '')
 ENGINE = os.getenv('RUNNER_CONTAINER_ENGINE', 'podman')
+CONTAINER_RUNTIME = 'runsc'
 IMAGE = os.getenv('RUNNER_IMAGE', 'localhost/leonardx-runner:node22')
 MAX_BODY = 6 * 1024 * 1024
 MAX_ARCHIVE = 4 * 1024 * 1024
@@ -21,6 +22,7 @@ WORKSPACE_TTL_SECONDS = 6 * 60 * 60
 MAX_FILE_SIZE = 2 * 1024 * 1024
 ID_RE = re.compile(r'^[a-zA-Z0-9_-]{8,80}$')
 WORKSPACE_ID_RE = re.compile(r'^[a-f0-9-]{36}$')
+TENANT_ID_RE = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$', re.I)
 OPERATIONS = {'inspect', 'apply_patch', 'install', 'test', 'typecheck', 'lint', 'build', 'git_status', 'git_diff', 'git_log', 'git_branch', 'git_commit'}
 
 class RequestError(Exception): pass
@@ -45,6 +47,23 @@ def safe_extract(archive_path: Path, dest: Path) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             with zf.open(info) as src, target.open('wb') as out: shutil.copyfileobj(src, out)
 
+def tenant_workspace_root(tenant_id: str) -> Path:
+    if not TENANT_ID_RE.fullmatch(tenant_id):
+        raise RequestError('invalid_tenant_id')
+    return WORKSPACE_ROOT / tenant_id.lower()
+
+def cleanup_expired_workspaces(now: float | None = None) -> None:
+    if not WORKSPACE_ROOT.is_dir():
+        return
+    current_time = now if now is not None else time.time()
+    for tenant_root in WORKSPACE_ROOT.iterdir():
+        if not tenant_root.is_dir() or tenant_root.is_symlink():
+            continue
+        for root in tenant_root.iterdir():
+            if root.is_dir() and not root.is_symlink() and not (root / '.lock').exists():
+                if current_time - root.stat().st_mtime > WORKSPACE_TTL_SECONDS:
+                    shutil.rmtree(root)
+
 def run_container(workspace: Path, operation: str, patch: str = '', branch: str = '', message: str = '') -> dict:
     if operation not in OPERATIONS: raise RequestError('unsupported_operation')
     if operation == 'apply_patch' and (not patch or len(patch.encode()) > 128_000): raise RequestError('invalid_patch')
@@ -67,12 +86,12 @@ def run_container(workspace: Path, operation: str, patch: str = '', branch: str 
     if operation == 'apply_patch': (workspace / '.runner-task.patch').write_text(patch, encoding='utf-8'); commands[operation] = ['sh', '-lc', 'git apply --check .runner-task.patch && git apply .runner-task.patch']
     env = os.environ.copy()
     env['COMMIT_MESSAGE'] = message
-    cmd = [ENGINE, 'run', '--rm', '--network', 'none', '--read-only', '--userns=keep-id:uid=10001,gid=10001', '--user', '10001:10001', '--cap-drop', 'all', '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--memory', '1536m', '--cpus', '2', '--tmpfs', '/tmp:rw,noexec,nosuid,size=256m', '-v', f'{workspace}:/workspace:rw,Z']
+    cmd = [ENGINE, 'run', '--rm', f'--runtime={CONTAINER_RUNTIME}', '--network', 'none', '--read-only', '--userns=keep-id:uid=10001,gid=10001', '--user', '10001:10001', '--cap-drop', 'all', '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--memory', '1536m', '--cpus', '2', '--tmpfs', '/tmp:rw,noexec,nosuid,size=256m', '-v', f'{workspace}:/workspace:rw,Z']
     npm_cache = os.getenv('RUNNER_NPM_CACHE', '').strip()
     if npm_cache and Path(npm_cache).is_dir(): cmd += ['-v', f'{Path(npm_cache).resolve()}:/opt/runner-npm-cache:ro,Z']
     cmd += ['-w', '/workspace', '--env', 'COMMIT_MESSAGE', IMAGE, *commands[operation]]
     try:
-        result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=630, check=False)
+        result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=270, check=False)
     except subprocess.TimeoutExpired:
         return {'ok': False, 'exit_code': 124, 'stdout': '', 'stderr': 'runner_timeout'}
     return {'ok': result.returncode == 0, 'exit_code': result.returncode, 'stdout': result.stdout[-24000:], 'stderr': result.stderr[-12000:]}
@@ -84,12 +103,14 @@ class Handler(BaseHTTPRequestHandler):
         raw = json.dumps(data, separators=(',', ':')).encode()
         self.send_response(status); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(raw))); self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(raw)
     def do_GET(self):
-        if self.path == '/health': return self.send_json(200, {'ok': True, 'engine_configured': shutil.which(ENGINE) is not None, 'image': IMAGE})
+        if self.path == '/health': return self.send_json(200, {'ok': True, 'engine_configured': shutil.which(ENGINE) is not None, 'runtime_required': CONTAINER_RUNTIME, 'image': IMAGE})
         return self.send_json(404, {'error': 'not_found'})
     def do_POST(self):
         if self.path != '/v1/jobs': return self.send_json(404, {'error': 'not_found'})
         if not TOKEN or len(TOKEN) < 32: return self.send_json(503, {'error': 'runner_secret_not_configured'})
         try:
+            if self.headers.get('Content-Length', '').isdigit() and int(self.headers['Content-Length']) > MAX_BODY:
+                return self.send_json(413, {'error': 'request_size_limit'})
             length = int(self.headers.get('Content-Length', '0'))
             if length <= 0 or length > MAX_BODY: return self.send_json(413, {'error': 'request_size_limit'})
             raw = self.rfile.read(length)
@@ -100,18 +121,21 @@ class Handler(BaseHTTPRequestHandler):
             if not hmac.compare_digest(expected, signature): return self.send_json(401, {'error': 'invalid_signature'})
             body = json.loads(raw)
             if not isinstance(body, dict) or not ID_RE.fullmatch(str(body.get('job_id', ''))): raise RequestError('invalid_job_id')
+            tenant_id = body.get('tenant_id')
+            if not isinstance(tenant_id, str): raise RequestError('invalid_tenant_id')
+            tenant_root = tenant_workspace_root(tenant_id)
             op = body.get('operation')
             if op not in OPERATIONS: raise RequestError('unsupported_operation')
-            WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
+            tenant_root.mkdir(parents=True, exist_ok=True, mode=0o700)
             workspace_id = str(body.get('workspace_id') or '')
             created_workspace = False
             if workspace_id:
                 if not WORKSPACE_ID_RE.fullmatch(workspace_id): raise RequestError('invalid_workspace_id')
-                root = WORKSPACE_ROOT / workspace_id
+                root = tenant_root / workspace_id
                 workspace = root / 'workspace'
                 if not workspace.is_dir(): raise RequestError('workspace_not_found_or_expired')
             else:
-                workspace_id = str(uuid.uuid4()); root = WORKSPACE_ROOT / workspace_id; workspace = root / 'workspace'
+                workspace_id = str(uuid.uuid4()); root = tenant_root / workspace_id; workspace = root / 'workspace'
                 root.mkdir(mode=0o700); workspace.mkdir(mode=0o700); created_workspace = True
                 repository = body.get('repository')
                 if repository:
@@ -153,8 +177,7 @@ class Handler(BaseHTTPRequestHandler):
                 out.unlink(missing_ok=True)
                 # Remove inactive workspaces opportunistically; active locks are never removed.
                 now = time.time()
-                for old in WORKSPACE_ROOT.iterdir():
-                    if old.is_dir() and old != root and not (old / '.lock').exists() and now - old.stat().st_mtime > WORKSPACE_TTL_SECONDS: shutil.rmtree(old, ignore_errors=True)
+                cleanup_expired_workspaces(now)
                 return self.send_json(200, {'job_id': body['job_id'], 'workspace_id': workspace_id, **result, 'workspace_zip_base64': zipped, 'workspace_artifact_omitted': zipped is None, 'git_remote_push_supported': False})
             finally:
                 try: os.close(lock_fd)

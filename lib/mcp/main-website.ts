@@ -1,5 +1,6 @@
 import { normalizeIdePath, validateIdeFiles } from '../ide-files.ts';
 import { requestProviderJson } from '../provider-http.ts';
+import { getMainWebsiteGitHubToken } from './github-app-auth.ts';
 
 const GITHUB_API = 'https://api.github.com';
 const VERCEL_API = 'https://api.vercel.com';
@@ -77,27 +78,28 @@ type VercelProject = { link?: { type?: string; org?: string; repo?: string; repo
 type VercelDeployments = { deployments?: Array<Record<string, unknown>> };
 
 export async function inspectMainWebsite(input: {
-  githubToken: string;
+  githubToken?: string | null;
   vercelToken: string;
 }) {
   const target = getMainWebsiteTarget();
   if (!target) throw new Error('Configure LEO_MAIN_WEBSITE_REPOSITORY and LEO_MAIN_WEBSITE_VERCEL_PROJECT_ID before using the owner website tools.');
+  const githubToken = await getMainWebsiteGitHubToken({ owner: target.owner, repository: target.repository, fallbackToken: input.githubToken });
   const repoPath = `/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repository)}`;
   const [branch, runs, project, deployments] = await Promise.all([
-    github<GitHubBranch>(input.githubToken, `${repoPath}/branches/main`),
-    github<GitHubRuns>(input.githubToken, `${repoPath}/actions/runs?branch=main&per_page=5`),
+    github<GitHubBranch>(githubToken, `${repoPath}/branches/main`),
+    github<GitHubRuns>(githubToken, `${repoPath}/actions/runs?branch=main&per_page=5`),
     vercel<VercelProject>(input.vercelToken, `/v9/projects/${encodeURIComponent(target.projectId)}`),
     vercel<VercelDeployments>(input.vercelToken, `/v6/deployments?projectId=${encodeURIComponent(target.projectId)}&limit=5`),
   ]);
   const repoLink = project.link;
   const linkedRepository = repoLink?.repo && repoLink.repoOwner ? `${repoLink.repoOwner}/${repoLink.repo}` : null;
   const expectedRepository = `${target.owner}/${target.repository}`;
-  if (linkedRepository && linkedRepository.toLowerCase() !== expectedRepository.toLowerCase()) {
-    throw new Error('The configured Vercel project is linked to a different GitHub repository. Update the owner website target before pushing.');
+  if (!linkedRepository || linkedRepository.toLowerCase() !== expectedRepository.toLowerCase()) {
+    throw new Error('The configured Vercel project is not verified as linked to the target GitHub repository. Update the owner website target before continuing.');
   }
   const sha = branch.commit?.sha;
   const checks = sha
-    ? await github<GitHubChecks>(input.githubToken, `${repoPath}/commits/${encodeURIComponent(sha)}/check-runs?per_page=20`)
+    ? await github<GitHubChecks>(githubToken, `${repoPath}/commits/${encodeURIComponent(sha)}/check-runs?per_page=20`)
     : { check_runs: [] };
   return {
     repository: expectedRepository,
@@ -134,7 +136,7 @@ export async function inspectMainWebsite(input: {
 }
 
 export async function pushMainWebsiteChanges(input: {
-  githubToken: string;
+  githubToken?: string | null;
   vercelToken: string;
   expectedCommitSha: string;
   commitMessage: string;
@@ -148,9 +150,10 @@ export async function pushMainWebsiteChanges(input: {
   const target = getMainWebsiteTarget();
   if (!target) throw new Error('Configure LEO_MAIN_WEBSITE_REPOSITORY and LEO_MAIN_WEBSITE_VERCEL_PROJECT_ID before using the owner website tools.');
 
+  const githubToken = await getMainWebsiteGitHubToken({ owner: target.owner, repository: target.repository, fallbackToken: input.githubToken });
   const repoPath = `/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repository)}`;
   const [branch, project] = await Promise.all([
-    github<GitHubBranch>(input.githubToken, `${repoPath}/branches/main`),
+    github<GitHubBranch>(githubToken, `${repoPath}/branches/main`),
     vercel<VercelProject>(input.vercelToken, `/v9/projects/${encodeURIComponent(target.projectId)}`),
   ]);
   if (!branch.commit?.sha || branch.commit.sha !== input.expectedCommitSha) {
@@ -162,12 +165,12 @@ export async function pushMainWebsiteChanges(input: {
     throw new Error('The configured Vercel project is not verified as linked to the target GitHub repository.');
   }
   const baseCommit = await github<{ commit?: { tree?: { sha?: string } } }>(
-    input.githubToken,
+    githubToken,
     `${repoPath}/commits/${encodeURIComponent(input.expectedCommitSha)}`,
   );
   const baseTree = baseCommit.commit?.tree?.sha;
   if (!baseTree) throw new Error('The GitHub base commit tree could not be verified.');
-  const tree = await github<{ sha?: string }>(input.githubToken, `${repoPath}/git/trees`, {
+  const tree = await github<{ sha?: string }>(githubToken, `${repoPath}/git/trees`, {
     method: 'POST',
     body: JSON.stringify({
       base_tree: baseTree,
@@ -175,7 +178,7 @@ export async function pushMainWebsiteChanges(input: {
     }),
   });
   if (!tree.sha) throw new Error('GitHub did not return a tree for the website changes.');
-  const createdCommit = await github<{ sha?: string; html_url?: string }>(input.githubToken, `${repoPath}/git/commits`, {
+  const createdCommit = await github<{ sha?: string; html_url?: string }>(githubToken, `${repoPath}/git/commits`, {
     method: 'POST',
     body: JSON.stringify({
       message: commitMessage,
@@ -184,7 +187,7 @@ export async function pushMainWebsiteChanges(input: {
     }),
   });
   if (!createdCommit.sha) throw new Error('GitHub did not return a commit for the website changes.');
-  await github(input.githubToken, `${repoPath}/git/refs/heads/main`, {
+  await github(githubToken, `${repoPath}/git/refs/heads/main`, {
     method: 'PATCH',
     body: JSON.stringify({ sha: createdCommit.sha, force: false }),
   });

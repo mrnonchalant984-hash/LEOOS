@@ -11,7 +11,7 @@ test('administrator 2FA never passes an optional email as an otplib label', () =
 });
 
 test('meeting route model selector and participant types are imported and explicit', () => {
-  assert.match(source('app/api/meetings/route.ts'), /import \{ getConfiguredModel \} from '@\/lib\/openai'/);
+  assert.match(source('app/api/meetings/route.ts'), /import \{ getConfiguredModel \} from '@\/lib\/leo-system-prompt'/);
   assert.match(source('app/api/meetings/[id]/discuss/route.ts'), /\(participantId: string\)/);
   assert.match(source('app/api/meetings/[id]/discuss/route.ts'), /\(typeof PROFESSIONAL_ROLES\)\[number\]/);
 });

@@ -204,24 +204,7 @@ export default function MeetingRoomPage() {
       const response = await authFetch(`/api/meetings/${selectedMeeting.id}/realtime-session`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Realtime meeting could not start.');
-      const secret = data.client_secret?.value;
-      if (!secret) throw new Error('Realtime meeting did not return a temporary client secret.');
-      const connection = new RTCPeerConnection(); realtimePcRef.current = connection;
-      connection.onconnectionstatechange = () => {
-        if (connection.connectionState === 'connected') setRealtimeStatus('Live · listening');
-        else if (connection.connectionState === 'disconnected') setRealtimeStatus('Reconnecting');
-        else if (connection.connectionState === 'failed') setRealtimeStatus('Connection failed');
-      };
-      connection.ontrack = event => { if (realtimeAudioRef.current) { realtimeAudioRef.current.srcObject = event.streams[0]; void realtimeAudioRef.current.play().catch(() => {}); } };
-      const local = await navigator.mediaDevices.getUserMedia({ audio: true }); realtimeStreamRef.current = local;
-      local.getTracks().forEach(track => connection.addTrack(track, local));
-      const channel = connection.createDataChannel('oai-events');
-      channel.onmessage = event => { try { const item = JSON.parse(event.data); if (item.type === 'response.created') setRealtimeStatus('Live · thinking'); else if (item.type === 'response.audio.delta' || item.type === 'response.output_audio.delta') setRealtimeStatus('Live · speaking'); else if (item.type === 'response.done' || item.type === 'input_audio_buffer.speech_started') setRealtimeStatus('Live · listening'); } catch {} };
-      const offer = await connection.createOffer(); await connection.setLocalDescription(offer);
-      const sdp = await fetch('https://api.openai.com/v1/realtime/calls', { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/sdp' }, body: offer.sdp, signal: AbortSignal.timeout(20000) });
-      if (!sdp.ok) throw new Error('The realtime provider rejected the WebRTC connection.');
-      await connection.setRemoteDescription({ type: 'answer', sdp: await sdp.text() });
-      setRealtimeActive(true); setRealtimeStatus('Live · listening'); setMessage('Live voice meeting connected. Speak naturally; the model can listen and respond while the session is open.');
+      throw new Error(data.error || "Live voice meetings are disabled until a supported Gemini audio workflow is verified.");
     } catch (cause) {
       realtimeStreamRef.current?.getTracks().forEach(track => track.stop()); realtimeStreamRef.current = null;
       realtimePcRef.current?.close(); realtimePcRef.current = null;

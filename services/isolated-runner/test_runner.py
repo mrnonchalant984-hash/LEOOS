@@ -1,8 +1,11 @@
 import io
+import os
 import sys
 import tempfile
+import time
 import unittest
 import zipfile
+from unittest import mock
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import server
@@ -49,5 +52,47 @@ class RunnerArchiveTests(unittest.TestCase):
         self.assertNotIn('shell', server.OPERATIONS)
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(server.RequestError): server.run_container(Path(tmp), 'arbitrary_command')
+
+    def test_workspace_roots_are_scoped_to_valid_tenant_ids(self):
+        with mock.patch.object(server, 'WORKSPACE_ROOT', Path('/sandbox-root')):
+            self.assertEqual(
+                server.tenant_workspace_root('8b5a9c2e-6f7d-4c1b-8a3d-123456789abc'),
+                Path('/sandbox-root/8b5a9c2e-6f7d-4c1b-8a3d-123456789abc'),
+            )
+        with self.assertRaises(server.RequestError):
+            server.tenant_workspace_root('../other-tenant')
+
+    def test_idle_workspace_cleanup_is_automatic_and_skips_active_workspaces(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tenant = root / 'tenant'
+            tenant.mkdir()
+            expired = tenant / 'expired'
+            active = tenant / 'active'
+            expired.mkdir()
+            active.mkdir()
+            (active / '.lock').write_text('running')
+            old = time.time() - server.WORKSPACE_TTL_SECONDS - 10
+            os.utime(expired, (old, old))
+            os.utime(active, (old, old))
+            with mock.patch.object(server, 'WORKSPACE_ROOT', root):
+                server.cleanup_expired_workspaces()
+            self.assertFalse(expired.exists())
+            self.assertTrue(active.exists())
+
+    def test_execution_requires_gvisor_and_applies_resource_and_network_limits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(server.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout='ok', stderr='')) as run:
+                result = server.run_container(Path(tmp), 'inspect')
+            self.assertTrue(result['ok'])
+            command = run.call_args.args[0]
+            self.assertIn('--runtime=runsc', command)
+            self.assertEqual(command[command.index('--network') + 1], 'none')
+            self.assertIn('--read-only', command)
+            self.assertIn('--cap-drop', command)
+            self.assertIn('--memory', command)
+            self.assertIn('--cpus', command)
+            self.assertIn('--pids-limit', command)
+            self.assertEqual(run.call_args.kwargs['timeout'], 270)
 
 if __name__ == '__main__': unittest.main(verbosity=2)

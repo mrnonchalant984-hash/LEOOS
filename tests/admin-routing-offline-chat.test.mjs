@@ -20,13 +20,11 @@ test('owner admin navigation links to independent dashboards', async () => {
   }
 });
 
-test('offline chat refuses hosted fallback and requires a local model endpoint', async () => {
+test('offline chat fails closed while local-model execution is disabled by Gemini-only policy', async () => {
   const source = await read('app/api/offline/chat/route.ts');
-  assert.match(source, /LEO_OFFLINE_MODE !== 'true'/);
-  assert.match(source, /LEO_LOCAL_MODEL_URL/);
-  assert.match(source, /createTextResponse/);
-  assert.match(source, /never falls back to a hosted AI provider/i);
+  assert.match(source, /LOCAL_MODEL_DISABLED/);
+  assert.doesNotMatch(source, /LEO_LOCAL_MODEL_URL|createTextResponse/);
   const docs = await read('docs/OFFLINE-LOCAL-MODEL-SETUP.md');
-  assert.match(docs, /http:\/\/127\.0\.0\.1:11434\/v1/);
-  assert.match(docs, /Vercel-hosted page cannot load or call its server API when the device has no internet/);
+  assert.match(docs, /local inference is disabled/i);
+  assert.match(docs, /does not run a local language model/i);
 });

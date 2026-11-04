@@ -1,11 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
-import { adminSupabase } from '@/lib/auth';
+import { adminSupabase, isPlatformOwner } from '@/lib/auth';
 import { decryptMcpCredential } from '@/lib/mcp/outbound-security';
 import { callMcpTool } from '@/lib/mcp/remote-clients';
+import { validateMcpToolArguments } from '@/lib/mcp/tool-arguments';
 import type { AssistantTool, AssistantToolExecutor } from '@/lib/ai/provider-registry';
-import { listSkills, loadSkill, readSkillFile, runSkillScript } from '@/lib/skills/registry';
-import { normalizeIdePath, validateIdeFiles } from '@/lib/ide-files';
+import { listSkills, loadSkill, readSkillFile } from '@/lib/skills/registry';
+import { getModelProviderStatus } from '@/lib/ai/model-catalog';
+import { getAccountBuilderAvailability } from '@/lib/builders/account-availability';
+import { getLeoKnowledgeCacheStatus } from '@/lib/leo-knowledge';
+import type { ProjectType } from '@/lib/pricing';
+import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
+import { validateIdeFiles } from '@/lib/ide-files';
+import { POST as buildDeployPost } from '@/app/api/build-deploy/route';
 
 type RemoteToolReference = {
   kind: 'remote';
@@ -13,7 +20,7 @@ type RemoteToolReference = {
   remoteName: string;
 };
 
-type LocalToolReference = { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'read_project_files' } | { kind: 'save_project_files' } | { kind: 'run_project_operation' } | { kind: 'deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repo' } | { kind: 'vercel_deployment_status' } | { kind: 'vercel_deploy_git_repo' } | { kind: 'build_and_deploy_website' } | { kind: 'inspect_website_deployment' } | { kind: 'validate_browser_game' } | { kind: 'publish_browser_game' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'run_skill_script' };
+type LocalToolReference = { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -73,14 +80,9 @@ const localTools: Array<{ name: string; description: string; inputSchema: Record
     inputSchema: { type: 'object', properties: { project_id: { type: 'string', description: 'UUID of the project.' } }, required: ['project_id'], additionalProperties: false },
   },
   {
-    name: 'read_project_files',
-    description: 'Read source files from a LeonardX project workspace owned by this account. Environment files, credentials, keys and generated dependency folders are excluded. Use only when the user asks to inspect or continue an owned project.',
-    inputSchema: { type: 'object', properties: { project_id: { type: 'string', description: 'UUID of the owned project.' }, paths: { type: 'array', items: { type: 'string' }, description: 'Optional relative paths to read.' } }, required: ['project_id'], additionalProperties: false },
-  },
-  {
-    name: 'save_project_files',
-    description: 'Save source-file changes to an owned LeonardX project workspace. Only use when the user explicitly requests editing or saving project files. Files are merged by path; this does not push to GitHub or deploy. Requires confirm=true and never accepts environment or credential files.',
-    inputSchema: { type: 'object', properties: { project_id: { type: 'string', description: 'UUID of the owned project.' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } }, confirm: { type: 'boolean', description: 'Set true only when the user explicitly asked to save these file changes.' } }, required: ['project_id', 'files', 'confirm'], additionalProperties: false },
+    name: 'get_project_files',
+    description: 'Read source files from a project owned by this account. Use this before deploying an existing project; never assume files were saved if this tool cannot retrieve them.',
+    inputSchema: { type: 'object', properties: { project_id: { type: 'string', description: 'UUID of the source project.' }, paths: { type: 'array', items: { type: 'string' }, description: 'Optional exact relative paths to retrieve.' } }, required: ['project_id'], additionalProperties: false },
   },
   {
     name: 'load_skill',
@@ -93,51 +95,52 @@ const localTools: Array<{ name: string; description: string; inputSchema: Record
     inputSchema: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string' } }, required: ['name', 'path'], additionalProperties: false },
   },
   {
-    name: 'run_skill_script',
-    description: 'Run an approved .py or .js helper from an enabled skill in the restricted skill sandbox.',
-    inputSchema: { type: 'object', properties: { name: { type: 'string' }, script: { type: 'string' }, args: { type: 'array', items: { type: 'string' } } }, required: ['name', 'script'], additionalProperties: false },
+    name: 'get_observability_events',
+    description: 'Read a bounded, account-scoped summary of recent system events, Leo usage, and agent run states. Never returns prompts, message bodies, credentials, or raw provider payloads.',
+    inputSchema: { type: 'object', properties: { limit: { type: 'integer', description: 'Maximum rows per source, from 1 to 20.' } }, additionalProperties: false },
   },
-  { name: 'github_repository_tree', description: 'Inspect the file paths and sizes in a repository connected by this user. Use before editing so Leo understands the actual repo structure.', inputSchema: { type:'object', properties:{ repo:{type:'string'}, branch:{type:'string'} }, required:['repo'], additionalProperties:false } },
-  { name: 'github_read_file', description: 'Read one UTF-8 source file from a repository connected by this user. Never read secrets or environment files. Use actual file contents before proposing code changes.', inputSchema: { type:'object', properties:{ repo:{type:'string'}, path:{type:'string'}, branch:{type:'string'} }, required:['repo','path'], additionalProperties:false } },
-  { name: 'github_commit_status', description: 'Inspect real GitHub check-runs and combined commit status for a source commit. Use after committing generated code and report failed or pending checks honestly.', inputSchema: { type:'object', properties:{repo:{type:'string'},sha:{type:'string'}}, required:['repo','sha'], additionalProperties:false } },
-  { name: 'vercel_deployment_status', description: 'Inspect a real Vercel deployment and recent build events from the user-connected Vercel account. Report actual status/error logs only.', inputSchema: { type:'object', properties:{ deploymentId:{type:'string'} }, required:['deploymentId'], additionalProperties:false } },
+  {
+    name: 'get_provider_readiness',
+    description: 'Check configured Gemini and account-scoped website deployment readiness using booleans and missing variable names only. Never returns secret values.',
+    inputSchema: { type: 'object', properties: { project_type: { type: 'string', enum: ['website', 'web_app', 'saas'] } }, required: ['project_type'], additionalProperties: false },
+  },
+  {
+    name: 'get_model_router_status',
+    description: 'Inspect the configured server-side model router and available provider/model identifiers. Returns readiness metadata only, never credentials or prompts.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'get_knowledge_cache_status',
+    description: 'Inspect whether the curated Leo knowledge retrieval cache is populated and its TTL. Does not return cached knowledge content.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'get_build_status',
+    description: 'Read recent persisted build/deployment status for a project owned by this account. Returns status, safe error summary, job identifier, and a live URL only when the database records a verified deployment.',
+    inputSchema: { type: 'object', properties: { project_id: { type: 'string', description: 'UUID of the source project.' } }, required: ['project_id'], additionalProperties: false },
+  },
 ];
 
-const projectWriteTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [
-  {
-    name: 'save_project_files',
-    description: 'Write generated or edited source files into an owned LeonardX project. Use this to actually save the code you generated, not merely describe it. Files are merged by path, ownership and secret-path checks are enforced, and confirm=true is required.',
-    inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } }, confirm: { type: 'boolean' } }, required: ['project_id', 'files', 'confirm'], additionalProperties: false },
-  },
-  {
-    name: 'run_project_operation',
-    description: 'Run the real isolated project runner on the latest saved files. Use after saving generated code to run test, typecheck, lint, or build and report actual results. This may contact the configured isolated runner. Requires confirm=true.',
-    inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, operation: { type: 'string', enum: ['test', 'typecheck', 'lint', 'build'] }, confirm: { type: 'boolean' } }, required: ['project_id', 'operation', 'confirm'], additionalProperties: false },
-  },
-  {
-    name: 'deploy_project',
-    description: 'Deploy the latest saved website/web-app/SaaS project through the existing LeonardX GitHub/Vercel deployment pipeline. Use only for a newly requested build that includes deployment, or when the user explicitly asked to publish/deploy/redeploy. Run validation first. Production changes require confirm=true; never claim success without a verified deployment result.',
-    inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, brief: { type: 'string' }, confirm: { type: 'boolean' } }, required: ['project_id', 'brief', 'confirm'], additionalProperties: false },
-  },
-  { name: 'github_commit_files', description: 'Commit 1–50 actual source files to the connected user-owned GitHub repository in a single commit. Only use after the user explicitly asked Leo to write/edit/push code to that repository. Requires confirm=true. Never commit secrets or environment files.', inputSchema: { type:'object', properties:{ repo:{type:'string'}, branch:{type:'string'}, message:{type:'string'}, files:{type:'array',items:{type:'object',properties:{path:{type:'string'},content:{type:'string'}},required:['path','content'],additionalProperties:false}}, confirm:{type:'boolean'} }, required:['repo','files','confirm'], additionalProperties:false } },
-  { name: 'github_create_repo', description: 'Create a new repository under the connected GitHub account. Only use for a user-requested project that needs a new repository. Requires confirm=true.', inputSchema: { type:'object', properties:{ name:{type:'string'}, private:{type:'boolean'}, description:{type:'string'}, confirm:{type:'boolean'} }, required:['name','confirm'], additionalProperties:false } },
-  { name: 'vercel_deploy_git_repo', description: 'Trigger a production deployment from a GitHub repository connected to Vercel. Only after requested build/publish/redeploy and after source checks; requires confirm=true.', inputSchema: { type:'object', properties:{ name:{type:'string'}, repo:{type:'string'}, ref:{type:'string'}, confirm:{type:'boolean'} }, required:['name','repo','confirm'], additionalProperties:false } },
-  { name: 'build_and_deploy_website', description: 'Build and deploy a newly created website/web-app/SaaS project from the actual source files generated by Leo in this chat. This uses the existing GitHub/Vercel deployment pipeline, performs its own validations, and verifies the live URL. Use only for the explicit create-and-build workflow or an explicit publish/redeploy request. Requires confirm=true.', inputSchema: { type:'object', properties:{ project_id:{type:'string'}, prompt:{type:'string'}, generated_files:{type:'array',items:{type:'object',properties:{path:{type:'string'},content:{type:'string'}},required:['path','content'],additionalProperties:false}}, confirm:{type:'boolean'} }, required:['project_id','prompt','generated_files','confirm'], additionalProperties:false } },
-  { name: 'inspect_website_deployment', description: 'Read the latest actual GitHub/Vercel build status, errors and sanitized logs for a website project owned by this user. Use after build/deployment failures before deciding whether a targeted repair and retry is appropriate.', inputSchema: { type:'object', properties:{project_id:{type:'string'}}, required:['project_id'], additionalProperties:false } },
-  { name: 'validate_browser_game', description: 'Run a real server-side structural validation of an owned browser game after saving its generated files. Checks entry point, paths and workspace limits; it is not a substitute for a real browser gameplay test.', inputSchema: { type:'object', properties:{project_id:{type:'string'}}, required:['project_id'], additionalProperties:false } },
-  { name: 'publish_browser_game', description: 'Publish or update an owned browser game using the user connected GitHub and Vercel integrations. Creates or updates a private GitHub source repository, commits actual saved files, requests a production deployment and returns a public URL only when Vercel reports READY. This changes production and requires an explicit user request, confirm=true, and repository-write permission.', inputSchema: { type:'object', properties:{project_id:{type:'string'},confirm:{type:'boolean'}}, required:['project_id','confirm'], additionalProperties:false } },
-];
+type LeoBuildToolOptions = { request: Request; userMessage: string; allowBuildActions: boolean; allowDeployment: boolean };
 
-export async function createUserAssistantTools(userId: string, options: { request?: Request; allowProjectWrites?: boolean; allowRepositoryAccess?: boolean; allowRepositoryWrites?: boolean; activeProjectId?: string } = {}): Promise<{ tools: AssistantTool[]; execute: AssistantToolExecutor }> {
+export async function createUserAssistantTools(userId: string, options?: LeoBuildToolOptions): Promise<{ tools: AssistantTool[]; execute: AssistantToolExecutor }> {
   const db = adminSupabase();
   const references = new Map<string, ToolReference>();
-  const enabledLocalTools = localTools.filter(tool => tool.name !== 'save_project_files' && (options.allowRepositoryAccess || !['github_repository_tree','github_read_file','github_commit_status','vercel_deployment_status'].includes(tool.name)));
-  const projectWriteToolsEnabled = options.allowProjectWrites ? projectWriteTools : [];
-  const enabledWriteTools = projectWriteToolsEnabled.filter(tool => !['github_commit_files','github_create_repo','vercel_deploy_git_repo','publish_browser_game'].includes(tool.name) || options.allowRepositoryWrites);
-  const tools: AssistantTool[] = [...enabledLocalTools, ...enabledWriteTools].map(tool => {
+  const tools: AssistantTool[] = localTools.map(tool => {
     references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
     return tool;
   });
+  if (options?.allowBuildActions) {
+    const buildTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [
+      { name: 'create_project', description: 'Create a real, plan-authorized LeonardX website/web-app/SaaS project workspace for the user request. Only use this when the user explicitly asked to build or create a project. Returns the persisted source project ID and linked website build ID.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, project_type: { type: 'string', enum: ['website', 'web_app', 'saas'] } }, required: ['name', 'project_type'], additionalProperties: false } },
+      { name: 'save_project_files', description: 'Persist generated source files into an owned LeonardX project. Supply complete file contents as an array of {path, content}; paths and total size are validated. This does not deploy the project.', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } } }, required: ['project_id', 'files'], additionalProperties: false } },
+    ];
+    if (options.allowDeployment) buildTools.push({ name: 'build_and_deploy_project', description: 'Deploy the supplied generated website files through LeonardX existing GitHub/Vercel integration. This tool is available only because the user explicitly requested deployment in the current message. It enforces existing plan, ownership, provider, idempotency, and deployment verification checks. Never claim success unless the tool returns confirmed deployed status and a verified liveUrl.', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, brief: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } } }, required: ['project_id', 'brief', 'files'], additionalProperties: false } });
+    for (const tool of buildTools) {
+      tools.push(tool as AssistantTool);
+      references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
+    }
+  }
 
   const { data: servers, error: serverError } = await db.from('mcp_remote_servers')
     .select('id,name,endpoint_url,enabled,discovered_tools')
@@ -177,64 +180,102 @@ export async function createUserAssistantTools(userId: string, options: { reques
   const execute: AssistantToolExecutor = async (name, args) => {
     const reference = references.get(name);
     if (!reference) return { text: 'That tool is not available for this account.', isError: true };
-    if (['github_repository_tree','github_read_file','github_commit_status','github_commit_files','github_create_repo','vercel_deployment_status','vercel_deploy_git_repo','build_and_deploy_website'].includes(reference.kind)) {
-      if (['github_commit_files','github_create_repo','vercel_deploy_git_repo'].includes(reference.kind) && (!options.allowRepositoryWrites || args.confirm !== true)) return { text: 'Repository write or production deployment requires an explicit user request and confirm=true.', isError: true };
-      if (reference.kind === 'build_and_deploy_website' && (!options.allowProjectWrites || args.confirm !== true)) return { text: 'Website build/deployment requires an explicit build request and confirm=true.', isError: true };
-      if (!options.request) return { text: 'The authenticated request context is unavailable for this integration operation.', isError: true };
-      const mapping: Record<string,{provider:string;action:string}> = { github_repository_tree:{provider:'github',action:'repository-tree'}, github_read_file:{provider:'github',action:'read-file'}, github_commit_status:{provider:'github',action:'commit-status'}, github_commit_files:{provider:'github',action:'commit-files'}, github_create_repo:{provider:'github',action:'create-repo'}, vercel_deployment_status:{provider:'vercel',action:'deployment-status'}, vercel_deploy_git_repo:{provider:'vercel',action:'deploy-git-repo'} };
-      if (reference.kind === 'build_and_deploy_website') {
-        try {
-          if (args.confirm !== true || typeof args.project_id !== 'string' || !Array.isArray(args.generated_files) || typeof args.prompt !== 'string') return { text:'Build/deployment requires project_id, generated source files, prompt and confirm=true.', isError:true };
-          const { POST } = await import('@/app/api/build-deploy/route'); const source=options.request; const headers=new Headers(source.headers); headers.delete('content-length'); headers.set('content-type','application/json');
-          const response=await POST(new NextRequest(new URL('/api/build-deploy',source.url),{method:'POST',headers,body:JSON.stringify({project_id:args.project_id,prompt:String(args.prompt).slice(0,12000),generated_files:args.generated_files,source:'leo_chat_build_workflow',idempotency_key:randomUUID()})}));
-          const payload=await response.json().catch(()=>null) as Record<string,unknown>|null; if(!response.ok) return {text:JSON.stringify({deployed:false,status:response.status,error:payload?.error||'Build/deployment failed.',code:payload?.code||null}),isError:true};
-          const verified = payload?.success === true || (payload?.status === 'deployed' && typeof payload?.liveUrl === 'string' && /^https:\/\//.test(payload.liveUrl));
-          return {text:JSON.stringify({deployed:verified,result:payload}),isError:!verified};
-        } catch { return {text:'The build/deployment pipeline failed unexpectedly. Check the real GitHub and Vercel build logs; no deployment success is claimed.',isError:true}; }
+    if (reference.kind === 'get_project_files') {
+      const projectId = typeof args.project_id === 'string' ? args.project_id : '';
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) return { text: 'Provide a valid project UUID.', isError: true };
+      const { data, error } = await db.from('projects').select('id,project_name,type,files').eq('id', projectId).eq('user_id', userId).maybeSingle();
+      if (error || !data) return { text: 'Project files could not be loaded or the project is not owned by this account.', isError: true };
+      const allFiles = data.files && typeof data.files === 'object' && !Array.isArray(data.files) ? data.files as Record<string, unknown> : {};
+      const requestedPaths = Array.isArray(args.paths) ? args.paths.filter((path): path is string => typeof path === 'string').slice(0, 250) : null;
+      const selected = Object.fromEntries(Object.entries(allFiles).filter(([path, content]) => (!requestedPaths || requestedPaths.includes(path)) && typeof content === 'string').slice(0, 250));
+      const bytes = Buffer.byteLength(JSON.stringify(selected));
+      if (bytes > 1_500_000) return { text: 'The selected source files exceed the chat retrieval limit. Request fewer exact paths.', isError: true };
+      return { text: JSON.stringify({ project_id: data.id, project_name: data.project_name, type: data.type, files: selected, file_count: Object.keys(selected).length, persisted: true }) };
+    }
+    if (reference.kind === 'get_build_status') {
+      const projectId = typeof args.project_id === 'string' ? args.project_id : '';
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) return { text: 'Provide a valid project UUID.', isError: true };
+      const { data: project, error: projectError } = await db.from('projects').select('id,project_name,type,status,progress').eq('id', projectId).eq('user_id', userId).maybeSingle();
+      if (projectError || !project) return { text: 'Project not found in this account or its status is temporarily unavailable.', isError: true };
+      const { data: websiteProject, error: websiteError } = await db.from('website_projects').select('id,status,live_url,build_status,build_step').eq('source_project_id', projectId).eq('owner_user_id', userId).maybeSingle();
+      if (websiteError) return { text: 'Build status is temporarily unavailable. Retry the status check.', isError: true };
+      if (!websiteProject) return { text: JSON.stringify({ project, build: null, message: 'No website build workspace is linked to this project yet.' }) };
+      const [builds, events] = await Promise.all([
+        db.from('project_builds').select('id,provider,status,step,deployment_id,deployment_url,error,created_at,started_at,completed_at').eq('website_project_id', websiteProject.id).eq('owner_user_id', userId).order('created_at', { ascending: false }).limit(5),
+        db.from('deployment_events').select('event_type,status,message,created_at').eq('website_project_id', websiteProject.id).order('created_at', { ascending: false }).limit(10),
+      ]);
+      if (builds.error || events.error) return { text: 'Build history could not be loaded. Check database migrations and retry.', isError: true };
+      const latest = builds.data?.[0] || null;
+      const liveUrl = websiteProject.status === 'live' && typeof websiteProject.live_url === 'string' && /^https:\/\//.test(websiteProject.live_url) ? websiteProject.live_url : null;
+      return { text: JSON.stringify({ project, websiteProject: { status: websiteProject.status, build_status: websiteProject.build_status, build_step: websiteProject.build_step, liveUrl }, latestBuild: latest ? { id: latest.id, provider: latest.provider, status: latest.status, step: latest.step, deployment_id: latest.deployment_id, deployment_url: latest.status === 'deployed' ? latest.deployment_url : null, error: latest.error, created_at: latest.created_at, started_at: latest.started_at, completed_at: latest.completed_at } : null, events: events.data || [] }) };
+    }
+    if (reference.kind === 'create_project') {
+      if (!options?.allowBuildActions) return { text: 'Project creation is not enabled for this request. Ask Leo to build a website or web app first.', isError: true };
+      const name = typeof args.name === 'string' ? args.name.trim().slice(0, 120) : '';
+      const projectType = String(args.project_type || '') as ProjectType;
+      if (name.length < 2 || !['website', 'web_app', 'saas'].includes(projectType)) return { text: 'Provide a project name and one of website, web_app, or saas.', isError: true };
+      const { data: profile, error: profileError } = await db.from('profiles').select('role,email').eq('id', userId).maybeSingle();
+      if (profileError || !profile) return { text: 'Your account profile could not be verified. No project was created.', isError: true };
+      const owner = isPlatformOwner(profile);
+      const plan = await getEffectiveUserPlan(userId, owner);
+      const feature = projectType === 'saas' ? 'saas-builder' : projectType === 'web_app' ? 'web-app-builder' : 'website-builder';
+      if (!owner && (!plan.projectTypes.includes(projectType) || !planAllows(plan, feature))) return { text: 'This project type is not included in your current plan. Review /pricing before retrying.', isError: true };
+      const { data: existing } = await db.from('projects').select('id,project_name,type,status,created_at,files').eq('user_id', userId).eq('project_name', name).eq('type', projectType).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (existing && existing.status === 'draft' && (!existing.files || Object.keys(existing.files as Record<string, unknown>).length === 0) && Date.now() - new Date(existing.created_at).getTime() < 120_000) {
+        const { data: linked } = await db.from('website_projects').select('id').eq('source_project_id', existing.id).eq('owner_user_id', userId).maybeSingle();
+        if (linked) return { text: JSON.stringify({ ...existing, website_project_id: linked.id, deduplicated: true }) };
       }
-      const target = mapping[reference.kind];
-      try {
-        const { POST } = await import('@/app/api/integrations/[provider]/[action]/route');
-        const source = options.request; const headers = new Headers(source.headers); headers.delete('content-length'); headers.set('content-type','application/json');
-        const response = await POST(new NextRequest(new URL(`/api/integrations/${target.provider}/${target.action}`, source.url), { method:'POST', headers, body:JSON.stringify(args) }), { params:Promise.resolve({ provider:target.provider, action:target.action }) });
-        const payload = await response.json().catch(()=>null) as Record<string,unknown> | null;
-        if (!response.ok) return { text: JSON.stringify({ success:false, status:response.status, error:payload?.error || 'Connected provider operation failed.' }), isError:true };
-        return { text: JSON.stringify({ success:true, provider:target.provider, action:target.action, result:payload?.result ?? payload }) };
-      } catch { return { text:'The connected GitHub/Vercel operation failed unexpectedly. No success is claimed; inspect the provider status before retrying.', isError:true }; }
+      const { data: websiteId, error: rpcError } = await db.rpc('create_customer_project', { p_owner_user_id: userId, p_project_type: projectType, p_website_type: projectType === 'website' ? 'company' : projectType, p_business_name: name, p_chatbot_enabled: false, p_payment_mode: 'manual_email', p_requirements: { source: 'leo_chat', ai_provider: 'configured_leo_model' }, p_project_limit: plan.limits.maxProjects });
+      if (rpcError || !websiteId) return { text: rpcError?.message || 'Project creation failed under the current account plan.', isError: true };
+      const { data: project, error: projectError } = await db.from('projects').insert({ user_id: userId, project_name: name, type: projectType, status: 'draft', progress: 0, files: {} }).select('id,project_name,type,status,progress,created_at').single();
+      if (projectError || !project) {
+        await db.from('website_projects').delete().eq('id', websiteId).eq('owner_user_id', userId);
+        return { text: 'The project workspace could not be created. No build was started.', isError: true };
+      }
+      const { error: linkError } = await db.from('website_projects').update({ source_project_id: project.id }).eq('id', websiteId).eq('owner_user_id', userId);
+      if (linkError) {
+        await db.from('projects').delete().eq('id', project.id).eq('user_id', userId);
+        await db.from('website_projects').delete().eq('id', websiteId).eq('owner_user_id', userId);
+        return { text: 'The project workspace was created but could not be linked safely; cleanup was attempted and deployment was not started.', isError: true };
+      }
+      return { text: JSON.stringify({ ...project, website_project_id: websiteId, files_persisted: true }) };
     }
-    if (reference.kind === 'inspect_website_deployment') {
+    if (reference.kind === 'save_project_files') {
+      if (!options?.allowBuildActions) return { text: 'File writes are not enabled for this request.', isError: true };
       const projectId = typeof args.project_id === 'string' ? args.project_id : '';
-      if (!options.allowProjectWrites || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) return {text:'A valid website project ID and explicit build workflow are required.',isError:true};
-      const {data:project,error}=await db.from('website_projects').select('id,project_type,business_name,status,build_status,build_step,live_url,github_repo,vercel_project_id,live_deployment_id,last_build_at,updated_at').eq('id',projectId).eq('owner_user_id',userId).maybeSingle();
-      if(error||!project) return {text:'Website project not found in this account.',isError:true};
-      const [builds,events]=await Promise.all([db.from('project_builds').select('provider,status,step,logs,error,deployment_id,deployment_url,created_at,completed_at').eq('website_project_id',projectId).eq('owner_user_id',userId).order('created_at',{ascending:false}).limit(3),db.from('deployment_events').select('event_type,status,message,metadata,created_at').eq('website_project_id',projectId).order('created_at',{ascending:false}).limit(5)]);
-      if(builds.error||events.error) return {text:'Deployment diagnostics could not be loaded.',isError:true};
-      const redact=(value:unknown)=>String(value||'').slice(0,8000).replace(/(?:ghp_|github_pat_|sk-|xox[baprs]-)[A-Za-z0-9_-]{16,}/g,'[REDACTED_SECRET]').replace(/Bearer\s+[A-Za-z0-9._-]{16,}/gi,'Bearer [REDACTED_SECRET]').replace(/(api[_-]?key|token|password|secret)\s*[:=]\s*[^\s,;]+/gi,'$1=[REDACTED]');
-      return {text:JSON.stringify({project:{id:project.id,type:project.project_type,name:project.business_name,status:project.status,build_status:project.build_status,build_step:project.build_step,live_url:project.live_url,github_repo:project.github_repo,vercel_project_id:project.vercel_project_id,live_deployment_id:project.live_deployment_id,last_build_at:project.last_build_at,updated_at:project.updated_at},builds:(builds.data||[]).map(row=>({...row,logs:redact(row.logs),error:redact(row.error)})),events:(events.data||[]).map(row=>({...row,message:redact(row.message),metadata:row.metadata&&typeof row.metadata==='object'?Object.fromEntries(Object.entries(row.metadata as Record<string,unknown>).filter(([key])=>/status|stage|provider|deployment|error|code|url/i.test(key)).map(([key,value])=>[key,redact(value)]).slice(0,16)):null}))}),isError:false};
+      const fileEntries = Array.isArray(args.files) ? args.files.filter((file): file is { path: string; content: string } => Boolean(file && typeof file === 'object' && typeof (file as Record<string, unknown>).path === 'string' && typeof (file as Record<string, unknown>).content === 'string')) : [];
+      const files = Object.fromEntries(fileEntries.map(file => [file.path, file.content]));
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId) || !fileEntries.length || Object.keys(files).length !== fileEntries.length || !validateIdeFiles(files)) return { text: 'Files were not saved: provide an owned project ID and valid relative file paths within the workspace limits.', isError: true };
+      const { data, error } = await db.from('projects').update({ files }).eq('id', projectId).eq('user_id', userId).select('id,project_name,type,status,progress').maybeSingle();
+      if (error || !data) return { text: 'Files could not be saved. Verify that the project belongs to your account and retry.', isError: true };
+      return { text: JSON.stringify({ ...data, files_saved: Object.keys(files).length, persisted: true }) };
     }
-    if (reference.kind === 'publish_browser_game') {
+    if (reference.kind === 'build_and_deploy_project') {
+      if (!options?.allowDeployment) return { text: 'Deployment is blocked because the current user message did not explicitly request publishing or going live. Ask for deployment explicitly first.', isError: true };
       const projectId = typeof args.project_id === 'string' ? args.project_id : '';
-      if (!options.allowProjectWrites || !options.allowRepositoryWrites || args.confirm !== true || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) return { text: 'Browser-game publication requires an explicit build/publish request, an owned project UUID, repository-write permission and confirm=true.', isError: true };
-      if (!options.request) return { text: 'Authenticated request context is unavailable; no deployment was started.', isError: true };
-      try {
-        const { POST } = await import('@/app/api/games/[id]/publish/route');
-        const source = options.request;
-        const headers = new Headers(source.headers); headers.delete('content-length'); headers.set('content-type', 'application/json');
-        const response = await POST(new NextRequest(new URL(`/api/games/${projectId}/publish`, source.url), { method: 'POST', headers, body: JSON.stringify({ confirm: true }) }), { params: Promise.resolve({ id: projectId }) });
-        const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
-        const verified = payload?.published === true && typeof payload.live_url === 'string' && /^https:\/\//.test(payload.live_url);
-        return { text: JSON.stringify({ ...(payload || {}), published: verified }), isError: !response.ok || !verified };
-      } catch { return { text: 'Browser-game publication failed unexpectedly. Check the actual GitHub commit and Vercel deployment status; no public URL is claimed.', isError: true }; }
-    }
-    if (reference.kind === 'validate_browser_game') {
-      const projectId = typeof args.project_id === 'string' ? args.project_id : '';
-      if (!options.allowProjectWrites || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) return {text:'A valid project ID and explicit project workflow are required.',isError:true};
-      const {data:project,error}=await db.from('projects').select('id,type,files').eq('id',projectId).eq('user_id',userId).maybeSingle();
-      if(error||!project) return {text:'Browser game project not found in this account.',isError:true};
-      if(project.type!=='game'||!validateIdeFiles(project.files)) return {text:'This is not a valid owned browser-game workspace.',isError:true};
-      const {gameFileValidationErrors,gameJavaScriptSyntaxErrors}=await import('@/lib/builders/game-generation');
-      const diagnostics=[...gameFileValidationErrors(project.files),...gameJavaScriptSyntaxErrors(project.files)];
-      return {text:JSON.stringify({project_id:projectId,valid:diagnostics.length===0,diagnostics,browser_tested:false,playability_confirmed:false,syntax_checked:true,module_compilation:'not_performed'}) ,isError:diagnostics.length>0};
+      const brief = typeof args.brief === 'string' ? args.brief.trim().slice(0, 6000) : '';
+      const files = Array.isArray(args.files) ? args.files.filter((f): f is { path: string; content: string } => Boolean(f && typeof f === 'object' && typeof f.path === 'string' && typeof f.content === 'string')) : [];
+      const fileMap = Object.fromEntries(files.map(file => [file.path, file.content]));
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId) || !brief || !files.length || Object.keys(fileMap).length !== files.length || !validateIdeFiles(fileMap)) return { text: 'Deployment was not started: project ID, brief, or generated files are invalid.', isError: true };
+      const { data: project, error: projectError } = await db.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+      if (projectError || !project) return { text: 'Project not found in your account. Deployment was not started.', isError: true };
+      const { data: websiteProject, error: websiteError } = await db.from('website_projects').select('id').eq('source_project_id', projectId).eq('owner_user_id', userId).maybeSingle();
+      if (websiteError || !websiteProject) return { text: 'The project has no authorized website build workspace. Deployment was not started.', isError: true };
+      const { error: saveError } = await db.from('projects').update({ files: fileMap }).eq('id', projectId).eq('user_id', userId);
+      if (saveError) return { text: 'Generated files could not be persisted; deployment was not started.', isError: true };
+      const keyHash = createHash('sha256').update(`${userId}:${projectId}:${brief}:${JSON.stringify(files)}`).digest('hex');
+      const hex = keyHash.slice(0, 32).split(''); hex[12] = '5'; hex[16] = ((parseInt(hex[16], 16) & 3) | 8).toString(16);
+      const idempotencyKey = `${hex.slice(0,8).join('')}-${hex.slice(8,12).join('')}-${hex.slice(12,16).join('')}-${hex.slice(16,20).join('')}-${hex.slice(20,32).join('')}`;
+      const headers = new Headers(options.request.headers); headers.delete('content-length'); headers.set('content-type', 'application/json');
+      const deployRequest = new NextRequest(new URL('/api/build-deploy', options.request.url), { method: 'POST', headers, body: JSON.stringify({ project_id: websiteProject.id, prompt: brief, generated_files: files, source: 'leo_chat', background: true, idempotency_key: idempotencyKey }) });
+      const response = await buildDeployPost(deployRequest);
+      const body = await response.json().catch(() => null) as Record<string, unknown> | null;
+      if (response.status === 202 && body?.success === true && body?.queued === true && typeof body.jobId === 'string') {
+        return { text: JSON.stringify({ success: true, status: 'queued', queued: true, project_id: projectId, jobId: body.jobId, message: 'The build is queued for durable background execution. Do not claim it is deployed until the worker confirms READY and public HTTPS verification.' }) };
+      }
+      if (!response.ok || !body?.success) return { text: JSON.stringify({ success: false, status: body?.status || 'failed', error: typeof body?.error === 'string' ? body.error : `Deployment did not complete (HTTP ${response.status}).`, code: body?.code || 'BUILD_DEPLOY_FAILED', retryable: body?.retryable === true, jobId: body?.jobId || body?.job_id || null }), isError: true };
+      if (body.status !== 'deployed' || typeof body.liveUrl !== 'string' || !/^https:\/\//.test(body.liveUrl)) return { text: JSON.stringify({ success: false, status: body.status || 'unknown', jobId: body.jobId || null, error: 'Deployment request completed, but a verified live URL was not returned. Do not claim the website is live.' }), isError: true };
+      return { text: JSON.stringify({ success: true, status: 'deployed', project_id: projectId, jobId: body.jobId || null, liveUrl: body.liveUrl, githubUrl: body.githubUrl || null, message: 'Deployment endpoint confirmed deployed status and returned a live URL.' }) };
     }
     if (reference.kind === 'list_projects') {
       const limit = typeof args.limit === 'number' && Number.isInteger(args.limit) ? Math.min(50, Math.max(1, args.limit)) : 20;
@@ -260,92 +301,35 @@ export async function createUserAssistantTools(userId: string, options: { reques
       if (!data) return { text: 'Project not found.', isError: true };
       return { text: JSON.stringify(data) };
     }
-    if (reference.kind === 'read_project_files') {
-      const projectId = typeof args.project_id === 'string' ? args.project_id : '';
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) return { text: 'Provide a valid project UUID.', isError: true };
-      const { data: project, error } = await db.from('projects').select('files').eq('id', projectId).eq('user_id', userId).maybeSingle();
-      if (error) return { text: 'Project files could not be loaded.', isError: true };
-      if (!project) return { text: 'Project not found in this account.', isError: true };
-      if (!validateIdeFiles(project.files)) return { text: 'Project workspace files are invalid.', isError: true };
-      const requested = Array.isArray(args.paths) ? new Set(args.paths.filter((path): path is string => typeof path === 'string').slice(0, 100)) : null;
-      const files = Object.fromEntries(Object.entries(project.files).filter(([path]) => {
-        const lower = path.toLowerCase();
-        return (!requested || requested.has(path)) && normalizeIdePath(path) === path &&
-          !/(^|\/)\.env(?:\.|$)|(^|\/)\.git(?:\/|$)|(^|\/)node_modules(?:\/|$)|(^|\/)\.next(?:\/|$)|(^|\/)credentials?\.(?:json|ya?ml)$|(^|\/)secrets?\.(?:json|ya?ml)$/i.test(path) &&
-          !/\.(?:pem|key|p12|pfx|keystore)$/i.test(lower) &&
-          !/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9_-]{24,}|xox[baprs]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16})\b/.test(project.files[path]);
-      }));
-      return { text: JSON.stringify({ project_id: projectId, files }) };
+    if (reference.kind === 'get_observability_events') {
+      const limit = typeof args.limit === 'number' && Number.isInteger(args.limit) ? Math.min(20, Math.max(1, args.limit)) : 10;
+      const [events, usage, runs] = await Promise.all([
+        db.from('system_events').select('id,kind,title,severity,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
+        db.from('ai_usage').select('id,feature,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
+        db.from('agent_runs').select('id,agent_id,status,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
+      ]);
+      const merged = [
+        ...(events.error ? [] : (events.data || [])),
+        ...(usage.error ? [] : (usage.data || []).map(row => ({ id: `usage-${row.id}`, kind: 'ai', title: `Leo used ${row.feature}`, severity: 'INFO', created_at: row.created_at }))),
+        ...(runs.error ? [] : (runs.data || []).map(row => ({ id: `run-${row.id}`, kind: 'agent', title: `${row.agent_id} run ${row.status}`, severity: row.status === 'failed' ? 'ERROR' : row.status === 'completed' ? 'COMPLETED' : 'RUNNING', created_at: row.created_at }))),
+      ].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at)).slice(0, 40);
+      if (events.error && usage.error && runs.error) return { text: 'Account observability is unavailable. Check the observability migrations and database connection.', isError: true };
+      return { text: JSON.stringify({ events: merged, partial: Boolean(events.error || usage.error || runs.error) }) };
     }
-    if (reference.kind === 'save_project_files') {
-      const projectId = typeof args.project_id === 'string' ? args.project_id : '';
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) return { text: 'Provide a valid project UUID.', isError: true };
-      if (args.confirm !== true) return { text: 'Saving was not confirmed. Ask the user to explicitly approve saving these changes.', isError: true };
-      if (!Array.isArray(args.files) || args.files.length < 1 || args.files.length > 100) return { text: 'Provide 1–100 changed files.', isError: true };
-      const changes: Record<string, string> = {};
-      for (const item of args.files) {
-        if (!item || typeof item !== 'object' || typeof item.path !== 'string' || typeof item.content !== 'string') return { text: 'Each change needs a relative path and text content.', isError: true };
-        const path = item.path;
-        if (normalizeIdePath(path) !== path || /(^|\/)\.env(?:\.|$)|(^|\/)\.git(?:\/|$)|(^|\/)node_modules(?:\/|$)|(^|\/)credentials?\.(?:json|ya?ml)$|(^|\/)secrets?\.(?:json|ya?ml)$/i.test(path) || /\.(?:pem|key|p12|pfx|keystore)$/i.test(path)) return { text: 'Secret, environment, dependency, or unsafe paths cannot be saved through chat tools.', isError: true };
-        if (Object.hasOwn(changes, path)) return { text: 'Duplicate file paths were supplied.', isError: true };
-        changes[path] = item.content;
-      }
-      const { data: existing, error: readError } = await db.from('projects').select('files').eq('id', projectId).eq('user_id', userId).maybeSingle();
-      if (readError) return { text: 'Project workspace could not be checked before saving.', isError: true };
-      if (!existing) return { text: 'Project not found in this account.', isError: true };
-      if (!validateIdeFiles(existing.files)) return { text: 'Existing project files are invalid; changes were not saved.', isError: true };
-      const merged = { ...existing.files, ...changes };
-      if (!validateIdeFiles(merged)) return { text: 'The merged project exceeds file-count or size limits; changes were not saved.', isError: true };
-      const { data, error } = await db.from('projects').update({ files: merged }).eq('id', projectId).eq('user_id', userId).select('id').maybeSingle();
-      if (error || !data) return { text: 'Project file changes could not be saved.', isError: true };
-      return { text: JSON.stringify({ project_id: projectId, files_saved: Object.keys(changes).length, total_files: Object.keys(merged).length, saved: true, deployed: false }) };
+    if (reference.kind === 'get_provider_readiness') {
+      const projectType = String(args.project_type || '') as ProjectType;
+      if (!['website', 'web_app', 'saas'].includes(projectType)) return { text: 'Choose website, web_app, or saas.', isError: true };
+      const [models, builder] = await Promise.all([
+        Promise.resolve(getModelProviderStatus().map(({ provider, configured }) => ({ provider, configured }))),
+        getAccountBuilderAvailability(projectType, userId),
+      ]);
+      return { text: JSON.stringify({ models, builder: { id: builder.id, label: builder.label, status: builder.status, requiredEnvironment: builder.requiredEnvironment, message: builder.message || null } }) };
     }
-    if (reference.kind === 'run_project_operation') {
-      const projectId = typeof args.project_id === 'string' ? args.project_id : '';
-      if (!options.allowProjectWrites) return { text: 'Project execution is disabled outside an explicit build workflow.', isError: true };
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) return { text: 'Provide a valid project UUID.', isError: true };
-      if (args.confirm !== true) return { text: 'Execution was not confirmed. Ask the user before running project operations.', isError: true };
-      const operation = args.operation;
-      if (!['test', 'typecheck', 'lint', 'build'].includes(String(operation))) return { text: 'Unsupported project operation.', isError: true };
-      const { data: project, error } = await db.from('projects').select('files,type').eq('id', projectId).eq('user_id', userId).maybeSingle();
-      if (error || !project) return { text: 'Project not found in this account.', isError: true };
-      if (!validateIdeFiles(project.files)) return { text: 'Project files are invalid; execution was not started.', isError: true };
-      try {
-        const { runProjectRunnerOperation } = await import('@/lib/project-runner');
-        const result = await runProjectRunnerOperation({ ownerId: userId, files: project.files, operation: operation as 'test' | 'typecheck' | 'lint' | 'build' });
-        return { text: JSON.stringify({ project_id: projectId, operation, ...result }), isError: Boolean(result.error) };
-      } catch {
-        return { text: 'The isolated project runner could not be started. No successful test/build is claimed.', isError: true };
-      }
+    if (reference.kind === 'get_model_router_status') {
+      return { text: JSON.stringify({ providers: getModelProviderStatus().map(({ id, provider, model, configured }) => ({ id, provider, model, configured })), routing: 'server-side Gemini catalog and configured fallback policy' }) };
     }
-    if (reference.kind === 'deploy_project') {
-      const projectId = typeof args.project_id === 'string' ? args.project_id : '';
-      if (!options.allowProjectWrites) return { text: 'Deployment is disabled outside an explicit build workflow.', isError: true };
-      if (args.confirm !== true) return { text: 'Deployment was not confirmed. Ask the user before publishing production changes.', isError: true };
-      if (!options.request) return { text: 'Deployment requires the authenticated request context and is unavailable here.', isError: true };
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) return { text: 'Provide a valid project UUID.', isError: true };
-      const { data: project, error: projectError } = await db.from('projects').select('id,type,files').eq('id', projectId).eq('user_id', userId).maybeSingle();
-      if (projectError || !project) return { text: 'Project not found in this account.', isError: true };
-      if (!['website', 'web_app', 'saas'].includes(project.type)) return { text: 'This deployment adapter currently supports website, web-app, and SaaS projects. Browser-game publishing requires the separate static-game publication adapter.', isError: true };
-      if (!validateIdeFiles(project.files)) return { text: 'Saved project files are invalid; deployment was not started.', isError: true };
-      const { data: linked, error: linkedError } = await db.from('website_projects').select('id').eq('source_project_id', projectId).eq('owner_user_id', userId).maybeSingle();
-      if (linkedError || !linked) return { text: 'This project has no plan-managed deployment workspace.', isError: true };
-      try {
-        const { POST } = await import('@/app/api/build-deploy/route');
-        const sourceRequest = options.request;
-        const headers = new Headers(sourceRequest.headers);
-        headers.delete('content-length');
-        headers.set('content-type', 'application/json');
-        const response = await POST(new NextRequest(new URL('/api/build-deploy', sourceRequest.url), {
-          method: 'POST', headers,
-          body: JSON.stringify({ project_id: linked.id, prompt: String(args.brief || '').slice(0, 6000), generated_files: Object.entries(project.files).map(([path, content]) => ({ path, content })), source: 'leo_chat_build_workflow' }),
-        }));
-        const body = await response.json().catch(() => null);
-        if (!response.ok) return { text: JSON.stringify({ deployed: false, status: response.status, error: body?.error || 'Deployment failed.' }), isError: true };
-        return { text: JSON.stringify({ deployed: true, result: body }), isError: false };
-      } catch {
-        return { text: 'Deployment request failed unexpectedly. Verify GitHub/Vercel status before retrying; no deployment success is claimed.', isError: true };
-      }
+    if (reference.kind === 'get_knowledge_cache_status') {
+      return { text: JSON.stringify(getLeoKnowledgeCacheStatus()) };
     }
     if (reference.kind === 'load_skill') {
       try { const skill = await loadSkill(String(args.name || ''), userId); return { text: JSON.stringify({ name: skill.name, description: skill.description, version: skill.version, instructions: skill.body }) }; }
@@ -354,14 +338,6 @@ export async function createUserAssistantTools(userId: string, options: { reques
     if (reference.kind === 'read_skill_file') {
       try { return { text: await readSkillFile(String(args.name || ''), String(args.path || ''), userId) }; }
       catch (error) { return { text: error instanceof Error ? error.message : 'Skill file could not be read.', isError: true }; }
-    }
-    if (reference.kind === 'run_skill_script') {
-      try { const result = await runSkillScript(String(args.name || ''), String(args.script || ''), Array.isArray(args.args) ? args.args.map(String) : [], userId); return { text: JSON.stringify(result), isError: result.code !== 0 }; }
-      catch (error) { return { text: error instanceof Error ? error.message : 'Skill script failed.', isError: true }; }
-    }
-
-    if (reference.kind !== 'remote') {
-      return { text: 'This tool reference is not a supported local or approved remote operation.', isError: true };
     }
     const { data: server, error: serverLookupError } = await db.from('mcp_remote_servers')
       .select('id,endpoint_url,credential_ciphertext,enabled,discovered_tools')
@@ -392,7 +368,10 @@ export async function createUserAssistantTools(userId: string, options: { reques
     const requestId = randomUUID();
     let result: { isError: boolean; text: string };
     try {
-      result = await callMcpTool(server.endpoint_url, credential, reference.remoteName, args);
+      if (!validateMcpToolArguments(remoteTool.inputSchema, args)) {
+        return { text: 'Arguments do not match the currently discovered input schema. No remote call was made.', isError: true };
+      }
+      result = await callMcpTool(server.endpoint_url, credential, reference.remoteName, args, remoteTool.inputSchema);
     } catch {
       const { error } = await db.from('mcp_tool_audit').insert({
         user_id: userId,

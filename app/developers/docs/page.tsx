@@ -69,7 +69,7 @@ export default function DeveloperDocsPage() {
     </Section>
 
     <Section id="health" title="Application liveness">
-      <p><code>GET /api/health</code> is a lightweight liveness endpoint. A healthy response means the Next.js process can answer HTTP requests; it does not assert that Supabase, OpenAI, Paystack, or deployment services are available.</p>
+      <p><code>GET /api/health</code> is a lightweight liveness endpoint. A healthy response means the Next.js process can answer HTTP requests; it does not assert that Supabase, Gemini, Paystack, or deployment services are available.</p>
       <Code>{`curl ${BASE}/api/health`}</Code>
       <Code>{`HTTP 200\ncache-control: no-store\nx-request-id: 90f7a5bc-0735-46eb-8f49-a56c5d1e4210\n\n{ "status": "ok" }`}</Code>
       <p>The endpoint intentionally makes no database, AI, or payment-provider calls. Use a provider-side uptime check for external reachability and service-dependent alerting.</p>

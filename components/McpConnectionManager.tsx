@@ -132,7 +132,7 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
           </p>
         </div>
         <button type="button" onClick={() => { setError(''); setBusy(true); void load().finally(() => setBusy(false)); }} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm disabled:opacity-50">
-          {busy ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Refresh
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Reload list
         </button>
       </div>
 
@@ -167,6 +167,9 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
                 <p className="mt-1 break-all text-xs text-zinc-500">{server.endpoint_url}</p>
               </div>
               <div className="flex gap-2">
+                <button type="button" disabled={busy} onClick={() => void mutate(`/api/mcp/servers/${server.id}/refresh`, 'POST')} className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-50">
+                  {busy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Rediscover tools
+                </button>
                 <button type="button" disabled={busy} onClick={() => void mutate(`/api/mcp/servers/${server.id}`, 'PATCH', { enabled: !server.enabled })} className="rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-50">
                   {server.enabled ? 'Disable' : 'Enable'}
                 </button>

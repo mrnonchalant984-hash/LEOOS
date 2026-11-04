@@ -9,7 +9,7 @@ const configured = (value?: string) => Boolean(value?.trim());
 export default function Status() {
   const services = [
     ['Supabase', configured(process.env.NEXT_PUBLIC_SUPABASE_URL), Database],
-    ['OpenAI', configured(process.env.OPENAI_API_KEY), Sparkles],
+    ['Google Gemini', configured(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY), Sparkles],
     ['Vercel API', configured(process.env.VERCEL_TOKEN), Activity],
     ['Paystack', configured(process.env.PAYSTACK_SECRET_KEY), CreditCard],
     ['Sentry', configured(process.env.SENTRY_DSN) && configured(process.env.NEXT_PUBLIC_SENTRY_DSN), KeyRound],

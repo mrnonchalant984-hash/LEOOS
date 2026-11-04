@@ -26,7 +26,7 @@ const stageCapabilities: Partial<Record<WorkflowStageId, string[]>> = {
 
 const providerByProjectType = {
   mobile_app: 'expo-eas',
-  game: 'browser-native',
+  game: 'godot-build-service',
 } as const;
 
 export function buildEngineeringOrchestrationPlan(input: OrchestrationRequest) {

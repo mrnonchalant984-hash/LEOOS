@@ -29,8 +29,8 @@ test("owner project allowance fits PostgreSQL integer plan-limit parameters", as
   assert.doesNotMatch(source, /maxProjects:\s*Number\.MAX_SAFE_INTEGER/);
 });
 
-test("web provider requires OpenAI, GitHub, and Vercel configuration", () => {
-  const keys = ["OPENAI_API_KEY", "GITHUB_TOKEN", "VERCEL_TOKEN"];
+test("web provider requires Gemini, GitHub, and Vercel configuration", () => {
+  const keys = ["GEMINI_API_KEY", "GITHUB_TOKEN", "VERCEL_TOKEN"];
   const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   try {
     for (const key of keys) delete process.env[key];
@@ -48,16 +48,15 @@ test("web provider requires OpenAI, GitHub, and Vercel configuration", () => {
   }
 });
 
-test("mobile cloud builds require Expo configuration while browser games need no native build service", () => {
-  const keys = ["EXPO_TOKEN"];
+test("mobile and game providers report not_configured until their credentials exist", () => {
+  const keys = ["EXPO_TOKEN", "GODOT_BUILD_SERVICE_URL", "GODOT_BUILD_SERVICE_TOKEN"];
   const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   try {
     for (const key of keys) delete process.env[key];
     assert.equal(getBuilderAvailability("mobile_app").status, "not_configured");
     assert.equal(getBuilderAvailability("mobile_app").id, "expo-eas");
-    assert.equal(getBuilderAvailability("game").status, "ready");
-    assert.equal(getBuilderAvailability("game").id, "browser-native");
-    assert.deepEqual(getBuilderAvailability("game").requiredEnvironment, []);
+    assert.equal(getBuilderAvailability("game").status, "not_configured");
+    assert.equal(getBuilderAvailability("game").id, "godot-build-service");
   } finally {
     for (const key of keys) {
       if (original[key] === undefined) delete process.env[key];

@@ -25,7 +25,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
           SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key
           OWNER_EMAIL: owner@example.invalid
-          OPENAI_API_KEY: ci-placeholder-key
+          GEMINI_API_KEY: ci-placeholder-key
           CRON_SECRET: ci-placeholder-cron-secret-that-is-long-enough-123456
           AGENT_WORKER_ENABLED: 'false'
           WORKFORCE_WORKER_ENABLED: 'false'

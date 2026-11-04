@@ -25,6 +25,11 @@ export async function POST(req: NextRequest) {
     const status = typeof error === 'object' && error && 'statusCode' in error ? Number((error as { statusCode: number }).statusCode) : 0;
     const message = error instanceof Error ? error.message : '';
     const isCredit = /credit|plan|subscription|entitled/i.test(message);
-    return NextResponse.json({ error: isCredit ? message : status === 409 ? message : 'Image generation is temporarily unavailable. Any reserved credits were returned when possible.' }, { status: status === 409 ? 409 : isCredit ? 402 : /migration|accounting/i.test(message) ? 503 : 502 });
+    const isSafeRecoveryMessage = /refund could not be confirmed|recovery could not be confirmed|hosted providers are disabled|configured model|text-capable|not configured|migration|accounting/i.test(message);
+    const responseStatus = [400, 409, 503].includes(status) ? status : isCredit ? 402 : /migration|accounting/i.test(message) ? 503 : 502;
+    const publicMessage = isCredit || status === 400 || status === 409 || isSafeRecoveryMessage
+      ? message
+      : 'Image generation is temporarily unavailable. Check your saved assets before retrying.';
+    return NextResponse.json({ error: publicMessage }, { status: responseStatus });
   }
 }

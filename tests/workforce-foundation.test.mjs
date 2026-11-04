@@ -233,11 +233,9 @@ test('durable workforce queue has idempotency, dependency checks, retries and at
 });
 
 test('local inference adapter is server-configured and bounded by a timeout', async () => {
-  const source = await read('lib/openai.ts');
-  assert.match(source, /LEO_LOCAL_MODEL_URL/);
-  assert.match(source, /baseURL/);
-  assert.match(source, /LEO_MODEL_TIMEOUT_MS/);
-  assert.match(source, /localUrl\.replace/);
+  const source = await read('lib/leo-system-prompt.ts');
+  assert.doesNotMatch(source, /from ['"]openai['"]|LEO_LOCAL_MODEL_URL|baseURL/);
+  assert.match(source, /getConfiguredModel/);
   const worker = await read('app/api/internal/workforce/worker/route.ts');
   assert.match(worker, /Never claim to have run code, edited files/);
 });

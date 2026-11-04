@@ -1,41 +1,21 @@
-# AI platform implementation report
+# LeonardX AI Platform Migration Status
 
-Date: 2026-10-15
+Updated: 2026-10-29
 
-## Delivered in this milestone
+## Current provider policy
 
-- Added `/studio` within the existing LeonardX app shell and a Workspace navigation entry.
-- Exposed the existing text-to-image endpoint and existing Runway Gen-4.5 text-to-video endpoint without adding unsupported model choices.
-- Added authenticated OpenAI image editing using the installed official OpenAI SDK. The request validates PNG/JPEG/WebP file signatures and MIME, enforces a 4 MB image limit, uses existing rate limits and credit reservation/refund functions, stores the source and result separately in private Supabase Storage, records the generation job, and uses ownership-checked signed media URLs.
-- Added a user-scoped, bounded studio history endpoint and UI, including the ability to resume checking an existing processing video job.
-- Added upload/workflow tests, architecture and readiness documentation, a repository evidence audit, and an implementation roadmap.
+- Platform text, reasoning, and tool calls use the central Gemini registry in `lib/ai/model-catalog.ts` and `lib/ai/provider-registry.ts`.
+- `GEMINI_API_KEY` is the primary server-side credential; `GOOGLE_API_KEY` is accepted as a compatibility alias. Neither belongs in a `NEXT_PUBLIC_` variable.
+- Platform OpenAI, Anthropic, and local-model inference paths are disabled. OpenAI/Anthropic customer-owned connection options have been removed from the current customer-connection catalog.
+- Image generation/editing uses Gemini image models and private Supabase Storage paths. The default is `gemini-nano-banana-2.1`.
+- Public Developer API text inference uses Gemini 3.8 Flash with token-based metering and a dated pricing transition. API model IDs are allowlisted; unknown or legacy model IDs are rejected.
 
-## Verification evidence
+## Workflows not yet production-verified
 
-- Full repository test run: 147 passed, 0 failed.
-- TypeScript check: passed.
-- ESLint: passed with one existing `selectedExecutor` hook-dependency warning in `app/meeting-room/page.tsx`.
-- Production build: compilation completed locally, but the Windows build process crashed during a later stage (exit code `-1073740791`). GitHub Actions `npm run verify` passed on commit `4bcf48a6d4aabb763b98624968fceaf9fd98e906`.
-- `supabase migration list` reports the MCP OAuth/connections migration as applied in the linked Supabase project. This does not establish which production deployment or environment is connected.
-- The public `/mcp` route responds with `405` to GET and `401` to an unauthenticated Streamable HTTP initialize POST. OAuth discovery metadata advertises the `/mcp` resource and PKCE S256. Authenticated deployed initialization, tool discovery, and tool calls have not been performed.
-- Live provider calls and the exact Vercel deployed commit are not verified.
+- Gemini image generation/editing requires a real credentialed request, storage/RLS checks, credit reservation/refund verification, and per-account smoke tests in a non-production environment.
+- Realtime/audio routes remain explicitly unavailable until a Gemini Live/TTS/transcription workflow is implemented and tested end-to-end.
+- Hosted browser/computer-use agents remain disabled; they must not be reported as operational.
+- MCP protocol/authentication, external tool execution, customer-account isolation, Supabase migrations/RLS, Vercel production build/deployment, and webhook/credit settlement still require integration verification with authorized test accounts and configured services.
+- The current environment could not complete `npm ci` because npm registry requests failed with DNS `EAI_AGAIN`; therefore full TypeScript, lint, and production build checks could not be run here.
 
-## Implemented in the pushed changes (not fully live-verified)
-
-- Server-side OpenAI, Anthropic, Google Gemini, and configured local text adapters use a typed model registry. The `/api/models` endpoint reports configured provider/model availability without exposing credentials.
-- Inbound MCP is implemented as a stateless Streamable HTTP server at `/mcp`. OAuth registration, authorization-code flow with PKCE S256, refresh-token rotation/revocation, consent, and discovery metadata are provided by `/oauth/*` and `/.well-known/oauth-*`. The registered server tools are user-scoped read-only `list_projects` and `get_project_status`.
-- Outbound MCP uses the Integrations page and `/api/mcp/servers` APIs. Endpoints must be HTTPS on an operator allowlist; DNS is validated and pinned, redirects are rejected, requests/responses are bounded, and optional bearer credentials are encrypted at rest. Users explicitly approve tools. Autonomous chat orchestration filters to explicitly approved read-only tools and re-checks grants at call time.
-- Leo chat has an explicit "Use approved read-only tools" mode. Provider-native tool calls are implemented for OpenAI, Anthropic, and Gemini; local model tool calling returns an explicit unsupported error.
-- The existing Runway Gen-4.5 image-to-video endpoint is now reachable from Studio using an owned private image asset and a short-lived signed URL.
-
-These are implementation, CI, and limited unauthenticated endpoint-check claims. The changes are pushed to `main` as commit `4bcf48a6d4aabb763b98624968fceaf9fd98e906`; the exact Vercel deployed commit, authenticated MCP calls, and provider credentials have not been live-tested, and the linked database migration status does not verify production runtime behavior. Do not claim full production functionality until authenticated endpoint and provider tests pass. Outbound MCP OAuth and autonomous write-capable tools are intentionally not supported.
-
-## Configuration
-
-The Studio reuses existing server configuration: `OPENAI_API_KEY` or `LEO_API_KEY`, Supabase URL/service-role key, the existing generation migration and private `leo-files` bucket. The optional `LEO_IMAGE_MODEL` must name a model supported by the configured Images API. Video additionally uses existing Runway and credit settings.
-
-For the broader AI/MCP implementation, configure provider credentials in the deployment environment as needed. Set `MCP_PUBLIC_URL` to the production HTTPS origin, `MCP_ALLOWED_ORIGINS` to trusted client origins, `MCP_OUTBOUND_ALLOWED_HOSTS` to exact remote MCP hostnames, and `MCP_CREDENTIAL_ENCRYPTION_KEY` to a stable random 32-byte key (hex or base64). Verify that the deployed app uses the Supabase project with the MCP OAuth/connections migration applied. Provider keys and the encryption key must remain server-side and must not be logged or returned to clients.
-
-## Deployment and rollback
-
-The new MCP OAuth/connections migration is `supabase/migrations/20261015120000_mcp_oauth_and_connections.sql`; the linked Supabase project reports it as applied. Before rollout, verify the intended production database and private `leo-files` bucket, configure the server-side provider/MCP settings, and test OAuth, MCP tools, image create/edit, image-to-video, signed history/downloads, plan access, and refunds using non-production accounts. Roll back by reverting the feature routes, UI, provider integration, migration only through a reviewed forward migration if necessary, tests, and docs. Existing image and video operations remain separate.
+This document records code changes and outstanding verification. It is not a production certification or a claim that external services were tested.

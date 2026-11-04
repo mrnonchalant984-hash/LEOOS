@@ -5,6 +5,7 @@ import { verifyAndApplyPaystack, verifyPaystackTransaction } from '@/lib/payment
 import { matchesHostingRenewal } from '@/lib/payments-core';
 import { promoteVercelDeployment } from '@/lib/vercel-hosting';
 import { withOperationalMonitoring } from '@/lib/monitoring';
+import { verifyAndConfirmDonation } from '@/lib/donations';
 
 export const runtime = 'nodejs';
 
@@ -188,6 +189,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, restored });
     }
 
+    if (eventName === 'charge.success' && metadata.type === 'donation' && reference) {
+      if (metadata.donation_id !== reference) {
+        return NextResponse.json({ error: 'Donation metadata does not match the transaction.' }, { status: 409 });
+      }
+      const donation = await verifyAndConfirmDonation(reference);
+      return NextResponse.json({ received: true, idempotent: donation.alreadyApplied });
+    }
+
     if (eventName === 'charge.success' && metadata.user_id && reference) {
       const payment = await verifyAndApplyPaystack(reference);
       if (providerEventColumnAvailable && providerEventId) await db.from('payments').update({ provider_event_id: providerEventId }).eq('reference', reference);
@@ -203,6 +212,12 @@ export async function POST(req: NextRequest) {
         .eq('status', 'pending');
       if (paymentError) throw paymentError;
 
+      const { error: donationError } = await db.from('donations')
+        .update({ payment_status: 'failed' })
+        .eq('transaction_reference', reference)
+        .eq('payment_status', 'pending');
+      if (donationError) throw donationError;
+
       await db.from('hosting_renewal_payments')
         .update({ status: 'failed', updated_at: new Date().toISOString() })
         .eq('reference', reference)
@@ -215,6 +230,11 @@ export async function POST(req: NextRequest) {
         if (providerEventColumnAvailable && providerEventId) refundUpdate.provider_event_id = providerEventId;
         const { error: refundError } = await db.from('payments').update(refundUpdate).eq('reference', reference);
         if (refundError) throw refundError;
+        const { error: donationRefundError } = await db.from('donations')
+          .update({ payment_status: 'refunded' })
+          .eq('transaction_reference', reference)
+          .eq('payment_status', 'success');
+        if (donationRefundError) throw donationRefundError;
       }
     }
 
