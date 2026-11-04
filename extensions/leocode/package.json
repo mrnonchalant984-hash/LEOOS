@@ -1,0 +1,89 @@
+{
+  "name": "leocode",
+  "displayName": "LeoCode by LeonardX",
+  "description": "Workspace-aware AI coding assistance from your LeonardX account.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "LeoCode",
+    "LeonardX",
+    "Leo AI",
+    "AI coding assistant"
+  ],
+  "icon": "media/icon.png",
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onView:leocode.chat",
+    "onCommand:leocode.openChat",
+    "onCommand:leocode.connect",
+    "onCommand:leocode.explainSelection",
+    "onCommand:leocode.reviewFile",
+    "onCommand:leocode.fixSelection",
+    "onCommand:leocode.generateCode",
+    "onCommand:leocode.analyzeWorkspace",
+    "onCommand:leocode.generateTests",
+    "onCommand:leocode.runAgent",
+    "onCommand:leocode.applyGeneratedCode",
+    "onCommand:leocode.viewUsage",
+    "onCommand:leocode.signOut"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "LeoCode",
+      "properties": {
+        "leocode.baseUrl": {
+          "type": "string",
+          "default": "https://leoos-omega.vercel.app",
+          "description": "LeonardX server origin. Use HTTPS except for local development."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "leocode",
+          "title": "LeoCode",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "leocode": [
+        {
+          "id": "leocode.chat",
+          "name": "Leo Chat"
+        }
+      ]
+    },
+    "commands": [
+      { "command": "leocode.openChat", "title": "LeoCode: Open Chat" },
+      { "command": "leocode.connect", "title": "LeoCode: Connect LeonardX" },
+      { "command": "leocode.explainSelection", "title": "LeoCode: Explain Selected Code" },
+      { "command": "leocode.reviewFile", "title": "LeoCode: Review Current File" },
+      { "command": "leocode.fixSelection", "title": "LeoCode: Fix Selected Code" },
+      { "command": "leocode.generateCode", "title": "LeoCode: Generate Code" },
+      { "command": "leocode.analyzeWorkspace", "title": "LeoCode: Analyze Workspace" },
+      { "command": "leocode.generateTests", "title": "LeoCode: Generate Tests" },
+      { "command": "leocode.runAgent", "title": "LeoCode: Run Specialist Agent" },
+      { "command": "leocode.applyGeneratedCode", "title": "LeoCode: Apply Generated Code" },
+      { "command": "leocode.viewUsage", "title": "LeoCode: View Usage" },
+      { "command": "leocode.signOut", "title": "LeoCode: Sign Out" }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.4"
+  }
+}

@@ -1,0 +1,42 @@
+name: Publish LeoCode extension
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-leocode
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      LEOCODE_PUBLISHER_ID: ${{ vars.LEOCODE_PUBLISHER_ID }}
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: extensions/leocode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extensions/leocode/package-lock.json
+      - run: npm ci
+      - name: Configure verified publisher
+        run: |
+          if [[ ! "$LEOCODE_PUBLISHER_ID" =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ ]]; then
+            echo "Set the repository variable LEOCODE_PUBLISHER_ID to the verified Marketplace publisher ID."
+            exit 1
+          fi
+          npm pkg set "publisher=$LEOCODE_PUBLISHER_ID"
+      - run: npm run compile
+      - run: npx --yes @vscode/vsce publish --oidc
