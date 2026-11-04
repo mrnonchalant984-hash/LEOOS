@@ -511,9 +511,23 @@ export async function POST(request: NextRequest) {
             }).eq('id', run.id).eq('user_id', userId);
             if (resultError) return { data: null, error: 'Agent finished but its result could not be persisted.' };
             return { data: { run_id: run.id, agent_id: staticAgent.id, status: finalStatus, result: parsed?.result || result, session_id: parsed?.session_id, approvals: parsed?.approvals }, error: null };
-          } catch {
-            await db.from('agent_runs').update({ status: 'failed', error: 'Agent execution failed. Review provider configuration and retry.', completed_at: new Date().toISOString() }).eq('id', run.id).eq('user_id', userId);
-            return { data: { run_id: run.id, agent_id: staticAgent.id, status: 'failed' }, error: 'Agent execution failed. Review provider configuration and retry.' };
+          } catch (error) {
+            const providerError = error instanceof ModelProviderError;
+            const safeError = providerError
+              ? error.message.slice(0, 400)
+              : 'Agent execution failed. Review provider configuration and retry.';
+            console.error(JSON.stringify({
+              event: 'mcp.agent.execution_failed',
+              run_id: run.id,
+              agent_id: staticAgent.id,
+              error_type: error instanceof Error ? error.name : 'UnknownError',
+              provider_status: providerError ? error.statusCode : undefined,
+            }));
+            const { error: persistError } = await db.from('agent_runs')
+              .update({ status: 'failed', error: safeError, completed_at: new Date().toISOString() })
+              .eq('id', run.id).eq('user_id', userId);
+            if (persistError) return { data: null, error: 'Agent execution failed and its status could not be persisted.' };
+            return { data: { run_id: run.id, agent_id: staticAgent.id, status: 'failed', error: safeError }, error: safeError };
           }
         }
 
@@ -1128,7 +1142,7 @@ export async function POST(request: NextRequest) {
     headers.set('Cache-Control', 'no-store');
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   } catch (error) {
-    console.error('MCP request failed:', error instanceof Error ? error.message : 'Unknown MCP error');
+    console.error(JSON.stringify({ event: 'mcp.request.failed', error_type: error instanceof Error ? error.name : 'UnknownError' }));
     return NextResponse.json({ error: 'The MCP request could not be completed.' }, { status: 503, headers: corsHeaders(request) });
   }
 }

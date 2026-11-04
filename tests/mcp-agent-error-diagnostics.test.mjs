@@ -8,7 +8,7 @@ test('MCP agent failures persist sanitized provider diagnostics instead of a gen
   assert.match(route, /catch \(error\) \{[\s\S]{0,500}error instanceof ModelProviderError/);
   assert.match(route, /event: 'mcp\.agent\.execution_failed'/);
   assert.match(route, /error_type: error instanceof Error \? error\.name : 'UnknownError'/);
-  assert.match(route, /provider_status: error instanceof ModelProviderError \? error\.statusCode : undefined/);
+  assert.match(route, /provider_status: providerError \? error\.statusCode : undefined/);
   assert.match(route, /status: 'failed', error: safeError/);
   assert.doesNotMatch(route, /console\.error\([^\n]*error\.message/);
 });

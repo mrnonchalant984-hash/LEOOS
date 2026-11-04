@@ -30,13 +30,24 @@ test('invalid or non-Gemini agent overrides do not bypass Gemini-first routing',
   }
 });
 
-test('a valid Gemini agent override and explicit local model configuration are preserved', () => {
-  const previous = { gemini: process.env.GEMINI_API_KEY };
+test('a valid Gemini agent override is preserved and local model configuration cannot bypass Gemini-only routing', () => {
+  const previous = {
+    gemini: process.env.GEMINI_API_KEY,
+    chat: process.env.LEO_CHAT_MODEL,
+    localUrl: process.env.LEO_LOCAL_MODEL_URL,
+    localName: process.env.LEO_LOCAL_MODEL_NAME,
+  };
   try {
     process.env.GEMINI_API_KEY = 'configured';
+    delete process.env.LEO_CHAT_MODEL;
     assert.equal(getAgentPrimaryModel('gemini-3.5-flash-lite', ''), 'google/gemini-3.5-flash-lite');
-    assert.equal(getAgentPrimaryModel('ignored', 'http://127.0.0.1:11434/v1', 'qwen-local'), 'local/qwen-local');
+    process.env.LEO_LOCAL_MODEL_URL = 'http://127.0.0.1:11434/v1';
+    process.env.LEO_LOCAL_MODEL_NAME = 'qwen-local';
+    assert.equal(getAgentPrimaryModel('ignored'), 'google/gemini-3.8-flash');
   } finally {
     if (previous.gemini === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = previous.gemini;
+    if (previous.chat === undefined) delete process.env.LEO_CHAT_MODEL; else process.env.LEO_CHAT_MODEL = previous.chat;
+    if (previous.localUrl === undefined) delete process.env.LEO_LOCAL_MODEL_URL; else process.env.LEO_LOCAL_MODEL_URL = previous.localUrl;
+    if (previous.localName === undefined) delete process.env.LEO_LOCAL_MODEL_NAME; else process.env.LEO_LOCAL_MODEL_NAME = previous.localName;
   }
 });

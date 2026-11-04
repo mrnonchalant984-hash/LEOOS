@@ -3,18 +3,12 @@ import { getDefaultTextModel, isProviderConfigured, resolveModel } from './model
 /**
  * Resolve the model used by built-in text agents.
  *
- * Gemini is the platform default. An explicitly configured local endpoint is
- * preserved, and a valid Gemini-specific agent override is accepted. Invalid
- * or non-Gemini LEO_AGENT_MODEL values fall back to the validated Gemini chat
- * default rather than bypassing provider routing or failing before fallback.
+ * Gemini is the platform default. Only a valid, configured Gemini-specific
+ * agent override is accepted; local and other provider endpoints are ignored.
  */
 export function getAgentPrimaryModel(
   agentModel = process.env.LEO_AGENT_MODEL?.trim(),
-  localUrl = process.env.LEO_LOCAL_MODEL_URL?.trim(),
-  localName = process.env.LEO_LOCAL_MODEL_NAME?.trim() || 'local-model',
 ): string {
-  if (localUrl) return `local/${localName}`;
-
   if (agentModel) {
     try {
       const candidate = agentModel.includes('/')

@@ -5,20 +5,20 @@ import { generateWithExplicitFallback, getSafeFallbackModel, isRetryableProvider
 
 test('uses a configured alternate Gemini model after transient failure', async () => {
   const calls = [];
-  const result = await generateWithExplicitFallback('google/gemini-3.8-flash', 'google/gemini-2.5-flash', async model => {
+  const result = await generateWithExplicitFallback('google/gemini-3.8-flash', 'google/gemini-3.1-flash-lite', async model => {
     calls.push(model);
     if (calls.length === 1) throw new ModelProviderError('rate limited', 429);
     return { text: 'fallback response' };
   }, () => true);
-  assert.deepEqual(calls, ['google/gemini-3.8-flash', 'google/gemini-2.5-flash']);
-  assert.equal(result.model, 'google/gemini-2.5-flash');
+  assert.deepEqual(calls, ['google/gemini-3.8-flash', 'google/gemini-3.1-flash-lite']);
+  assert.equal(result.model, 'google/gemini-3.1-flash-lite');
   assert.equal(result.fallback_used, true);
   assert.equal(result.result.text, 'fallback response');
 });
 
 test('rejects non-Gemini primary models before calling a provider', async () => {
   let calls = 0;
-  await assert.rejects(generateWithExplicitFallback('openai/gpt-4o-mini', 'google/gemini-2.5-flash', async () => { calls++; }, () => true), /Only Gemini/i);
+  await assert.rejects(generateWithExplicitFallback('openai/gpt-4o-mini', 'google/gemini-3.1-flash-lite', async () => { calls++; }, () => true), /Only Gemini/i);
   assert.equal(calls, 0);
   assert.throws(() => resolveModel('anthropic/claude-3-5-haiku-latest'), /Only Gemini/i);
 });
@@ -34,10 +34,17 @@ test('does not retry when fallback is unavailable and logs only safe metadata', 
   const originalInfo = console.info;
   console.info = (...args) => logs.push(args.join(' '));
   try {
-    await assert.rejects(generateWithExplicitFallback('google/gemini-3.8-flash', 'google/gemini-2.5-flash', async model => {
+    await assert.rejects(generateWithExplicitFallback('google/gemini-3.8-flash', 'google/gemini-3.1-flash-lite', async model => {
       throw new ModelProviderError(model.includes('3.8') ? 'primary unavailable: do-not-log-this' : 'fallback unavailable', 503);
     }, () => true), /fallback unavailable/);
     assert.ok(logs.some(line => line.includes('leo.ai.fallback.failure')));
     assert.ok(logs.every(line => !line.includes('do-not-log-this')));
   } finally { console.info = originalInfo; }
+});
+
+test('ignores a non-catalogued Gemini 2.5 Flash fallback and selects a listed model', () => {
+  assert.equal(
+    getSafeFallbackModel('google/gemini-3.8-flash', 'google/gemini-2.5-flash', false, () => true),
+    'google/gemini-3.1-flash-lite',
+  );
 });

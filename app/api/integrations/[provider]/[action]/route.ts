@@ -110,6 +110,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
       result = await providerFetch(`https://api.supabase.com/v1/projects/${encodeURIComponent(projectRef)}/database/query`, c.access_token, { method: 'POST', body: JSON.stringify({ query: sql }) });
       const { error: auditError } = await adminSupabase().from('integration_migration_runs').insert({ user_id: ctx.user.id, integration_id: connection.id, project_ref: projectRef, migration_name: migrationName, sql_sha256: await (async()=>{ const bytes = new TextEncoder().encode(sql); const digest = await crypto.subtle.digest('SHA-256', bytes); return Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,'0')).join(''); })(), status: 'succeeded' });
       if (auditError) return NextResponse.json({ error: 'SQL was accepted by the provider, but audit persistence failed. Check the database before retrying to avoid applying a migration twice.' }, { status: 502 });
+    } else if (provider === 'vercel' && action === 'deployment-status') {
+      const deploymentId = typeof body.deploymentId === 'string' ? body.deploymentId.trim() : '';
+      if (!deploymentId || !/^[A-Za-z0-9_.-]{1,200}$/.test(deploymentId)) throw new Error('Provide a valid Vercel deployment ID.');
+      result = await providerFetch(`https://api.vercel.com/v13/deployments/${encodeURIComponent(deploymentId)}`, c.token);
+    } else if (provider === 'vercel' && action === 'delete-deployment') {
+      const deploymentId = typeof body.deploymentId === 'string' ? body.deploymentId.trim() : '';
+      if (body.confirm !== true) throw new Error('Explicit confirmation is required before deleting a production deployment.');
+      if (!deploymentId || !/^[A-Za-z0-9_.-]{1,200}$/.test(deploymentId)) throw new Error('Provide a valid Vercel deployment ID.');
+      await providerFetch(`https://api.vercel.com/v13/deployments/${encodeURIComponent(deploymentId)}`, c.token, { method: 'DELETE' });
+      result = { deleted: true, deployment_id: deploymentId };
     } else if (provider === 'vercel' && action === 'create-project') {
       const name = typeof body.name === 'string' ? body.name.trim() : '';
       if (!/^[a-z0-9][a-z0-9-]{0,99}$/.test(name)) throw new Error('Project name must use lowercase letters, numbers, and hyphens.');
@@ -122,6 +132,66 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
       const name = typeof body.name === 'string' ? body.name.trim() : '';
       if (!/^[A-Za-z0-9_.-]{1,100}$/.test(name)) throw new Error('Repository name may contain letters, numbers, dots, underscores, and hyphens.');
       result = await providerFetch('https://api.github.com/user/repos', c.token, { method: 'POST', headers: { 'User-Agent': 'LeonardX', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }, body: JSON.stringify({ name, private: body.private !== false, auto_init: true, description: typeof body.description === 'string' ? body.description.slice(0, 350) : 'Created with LeonardX' }) });
+    } else if (provider === 'github' && action === 'read-file') {
+      const repo = typeof body.repo === 'string' ? body.repo : '';
+      const path = typeof body.path === 'string' ? body.path : '';
+      const branch = typeof body.branch === 'string' ? body.branch : 'main';
+      if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) || !/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9_.@/-]{1,240}$/.test(path) || !/^[A-Za-z0-9_.\/-]{1,200}$/.test(branch)) throw new Error('Provide a valid repository, safe relative file path, and branch.');
+      if (/(^|\/)\.env(?:\.|$)|(^|\/)(?:credentials?|secrets?)(?:\.|\/|$)|private[-_]?key/i.test(path)) throw new Error('Secret and environment files cannot be read through the repository agent.');
+      const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+      const file = await providerFetch(`https://api.github.com/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`, c.token, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'LeonardX', 'X-GitHub-Api-Version': '2022-11-28' } });
+      if (typeof file.content !== 'string' || file.encoding !== 'base64') throw new Error('GitHub returned a directory, binary file, or unsupported file encoding.');
+      const decoded = Buffer.from(file.content.replace(/\s/g, ''), 'base64').toString('utf8');
+      if (/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9_-]{24,}|AKIA[0-9A-Z]{16})\b/.test(decoded)) throw new Error('The requested file appears to contain credentials or a private key and cannot be returned.');
+      if (Buffer.byteLength(decoded, 'utf8') > 256_000) throw new Error('The requested file exceeds the 256 KB read limit.');
+      result = { name: file.name, path: file.path, sha: file.sha, size: file.size, branch, content: decoded };
+    } else if (provider === 'github' && action === 'commit-status') {
+      const repo = typeof body.repo === 'string' ? body.repo : '';
+      const sha = typeof body.sha === 'string' ? body.sha : '';
+      if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) || !/^[0-9a-f]{40}$/i.test(sha)) throw new Error('Provide a valid repository and full 40-character commit SHA.');
+      const [checks, status] = await Promise.all([
+        providerFetch(`https://api.github.com/repos/${repo}/commits/${sha}/check-runs`, c.token, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'LeonardX', 'X-GitHub-Api-Version': '2022-11-28' } }),
+        providerFetch(`https://api.github.com/repos/${repo}/commits/${sha}/status`, c.token, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'LeonardX', 'X-GitHub-Api-Version': '2022-11-28' } }),
+      ]);
+      result = { repo, sha, combined_state: status.state || 'unknown', total_count: Number(checks.total_count || 0), checks: (Array.isArray(checks.check_runs) ? checks.check_runs as Json[] : []).slice(0, 100).map(row => ({ name: row.name, status: row.status, conclusion: row.conclusion, details_url: row.details_url, started_at: row.started_at, completed_at: row.completed_at, output: row.output && typeof row.output === 'object' ? { title: (row.output as Json).title, summary: typeof (row.output as Json).summary === 'string' ? String((row.output as Json).summary).slice(0, 1000) : undefined } : undefined })), statuses: (Array.isArray(status.statuses) ? status.statuses as Json[] : []).slice(0, 100).map(row => ({ context: row.context, state: row.state, description: typeof row.description === 'string' ? row.description.slice(0, 500) : undefined, target_url: row.target_url })) };
+    } else if (provider === 'github' && action === 'repository-tree') {
+      const repo = typeof body.repo === 'string' ? body.repo : '';
+      const branch = typeof body.branch === 'string' ? body.branch : 'main';
+      if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) || !/^[A-Za-z0-9_.\/-]{1,200}$/.test(branch)) throw new Error('Provide a valid repository and branch.');
+      const ref = await providerFetch(`https://api.github.com/repos/${repo}/git/ref/heads/${branch.split('/').map(encodeURIComponent).join('/')}`, c.token, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'LeonardX' } });
+      const treeSha = String((ref.object as Json | undefined)?.sha || '');
+      if (!/^[0-9a-f]{40}$/i.test(treeSha)) throw new Error('GitHub branch head could not be resolved.');
+      const tree = await providerFetch(`https://api.github.com/repos/${repo}/git/trees/${treeSha}?recursive=1`, c.token, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'LeonardX' } });
+      result = { repo, branch, truncated: tree.truncated === true, files: (Array.isArray(tree.tree) ? tree.tree as Json[] : []).filter(item => item.type === 'blob').slice(0, 500).map(item => ({ path: item.path, sha: item.sha, size: item.size })) };
+    } else if (provider === 'github' && action === 'commit-files') {
+      const repo = typeof body.repo === 'string' ? body.repo : '';
+      const branch = typeof body.branch === 'string' ? body.branch : 'main';
+      const files = Array.isArray(body.files) ? body.files as Json[] : [];
+      if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) || !/^[A-Za-z0-9_.\/-]{1,200}$/.test(branch) || files.length < 1 || files.length > 50) throw new Error('Provide a valid repository, branch, and 1–50 files.');
+      if (body.confirm !== true) throw new Error('Explicit confirmation is required before committing to the connected repository.');
+      const seen = new Set<string>();
+      const normalized = files.map(file => {
+        const path = typeof file.path === 'string' ? file.path : '';
+        const content = typeof file.content === 'string' ? file.content : '';
+        if (!/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9_.@/-]{1,240}$/.test(path) || content.length > 256_000 || seen.has(path)) throw new Error('A changed file has an invalid path, duplicate path, or exceeds 256 KB.');
+        if (/(^|\/)\.env(?:\.|$)|(^|\/)node_modules(?:\/|$)|(^|\/)\.git(?:\/|$)|private[-_]?key/i.test(path) || /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9_-]{24,})\b/.test(content)) throw new Error('Credential, secret, or generated dependency files cannot be committed.');
+        seen.add(path);
+        return { path, content };
+      });
+      const head = await providerFetch(`https://api.github.com/repos/${repo}/git/ref/heads/${branch.split('/').map(encodeURIComponent).join('/')}`, c.token, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'LeonardX' } });
+      const parentSha = String((head.object as Json | undefined)?.sha || '');
+      if (!/^[0-9a-f]{40}$/i.test(parentSha)) throw new Error('GitHub branch head could not be resolved.');
+      const parentCommit = await providerFetch(`https://api.github.com/repos/${repo}/git/commits/${parentSha}`, c.token, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'LeonardX' } });
+      const baseTree = String((parentCommit.tree as Json | undefined)?.sha || '');
+      if (!/^[0-9a-f]{40}$/i.test(baseTree)) throw new Error('GitHub base tree could not be resolved.');
+      const tree = await providerFetch(`https://api.github.com/repos/${repo}/git/trees`, c.token, { method: 'POST', headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'LeonardX' }, body: JSON.stringify({ base_tree: baseTree, tree: normalized.map(file => ({ path: file.path, mode: '100644', type: 'blob', content: file.content })) }) });
+      const treeSha = String(tree.sha || '');
+      if (!/^[0-9a-f]{40}$/i.test(treeSha)) throw new Error('GitHub did not return a valid tree ID.');
+      const commit = await providerFetch(`https://api.github.com/repos/${repo}/git/commits`, c.token, { method: 'POST', headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'LeonardX' }, body: JSON.stringify({ message: typeof body.message === 'string' ? body.message.slice(0, 200) : 'Update files via LeonardX', tree: treeSha, parents: [parentSha] }) });
+      const commitSha = String(commit.sha || '');
+      if (!/^[0-9a-f]{40}$/i.test(commitSha)) throw new Error('GitHub did not confirm the commit.');
+      await providerFetch(`https://api.github.com/repos/${repo}/git/refs/heads/${branch.split('/').map(encodeURIComponent).join('/')}`, c.token, { method: 'PATCH', headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'LeonardX' }, body: JSON.stringify({ sha: commitSha, force: false }) });
+      result = { committed: true, repo, branch, commit_sha: commitSha, files: normalized.map(file => file.path), commit_url: `https://github.com/${repo}/commit/${commitSha}` };
     } else if (provider === 'github' && action === 'commit-file') {
       const repo = typeof body.repo === 'string' ? body.repo : ''; const path = typeof body.path === 'string' ? body.path : ''; const content = typeof body.content === 'string' ? body.content : '';
       if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) || !/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9_.@/-]{1,240}$/.test(path) || content.length > 500_000) throw new Error('Provide a valid owner/repository, safe file path, and content under 500 KB.');
@@ -140,6 +210,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
   }
 }
 function supportedActions(provider: CustomerProvider) {
-  const actions: Partial<Record<CustomerProvider, string[]>> = { github: ['create-repo','commit-file'], vercel: ['create-project','deploy-git-repo'], supabase: ['apply-migration'], firebase: ['project','firestore-document'], youtube: ['channel','analytics'], meta: ['pages','page-insights','send-message'], whatsapp_business: ['send'] };
+  const actions: Partial<Record<CustomerProvider, string[]>> = { github: ['create-repo','read-file','repository-tree','commit-file','commit-files','commit-status'], vercel: ['create-project','deploy-git-repo','deployment-status','delete-deployment'], supabase: ['apply-migration'], firebase: ['project','firestore-document'], youtube: ['channel','analytics'], meta: ['pages','page-insights','send-message'], whatsapp_business: ['send'] };
   return actions[provider] || [];
 }

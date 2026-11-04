@@ -5,36 +5,36 @@ import { readFile } from 'node:fs/promises';
 const root = new URL('../', import.meta.url);
 async function source(path) { return readFile(new URL(path, root), 'utf8'); }
 
-test('Leo chat creates project then continues into generation instead of returning only a draft notice', async () => {
+test('Leo chat enables project creation and generation only for explicit build requests', async () => {
   const chat = await source('app/api/chat/route.ts');
-  assert.match(chat, /status !== 'project_created'/);
-  assert.match(chat, /project_id: createdId/);
-  assert.match(chat, /Owned project ID:/);
-  assert.match(chat, /projectWriteWorkflow/);
-  assert.match(chat, /createUserAssistantTools\(ctx\.user\.id, \{ request: req, allowProjectWrites: projectWriteWorkflow, allowRepositoryAccess: repositoryWorkflow, allowRepositoryWrites: repositoryWriteWorkflow, activeProjectId \}\)/);
+  assert.match(chat, /const buildMode = Boolean\(ctx && explicitBuildIntent && !customAgent\)/);
+  assert.match(chat, /allowBuildActions: buildMode/);
+  assert.match(chat, /allowDeployment: explicitDeploymentIntent/);
+  assert.match(chat, /allowRepositoryWrites: repositoryWriteWorkflow/);
 });
 
-test('project write, run and deployment tools are gated behind an explicit project workflow', async () => {
+test('project creation, file writes, and deployment tools are gated by explicit request state', async () => {
   const tools = await source('lib/ai/tool-orchestrator.ts');
-  assert.match(tools, /const projectWriteToolsEnabled = options\.allowProjectWrites \? projectWriteTools : \[\]/);
+  assert.match(tools, /if \(options\?\.allowBuildActions\)/);
   assert.match(tools, /name: 'save_project_files'/);
-  assert.match(tools, /name: 'run_project_operation'/);
-  assert.match(tools, /name: 'deploy_project'/);
+  assert.match(tools, /name: 'build_and_deploy_project'/);
   assert.match(tools, /eq\('user_id', userId\)/);
-  assert.match(tools, /options\.allowProjectWrites/);
+  assert.match(tools, /options\.allowDeployment/);
 });
 
 test('chat deployment reuses existing build-deploy checks with the saved generated files', async () => {
   const tools = await source('lib/ai/tool-orchestrator.ts');
   const route = await source('app/api/build-deploy/route.ts');
-  assert.match(tools, /source: 'leo_chat_build_workflow'/);
-  assert.match(tools, /generated_files: Object\.entries\(project\.files\)/);
-  assert.match(route, /body\.source === 'leo_chat_build_workflow'/);
+  assert.match(tools, /source: 'leo_chat'/);
+  assert.match(tools, /generated_files: files/);
+  assert.match(route, /body\.source === 'leo_chat'/);
   assert.match(route, /validateGeneratedSite/);
   assert.match(route, /resolveVerifiedVercelMainUrl/);
 });
 
-test('browser game deployment is not falsely reported through the website-only adapter', async () => {
+test('browser game publication uses its separately authorized static-game adapter', async () => {
   const tools = await source('lib/ai/tool-orchestrator.ts');
-  assert.match(tools, /Browser-game publishing requires the separate static-game publication adapter/);
+  assert.match(tools, /name: 'publish_browser_game'/);
+  assert.match(tools, /options\.allowDeployment && options\.allowBrowserGame/);
+  assert.match(tools, /reference\.kind === 'publish_browser_game'/);
 });

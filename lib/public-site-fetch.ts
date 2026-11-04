@@ -2,10 +2,10 @@ import { lookup } from 'node:dns/promises';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import type { RequestOptions as HttpRequestOptions } from 'node:http';
-import { isPrivateIp } from '@/lib/webhooks-core';
-import { PublicSiteFetchError, validatePublicSiteUrl } from '@/lib/public-site-url';
+import { isPrivateIp } from './webhooks-core.ts';
+import { PublicSiteFetchError, validatePublicSiteUrl } from './public-site-url.ts';
 
-export { PublicSiteFetchError, validatePublicSiteUrl } from '@/lib/public-site-url';
+export { PublicSiteFetchError, validatePublicSiteUrl } from './public-site-url.ts';
 
 const MAX_HTML_BYTES = 800_000;
 const MAX_REDIRECTS = 3;

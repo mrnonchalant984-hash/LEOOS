@@ -15,8 +15,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: production
     env:
-      LEOCODE_PUBLISHER_ID: ${{ vars.LEOCODE_PUBLISHER_ID }}
+      LEOCODE_PUBLISHER_ID: ${{ vars.LEOCODE_PUBLISHER_ID || 'leonardx' }}
     permissions:
       contents: read
       id-token: write

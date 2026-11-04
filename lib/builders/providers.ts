@@ -46,14 +46,11 @@ export function getBuilderAvailability(projectType: ProjectType, environment: No
     };
   }
 
-  const requiredEnvironment = ["GODOT_BUILD_SERVICE_URL", "GODOT_BUILD_SERVICE_TOKEN"];
-  const missing = requiredEnvironment.filter((key) => !environment[key]?.trim());
   return {
-    id: "godot-build-service",
-    label: "Godot build service",
-    status: missing.length ? "not_configured" : "ready",
-    requiredEnvironment,
-    ...(missing.length ? { message: `Configure ${missing.join(", ")} on the server to enable Godot builds.` } : {}),
+    id: "browser-game-studio",
+    label: "Browser-native game workspace",
+    status: "ready",
+    requiredEnvironment: [],
   };
 }
 

@@ -1,4 +1,4 @@
-import { isProviderConfigured, ModelProviderError, resolveModel } from './model-catalog.ts';
+import { getModelProviderStatus, isProviderConfigured, ModelProviderError, resolveModel } from './model-catalog.ts';
 
 function providerStatus(error: unknown) {
   if (error instanceof ModelProviderError) return error.statusCode;
@@ -32,7 +32,8 @@ export function getSafeFallbackModel(
   if (configuredFallback) {
     try {
       const fallback = resolveModel(configuredFallback);
-      if (fallback.provider === 'google' && `${fallback.provider}/${fallback.model}` !== `${primary.provider}/${primary.model}` && configured('google')) {
+      const isCatalogued = getModelProviderStatus().some(model => model.provider === fallback.provider && model.model === fallback.model);
+      if (fallback.provider === 'google' && isCatalogued && `${fallback.provider}/${fallback.model}` !== `${primary.provider}/${primary.model}` && configured('google')) {
         return `${fallback.provider}/${fallback.model}`;
       }
     } catch {
@@ -41,7 +42,7 @@ export function getSafeFallbackModel(
   }
 
   if (!configured('google')) return undefined;
-  const fallbackModel = primary.model === 'gemini-3.8-flash' ? 'gemini-2.5-flash' : 'gemini-3.8-flash';
+  const fallbackModel = primary.model === 'gemini-3.8-flash' ? 'gemini-3.1-flash-lite' : 'gemini-3.8-flash';
   return `google/${fallbackModel}`;
 }
 

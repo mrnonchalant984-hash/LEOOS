@@ -20,7 +20,7 @@ type RemoteToolReference = {
   remoteName: string;
 };
 
-type LocalToolReference = { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' };
+type LocalToolReference = { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'publish_browser_game' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -66,6 +66,31 @@ function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null
     result.properties = sanitized;
   }
   return result;
+}
+
+async function postAsUser(request: Request, path: string, body: Record<string, unknown>) {
+  const headers = new Headers(request.headers);
+  headers.delete('content-length');
+  headers.set('content-type', 'application/json');
+  const url = new URL(path, request.url);
+  const internalRequest = new NextRequest(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  let response: Response;
+  if (url.pathname === '/api/setup/projects') {
+    const { POST } = await import('@/app/api/setup/projects/route');
+    response = await POST(internalRequest);
+  } else if (url.pathname.startsWith('/api/integrations/')) {
+    const { POST } = await import('@/app/api/integrations/[provider]/[action]/route');
+    const [, , , provider, action] = url.pathname.split('/');
+    response = await POST(internalRequest, { params: Promise.resolve({ provider, action }) });
+  } else {
+    const match = url.pathname.match(/^\/api\/games\/([0-9a-f-]+)\/publish$/i);
+    if (!match) throw new Error('Unsupported authenticated internal operation.');
+    const { POST } = await import('@/app/api/games/[id]/publish/route');
+    response = await POST(internalRequest, { params: Promise.resolve({ id: match[1] }) });
+  }
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : `The authorized operation failed with HTTP ${response.status}.`);
+  return data;
 }
 
 const localTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [
@@ -121,7 +146,15 @@ const localTools: Array<{ name: string; description: string; inputSchema: Record
   },
 ];
 
-type LeoBuildToolOptions = { request: Request; userMessage: string; allowBuildActions: boolean; allowDeployment: boolean };
+type LeoBuildToolOptions = {
+  request: Request;
+  userMessage: string;
+  allowBuildActions: boolean;
+  allowDeployment: boolean;
+  allowRepositoryAccess?: boolean;
+  allowRepositoryWrites?: boolean;
+  allowBrowserGame?: boolean;
+};
 
 export async function createUserAssistantTools(userId: string, options?: LeoBuildToolOptions): Promise<{ tools: AssistantTool[]; execute: AssistantToolExecutor }> {
   const db = adminSupabase();
@@ -132,13 +165,26 @@ export async function createUserAssistantTools(userId: string, options?: LeoBuil
   });
   if (options?.allowBuildActions) {
     const buildTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [
-      { name: 'create_project', description: 'Create a real, plan-authorized LeonardX website/web-app/SaaS project workspace for the user request. Only use this when the user explicitly asked to build or create a project. Returns the persisted source project ID and linked website build ID.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, project_type: { type: 'string', enum: ['website', 'web_app', 'saas'] } }, required: ['name', 'project_type'], additionalProperties: false } },
+      { name: 'create_project', description: 'Create a real, plan-authorized LeonardX website, web-app, SaaS, or browser-game project workspace. Only use this when the user explicitly asked to build or create a project. Returns the persisted source project ID.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, project_type: { type: 'string', enum: ['website', 'web_app', 'saas', 'game'] }, brief: { type: 'string' } }, required: ['name', 'project_type'], additionalProperties: false } },
       { name: 'save_project_files', description: 'Persist generated source files into an owned LeonardX project. Supply complete file contents as an array of {path, content}; paths and total size are validated. This does not deploy the project.', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } } }, required: ['project_id', 'files'], additionalProperties: false } },
     ];
-    if (options.allowDeployment) buildTools.push({ name: 'build_and_deploy_project', description: 'Deploy the supplied generated website files through LeonardX existing GitHub/Vercel integration. This tool is available only because the user explicitly requested deployment in the current message. It enforces existing plan, ownership, provider, idempotency, and deployment verification checks. Never claim success unless the tool returns confirmed deployed status and a verified liveUrl.', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, brief: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } } }, required: ['project_id', 'brief', 'files'], additionalProperties: false } });
+    if (options.allowDeployment && !options.allowBrowserGame) buildTools.push({ name: 'build_and_deploy_project', description: 'Deploy the supplied generated website files through LeonardX existing GitHub/Vercel integration. This tool is available only because the user explicitly requested deployment in the current message. It enforces existing plan, ownership, provider, idempotency, and deployment verification checks. Never claim success unless the tool returns confirmed deployed status and a verified liveUrl.', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, brief: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } } }, required: ['project_id', 'brief', 'files'], additionalProperties: false } });
+    if (options.allowDeployment && options.allowBrowserGame) buildTools.push({ name: 'publish_browser_game', description: 'Publish an owned browser-game project through the connected GitHub and Vercel accounts. Available only for an explicit publish/deploy request in the user message; the server rechecks ownership, game type, connected credentials, file safety, and verified deployment state.', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, confirm: { type: 'boolean', const: true } }, required: ['project_id', 'confirm'], additionalProperties: false } });
     for (const tool of buildTools) {
       tools.push(tool as AssistantTool);
       references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
+    }
+    if (options?.allowRepositoryAccess) {
+      const repositoryTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [
+        { name: 'github_repository_tree', description: 'Read a bounded list of files in a repository using the authenticated user’s connected GitHub account.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, branch: { type: 'string' } }, required: ['repo'], additionalProperties: false } },
+        { name: 'github_read_file', description: 'Read a safe text source file from a repository using the authenticated user’s connected GitHub account. Secret, credential, environment, binary, and oversized files are rejected server-side.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, path: { type: 'string' }, branch: { type: 'string' } }, required: ['repo', 'path'], additionalProperties: false } },
+        { name: 'github_commit_status', description: 'Read bounded commit check and status information from the authenticated user’s connected GitHub account.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, sha: { type: 'string' } }, required: ['repo', 'sha'], additionalProperties: false } },
+      ];
+      if (options.allowRepositoryWrites) repositoryTools.push({ name: 'github_commit_files', description: 'Commit 1–50 validated source files atomically to the connected repository. Use only after the user explicitly requested this commit and set confirm=true. Secret files and secret-like contents are rejected server-side.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, branch: { type: 'string' }, message: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } }, confirm: { type: 'boolean', const: true } }, required: ['repo', 'files', 'confirm'], additionalProperties: false } });
+      for (const tool of repositoryTools) {
+        tools.push(tool as AssistantTool);
+        references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
+      }
     }
   }
 
@@ -213,7 +259,22 @@ export async function createUserAssistantTools(userId: string, options?: LeoBuil
       if (!options?.allowBuildActions) return { text: 'Project creation is not enabled for this request. Ask Leo to build a website or web app first.', isError: true };
       const name = typeof args.name === 'string' ? args.name.trim().slice(0, 120) : '';
       const projectType = String(args.project_type || '') as ProjectType;
-      if (name.length < 2 || !['website', 'web_app', 'saas'].includes(projectType)) return { text: 'Provide a project name and one of website, web_app, or saas.', isError: true };
+      if (name.length < 2 || !['website', 'web_app', 'saas', 'game'].includes(projectType)) return { text: 'Provide a project name and one of website, web_app, saas, or game.', isError: true };
+      if (projectType === 'game') {
+        if (!options.request) return { text: 'Browser-game creation requires an authenticated chat request.', isError: true };
+        try {
+          const created = await postAsUser(options.request, '/api/setup/projects', {
+            business_name: name,
+            project_type: 'game',
+            requirements: { description: typeof args.brief === 'string' ? args.brief.slice(0, 12_000) : options.userMessage.slice(0, 12_000), source: 'leo_chat' },
+          });
+          const project = created.project && typeof created.project === 'object' ? created.project : null;
+          if (!project || typeof (project as Record<string, unknown>).id !== 'string') return { text: 'The browser-game setup route did not return a saved project ID.', isError: true };
+          return { text: JSON.stringify(project) };
+        } catch (error) {
+          return { text: error instanceof Error ? error.message : 'Browser-game project creation failed.', isError: true };
+        }
+      }
       const { data: profile, error: profileError } = await db.from('profiles').select('role,email').eq('id', userId).maybeSingle();
       if (profileError || !profile) return { text: 'Your account profile could not be verified. No project was created.', isError: true };
       const owner = isPlatformOwner(profile);
@@ -239,6 +300,33 @@ export async function createUserAssistantTools(userId: string, options?: LeoBuil
         return { text: 'The project workspace was created but could not be linked safely; cleanup was attempted and deployment was not started.', isError: true };
       }
       return { text: JSON.stringify({ ...project, website_project_id: websiteId, files_persisted: true }) };
+    }
+    if (reference.kind === 'github_repository_tree' || reference.kind === 'github_read_file' || reference.kind === 'github_commit_status' || reference.kind === 'github_commit_files') {
+      if (!options?.request || !options.allowRepositoryAccess) return { text: 'Connected repository access is not enabled for this request.', isError: true };
+      if (reference.kind === 'github_commit_files' && (!options.allowRepositoryWrites || args.confirm !== true)) return { text: 'Repository writes require an explicit user request and confirm=true.', isError: true };
+      const actions = {
+        github_repository_tree: 'repository-tree',
+        github_read_file: 'read-file',
+        github_commit_status: 'commit-status',
+        github_commit_files: 'commit-files',
+      } as const;
+      try {
+        const result = await postAsUser(options.request, `/api/integrations/github/${actions[reference.kind]}`, args as Record<string, unknown>);
+        return { text: JSON.stringify(result) };
+      } catch (error) {
+        return { text: error instanceof Error ? error.message : 'Connected repository operation failed.', isError: true };
+      }
+    }
+    if (reference.kind === 'publish_browser_game') {
+      if (!options?.request || !options.allowDeployment || !options.allowBrowserGame || args.confirm !== true) return { text: 'Browser-game publication requires an explicit deployment request and confirm=true.', isError: true };
+      const projectId = typeof args.project_id === 'string' ? args.project_id : '';
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) return { text: 'Provide a valid project UUID.', isError: true };
+      try {
+        const result = await postAsUser(options.request, `/api/games/${encodeURIComponent(projectId)}/publish`, { confirm: true });
+        return { text: JSON.stringify(result) };
+      } catch (error) {
+        return { text: error instanceof Error ? error.message : 'Browser-game publication failed.', isError: true };
+      }
     }
     if (reference.kind === 'save_project_files') {
       if (!options?.allowBuildActions) return { text: 'File writes are not enabled for this request.', isError: true };

@@ -2,6 +2,7 @@ import { generateText } from '@/lib/ai/provider-registry';
 import { generateWithExplicitFallback, getSafeFallbackModel } from '@/lib/ai/provider-fallback';
 import { getDefaultTextModel } from '@/lib/ai/model-catalog';
 import {defs,getAgent,listAgents} from './registry';
+import { runSeoAudit } from './seo-audit';
 export {getAgent};
 import {AgentDefinition} from './types';
 import {runHostedBrowserAgent, isBrowserAgent} from './browser-agent-disabled';
@@ -29,6 +30,7 @@ export function classifyAgents(message:string, owner:boolean, allowedAgentIds?:s
 export async function runAgent(agent:AgentDefinition, task:string, context:string, owner:boolean, meta?:{runId?:string;userId?:string}){
  if(agent.ownerOnly&&!owner) throw new Error('Owner-only agent access denied');
  if(isBrowserAgent(agent)) return runHostedBrowserAgent(agent,task,context,{runId:meta?.runId,userId:meta?.userId});
+ if(agent.id==='seo') return JSON.stringify(await runSeoAudit(task));
  if(agent.id==='video'){
   const imageMatch=context.match(/(?:image|reference(?: image)?)\s*(?:url|uri)?\s*[:=]\s*(https?:\/\/\S+)/i);
   const durationMatch=task.match(/(?:duration|length)\s*(?:of)?\s*(\d+)\s*(?:s|sec|seconds)?/i);

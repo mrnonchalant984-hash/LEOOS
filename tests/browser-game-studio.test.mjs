@@ -26,16 +26,17 @@ test('browser game ZIP endpoint verifies authentication, ownership, game type, e
   assert.match(route, /node_modules|private-key/);
 });
 
-test('explicit build requests from Leo chat create a draft project through the existing plan-checked setup route', async () => {
+test('explicit browser-game builds use account-scoped tools and the existing plan-checked setup route', async () => {
   const chat = await read('app/api/chat/route.ts');
+  const setup = await read('app/api/setup/projects/route.ts');
+  const tools = await read('lib/ai/tool-orchestrator.ts');
   assert.match(chat, /isExplicitBuildIntent\(message\)/);
-  assert.match(chat, /createSetupProject\(setupRequest\)/);
-  assert.match(chat, /project_created/);
-  assert.match(chat, /app\/game-studio\?project_id=/);
-  assert.match(chat, /dashboard\/websites\/.*auto_build=1/);
-  assert.match(chat, /Owned project ID:/);
-  assert.match(chat, /status !== 'project_created'/);
-  assert.match(chat, /projectWriteWorkflow/);
+  assert.match(chat, /allowBuildActions: buildMode/);
+  assert.match(chat, /allowBrowserGame: requestedProjectType === 'game'/);
+  assert.match(setup, /planAllowsCloudProject\(plan, projectType, owner\)/);
+  assert.match(setup, /createBrowserGameStarter/);
+  assert.match(tools, /projectType === 'game'/);
+  assert.match(tools, /postAsUser\(options\.request, '\/api\/setup\/projects'/);
 });
 
 test('engine compilation is retired from active game setup, MCP native build tools, and the service tree', async () => {
@@ -53,10 +54,11 @@ test('engine compilation is retired from active game setup, MCP native build too
 
 test('Leo chat tool mode can read and save owner-scoped workspace source without pushing or deploying', async () => {
   const tools = await read('lib/ai/tool-orchestrator.ts');
-  assert.match(tools, /name: 'read_project_files'/);
+  assert.match(tools, /name: 'get_project_files'/);
   assert.match(tools, /name: 'save_project_files'/);
   assert.match(tools, /\.eq\('id', projectId\)\.eq\('user_id', userId\)/);
-  assert.match(tools, /args\.confirm !== true/);
-  assert.match(tools, /saved: true, deployed: false/);
-  assert.match(tools, /never accepts environment or credential files/);
+  assert.match(tools, /options\?\.allowBuildActions/);
+  assert.match(tools, /options\.allowDeployment/);
+  assert.match(tools, /validateIdeFiles\(files\)/);
+  assert.match(tools, /Files were not saved: provide an owned project ID/);
 });

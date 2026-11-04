@@ -26,7 +26,7 @@ test('unsupported configured default falls back only to configured Gemini', () =
 
 test('provider status advertises only Gemini without exposing credentials', () => {
   const status = getModelProviderStatus();
-  assert.equal(status.length, 5);
+  assert.equal(status.length, 6);
   assert.ok(status.every(({ provider }) => provider === 'google'));
   assert.ok(status.every(({ configured }) => typeof configured === 'boolean'));
   assert.doesNotMatch(JSON.stringify(status), /sk-[A-Za-z0-9_-]{12,}|api.?key/i);
@@ -52,7 +52,7 @@ test('model defaults ignore local and alternative-provider settings', () => {
 
 test('Gemini fallback selection never invokes non-Gemini providers', () => {
   const configured = provider => provider === 'google';
-  assert.equal(getSafeFallbackModel('google/gemini-3.8-flash', 'unsupported/fallback-model', false, configured), 'google/gemini-2.5-flash');
-  assert.equal(getSafeFallbackModel('google/gemini-3.8-flash', 'gemini-2.5-flash', false, configured), 'google/gemini-2.5-flash');
+  assert.equal(getSafeFallbackModel('google/gemini-3.8-flash', 'unsupported/fallback-model', false, configured), 'google/gemini-3.1-flash-lite');
+  assert.equal(getSafeFallbackModel('google/gemini-3.8-flash', 'gemini-2.5-flash', false, configured), 'google/gemini-3.1-flash-lite');
   assert.equal(getSafeFallbackModel('google/gemini-2.5-flash', undefined, false, configured), 'google/gemini-3.8-flash');
 });

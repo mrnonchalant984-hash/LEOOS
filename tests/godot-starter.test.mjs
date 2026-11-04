@@ -4,34 +4,23 @@ import { test } from 'node:test';
 
 const source = async path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('football briefs create a real Godot project source tree with a bounded match loop', async () => {
+test('game setup uses a browser-native starter instead of the retired Godot generator', async () => {
   const setup = await source('app/api/setup/projects/route.ts');
-  const football = await source('lib/builders/godot-football-starter.ts');
-  assert.match(setup, /football\|soccer/);
-  assert.match(setup, /createGodotFootballStarter/);
-  assert.match(football, /project\.godot/);
-  assert.match(football, /export_presets\.cfg/);
-  assert.match(football, /Main\.tscn/);
-  assert.match(football, /RigidBody3D\.new\(\)/);
-  assert.match(football, /apply_central_impulse/);
-  assert.match(football, /_on_goal_body_entered/);
-  assert.match(football, /MATCH_SECONDS/);
-  assert.match(football, /_move_keeper/);
-  assert.match(football, /not been run or exported by LeonardX/);
+  const starter = await source('lib/builders/browser-game-starter.ts');
+  assert.match(setup, /createBrowserGameStarter/);
+  assert.doesNotMatch(setup, /createGodot|api\/builds\/godot/);
+  assert.match(starter, /index\.html/);
+  assert.match(starter, /requestAnimationFrame/);
+  assert.match(starter, /Content-Security-Policy/);
+  assert.match(starter, /runtime:'browser'/);
 });
 
-test('action-game briefs select an original offline combat starter', async () => {
+test('game setup does not select native engine starters for action-game briefs', async () => {
   const setup = await source('app/api/setup/projects/route.ts');
-  const action = await source('lib/builders/godot-action-starter.ts');
-  assert.match(setup, /createGodotActionStarter/);
-  assert.match(setup, /action\|shooter\|combat\|arena/);
-  assert.match(action, /project\.godot/);
-  assert.match(action, /export_presets\.cfg/);
-  assert.match(action, /Main\.tscn/);
-  assert.match(action, /_fire_projectile/);
-  assert.match(action, /_on_projectile_hit/);
-  assert.match(action, /player_health/);
-  assert.match(action, /STARTING_ENEMIES/);
-  assert.match(action, /claim online multiplayer/);
-  assert.match(action, /Upload original PNG, JPEG, or WebP textures from the IDE Game images panel/);
+  const starter = await source('lib/builders/browser-game-starter.ts');
+  assert.match(setup, /createBrowserGameStarter/);
+  assert.doesNotMatch(setup, /createGodotActionStarter|createGodotFootballStarter/);
+  assert.match(starter, /chooseKind/);
+  assert.match(starter, /top-down/);
+  assert.match(starter, /brief/);
 });

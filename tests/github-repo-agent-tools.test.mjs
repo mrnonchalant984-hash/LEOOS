@@ -22,10 +22,12 @@ test('GitHub repository tools support actual source reads and atomic multi-file 
 test('Leo chat makes explicit repo tasks tool-enabled and tells build workflows to write, validate, inspect and repair', () => {
   assert.match(chat, /function isRepositoryTask/);
   assert.match(chat, /allowRepositoryAccess: repositoryWorkflow/);
-  assert.match(chat, /generate actual source code, save it with the write tool/);
-  assert.match(chat, /make at most two targeted repairs/);
-  assert.match(chat, /call build_and_deploy_website/);
-  assert.match(chat, /call validate_browser_game/);
+  assert.match(chat, /allowRepositoryWrites: repositoryWriteWorkflow/);
+  assert.match(chat, /use only the supplied account-scoped GitHub tools/i);
+  assert.match(chat, /call github_commit_files with confirm=true/);
+  assert.match(tools, /name: 'github_repository_tree'/);
+  assert.match(tools, /name: 'github_read_file'/);
+  assert.doesNotMatch(chat, /call build_and_deploy_website/);
 });
 
 test('browser-game asset uploads are user/project-scoped, bounded, and exportable', () => {

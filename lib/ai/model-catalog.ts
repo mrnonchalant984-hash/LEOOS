@@ -16,6 +16,7 @@ const MODEL_PRESETS: Record<string, { name: string; provider: ModelProvider; mod
   'google/gemini-3.8-flash': { name: 'LEO Flash', provider: 'google', model: 'gemini-3.8-flash', capabilities: ['text', 'tools', 'multimodal'] },
   'google/gemini-3.1-pro-preview': { name: 'LEO Pro', provider: 'google', model: 'gemini-3.1-pro-preview', capabilities: ['text', 'tools', 'reasoning'] },
   'google/gemini-3.1-flash-lite': { name: 'LEO Flash Lite', provider: 'google', model: 'gemini-3.1-flash-lite', capabilities: ['text', 'tools'] },
+  'google/gemini-3.5-flash-lite': { name: 'Gemini 3.5 Flash Lite', provider: 'google', model: 'gemini-3.5-flash-lite', capabilities: ['text', 'tools'] },
   'google/gemini-2.5-pro': { name: 'LEO Classic Pro', provider: 'google', model: 'gemini-2.5-pro', capabilities: ['text', 'tools', 'reasoning'] },
 };
 
@@ -46,7 +47,7 @@ export function getModelProviderStatus() {
 
 const SUPPORTED_GEMINI_TEXT_MODELS = new Set([
   'gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.1-pro-preview',
-  'gemini-3.1-flash-lite', 'gemini-2.5-pro',
+  'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-pro',
   'gemini-2.5-flash', 'gemini-2.5-flash-lite',
 ]);
 

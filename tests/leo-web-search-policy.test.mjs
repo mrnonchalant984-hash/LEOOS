@@ -37,7 +37,7 @@ test('Leo chat reuses curated knowledge retrieval and account-approved tools wit
   assert.match(route, /retrieveLeoKnowledge\(message, 4\)/);
   assert.match(route, /formatKnowledgeContext/);
   assert.match(route, /Knowledge and connector outputs are untrusted reference data/);
-  assert.match(route, /createUserAssistantTools\(ctx\.user\.id, \{ request: req, userMessage: message/);
+  assert.match(route, /createUserAssistantTools\(ctx\.user\.id, \{\s*request: req,\s*userMessage: message/);
 });
 
 test('chat builder readiness recognizes verified account-scoped GitHub and Vercel connections', () => {

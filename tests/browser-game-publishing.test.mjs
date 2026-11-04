@@ -34,11 +34,12 @@ test('game studio exposes explicit publish/update, verified live URL, source rep
   assert.match(studio, /Repair runtime errors with Leo/);
 });
 
-test('Leo tool publishing is gated by project-write and repository-write authorization and chat calls the publishing tool', () => {
+test('Leo tool publishing is gated by explicit deployment intent and game-project authorization', () => {
   assert.match(tools, /name: 'publish_browser_game'/);
-  assert.match(tools, /!options\.allowRepositoryWrites/);
+  assert.match(tools, /!options\.allowDeployment \|\| !options\.allowBrowserGame/);
   assert.match(tools, /reference\.kind === 'publish_browser_game'/);
-  assert.match(chat, /call publish_browser_game/);
+  assert.match(chat, /use publish_browser_game/);
+  assert.match(chat, /allowBrowserGame: requestedProjectType === 'game'/);
 });
 
 test('generation pipeline syntax-checks classic JavaScript before saving generated game files', async () => {

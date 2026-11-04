@@ -3,9 +3,7 @@ import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { getEffectiveUserPlan, planAllows, planAllowsCloudProject } from '@/lib/plan-access';
 import { getBuilderAvailability, supportedProjectTypes } from '@/lib/builders/providers';
 import { getAccountBuilderAvailability } from '@/lib/builders/account-availability';
-import { createGodot3dStarter } from '@/lib/builders/godot-starter';
-import { createGodotFootballStarter } from '@/lib/builders/godot-football-starter';
-import { createGodotActionStarter } from '@/lib/builders/godot-action-starter';
+import { createBrowserGameStarter } from '@/lib/builders/browser-game-starter';
 import { createExpoMobileStarter } from '@/lib/builders/expo-starter';
 import type { ProjectType } from '@/lib/pricing';
 
@@ -77,13 +75,8 @@ export async function POST(req: NextRequest) {
       if (countError) return NextResponse.json({ error: 'Project capacity could not be checked.' }, { status: 503 });
       if (!owner && (count || 0) >= plan.limits.maxProjects) return NextResponse.json({ error: 'Project limit reached.', upgrade_url: '/pricing' }, { status: 409 });
       const provider = getBuilderAvailability(projectType);
-      const gameBrief = `${name} ${JSON.stringify(requirements)}`;
       const starter = projectType === 'game'
-        ? /\b(?:football|soccer)\b/i.test(gameBrief)
-          ? createGodotFootballStarter(name, requirements)
-          : /\b(?:action|shooter|combat|arena)\b/i.test(gameBrief)
-            ? createGodotActionStarter(name, requirements)
-            : createGodot3dStarter(name, requirements)
+        ? createBrowserGameStarter(name, requirements)
         : createExpoMobileStarter(name, requirements);
       const { data, error } = await db.from('projects').insert({ user_id: ctx.user.id, project_name: name, type: projectType, status: 'draft', progress: 0, files: starter })
         .select('id,project_name,type,status,progress,created_at').single();

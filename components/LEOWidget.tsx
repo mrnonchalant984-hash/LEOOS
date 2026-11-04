@@ -510,7 +510,10 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     setMessages((m) => [...m, { role: "user", content: next, ...((attachedTool || attachedAgent) ? { selectedToolLabel: attachedTool?.name || attachedAgent?.name } : {}) }]);
     setSelectedTool(null);
     setSelectedAgent(null);
-    const buildIntent = /\b(build|create|make|deploy|publish|launch|website|web\s?app|saas)\b/i.test(next) && /\b(build|create|make|deploy|publish|launch|website|web\s?app|saas)\b/i.test(next);
+    const negatesBuild = /\b(?:do not|don't|never|not)\b.{0,32}\b(?:build|create|make|deploy|publish|launch)\b/i.test(next);
+    const buildIntent = !negatesBuild &&
+      /\b(build|create|make|deploy|publish|launch)\b/i.test(next) &&
+      /\b(website|web\s?app|saas|game|project|site)\b/i.test(next);
     if (buildIntent) { setBuildTrackingSince(new Date().toISOString()); setBuildProgress({ status: 'preparing', step: 'Preparing your build request', message: 'Leo is preparing the project and will show persisted build events here.' }); setTrackBuildProgress(true); }
     setLoading(true);
     setError("");

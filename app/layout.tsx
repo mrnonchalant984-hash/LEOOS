@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import './globals.css';
 import './premium-theme.css';
 import { Header } from '@/components/Header';
@@ -104,6 +105,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(websiteSchema) }} />
       </head>
       <body className="min-h-screen bg-black text-white">
+        <Script
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8872751811502892"
+          strategy="beforeInteractive"
+          crossOrigin="anonymous"
+        />
         <VisualBackground />
         <Providers>
           <Header />

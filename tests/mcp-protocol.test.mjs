@@ -79,6 +79,7 @@ test('Streamable HTTP MCP server initializes, lists tools, and calls a harmless 
     const { tools } = await client.listTools();
     assert.deepEqual(tools.map(tool => tool.name).sort(), [
       'discover_application_capabilities',
+      'export_browser_game_project',
       'get_account_plan',
       'get_agent_details',
       'get_agent_execution_status',
@@ -179,9 +180,11 @@ test('MCP write tools require the write scope and explicit confirmation input', 
       'build_android_calculator',
       'cancel_agent_execution',
       'cancel_engineering_workflow',
+      'create_browser_game',
       'create_engineering_workflow',
       'create_project',
       'discover_application_capabilities',
+      'export_browser_game_project',
       'get_account_plan',
       'get_agent_details',
       'get_agent_execution_status',
@@ -332,32 +335,42 @@ test('MCP write tools dispatch approved project actions to their account-scoped 
       ['rename_project', { project_id: project.id, name: 'Renamed workspace', confirm: true }],
       ['save_project_files', { project_id: project.id, files: { 'app/page.tsx': 'export default function Page() {}' }, confirm: true }],
       ['build_and_deploy_project', { project_id: project.id, brief: 'Deploy this site', files: [{ path: 'app/page.tsx', content: 'export default function Page() {}' }], idempotency_key: '11111111-1111-4111-8111-111111111111', confirm: true }],
-      ['start_cloud_build', { project_id: project.id, provider: 'godot-build-service', preset: 'Linux/X11', idempotency_key: '55555555-5555-4555-8555-555555555555', confirm: true }],
       ['start_cloud_build', { project_id: project.id, provider: 'expo-eas', idempotency_key: '77777777-7777-4777-8777-777777777777', confirm: true }],
       ['leo_ai_chat', { message: 'Explain this project', project_id: project.id, fallback_model: 'anthropic/claude-3-5-haiku-latest', idempotency_key: '99999999-9999-4999-8999-999999999999', confirm: true }],
       ['invoke_agent', { agent_id: 'code-review', task: 'Review my code', idempotency_key: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', confirm: true }],
       ['cancel_agent_execution', { run_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', confirm: true }],
       ['approve_agent_execution', { approval_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', confirm: true }],
-      ['get_cloud_build_status', { provider: 'godot-build-service', job_id: project.id }],
+      ['get_cloud_build_status', { provider: 'expo-eas', job_id: project.id }],
       ['run_project_operation', { project_id: project.id, operation: 'test', confirm: true }],
-      ['retry_cloud_build', { provider: 'godot-build-service', job_id: project.id, confirm: true }],
     ];
     for (const [name, arguments_] of actions) {
       const result = await client.callTool({ name, arguments: arguments_ });
       assert.equal(result.isError, undefined, `${name} should be dispatched successfully`);
     }
+    const retiredBuild = await client.callTool({ name: 'start_cloud_build', arguments: {
+      project_id: project.id, provider: 'godot-build-service', preset: 'Linux/X11',
+      idempotency_key: '55555555-5555-4555-8555-555555555555', confirm: true,
+    } });
+    assert.equal(retiredBuild.isError, true, 'retired Godot builds must be rejected');
+    const retiredRetry = await client.callTool({ name: 'retry_cloud_build', arguments: {
+      provider: 'godot-build-service', job_id: project.id, confirm: true,
+    } });
+    assert.equal(retiredRetry.isError, true, 'retired Godot retries must be rejected');
+    const retiredStatus = await client.callTool({ name: 'get_cloud_build_status', arguments: {
+      provider: 'godot-build-service', job_id: project.id,
+    } });
+    assert.equal(retiredStatus.isError, true, 'retired Godot status queries must be rejected');
     assert.deepEqual(calls, [
       ['create_project', 'authenticated-user', 'New workspace', 'website'],
       ['create_project', 'authenticated-user', 'Shopping app', 'mobile_app'],
       ['rename_project', 'authenticated-user', project.id, 'Renamed workspace'],
       ['save_project_files', 'authenticated-user', project.id, { 'app/page.tsx': 'export default function Page() {}' }],
       ['build_and_deploy_project', 'authenticated-user', project.id, 'Deploy this site', [{ path: 'app/page.tsx', content: 'export default function Page() {}' }], '11111111-1111-4111-8111-111111111111'],
-      ['start_cloud_build', 'authenticated-user', { project_id: project.id, provider: 'godot-build-service', platform: undefined, profile: undefined, preset: 'Linux/X11', idempotency_key: '55555555-5555-4555-8555-555555555555' }],
       ['start_cloud_build', 'authenticated-user', { project_id: project.id, provider: 'expo-eas', platform: 'android', profile: 'preview', preset: undefined, idempotency_key: '77777777-7777-4777-8777-777777777777' }],
       ['leo_ai_chat', 'authenticated-user', { message: 'Explain this project', project_id: project.id, session_id: undefined, model: undefined, fallback_model: 'anthropic/claude-3-5-haiku-latest', idempotency_key: '99999999-9999-4999-8999-999999999999' }],
       ['invoke_agent', 'authenticated-user', { agent_id: 'code-review', task: 'Review my code', context: undefined, idempotency_key: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
       ['approve_agent_execution', 'authenticated-user', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'],
-      ['get_cloud_build_status', 'authenticated-user', 'godot-build-service', project.id],
+      ['get_cloud_build_status', 'authenticated-user', 'expo-eas', project.id],
     ]);
   } finally {
     await client.close();
