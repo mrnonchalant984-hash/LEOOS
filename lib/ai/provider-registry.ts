@@ -18,6 +18,8 @@ export type TextGenerationResult = {
   model: string;
   provider: ModelProvider;
   usage: { inputTokens: number; outputTokens: number; totalTokens: number } | null;
+  toolCalls?: Array<{ name: string; success: boolean }>;
+  sources?: Array<{ title?: string; uri: string }>;
 };
 export type AssistantTool = { name: string; description: string; inputSchema: Record<string, unknown> };
 export type AssistantToolExecutor = (name: string, args: Record<string, unknown>) => Promise<{ text: string; isError?: boolean }>;
@@ -114,6 +116,7 @@ export async function generateTextWithTools(
   let toolErrors = 0;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  const toolCalls: Array<{ name: string; success: boolean }> = [];
   let usageReported = false;
   let finalText = '';
   const temperature = Math.max(0, Math.min(2, request.temperature ?? 0.3));
@@ -164,6 +167,7 @@ export async function generateTextWithTools(
         ? await executeProviderTool(call.name || '', call.args, request.tools, request.executeTool)
         : { text: 'Tool-call limit reached. No further tools were executed; summarize completed results and tell the user what remains.', isError: true };
       if (result.isError) toolErrors += 1;
+      toolCalls.push({ name: call.name || '', success: !result.isError });
       resultParts.push({
         functionResponse: {
           name: call.name || '',
@@ -202,6 +206,7 @@ export async function generateTextWithTools(
     model: resolved.model,
     provider: 'google',
     usage: usageReported ? normalizeUsage(totalInputTokens, totalOutputTokens) : null,
+    toolCalls,
   };
 }
 
@@ -235,7 +240,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
   const grounded = response as typeof response & { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { title?: string; uri?: string } }> } }> };
   const sources = (grounded.candidates?.[0]?.groundingMetadata?.groundingChunks || [])
     .map(chunk => chunk.web)
-    .filter((web): web is { title?: string; uri?: string } => Boolean(web?.uri && /^https?:\/\//i.test(web.uri)))
+    .filter((web): web is { title?: string; uri: string } => typeof web?.uri === 'string' && /^https?:\/\//i.test(web.uri))
     .filter((web, index, all) => all.findIndex(item => item.uri === web.uri) === index)
     .slice(0, 8);
   const baseText = (response.text || '').trim();
@@ -245,5 +250,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
     model: resolved.model,
     provider: 'google',
     usage: normalizeUsage(usage?.promptTokenCount, usage?.candidatesTokenCount),
+    toolCalls: [],
+    ...(sources.length ? { sources: sources.map(source => ({ title: source.title, uri: source.uri })) } : {}),
   };
 }

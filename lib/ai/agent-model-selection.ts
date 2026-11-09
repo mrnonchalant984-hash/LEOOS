@@ -1,4 +1,6 @@
 import { getDefaultTextModel, isProviderConfigured, resolveModel } from './model-catalog.ts';
+import type { AgentDefinition } from '@/lib/agents/types';
+import { getModelProviderStatus } from './model-catalog.ts';
 
 /**
  * Resolve the model used by built-in text agents.
@@ -26,4 +28,24 @@ export function getAgentPrimaryModel(
   }
 
   return getDefaultTextModel('chat');
+}
+
+export function selectAgentModel(agent: Pick<AgentDefinition, 'id' | 'model' | 'allowedTools'>, task: string) {
+  const reasoning = agent.allowedTools.some(tool =>
+    ['database_write', 'deployment', 'github_write', 'security'].includes(tool),
+  ) || /architect|analy[sz]e|debug|design|plan|reason|security|trade.?off/i.test(`${agent.id} ${task}`);
+  const configuredAgentModel = agent.model?.trim() || process.env.LEO_AGENT_MODEL?.trim();
+  const model = configuredAgentModel
+    ? getAgentPrimaryModel(configuredAgentModel)
+    : getDefaultTextModel(reasoning ? 'reasoning' : 'chat');
+  const resolved = resolveModel(model);
+  const catalogEntry = getModelProviderStatus().find(entry =>
+    entry.provider === resolved.provider && entry.model === resolved.model,
+  );
+  return {
+    model: `${resolved.provider}/${resolved.model}`,
+    provider: resolved.provider,
+    reason: reasoning ? 'reasoning' as const : 'general' as const,
+    capabilities: catalogEntry?.capabilities ?? ['text'],
+  };
 }
