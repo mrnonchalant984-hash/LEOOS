@@ -45,6 +45,9 @@ function createReportOnlyCsp() {
 }
 
 const nextConfig = {
+  // npm run build checks types first. Avoid Next's duplicate TypeScript pass
+  // so constrained production builders do not run out of memory.
+  typescript: { ignoreBuildErrors: true },
   async headers() {
     const headers = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },

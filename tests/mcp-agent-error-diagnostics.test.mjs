@@ -16,6 +16,6 @@ test('MCP agent failures persist sanitized provider diagnostics instead of a gen
 test('SEO agent is routed to the read-only live audit instead of a generic text-only prompt', () => {
   const manager = fs.readFileSync(new URL('../lib/agents/manager.ts', import.meta.url), 'utf8');
   const registry = fs.readFileSync(new URL('../lib/agents/registry.ts', import.meta.url), 'utf8');
-  assert.match(manager, /agent\.id==='seo'\) return JSON\.stringify\(await runSeoAudit\(task\)\)/);
+  assert.match(manager, /agent\.id\s*===\s*'seo'\)\s*return JSON\.stringify\(await runSeoAudit\(task\)\)/);
   assert.match(registry, /\['seo',[^\n]+\['public_site_audit'\],\['read'\],false\]/);
 });
