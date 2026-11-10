@@ -137,13 +137,40 @@ test('workflow dependency engine rejects missing references and cycles, and prod
   const source = await read('lib/workflow-dependencies.ts');
   const route = await read('app/api/workflows/route.ts');
   const worker = await read('app/api/internal/workflow-worker/route.ts');
+  assert.match(source, /getReadyWorkflowStepBatch/);
   assert.match(source, /workflowDependencyError/);
   assert.match(source, /workflow_dependency_cycle/);
   assert.match(source, /topologicallySortWorkflowSteps/);
   assert.match(route, /dependsOn: z\.array/);
   assert.match(route, /workflowDependencyError/);
   assert.match(worker, /topologicallySortWorkflowSteps/);
+  assert.match(worker, /Promise\.allSettled/);
+  assert.match(worker, /PARALLEL_READ_ONLY_TOOLS/);
   assert.match(worker, /invalid_workflow_dependencies/);
+});
+
+test('workflow batches only dependency-ready read-only steps and serializes write-capable steps', async () => {
+  const { getReadyWorkflowStepBatch } = await import('../lib/workflow-dependencies.ts');
+  const steps = [
+    { id: 'a', type: 'agent', dependsOn: [], readOnly: true },
+    { id: 'b', type: 'agent', dependsOn: [], readOnly: true },
+    { id: 'c', type: 'agent', dependsOn: ['a'], readOnly: true },
+    { id: 'd', type: 'agent', dependsOn: [], readOnly: false },
+    { id: 'e', type: 'agent', dependsOn: [], readOnly: true },
+  ];
+  const isReadOnly = step => step.readOnly;
+  assert.deepEqual(
+    getReadyWorkflowStepBatch(steps, new Set(), isReadOnly, 3).map(step => step.id),
+    ['a', 'b', 'e'],
+  );
+  assert.deepEqual(
+    getReadyWorkflowStepBatch(steps.slice(3), new Set(), isReadOnly, 3).map(step => step.id),
+    ['d'],
+  );
+  assert.deepEqual(
+    getReadyWorkflowStepBatch(steps, new Set(['a']), isReadOnly, 2).map(step => step.id),
+    ['b', 'c'],
+  );
 });
 
 test('project memory supports global plus project-scoped retrieval with ownership and bounded input checks', async () => {

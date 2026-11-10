@@ -4,9 +4,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight, FileCode2, Play, Save, TerminalSquare } from 'lucide-react';
 import CloudBuildPanel from '@/components/ide/CloudBuildPanel';
+import { LivePreviewFrame } from '@/components/engineering/LivePreviewFrame';
 
 type Workspace = { id: string; project_name: string; type: string | null; status: string | null; files: Record<string, string> };
 type TerminalLine = { kind: 'input' | 'output' | 'error'; text: string };
+type PreviewJob = {
+  id: string;
+  status: 'queued' | 'running' | 'deployed' | 'failed';
+  branch_name: string;
+  deployment_url: string | null;
+  error_code: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
 
 function flattenFiles(files: Record<string, string>) {
   return Object.keys(files).sort((a, b) => a.localeCompare(b));
@@ -23,9 +33,20 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [preview, setPreview] = useState<PreviewJob | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
   const filePaths = useMemo(() => flattenFiles(files), [files]);
   const visibleFilePaths = useMemo(() => filePaths.filter(path => path.toLowerCase().includes(fileSearch.toLowerCase())), [filePaths, fileSearch]);
   const isDirty = useMemo(() => JSON.stringify(files) !== JSON.stringify(savedFiles), [files, savedFiles]);
+  const isPreviewPending = preview?.status === 'queued' || preview?.status === 'running';
+
+  const refreshPreview = useCallback(async () => {
+    const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/preview`, { cache: 'no-store' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Preview status could not be loaded.');
+    setPreview(result.preview || null);
+  }, [workspaceId]);
 
   const loadWorkspace = useCallback(async () => {
     try {
@@ -64,6 +85,30 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
     return () => { active = false; };
   }, [workspaceId]);
 
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/preview`, { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Preview status could not be loaded.');
+        if (active) setPreview(result.preview || null);
+      } catch (cause) {
+        if (active) setPreviewError(cause instanceof Error ? cause.message : 'Preview status could not be loaded.');
+      }
+    };
+    void refresh();
+    return () => { active = false; };
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!isPreviewPending) return;
+    const interval = window.setInterval(() => {
+      void refreshPreview().catch(cause => setPreviewError(cause instanceof Error ? cause.message : 'Preview status could not be loaded.'));
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [isPreviewPending, refreshPreview]);
+
   const saveFiles = useCallback(async () => {
     setSaving(true);
     setError('');
@@ -81,6 +126,29 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
       setSaving(false);
     }
   }, [files, workspaceId]);
+
+  async function createCloudflarePreview() {
+    if (isDirty) {
+      setPreviewError('Save workspace files before creating a preview.');
+      return;
+    }
+    setPreviewLoading(true);
+    setPreviewError('');
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/preview`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Cloudflare preview could not be queued.');
+      setPreview(result.preview);
+    } catch (cause) {
+      setPreviewError(cause instanceof Error ? cause.message : 'Cloudflare preview could not be queued.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
 
   function createFile() {
     const path = window.prompt('New file path (relative to the workspace)');
@@ -160,6 +228,37 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
     </header>
     <CloudBuildPanel projectId={workspaceId} projectType={workspace?.type || null} />
     {error && <div role="alert" className="mx-auto mb-3 max-w-[1600px] rounded-md border border-red-400/30 bg-red-950/30 px-4 py-2 text-sm text-red-200">{error}</div>}
+    <section aria-label="Cloudflare static preview" className="mx-auto mb-4 max-w-[1600px] rounded-xl border border-white/10 bg-[#101114] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">Cloudflare static preview</h2>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-white/55">
+            Uploads saved static HTML/CSS/JavaScript/JSON/SVG text assets to an isolated Cloudflare Pages preview branch. This does not build framework projects or deploy to Vercel production.
+          </p>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-amber-200/75">
+            Preview URLs are public. Do not include secrets or private data; common credential patterns are blocked but scanning is not exhaustive.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void createCloudflarePreview()}
+          disabled={isDirty || saving || previewLoading || isPreviewPending}
+          className="rounded-md border border-[#d7aa70]/40 bg-[#d7aa70]/10 px-3 py-2 text-sm text-[#f1c894] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {previewLoading ? 'Queueing preview…' : isPreviewPending ? 'Preview in progress…' : 'Create Cloudflare preview'}
+        </button>
+      </div>
+      {isDirty && <p className="mt-2 text-xs text-amber-200/80">Save files before creating a preview.</p>}
+      {previewError && <p role="alert" className="mt-2 text-xs text-red-300">{previewError}</p>}
+      {preview && <p className="mt-2 text-xs text-white/55" aria-live="polite">
+        Latest preview: {preview.status}{preview.error_code ? ` (${preview.error_code})` : ''} · {new Date(preview.created_at).toLocaleString()}
+      </p>}
+      {preview?.status === 'deployed' && preview.deployment_url && (
+        <div className="mt-4">
+          <LivePreviewFrame url={preview.deployment_url} title={`${workspace?.project_name || 'Workspace'} static preview`} sandboxed />
+        </div>
+      )}
+    </section>
     <section aria-label="Workspace editor" className="mx-auto grid min-h-[68vh] max-w-[1600px] overflow-hidden rounded-xl border border-white/10 bg-[#101114] lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.75fr)]">
       <div className="flex min-h-[58vh] flex-col border-b border-white/10 lg:border-b-0 lg:border-r">
         <div className="flex h-11 items-center gap-2 border-b border-white/10 px-4 text-xs text-white/55"><FileCode2 size={15}/> Files <input aria-label="Search files" value={fileSearch} onChange={event => setFileSearch(event.target.value)} placeholder="Search files…" className="ml-auto min-w-0 w-32 rounded border border-white/10 bg-black/20 px-2 py-1 text-xs text-white outline-none focus:border-[#d7aa70]/60"/><button onClick={createFile} className="ml-auto rounded px-2 py-1 text-white/70 hover:bg-white/10 hover:text-white">New file</button><span>{filePaths.length} items</span></div>

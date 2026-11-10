@@ -69,6 +69,7 @@
     "eslint-config-next": "16.3.6",
     "supabase": "^2.0.0",
     "tailwindcss": "^4.1.13",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "wrangler": "^4.159.0"
   }
 }

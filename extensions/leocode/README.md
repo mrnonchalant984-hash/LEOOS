@@ -6,18 +6,25 @@ LeoCode is a native Visual Studio Code extension project that connects to the ex
 
 - Connect an existing LeonardX account using the platform's sign-in API. The password is requested only for the sign-in operation; access and refresh tokens are held in VS Code `SecretStorage`.
 - Open Leo chat inside VS Code and use the authenticated `/api/chat` endpoint.
-- Send a bounded active-file/selection context after excluding credential files and redacting common secret assignments.
+- Opt in to sharing the active file/selection or select up to five safe workspace files; context reads have file-count and byte limits, exclude credential/build/dependency paths, and redact common secret assignments.
+- Search workspace text locally and choose which bounded snippets and project metadata to share.
+- Request multi-file changes as complete file proposals, review each in VS Code diffs, and apply them only after explicit confirmation and a stale-file check.
+- Request grounded Google Search explicitly; citations are included only when returned in Gemini grounding metadata.
 - Use the existing server-side MCP/tool path only when the user explicitly selects tool mode in chat.
+- Discover and call LeonardX-authorized MCP tools through VS Code's language-model tool API; the backend remains the authorization boundary.
 - Discover and run only specialist agents returned for the signed-in account; the existing agent API still enforces plan access and approvals.
 - Explain or review the active file, request code, generate tests, and preview/apply an extracted code block after confirmation.
-- Inspect the current workspace file names without uploading its contents.
+- Run a command typed by the user in a VS Code terminal only after confirming the exact command. LeoCode does not execute model-generated commands and does not capture terminal output.
+- Inspect workspace structure without automatically uploading file contents.
 - Read account usage from the authenticated dashboard endpoint.
 
-The model picker uses five LEO-branded configurations backed by distinct Google Gemini model IDs. The upstream model identifiers are cross-checked against the [official Gemini models catalog](https://ai.google.dev/gemini-api/docs/models); actual availability for a particular API key is determined by the server's provider response, and no credentials are included in the extension. The chat API currently returns a completed JSON response rather than a token stream, so this extension does not claim streaming.
+The model picker uses only configured text models advertised by the LeonardX server and currently supports Gemini. Auto delegates to the server's Gemini-first default. Other model families are deliberately excluded unless the backend advertises and implements them. No provider credentials are included in the extension. The chat API currently returns a completed JSON response rather than a token stream, so this extension does not claim streaming.
 
 Founders Early Access accounts share a server-enforced limit of 40 Leo chat and sandbox requests per rolling 24-hour window. The entitlement and usage counter are checked by LeonardX; the extension does not store or enforce the quota locally.
 
-Active editor context is sent to LeonardX when you submit a chat or specialist-agent request. LeoCode excludes common credential files and redacts common secret assignments, but this is a best-effort safeguard, not a guarantee that every sensitive value is detected. Review the active editor and selection before sending. Generated code is shown as a diff and is not applied unless you confirm.
+Workspace context is not sent automatically in chat. Use the context controls to select files/snippets, or opt in to the active editor/selection. Review the listed context before sending. Secret filtering and redaction are best-effort safeguards, not a guarantee that every sensitive value is detected. File edits are proposals only; LeoCode does not yet rename or delete workspace files and does not run an autonomous local edit/test loop. Specialist-agent runs operate through LeonardX's account-scoped server tools, not directly on the local workspace. The terminal command is entered by the user, shown in a confirmation dialog, and then executed in a visible VS Code terminal.
+
+The extension's MCP tools currently discover and call LeonardX-connected MCP servers through LeonardX endpoints. Direct connections to arbitrary third-party MCP servers, native local repository indexing, Git publishing, and multi-agent orchestration over local files are not implemented.
 
 ## Local development
 

@@ -14,9 +14,11 @@ const VIEWPORTS: Record<Viewport, { label: string; width: number; icon: typeof M
 export function LivePreviewFrame({
   url,
   title = 'Live application preview',
+  sandboxed = false,
 }: {
   url: string | null;
   title?: string;
+  sandboxed?: boolean;
 }) {
   const [viewport, setViewport] = useState<Viewport>('desktop');
   const [nonce, setNonce] = useState(0);
@@ -83,6 +85,7 @@ export function LivePreviewFrame({
               key={`${url}-${nonce}-${viewport}`}
               title={title}
               src={url}
+              sandbox={sandboxed ? 'allow-forms allow-scripts' : undefined}
               className="min-h-[420px] w-full bg-white"
               onError={() => setIframeError(true)}
             />

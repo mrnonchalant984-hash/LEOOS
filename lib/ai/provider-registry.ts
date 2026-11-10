@@ -7,6 +7,7 @@ export type { ModelMessage, ModelProvider } from './model-catalog';
 export type TextGenerationRequest = {
   model: string;
   messages: ModelMessage[];
+  signal?: AbortSignal;
   maxOutputTokens?: number;
   temperature?: number;
   reasoning?: { effort: 'low' | 'medium' | 'high' };
@@ -22,7 +23,7 @@ export type TextGenerationResult = {
   sources?: Array<{ title?: string; uri: string }>;
 };
 export type AssistantTool = { name: string; description: string; inputSchema: Record<string, unknown> };
-export type AssistantToolExecutor = (name: string, args: Record<string, unknown>) => Promise<{ text: string; isError?: boolean }>;
+export type AssistantToolExecutor = (name: string, args: Record<string, unknown>, signal?: AbortSignal) => Promise<{ text: string; isError?: boolean }>;
 
 function normalizeUsage(inputTokens?: number | null, outputTokens?: number | null) {
   if (!Number.isFinite(inputTokens) || !Number.isFinite(outputTokens)) return null;
@@ -70,13 +71,15 @@ async function executeProviderTool(
   input: unknown,
   tools: AssistantTool[],
   executeTool: AssistantToolExecutor,
+  signal?: AbortSignal,
 ) {
+  if (signal?.aborted) return { text: 'Agent execution timed out or was cancelled. No tool call was started.', isError: true };
   const args = toolArguments(input);
   if (!args) return { text: 'Tool arguments must be a JSON object no larger than 16 KB.', isError: true };
   const tool = tools.find(item => item.name === name);
   if (!tool) return { text: 'That tool is not available for this request.', isError: true };
   try {
-    return await executeTool(name, args);
+    return await executeTool(name, args, signal);
   } catch {
     return { text: 'The tool could not be completed. No raw arguments or credentials were logged.', isError: true };
   }
@@ -137,6 +140,7 @@ export async function generateTextWithTools(
       config: {
         maxOutputTokens,
         temperature,
+        ...(request.signal ? { abortSignal: request.signal } : {}),
         ...(system ? { systemInstruction: system } : {}),
         tools: [{ functionDeclarations: definitions }],
         ...(request.requiredToolName && callsMade === 0 ? { toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [request.requiredToolName] } } } : {}),
@@ -164,7 +168,7 @@ export async function generateTextWithTools(
     for (const call of calls) {
       callsMade += 1;
       const result = callsMade <= maxCalls
-        ? await executeProviderTool(call.name || '', call.args, request.tools, request.executeTool)
+        ? await executeProviderTool(call.name || '', call.args, request.tools, request.executeTool, request.signal)
         : { text: 'Tool-call limit reached. No further tools were executed; summarize completed results and tell the user what remains.', isError: true };
       if (result.isError) toolErrors += 1;
       toolCalls.push({ name: call.name || '', success: !result.isError });
@@ -190,7 +194,12 @@ export async function generateTextWithTools(
     const response = await withProviderError('google', resolved.model, () => client.models.generateContent({
       model: resolved.model,
       contents,
-      config: { maxOutputTokens, temperature: 0.2, ...(system ? { systemInstruction: system } : {}) },
+      config: {
+        maxOutputTokens,
+        temperature: 0.2,
+        ...(request.signal ? { abortSignal: request.signal } : {}),
+        ...(system ? { systemInstruction: system } : {}),
+      },
     }));
     addUsage(response);
     finalText = (response.text || response.candidates?.[0]?.content?.parts?.filter(part => typeof part.text === 'string').map(part => part.text || '').join('') || '').trim();
@@ -232,6 +241,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
     config: {
       maxOutputTokens,
       temperature,
+      ...(request.signal ? { abortSignal: request.signal } : {}),
       ...(system ? { systemInstruction: system } : {}),
       ...(request.webSearch ? { tools: [{ googleSearch: {} }] } : {}),
     },

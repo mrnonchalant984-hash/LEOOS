@@ -11,7 +11,8 @@ const knowledge = await readFile(new URL('../lib/leo-knowledge.ts', import.meta.
 test('Leo chat sends its server-generated system prompt and bounded conversation history to the selected provider', () => {
   assert.match(route, /getLeoSystemPrompt\(\)/);
   assert.match(route, /history\.slice\(-20\)/);
-  assert.match(route, /generateText\(\{ \.\.\.request, model, webSearch: shouldUseWebSearch\(message\) \}\)/);
+  assert.match(route, /generateText\(\{ \.\.\.request, model, webSearch: webSearchRequested \}\)/);
+  assert.match(route, /requestedWebSearch === true \|\| shouldUseWebSearch\(message\)/);
 });
 
 test('Leo chat validates caller-selected models against the authenticated model catalog', () => {

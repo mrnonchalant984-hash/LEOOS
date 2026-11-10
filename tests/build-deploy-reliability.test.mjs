@@ -6,6 +6,7 @@ import {
   getBuildDeployRateLimitPerHour,
   resolveBuildDeployIdempotencyKey,
 } from '../lib/build-deploy-idempotency.ts';
+import { isVerifiedDeploymentResponse } from '../lib/deployment-result.ts';
 import { parseRetryAfter, ProviderHttpError, requestProviderJson } from '../lib/provider-http.ts';
 
 const source = async (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -35,6 +36,19 @@ test('deployment attempt cap is server configurable and bounded', () => {
   assert.equal(getBuildDeployRateLimitPerHour('0'), 3);
   assert.equal(getBuildDeployRateLimitPerHour('1000'), 3);
   assert.equal(getBuildDeployRateLimitPerHour('invalid'), 3);
+});
+
+test('deployment bridge only treats a successful response with a verified HTTPS URL as deployed', async () => {
+  assert.equal(isVerifiedDeploymentResponse(202, { success: true, status: 'queued' }), false);
+  assert.equal(isVerifiedDeploymentResponse(202, { status: 'deployed', liveUrl: 'https://example.com' }), false);
+  assert.equal(isVerifiedDeploymentResponse(200, { success: true, status: 'building' }), false);
+  assert.equal(isVerifiedDeploymentResponse(200, { success: true, status: 'deployed' }), false);
+  assert.equal(isVerifiedDeploymentResponse(200, { success: false, status: 'deployed', liveUrl: 'https://example.com' }), false);
+  assert.equal(isVerifiedDeploymentResponse(200, { success: true, status: 'deployed', liveUrl: 'http://example.com' }), false);
+  assert.equal(isVerifiedDeploymentResponse(200, { success: true, status: 'deployed', liveUrl: 'https://example.com' }), true);
+  assert.equal(isVerifiedDeploymentResponse(200, { status: 'deployed', liveUrl: 'https://example.com', warning: 'status sync failed' }), true);
+  const bridge = await source('app/api/v1/projects/[id]/deploy/route.ts');
+  assert.match(bridge, /isVerifiedDeploymentResponse\(result\.status, deployment\)/);
 });
 
 test('Retry-After supports provider seconds and HTTP dates', () => {

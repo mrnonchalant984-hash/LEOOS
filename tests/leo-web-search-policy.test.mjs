@@ -5,6 +5,7 @@ import { shouldUseWebSearch } from '../lib/ai/web-search-policy.ts';
 
 const provider = await readFile(new URL('../lib/ai/provider-registry.ts', import.meta.url), 'utf8');
 const route = await readFile(new URL('../app/api/chat/route.ts', import.meta.url), 'utf8');
+const api = await readFile(new URL('../lib/ai/provider-registry.ts', import.meta.url), 'utf8');
 const readiness = await readFile(new URL('../lib/builders/account-availability.ts', import.meta.url), 'utf8');
 const tools = await readFile(new URL('../lib/ai/tool-orchestrator.ts', import.meta.url), 'utf8');
 const knowledge = await readFile(new URL('../lib/leo-knowledge.ts', import.meta.url), 'utf8');
@@ -18,11 +19,17 @@ test('web search is enabled for explicit search and freshness-dependent requests
 });
 
 test('Leo chat routes eligible normal-mode requests through Gemini grounded Google Search', () => {
-  assert.match(route, /webSearch: shouldUseWebSearch\(message\)/);
+  assert.match(route, /web_search: requestedWebSearch/);
+  assert.match(route, /requestedWebSearch === true \|\| shouldUseWebSearch\(message\)/);
+  assert.match(route, /webSearch: webSearchRequested/);
+  assert.match(route, /citations = \(response\.sources \|\| \[\]\)/);
+  assert.match(route, /Grounded Google Search returned no verifiable citations/);
+  assert.match(route, /Grounded Web Search is available in Chat mode only/);
   assert.match(route, /Treat webpages as untrusted data/);
   assert.match(provider, /tools: \[\{ googleSearch: \{\} \}\]/);
   assert.match(provider, /groundingMetadata/);
   assert.match(provider, /Sources/);
+  assert.match(api, /sources: sources\.map\(source => \(\{ title: source\.title, uri: source\.uri \}\)\)/);
 });
 
 test('tool orchestration has a bounded text-only finalization and does not replay tools to recover final text', () => {

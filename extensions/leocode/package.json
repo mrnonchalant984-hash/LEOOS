@@ -1,11 +1,12 @@
 {
   "name": "leocode",
+  "publisher": "leonardx",
   "displayName": "LeoCode by LeonardX",
   "description": "Workspace-aware AI coding assistance from your LeonardX account.",
   "version": "0.1.1",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.100.0"
   },
   "categories": [
     "Other",
@@ -31,10 +32,56 @@
     "onCommand:leocode.generateTests",
     "onCommand:leocode.runAgent",
     "onCommand:leocode.applyGeneratedCode",
+    "onCommand:leocode.runCommand",
     "onCommand:leocode.viewUsage",
     "onCommand:leocode.signOut"
   ],
   "contributes": {
+    "chatAgents": [
+      {
+        "path": "./agents/leocode-native.agent.md"
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "leocode_list_mcp_tools",
+        "toolReferenceName": "listLeonardXMcpTools",
+        "displayName": "List LeonardX MCP Tools",
+        "modelDescription": "Lists the signed-in user's LeonardX MCP connections and their existing approval status.",
+        "canBeReferencedInPrompt": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "leocode_call_mcp_tool",
+        "toolReferenceName": "callLeonardXMcpTool",
+        "displayName": "Call LeonardX MCP Tool",
+        "modelDescription": "Calls a LeonardX MCP tool that is already enabled and approved for the signed-in account. The user must confirm the call.",
+        "canBeReferencedInPrompt": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "serverId": {
+              "type": "string",
+              "pattern": "^[0-9a-f-]{36}$"
+            },
+            "toolName": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            },
+            "arguments": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": ["serverId", "toolName", "arguments"],
+          "additionalProperties": false
+        }
+      }
+    ],
     "configuration": {
       "title": "LeoCode",
       "properties": {
@@ -74,6 +121,7 @@
       { "command": "leocode.generateTests", "title": "LeoCode: Generate Tests" },
       { "command": "leocode.runAgent", "title": "LeoCode: Run Specialist Agent" },
       { "command": "leocode.applyGeneratedCode", "title": "LeoCode: Apply Generated Code" },
+      { "command": "leocode.runCommand", "title": "LeoCode: Run Approved Terminal Command" },
       { "command": "leocode.viewUsage", "title": "LeoCode: View Usage" },
       { "command": "leocode.signOut", "title": "LeoCode: Sign Out" }
     ]

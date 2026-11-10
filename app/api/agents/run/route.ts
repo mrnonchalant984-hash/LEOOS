@@ -6,6 +6,7 @@ import { getEffectiveUserPlan } from '@/lib/plan-access';
 import { agentAllowed, canUseManualAgents, getAllowedAgentIds } from '@/lib/agents/entitlements';
 import { canWriteOrganization, getOrganizationRole } from '@/lib/organization-access';
 import { withOperationalMonitoring } from '@/lib/monitoring';
+import { AGENT_TASK_MAX_CHARS } from '@/lib/agents/contracts';
 
 export const runtime = 'nodejs';
 
@@ -18,6 +19,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null);
     const task = typeof body?.task === 'string' ? body.task.trim() : '';
     if (!task) return NextResponse.json({ error: 'Task is required.' }, { status: 400 });
+    if (task.length > AGENT_TASK_MAX_CHARS) {
+      return NextResponse.json({ error: `Agent tasks are limited to ${AGENT_TASK_MAX_CHARS} characters.` }, { status: 413 });
+    }
 
     const limited = await enforceUserRateLimit(ctx.user.id, 'agent-run', 10, 60);
     if (limited) return limited;
@@ -30,8 +34,10 @@ export async function POST(req: NextRequest) {
 
     const owner = isPlatformOwner(ctx.profile);
     const plan = await getEffectiveUserPlan(ctx.user.id, owner);
-    if (/\b(generate|create|make|render)\b.{0,40}\b(image|picture|photo|visual)\b/i.test(task)) return NextResponse.json({ error: 'Image generation uses the dedicated, credit-protected endpoint. Use the Image Generation mode.' }, { status: 400 });
+    const requestsBrandImage = /\b(generate|create|make|render)\b.{0,48}\b(image|picture|photo|visual|mockup|logo)\b/i.test(task);
+    if (requestsBrandImage && requested?.id !== 'branding') return NextResponse.json({ error: 'Image generation uses the dedicated, credit-protected endpoint. Use the Image Generation mode or explicitly choose the Branding Agent for a brand visual.' }, { status: 400 });
     if (/\b(generate|create|make|render)\b.{0,40}\b(video|clip|film)\b/i.test(task)) return NextResponse.json({ error: 'Video generation uses the dedicated, credit-protected endpoint. Use the Video Generation mode.' }, { status: 400 });
+    if (body.async === true && requestsBrandImage) return NextResponse.json({ error: 'Brand image generation requires an interactive run so credit reservation and the saved asset can be confirmed.' }, { status: 400 });
     if (!owner && !canUseManualAgents(plan.key, owner)) return NextResponse.json({ error: 'Manual specialist agents require a Pro or Business plan. Free users can use Leo AI chat in Auto mode.' }, { status: 403 });
     const allowedAgentIds = getAllowedAgentIds(plan.key, owner);
     if (requested && !agentAllowed(requested.id, plan.key, owner)) return NextResponse.json({ error: 'This specialist agent is not included in your current plan.' }, { status: 403 });
@@ -44,6 +50,7 @@ export async function POST(req: NextRequest) {
 
     const db = adminSupabase();
     const agent = agents[0];
+    const approvalAgent = agents.find((item) => item.approvalRequired);
     const organizationId = typeof body.organization_id === 'string' ? body.organization_id : null;
     if (organizationId) {
       const organizationRole = await getOrganizationRole(ctx.user.id, organizationId);
@@ -58,7 +65,7 @@ export async function POST(req: NextRequest) {
     if (providerLimited) return providerLimited;
     const context = typeof body.context === 'string' ? body.context.slice(0, 18_000) : '';
 
-    if (body.async === true) {
+    if (body.async === true && !approvalAgent) {
       const { data: queuedRun, error: queuedRunError } = await db.from('agent_runs').insert({
         user_id: ctx.user.id,
         agent_id: agent.id,
@@ -73,23 +80,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'queued', run_id: queuedRun.id, agent: { id: agent.id, name: agent.name } }, { status: 202 });
     }
 
-    if (agent.approvalRequired) {
+    if (approvalAgent) {
       const { data: run, error: runError } = await db.from('agent_runs').insert({
         user_id: ctx.user.id,
-        agent_id: agent.id,
+        agent_id: approvalAgent.id,
         task,
         status: 'waiting_approval',
         ...(organizationId ? { organization_id: organizationId } : {}),
-        metadata: { context, requested_agents: agents.map((item) => item.id) },
+        metadata: { context, requested_agents: [approvalAgent.id] },
       }).select('id').single();
       if (runError) throw runError;
 
       const { data: approval, error: approvalError } = await db.from('agent_approvals').insert({
         run_id: run.id,
         user_id: ctx.user.id,
-        action: `Run ${agent.name}`,
+        action: `Run ${approvalAgent.name}`,
         status: 'pending',
-        metadata: { agent_id: agent.id, task, context },
+        metadata: { agent_id: approvalAgent.id, task, context },
       }).select('id').single();
       if (approvalError) throw approvalError;
 
@@ -97,9 +104,9 @@ export async function POST(req: NextRequest) {
         status: 'waiting_approval',
         approval_id: approval.id,
         run_id: run.id,
-        agent: { id: agent.id, name: agent.name },
+        agent: { id: approvalAgent.id, name: approvalAgent.name },
         approval_required: true,
-        message: `${agent.name} requires your approval before execution.`,
+        message: `${approvalAgent.name} requires your approval before execution.`,
       });
     }
 
@@ -117,7 +124,12 @@ export async function POST(req: NextRequest) {
       if (runError) throw runError;
 
       try {
-        const result = await runAgent(currentAgent, task, sharedContext, owner, { runId: run.id, userId: ctx.user.id });
+        const result = await runAgent(currentAgent, task, sharedContext, owner, {
+          runId: run.id,
+          userId: ctx.user.id,
+          request: req,
+          persistAgentRun: true,
+        });
         const parsed = parseAgentExecutionResult(result);
         const waitingForOwner = parsed?.status === 'waiting_owner_input';
         const verifiedOutput = parsed?.result || result;
@@ -133,12 +145,18 @@ export async function POST(req: NextRequest) {
         // Pass a bounded, explicitly untrusted handoff to the next specialist.
         sharedContext = `${sharedContext.slice(0, 9000)}\n\n[UNTRUSTED SPECIALIST HANDOFF: ${currentAgent.name} -> next selected specialist]\n${String(verifiedOutput).slice(0, 5000)}`.slice(-18000);
 
+        const { data: currentRun, error: currentRunError } = await db.from('agent_runs')
+          .select('metadata')
+          .eq('id', run.id)
+          .eq('user_id', ctx.user.id)
+          .maybeSingle();
+        if (currentRunError || !currentRun) throw new Error('Agent execution metadata could not be loaded.');
         const { error: updateError } = await db.from('agent_runs').update({
           status: waitingForOwner ? 'waiting_approval' : 'completed',
           result: parsed?.result || result,
           completed_at: waitingForOwner ? null : new Date().toISOString(),
           metadata: {
-            ...(run.metadata || {}),
+            ...(currentRun.metadata || {}),
             browser_session_id: parsed?.session_id || null,
             browser_approvals: parsed?.approvals || [],
           },
@@ -167,7 +185,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ status: 'completed', orchestration: { selected_agent_count: agents.length, max_agents_per_request: 4, handoff_mode: agents.length > 1 ? 'bounded_sequential' : 'single_agent' }, results });
   } catch (error) {
-    reportFailure(error, 'openai');
+    reportFailure(error, 'google');
     return NextResponse.json({ error: 'Agent execution failed. Review the run history and try again.' }, { status: 500 });
   }
   });

@@ -19,6 +19,7 @@ MAX_ARCHIVE = 4 * 1024 * 1024
 MAX_FILES = 1200
 WORKSPACE_ROOT = Path(os.getenv('RUNNER_WORKSPACE_ROOT', '/var/lib/leonardx-runner/workspaces'))
 WORKSPACE_TTL_SECONDS = 6 * 60 * 60
+WORKSPACE_LOCK_TTL_SECONDS = 10 * 60
 MAX_FILE_SIZE = 2 * 1024 * 1024
 ID_RE = re.compile(r'^[a-zA-Z0-9_-]{8,80}$')
 WORKSPACE_ID_RE = re.compile(r'^[a-f0-9-]{36}$')
@@ -52,6 +53,40 @@ def tenant_workspace_root(tenant_id: str) -> Path:
         raise RequestError('invalid_tenant_id')
     return WORKSPACE_ROOT / tenant_id.lower()
 
+def workspace_lock_is_active(root: Path, now: float | None = None) -> bool:
+    lock_path = root / '.lock'
+    if not lock_path.exists():
+        return False
+    current_time = now if now is not None else time.time()
+    try:
+        try:
+            lock_time = float(lock_path.read_text(encoding='ascii').strip())
+        except (ValueError, UnicodeDecodeError):
+            lock_time = lock_path.stat().st_mtime
+        if current_time - lock_time <= WORKSPACE_LOCK_TTL_SECONDS:
+            return True
+        lock_path.unlink()
+        return False
+    except OSError as error:
+        print(f'runner_workspace_lock_cleanup_failed:{root.name}:{type(error).__name__}', file=sys.stderr)
+        return True
+
+def delete_tenant_workspace(tenant_id: str, workspace_id: str, now: float | None = None) -> bool:
+    if not WORKSPACE_ID_RE.fullmatch(workspace_id):
+        raise RequestError('invalid_workspace_id')
+    tenant_root = tenant_workspace_root(tenant_id)
+    if tenant_root.is_symlink():
+        raise RequestError('invalid_tenant_workspace_root')
+    root = tenant_root / workspace_id
+    if root.is_symlink():
+        raise RequestError('invalid_workspace_root')
+    if not root.is_dir():
+        return False
+    if workspace_lock_is_active(root, now):
+        raise RequestError('workspace_busy')
+    shutil.rmtree(root)
+    return True
+
 def cleanup_expired_workspaces(now: float | None = None) -> None:
     if not WORKSPACE_ROOT.is_dir():
         return
@@ -60,9 +95,43 @@ def cleanup_expired_workspaces(now: float | None = None) -> None:
         if not tenant_root.is_dir() or tenant_root.is_symlink():
             continue
         for root in tenant_root.iterdir():
-            if root.is_dir() and not root.is_symlink() and not (root / '.lock').exists():
+            if not root.is_dir() or root.is_symlink():
+                continue
+            if workspace_lock_is_active(root, current_time):
+                continue
+            try:
                 if current_time - root.stat().st_mtime > WORKSPACE_TTL_SECONDS:
                     shutil.rmtree(root)
+            except OSError as error:
+                print(f'runner_workspace_cleanup_failed:{root.name}:{type(error).__name__}', file=sys.stderr)
+
+def create_workspace_archive(workspace: Path, output: Path) -> str | None:
+    files = []
+    total_size = 0
+    workspace_root = workspace.resolve()
+    for path in workspace.rglob('*'):
+        if path.is_symlink() or not path.is_file():
+            continue
+        relative = path.relative_to(workspace)
+        if '.git' in relative.parts or 'node_modules' in relative.parts or '.next' in relative.parts or '.runner-npm-cache' in relative.parts:
+            continue
+        if (path.name.startswith('.env') and path.name != '.env.example') or path.suffix in ('.pem', '.key') or 'credentials' in path.name.lower():
+            continue
+        resolved = path.resolve()
+        try:
+            resolved.relative_to(workspace_root)
+        except ValueError:
+            continue
+        total_size += resolved.stat().st_size
+        if len(files) >= MAX_FILES or total_size > MAX_ARCHIVE:
+            return None
+        files.append((path, relative.as_posix()))
+    with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
+        for path, relative in files:
+            archive.write(path, relative)
+    if output.stat().st_size > MAX_ARCHIVE:
+        return None
+    return base64.b64encode(output.read_bytes()).decode()
 
 def run_container(workspace: Path, operation: str, patch: str = '', branch: str = '', message: str = '') -> dict:
     if operation not in OPERATIONS: raise RequestError('unsupported_operation')
@@ -105,6 +174,36 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/health': return self.send_json(200, {'ok': True, 'engine_configured': shutil.which(ENGINE) is not None, 'runtime_required': CONTAINER_RUNTIME, 'image': IMAGE})
         return self.send_json(404, {'error': 'not_found'})
+    def do_DELETE(self):
+        match = re.fullmatch(r'/v1/workspaces/([a-f0-9-]{36})', self.path, re.I)
+        if not match: return self.send_json(404, {'error': 'not_found'})
+        if not TOKEN or len(TOKEN) < 32: return self.send_json(503, {'error': 'runner_secret_not_configured'})
+        try:
+            if not self.headers.get('Content-Length', '').isdigit() or int(self.headers['Content-Length']) > 16_384:
+                return self.send_json(413, {'error': 'request_size_limit'})
+            length = int(self.headers['Content-Length'])
+            if length <= 0: return self.send_json(413, {'error': 'request_size_limit'})
+            raw = self.rfile.read(length)
+            timestamp = self.headers.get('X-Runner-Timestamp', '')
+            signature = self.headers.get('X-Runner-Signature', '')
+            if not timestamp.isdigit() or abs(int(time.time()) - int(timestamp)) > 60:
+                return self.send_json(401, {'error': 'stale_request'})
+            expected = hmac.new(TOKEN.encode(), timestamp.encode() + b'.' + raw, hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(expected, signature):
+                return self.send_json(401, {'error': 'invalid_signature'})
+            body = json.loads(raw)
+            if not isinstance(body, dict) or set(body) != {'tenant_id'} or not isinstance(body.get('tenant_id'), str):
+                raise RequestError('invalid_request')
+            deleted = delete_tenant_workspace(body['tenant_id'], match.group(1))
+            if not deleted: return self.send_json(404, {'error': 'workspace_not_found'})
+            return self.send_json(200, {'workspace_id': match.group(1), 'deleted': True})
+        except RequestError as exc:
+            status = 409 if str(exc) == 'workspace_busy' else 400
+            return self.send_json(status, {'error': str(exc)[:100] or 'invalid_request'})
+        except (ValueError, json.JSONDecodeError):
+            return self.send_json(400, {'error': 'invalid_request'})
+        except Exception:
+            return self.send_json(500, {'error': 'runner_internal_error'})
     def do_POST(self):
         if self.path != '/v1/jobs': return self.send_json(404, {'error': 'not_found'})
         if not TOKEN or len(TOKEN) < 32: return self.send_json(503, {'error': 'runner_secret_not_configured'})
@@ -169,11 +268,7 @@ class Handler(BaseHTTPRequestHandler):
                 result = run_container(workspace, op, str(body.get('patch', '')), str(body.get('branch', '')), str(body.get('commit_message', '')))
                 (workspace / '.runner-task.patch').unlink(missing_ok=True)
                 out = root / 'result.zip'
-                with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    for p in workspace.rglob('*'):
-                        if not p.is_file() or '.git' in p.relative_to(workspace).parts or 'node_modules' in p.relative_to(workspace).parts or '.next' in p.relative_to(workspace).parts or '.runner-npm-cache' in p.relative_to(workspace).parts or (p.name.startswith('.env') and p.name != '.env.example') or p.suffix in ('.pem','.key') or 'credentials' in p.name.lower(): continue
-                        zf.write(p, p.relative_to(workspace).as_posix())
-                zipped = base64.b64encode(out.read_bytes()).decode() if out.stat().st_size <= MAX_ARCHIVE else None
+                zipped = create_workspace_archive(workspace, out)
                 out.unlink(missing_ok=True)
                 # Remove inactive workspaces opportunistically; active locks are never removed.
                 now = time.time()

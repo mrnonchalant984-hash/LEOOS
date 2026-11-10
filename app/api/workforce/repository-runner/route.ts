@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (!hasArchive && !hasWorkspace && !hasRepository) return NextResponse.json({ error: 'Provide a bounded workspace ZIP, a valid existing workspace ID, or an allowlisted repository slug.' }, { status: 400 });
   if (hasArchive && (body.workspace_zip_base64 as string).length > 5_500_000) return NextResponse.json({ error: 'Workspace ZIP exceeds the request limit.' }, { status: 400 });
   const jobId = randomUUID();
-  const payload = JSON.stringify({ job_id: jobId, operation: body.operation, ...(hasArchive ? { workspace_zip_base64: body.workspace_zip_base64 } : {}), ...(hasWorkspace ? { workspace_id: body.workspace_id } : {}), ...(hasRepository ? { repository: body.repository } : {}), ...(typeof body.patch === 'string' ? { patch: body.patch } : {}), ...(typeof body.branch === 'string' ? { branch: body.branch } : {}), ...(typeof body.commit_message === 'string' ? { commit_message: body.commit_message } : {}) });
+  const payload = JSON.stringify({ job_id: jobId, tenant_id: ctx.user.id, operation: body.operation, ...(hasArchive ? { workspace_zip_base64: body.workspace_zip_base64 } : {}), ...(hasWorkspace ? { workspace_id: body.workspace_id } : {}), ...(hasRepository ? { repository: body.repository } : {}), ...(typeof body.patch === 'string' ? { patch: body.patch } : {}), ...(typeof body.branch === 'string' ? { branch: body.branch } : {}), ...(typeof body.commit_message === 'string' ? { commit_message: body.commit_message } : {}) });
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = createHmac('sha256', secret).update(`${timestamp}.${payload}`).digest('hex');
   try {

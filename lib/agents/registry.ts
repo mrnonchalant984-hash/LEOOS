@@ -1,4 +1,5 @@
 import {AgentDefinition} from './types';
+import {validateAgentDefinition} from './contracts';
 const rawDefs = ([
 ['leo-manager','Leo Manager','Coordinates Leo tasks and specialist handoffs','core','Classify the task, choose the minimum specialist capabilities, preserve truthfulness, and report only verified actions.',false,[],['read'],false],
 ['ceo-strategy','CEO / Strategy Agent','Strategy, planning and decisions','core','Provide practical strategy and decision support. Do not execute sensitive actions.',true,[],['read'],false],
@@ -62,7 +63,10 @@ const rawDefs = ([
 ['shopping','Shopping Agent','Shopping workflows','computer','Search and compare products, prepare checkout, then stop for explicit approval before purchase.',true,['browser','shopping'],['read','write','critical'],true],
 ['web-automation','Web Automation Agent','Web automation','computer','Automate approved browser workflows only with connected tools.',true,['browser','web_automation'],['read','write','sensitive'],true],
 ['app-testing','App Testing Agent','Application testing','computer','Test applications using connected browser/computer tools and report actual results.',true,['browser','computer_use','test_execute'],['read','write'],false],
-] as Array<[string,string,string,AgentDefinition['category'],string,boolean,string[],AgentDefinition['permissions'],boolean]>).map(([id,name,description,category,instructions,ownerOnly,allowedTools,permissions,approvalRequired])=>({id,name,description,category,instructions,enabled:true,ownerOnly,allowedTools,permissions,approvalRequired,model:process.env.LEO_AGENT_MODEL || undefined,timeoutMs:60000,maxRetries:1}));
+] as Array<[string,string,string,AgentDefinition['category'],string,boolean,string[],AgentDefinition['permissions'],boolean]>).map(([id,name,description,category,instructions,ownerOnly,allowedTools,permissions,approvalRequired])=>validateAgentDefinition({id,name,description,category,instructions,enabled:true,ownerOnly,allowedTools,permissions,approvalRequired,model:process.env.LEO_AGENT_MODEL || undefined,timeoutMs:60000,maxRetries:1}));
+if (new Set(rawDefs.map(agent => agent.id)).size !== rawDefs.length) {
+  throw new Error('Agent registry contains duplicate IDs.');
+}
 const defs: AgentDefinition[] = rawDefs;
 export function listAgents(owner:boolean){return defs.filter(a=>a.enabled&&(!a.ownerOnly||owner));}
 export function getAgent(id:string){return defs.find(a=>a.id===id)||null;}

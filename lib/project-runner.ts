@@ -37,7 +37,7 @@ export async function runProjectRunnerOperation(input: {
   }
   if (archive.length > 5_500_000) return { data: null, error: 'Project archive exceeds the runner request limit.' };
   const jobId = randomUUID();
-  const payload = JSON.stringify({ job_id: jobId, operation: input.operation, workspace_zip_base64: archive });
+  const payload = JSON.stringify({ job_id: jobId, tenant_id: input.ownerId, operation: input.operation, workspace_zip_base64: archive });
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = createHmac('sha256', secret).update(`${timestamp}.${payload}`).digest('hex');
   try {

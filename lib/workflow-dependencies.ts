@@ -7,6 +7,26 @@ export type WorkflowDependencyStep = {
   dependsOn?: string[];
 };
 
+export function getReadyWorkflowStepBatch<T extends WorkflowDependencyStep>(
+  steps: readonly T[],
+  completedStepIds: ReadonlySet<string>,
+  isReadOnly: (step: T) => boolean,
+  maxParallel = 3,
+): T[] {
+  const ready = steps.filter(step =>
+    !completedStepIds.has(step.id) &&
+    (step.dependsOn ?? []).every(dependency => completedStepIds.has(dependency)),
+  );
+  if (!ready.length) return [];
+
+  const first = ready[0];
+  if (!first || !isReadOnly(first)) return first ? [first] : [];
+  const concurrency = Number.isFinite(maxParallel)
+    ? Math.max(1, Math.min(3, Math.floor(maxParallel)))
+    : 1;
+  return ready.filter(isReadOnly).slice(0, concurrency);
+}
+
 export function workflowDependencyError(steps: readonly WorkflowDependencyStep[]): string | null {
   if (steps.length > 5) return 'A workflow can contain at most five steps.';
   const ids = new Set<string>();

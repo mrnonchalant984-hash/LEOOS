@@ -24,7 +24,7 @@ LeonardX is a software-services and LeoOS product platform with project demos, a
 6. Deploy to Vercel with the same environment variables.
 
 ## Required server secrets
-`OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PAYSTACK_SECRET_KEY`, `RESEND_API_KEY` (for email features), and the owner configuration variables.
+`GEMINI_API_KEY` (or its `GOOGLE_API_KEY` compatibility alias), `SUPABASE_SERVICE_ROLE_KEY`, `PAYSTACK_SECRET_KEY`, `RESEND_API_KEY` (for email features), and the owner configuration variables.
 
 ## Important
 A successful frontend payment redirect never unlocks a plan by itself. Subscription and credits are granted by the verified Paystack webhook. Owner access is checked against the authenticated account and the server-side owner email.
@@ -32,7 +32,7 @@ A successful frontend payment redirect never unlocks a plan by itself. Subscript
 
 This upgrade adds a personalized Leo AI opening state with the signed-in user's first name, a glowing Leo bubble, and quick actions for brainstorming, creating, deploying, fixing, and coding.
 
-It also adds the `ai_usage` Supabase table. Chat requests record OpenAI prompt/completion/total tokens, while feature credit consumption records credits used. The owner admin dashboard polls the protected analytics endpoint every 5 seconds and shows total AI tokens, credits used, request count, per-feature usage, and recent usage.
+It also adds the `ai_usage` Supabase table. Chat requests record provider usage, while feature credit consumption records credits used. The owner admin dashboard polls the protected analytics endpoint every 5 seconds and shows total AI tokens, credits used, request count, per-feature usage, and recent usage.
 
 Run the updated `supabase/schema.sql` in Supabase before using the analytics dashboard.
 
@@ -91,11 +91,11 @@ The 12 project URL variables are listed in `.env.example`.
 A complete production `npm run build` was not run in this environment because the dependency registry was unavailable and `node_modules` is intentionally not included in the ZIP. The source was statically audited and several broken integrations were corrected, but deployment should still run `npm ci && npm run build` in an environment with registry access before production release.
 
 ## Provider setup
-OpenAI, GitHub, Vercel, Supabase, Paystack, Resend and optional browser/computer/3D provider credentials are represented by server-side environment variables. The app never puts provider secrets in NEXT_PUBLIC variables. A provider must have a real credential/endpoint configured before its corresponding owner-only agent can execute external actions.
+Gemini, GitHub, Vercel, Supabase, Paystack, Resend and optional provider credentials are represented by server-side environment variables. The app never puts provider secrets in NEXT_PUBLIC variables. A provider must have a real credential/endpoint configured before its corresponding owner-only agent can execute external actions.
 
 ## Owner Video Agent
 
-LEO OS includes an owner-only Video Agent powered by Runway Dev. GPT-6 Astra remains the reasoning/orchestration layer; Runway performs the actual video generation. The agent requires explicit owner approval because generation consumes provider credits. Generated videos are copied into the existing private `leo-files` Supabase Storage bucket when possible because Runway result URLs are temporary.
+LEO OS includes an owner-only Video Agent powered by Runway. Gemini provides the platform's text and orchestration capabilities; Runway performs the actual video generation. The agent requires explicit owner approval because generation consumes provider credits. Generated videos are copied into the existing private `leo-files` Supabase Storage bucket when possible because Runway result URLs are temporary.
 
 Required server environment variables:
 

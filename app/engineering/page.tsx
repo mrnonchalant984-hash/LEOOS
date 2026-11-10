@@ -23,7 +23,7 @@ export default function EngineeringWorkspacePage() {
   const [workflow, setWorkflow] = useState<WorkflowView | null>(null);
   const [events, setEvents] = useState<Array<{ id: string; stage: string | null; event_type: string; message: string; created_at: string }>>([]);
   const [error, setError] = useState('');
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const previewUrl: string | null = null;
   const [vercelProjectId, setVercelProjectId] = useState('');
   const [vercelProjects, setVercelProjects] = useState<Array<{ id: string; name: string }>>([]);
   const [vercelMessage, setVercelMessage] = useState('');
@@ -82,7 +82,6 @@ export default function EngineeringWorkspacePage() {
             setVercelMessage(vercelResult.error || 'Vercel project discovery unavailable.');
           }
         }
-        setPreviewUrl(window.location.origin);
       } catch (cause) {
         if (alive) setError(cause instanceof Error ? cause.message : 'Engineering workspace unavailable.');
       }

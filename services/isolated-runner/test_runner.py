@@ -1,3 +1,4 @@
+import base64
 import io
 import os
 import sys
@@ -79,6 +80,56 @@ class RunnerArchiveTests(unittest.TestCase):
                 server.cleanup_expired_workspaces()
             self.assertFalse(expired.exists())
             self.assertTrue(active.exists())
+
+    def test_idle_workspace_cleanup_recovers_stale_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                tenant = root / 'tenant'
+                tenant.mkdir()
+                workspace = tenant / 'workspace-id'
+                workspace.mkdir()
+                now = time.time()
+                lock = workspace / '.lock'
+                lock.write_text(str(now - server.WORKSPACE_LOCK_TTL_SECONDS - 1))
+                with mock.patch.object(server, 'WORKSPACE_ROOT', root):
+                    server.cleanup_expired_workspaces(now)
+                self.assertTrue(workspace.exists())
+                self.assertFalse(lock.exists())
+
+    def test_workspace_deletion_is_tenant_scoped_and_refuses_active_jobs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                current_tenant = root / '11111111-1111-4111-8111-111111111111'
+                other_tenant = root / '22222222-2222-4222-8222-222222222222'
+                workspace_id = '33333333-3333-4333-8333-333333333333'
+                current_workspace = current_tenant / workspace_id
+                other_workspace = other_tenant / workspace_id
+                current_workspace.mkdir(parents=True)
+                other_workspace.mkdir(parents=True)
+                (current_workspace / '.lock').write_text(str(time.time()))
+                with mock.patch.object(server, 'WORKSPACE_ROOT', root):
+                    with self.assertRaises(server.RequestError) as error:
+                        server.delete_tenant_workspace(current_tenant.name, workspace_id)
+                    self.assertEqual(str(error.exception), 'workspace_busy')
+                    (current_workspace / '.lock').write_text(str(time.time() - server.WORKSPACE_LOCK_TTL_SECONDS - 1))
+                    self.assertTrue(server.delete_tenant_workspace(current_tenant.name, workspace_id))
+                self.assertFalse(current_workspace.exists())
+                self.assertTrue(other_workspace.exists())
+
+    def test_workspace_archive_never_follows_symlinks_outside_workspace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                workspace = root / 'workspace'
+                workspace.mkdir()
+                leak = workspace / 'leak.txt'
+                leak.write_text('symlink target')
+                is_symlink = Path.is_symlink
+                output = root / 'result.zip'
+                with mock.patch.object(Path, 'is_symlink', autospec=True, side_effect=lambda path: path == leak or is_symlink(path)):
+                    encoded = server.create_workspace_archive(workspace, output)
+                self.assertIsNotNone(encoded)
+                with zipfile.ZipFile(io.BytesIO(base64.b64decode(encoded))) as archive:
+                    self.assertNotIn('leak.txt', archive.namelist())
 
     def test_execution_requires_gvisor_and_applies_resource_and_network_limits(self):
         with tempfile.TemporaryDirectory() as tmp:

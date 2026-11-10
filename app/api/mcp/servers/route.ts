@@ -3,6 +3,8 @@ import { adminSupabase, getProfile } from '@/lib/auth';
 import { encryptMcpCredential, validateMcpEndpointUrl } from '@/lib/mcp/outbound-security';
 import { discoverMcpTools } from '@/lib/mcp/remote-clients';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { listAgents } from '@/lib/agents/registry';
+import { agentHasMcpReadCapability } from '@/lib/agents/mcp-capabilities';
 
 export const runtime = 'nodejs';
 
@@ -17,7 +19,7 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: 'MCP connections could not be loaded.' }, { status: 503 });
   const ids = (servers || []).map(server => server.id);
   const { data: approvals, error: approvalError } = ids.length
-    ? await adminSupabase().from('mcp_remote_tool_approvals').select('server_id,tool_name,approved_at').in('server_id', ids)
+    ? await adminSupabase().from('mcp_remote_tool_approvals').select('server_id,tool_name,approved_at,allowed_agent_ids').in('server_id', ids)
     : { data: [], error: null };
   if (approvalError) return NextResponse.json({ error: 'MCP tool permissions could not be loaded.' }, { status: 503 });
   const safeServers = (servers || []).map(server => ({
@@ -29,9 +31,16 @@ export async function GET(request: NextRequest) {
     tools: (Array.isArray(server.discovered_tools) ? server.discovered_tools : []).map(tool => ({
       ...tool,
       approved: (approvals || []).some(approval => approval.server_id === server.id && approval.tool_name === tool.name),
+      allowed_agent_ids: (() => {
+        const ids = (approvals || []).find(approval => approval.server_id === server.id && approval.tool_name === tool.name)?.allowed_agent_ids;
+        return Array.isArray(ids) ? ids.filter((agentId): agentId is string => typeof agentId === 'string') : [];
+      })(),
     })),
   }));
-  return NextResponse.json({ servers: safeServers }, { headers: { 'Cache-Control': 'private, no-store' } });
+  const agentOptions = listAgents(true)
+    .filter(agentHasMcpReadCapability)
+    .map(({ id, name }) => ({ id, name }));
+  return NextResponse.json({ servers: safeServers, agent_options: agentOptions }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
 export async function POST(request: NextRequest) {

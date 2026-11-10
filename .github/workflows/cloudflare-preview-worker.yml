@@ -1,0 +1,52 @@
+name: Cloudflare static preview worker
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leonardx-cloudflare-preview-worker
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate protected worker configuration
+        id: config
+        env:
+          LEONARDX_BASE_URL: ${{ secrets.LEONARDX_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$LEONARDX_BASE_URL" || -z "$CRON_SECRET" || -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_PAGES_PROJECT" ]]; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Cloudflare preview worker is not configured; no jobs were processed.'
+            exit 0
+          fi
+          [[ -n "$LEONARDX_BASE_URL" && "$LEONARDX_BASE_URL" == https://* ]] || { echo 'LEONARDX_BASE_URL must be an HTTPS URL.' >&2; exit 1; }
+          [[ -n "$CRON_SECRET" && ${#CRON_SECRET} -ge 32 ]] || { echo 'CRON_SECRET must be configured and at least 32 characters.' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_PAGES_PROJECT" ]] || { echo 'Cloudflare API token, account ID, and pre-created Pages project must be configured.' >&2; exit 1; }
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+      - name: Claim and process one bounded static preview
+        if: steps.config.outputs.ready == 'true'
+        env:
+          LEONARDX_BASE_URL: ${{ secrets.LEONARDX_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
+        run: node scripts/cloudflare-preview-worker.mjs

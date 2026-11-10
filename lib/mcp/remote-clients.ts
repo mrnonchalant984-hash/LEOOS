@@ -89,13 +89,20 @@ export async function discoverMcpTools(endpoint: string, bearerToken?: string): 
   }
 }
 
-export async function callMcpTool(endpoint: string, bearerToken: string | undefined, name: string, args: Record<string, unknown>, inputSchema: unknown) {
+export async function callMcpTool(
+  endpoint: string,
+  bearerToken: string | undefined,
+  name: string,
+  args: Record<string, unknown>,
+  inputSchema: unknown,
+  signal?: AbortSignal,
+) {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(name)) throw new Error('The requested MCP tool name is invalid.');
   if (Buffer.byteLength(JSON.stringify(args)) > 16 * 1024) throw new Error('MCP tool arguments exceed the allowed size.');
   if (!validateMcpToolArguments(inputSchema, args)) throw new Error('MCP tool arguments do not match the discovered input schema.');
   const client = await connectRemoteClient(endpoint, bearerToken);
   try {
-    const result = await client.callTool({ name, arguments: args });
+    const result = await client.callTool({ name, arguments: args }, undefined, signal ? { signal } : undefined);
     const text = Array.isArray(result.content)
       ? result.content.flatMap(item => item && typeof item === 'object' && 'type' in item && item.type === 'text' && 'text' in item && typeof item.text === 'string' ? [item.text] : []).join('\n')
       : '';

@@ -8,7 +8,9 @@ type McpTool = {
   description: string;
   annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
   approved: boolean;
+  allowed_agent_ids: string[];
 };
+type McpAgentOption = { id: string; name: string };
 type McpServer = {
   id: string;
   name: string;
@@ -23,6 +25,7 @@ function subscribeToBrowserOrigin() {
 
 export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredLeonardXMcpUrl?: string }) {
   const [servers, setServers] = useState<McpServer[]>([]);
+  const [agentOptions, setAgentOptions] = useState<McpAgentOption[]>([]);
   const [name, setName] = useState('');
   const [endpoint, setEndpoint] = useState('');
   const [bearerToken, setBearerToken] = useState('');
@@ -40,19 +43,27 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
     const response = await fetch('/api/mcp/servers', { cache: 'no-store' });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'MCP connections could not be loaded.');
-    return (data.servers || []) as McpServer[];
+    return {
+      servers: (data.servers || []) as McpServer[],
+      agentOptions: (data.agent_options || []) as McpAgentOption[],
+    };
   }, []);
 
   const load = useCallback(async () => {
     try {
-      setServers(await fetchServers());
+      const data = await fetchServers();
+      setServers(data.servers);
+      setAgentOptions(data.agentOptions);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'MCP connections could not be loaded.');
     }
   }, [fetchServers]);
 
   useEffect(() => {
-    void fetchServers().then(setServers).catch(cause => {
+    void fetchServers().then(data => {
+      setServers(data.servers);
+      setAgentOptions(data.agentOptions);
+    }).catch(cause => {
       setError(cause instanceof Error ? cause.message : 'MCP connections could not be loaded.');
     });
   }, [fetchServers]);
@@ -128,7 +139,7 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
           <h2 className="text-lg font-semibold">Remote MCP connections</h2>
           <p className="mt-1 max-w-3xl text-sm text-zinc-400">
             Connect an operator-allowlisted HTTPS MCP server. Credentials are encrypted at rest.
-            Approving a tool permits manual calls; Leo tool mode can autonomously invoke only tools explicitly marked read-only.
+            Approving a tool permits manual calls. Read-only tools are available to specialists only when you grant each tool to specific agents.
           </p>
         </div>
         <button type="button" onClick={() => { setError(''); setBusy(true); void load().finally(() => setBusy(false)); }} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm disabled:opacity-50">
@@ -188,9 +199,39 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
                       <p className="mt-1 whitespace-pre-wrap text-xs text-zinc-500">{tool.description}</p>
                     </div>
                     <label className="flex items-center gap-2 text-xs text-zinc-300">
-                      <input type="checkbox" checked={tool.approved} disabled={busy || !server.enabled} onChange={event => void mutate(`/api/mcp/servers/${server.id}/tools`, 'POST', { tool_name: tool.name, approved: event.target.checked })} />
+                      <input type="checkbox" checked={tool.approved} disabled={busy || !server.enabled} onChange={event => void mutate(`/api/mcp/servers/${server.id}/tools`, 'POST', { tool_name: tool.name, approved: event.target.checked, agent_ids: event.target.checked ? tool.allowed_agent_ids : [] })} />
                       Approve
                     </label>
+                    {tool.approved && tool.annotations?.readOnlyHint === true && !tool.annotations.destructiveHint && agentOptions.length > 0 && (
+                      <details className="basis-full rounded-lg border border-white/10 px-3 py-2">
+                        <summary className="cursor-pointer text-xs text-zinc-300">Grant to specialist agents ({tool.allowed_agent_ids.length})</summary>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {agentOptions.map(agent => {
+                            const checked = tool.allowed_agent_ids.includes(agent.id);
+                            return (
+                              <label key={agent.id} className="flex items-center gap-2 text-xs text-zinc-400">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={busy || !server.enabled}
+                                  onChange={event => {
+                                    const nextIds = event.target.checked
+                                      ? [...tool.allowed_agent_ids, agent.id]
+                                      : tool.allowed_agent_ids.filter(id => id !== agent.id);
+                                    void mutate(`/api/mcp/servers/${server.id}/tools`, 'POST', {
+                                      tool_name: tool.name,
+                                      approved: true,
+                                      agent_ids: nextIds,
+                                    });
+                                  }}
+                                />
+                                {agent.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </details>
+                    )}
                   </li>
                 ))}
               </ul>

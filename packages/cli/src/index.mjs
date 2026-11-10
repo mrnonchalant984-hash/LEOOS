@@ -126,8 +126,8 @@ async function main(args) {
   if (command === 'usage') { process.stdout.write(JSON.stringify((await api('/api/v1/usage')).data || [], null, 2) + '\n'); return; }
   if (command === 'chat') {
     const message = option(args, '--message');
-    if (!message?.trim()) throw new Error('Usage: leo chat --message "Hello" [--model gpt-4o-mini]');
-    const result = await api('/api/v1/messages', { method: 'POST', body: JSON.stringify({ model: option(args, '--model') || 'gpt-4o-mini', messages: [{ role: 'user', content: message.trim() }], max_tokens: Number(option(args, '--max-tokens') || 1024) }) });
+    if (!message?.trim()) throw new Error('Usage: leo chat --message "Hello" [--model gemini-3.8-flash]');
+    const result = await api('/api/v1/messages', { method: 'POST', body: JSON.stringify({ model: option(args, '--model') || 'gemini-3.8-flash', messages: [{ role: 'user', content: message.trim() }], max_tokens: Number(option(args, '--max-tokens') || 1024) }) });
     process.stdout.write(`${result.content?.find(part => part.type === 'text')?.text || JSON.stringify(result)}\n\nUsage: ${JSON.stringify(result.usage || {})}\n`); return;
   }
   if (command === 'projects' && resource === 'list') { process.stdout.write(JSON.stringify(await api(`/api/v1/projects${option(args, '--status') ? `?status=${encodeURIComponent(option(args, '--status'))}` : ''}`), null, 2) + '\n'); return; }

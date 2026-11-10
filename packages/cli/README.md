@@ -25,7 +25,7 @@ The package exposes both `leo` and the legacy `leonardx` binary. Link it locally
 - `leo agents strategy <strategy>` selects a local coordination strategy. `check-path` enforces explicit directory fences. Git worktree operations use a separate checkout, allowlisted npm validation scripts, a serialized merge lock, and a revalidation after rebase.
 - `leo agents scratchpad read|add` stores bounded metadata in `.leo/scratchpad.json`; it does not store code blobs or credentials.
 - `leo models list` lists model IDs exposed by the deployment without consuming model credits.
-- `leo chat --message "Hello" [--model gpt-4o-mini]` calls the public text inference endpoint and requires an active API plan and sufficient credits.
+- `leo chat --message "Hello" [--model gemini-3.8-flash]` calls the public Gemini text inference endpoint and requires an active API plan and sufficient credits.
 - `leo usage` reads recent token and credit usage.
 - Existing project list/create and logout commands remain available.
 

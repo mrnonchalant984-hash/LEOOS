@@ -8,16 +8,13 @@ import { runSeoAudit } from './seo-audit';
 import { defs, getAgent, listAgents } from './registry';
 import type { AgentDefinition } from './types';
 import { runHostedBrowserAgent, isBrowserAgent } from './browser-agent-disabled';
+import { validateAgentInput, validateAgentOutput } from './contracts';
+import { agentHasMcpReadCapability, MCP_AGENT_CAPABILITIES } from './mcp-capabilities';
 
 export { getAgent };
 
-const MCP_CAPABILITIES = new Set([
-  'analytics_read', 'calendar_read', 'crm_read', 'database_read', 'document_read',
-  'email_read', 'github_read', 'hosting_read', 'invoice_read', 'knowledge_read',
-  'notes_read', 'payment_read', 'repository_read',
-]);
 const TOOL_CAPABILITIES = new Set([
-  ...MCP_CAPABILITIES, 'database_write', 'deployment', 'devops', 'file_read',
+  ...MCP_AGENT_CAPABILITIES, 'database_write', 'deployment', 'devops', 'file_read',
   'file_write', 'github_write', 'image_generation', 'project_read',
   'website_builder', 'web_search',
 ]);
@@ -45,7 +42,7 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   if (toolName === 'generate_brand_image') {
     return agent.id === 'branding' && permissions.has('image_generation') && EXPLICIT_IMAGE_REQUEST.test(task);
   }
-  if (toolName.startsWith('mcp_')) return agent.allowedTools.some(capability => MCP_CAPABILITIES.has(capability));
+  if (toolName.startsWith('mcp_')) return agentHasMcpReadCapability(agent);
   return false;
 }
 
@@ -119,6 +116,8 @@ export async function runAgent(
   owner: boolean,
   meta?: { runId?: string; userId?: string; request?: Request; persistAgentRun?: boolean },
 ) {
+  const input = validateAgentInput(task, context);
+  if (!input.success) throw new Error('Agent input did not match its execution schema.');
   if (agent.ownerOnly && !owner) throw new Error('Owner-only agent access denied');
   if (isBrowserAgent(agent)) {
     return runHostedBrowserAgent(agent, task, context, { runId: meta?.runId, userId: meta?.userId });
@@ -156,7 +155,10 @@ export async function runAgent(
       allowRepositoryWrites: repositoryWrites,
       allowImageGeneration: imageRequested,
     } : undefined;
-    available = await createUserAssistantTools(meta.userId, options);
+    available = await createUserAssistantTools(meta.userId, options, {
+      agentId: agent.id,
+      allowMcpRead: agentHasMcpReadCapability(agent),
+    });
   }
   const tools = getAgentAvailableTools(agent, available.tools, task);
   const useWebSearch = agent.allowedTools.includes('web_search');
@@ -173,12 +175,9 @@ export async function runAgent(
     { role: 'user' as const, content: `Task:\n${task}\n\nRelevant context:\n${context.slice(0, 18_000)}` },
   ];
   const primaryModel = selection.model;
-  const fallbackModel = getSafeFallbackModel(
-    primaryModel,
-    process.env.LEO_FALLBACK_MODEL?.trim(),
-    false,
-    undefined,
-  );
+  const fallbackModel = agent.maxRetries > 0
+    ? getSafeFallbackModel(primaryModel, process.env.LEO_FALLBACK_MODEL?.trim(), false, undefined)
+    : undefined;
   const baseExecution = {
     model_id: primaryModel,
     provider: selection.provider,
@@ -193,17 +192,35 @@ export async function runAgent(
   };
   await persistExecution(meta, baseExecution);
 
+  let toolExecutionStarted = false;
+  const timeoutSignal = AbortSignal.timeout(agent.timeoutMs);
+  const signal = meta?.request
+    ? AbortSignal.any([timeoutSignal, meta.request.signal])
+    : timeoutSignal;
+  const executeAgentTool: AssistantToolExecutor = (name, args) => {
+    toolExecutionStarted = true;
+    return available.execute(name, args, signal);
+  };
+
   try {
-    const outcome = await generateWithExplicitFallback(primaryModel, fallbackModel, model =>
-      generateTextWithTools({
+    const outcome = await generateWithExplicitFallback(
+      primaryModel,
+      fallbackModel,
+      model => generateTextWithTools({
         model,
         messages,
+        signal,
         maxOutputTokens: 1800,
         webSearch: useWebSearch,
         tools,
-        executeTool: available.execute,
+        executeTool: executeAgentTool,
         maxToolCalls: 4,
       }),
+      undefined,
+      {
+        maxFallbackAttempts: agent.maxRetries,
+        shouldFallbackOnError: () => !toolExecutionStarted && !signal.aborted,
+      },
     );
     const text = outcome.result.text.trim();
     if (!text) throw new Error('The model returned an empty response.');
@@ -247,16 +264,8 @@ export async function runAgent(
 export function parseAgentExecutionResult(result: string) {
   try {
     const value = JSON.parse(result);
-    if (value && typeof value === 'object' && typeof value.status === 'string') {
-      return value as {
-        status: string;
-        session_id?: string;
-        approvals?: unknown[];
-        result?: string;
-        message?: string;
-        execution?: { model_id?: string; provider?: string; fallback_used?: boolean; tool_calls?: Array<{ name: string; success: boolean }> };
-      };
-    }
+    const parsed = validateAgentOutput(value);
+    if (parsed.success) return parsed.data;
   } catch {}
   return null;
 }

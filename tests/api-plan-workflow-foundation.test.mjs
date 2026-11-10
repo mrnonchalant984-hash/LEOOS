@@ -98,6 +98,31 @@ test('Developer API only exposes models with a reviewed provider rate and charge
   assert.match(catalog, /requested\.filter\(isApiModel\)/);
 });
 
+test('v1 project creation applies the same project type and capacity gates as v2', async () => {
+  const v1 = await readFile(new URL('../app/api/v1/projects/route.ts', import.meta.url), 'utf8');
+  const v2 = await readFile(new URL('../app/api/v2/projects/route.ts', import.meta.url), 'utf8');
+  for (const route of [v1, v2]) {
+    assert.match(route, /getEffectiveUserPlan/);
+    assert.match(route, /planAllowsCloudProject/);
+    assert.match(route, /PLAN_NOT_ENTITLED/);
+    assert.match(route, /PROJECT_LIMIT_REACHED/);
+    assert.match(route, /maxProjects/);
+  }
+  assert.match(v1, /allowedTypes: ProjectType\[\]/);
+});
+
+test('CLI and OpenAPI default to the supported Gemini API model', async () => {
+  const cli = await readFile(new URL('../packages/cli/src/index.mjs', import.meta.url), 'utf8');
+  const cliReadme = await readFile(new URL('../packages/cli/README.md', import.meta.url), 'utf8');
+  const openapi = await readFile(new URL('../lib/openapi-v1.ts', import.meta.url), 'utf8');
+  const envExample = await readFile(new URL('../.env.example', import.meta.url), 'utf8');
+  assert.match(cli, /option\(args, '--model'\) \|\| 'gemini-3\.8-flash'/);
+  assert.match(cliReadme, /--model gemini-3\.8-flash/);
+  assert.match(openapi, /default: 'gemini-3\.8-flash'/);
+  assert.equal((envExample.match(/^LEONARDX_API_MODELS=/gm) || []).length, 1);
+  assert.match(envExample, /^LEONARDX_API_MODELS=gemini-3\.8-flash$/m);
+});
+
 test('API key journey keeps free key creation separate from paid execution and offers pricing after copying', async () => {
   const keysPage = await readFile(new URL('../app/api-keys/page.tsx', import.meta.url), 'utf8');
   const auth = await readFile(new URL('../lib/api-auth.ts', import.meta.url), 'utf8');

@@ -1,7 +1,10 @@
 .vscode/**
 .vscode-test/**
+test/**
 src/**
 node_modules/**
 **/*.ts
 tsconfig.json
 package-lock.json
+*.vsix
+agents/leocode.agent.md

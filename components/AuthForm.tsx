@@ -17,7 +17,8 @@ function subscribeAuthLocation(onChange: () => void) {
 
 function getAuthLocationMode(): Mode {
   const params = new URLSearchParams(window.location.search);
-  return params.get('mode') === 'reset' || window.location.hash.includes('type=recovery') ? 'reset' : 'login';
+  if (params.get('mode') === 'reset' || window.location.hash.includes('type=recovery')) return 'reset';
+  return params.get('mode') === 'signup' ? 'signup' : 'login';
 }
 
 function getServerAuthLocationMode(): Mode { return 'login'; }

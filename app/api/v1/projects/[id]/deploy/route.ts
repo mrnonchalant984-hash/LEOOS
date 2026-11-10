@@ -3,6 +3,7 @@ import { adminSupabase } from '@/lib/auth';
 import { apiResponse, withApiKey } from '@/lib/api-auth';
 import { POST as buildDeploy } from '@/app/api/build-deploy/route';
 import { emitWebhookEvent } from '@/lib/webhooks';
+import { isVerifiedDeploymentResponse } from '@/lib/deployment-result';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -60,8 +61,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }),
     });
     const result = await buildDeploy(internalRequest);
-    if (result.status >= 200 && result.status < 300) {
-      await db.from('projects').update({ status: 'deployed', progress: 100 }).eq('id', source.id).eq('user_id', auth.userId);
+    const deployment = await result.clone().json().catch(() => null);
+    if (isVerifiedDeploymentResponse(result.status, deployment)) {
+      const { error: statusError } = await db.from('projects').update({ status: 'deployed', progress: 100 }).eq('id', source.id).eq('user_id', auth.userId);
+      if (statusError) {
+        return apiResponse({
+          error: { code: 'DEPLOYMENT_STATUS_UNAVAILABLE', message: 'Deployment succeeded, but project status could not be saved. Check the deployment before retrying.' },
+          status: 'deployed',
+          live_url: deployment.liveUrl,
+          request_id: auth.requestId,
+        }, 503, auth.requestId);
+      }
       after(async () => { try { await emitWebhookEvent(auth.userId, 'project.deployed', { project_id: source.id, project_name: source.project_name }); } catch { /* queued delivery retries handle transient failures */ } });
     }
     return new NextResponse(result.body, { status: result.status, statusText: result.statusText, headers: result.headers });
