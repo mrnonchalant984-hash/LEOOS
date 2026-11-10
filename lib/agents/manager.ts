@@ -178,7 +178,6 @@ export async function runAgent(
     process.env.LEO_FALLBACK_MODEL?.trim(),
     false,
     undefined,
-    selection.reason === 'general' ? 'text' : 'reasoning',
   );
   const baseExecution = {
     model_id: primaryModel,
