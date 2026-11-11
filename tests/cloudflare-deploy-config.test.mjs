@@ -14,7 +14,7 @@ test('Cloudflare uses the OpenNext worker build and deploy commands', async () =
 
   assert.equal(config.main, '.open-next/worker.js');
   assert.deepEqual(config.assets, { directory: '.open-next/assets', binding: 'ASSETS' });
-  assert.equal(packageJson.scripts['cloudflare:build'], 'npm run build && opennextjs-cloudflare build --skipNextBuild');
+  assert.equal(packageJson.scripts['cloudflare:build'], 'npm run typecheck && opennextjs-cloudflare build');
   assert.equal(packageJson.scripts['cloudflare:deploy'], 'opennextjs-cloudflare deploy');
   assert.equal(packageJson.scripts['cloudflare:preview'], 'npm run cloudflare:build && opennextjs-cloudflare preview');
   assert.equal(packageJson.devDependencies['@opennextjs/cloudflare'], '1.19.11');
