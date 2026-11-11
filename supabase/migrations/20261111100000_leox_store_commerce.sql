@@ -157,9 +157,11 @@ create policy marketplace_delivery_public_read on public.marketplace_delivery_op
 create policy marketplace_conversation_members on public.marketplace_conversations for select to authenticated using (auth.uid() in (buyer_id, seller_id));
 create policy marketplace_messages_members_read on public.marketplace_messages for select to authenticated using (exists (select 1 from public.marketplace_conversations c where c.id = conversation_id and auth.uid() in (c.buyer_id,c.seller_id)));
 create policy marketplace_messages_members_insert on public.marketplace_messages for insert to authenticated with check (sender_id = auth.uid() and exists (select 1 from public.marketplace_conversations c where c.id = conversation_id and auth.uid() in (c.buyer_id,c.seller_id) and c.blocked_by is null));
-create policy marketplace_messages_member_read_update on public.marketplace_messages for update to authenticated using (exists (select 1 from public.marketplace_conversations c where c.id = conversation_id and auth.uid() in (c.buyer_id,c.seller_id))) with check (exists (select 1 from public.marketplace_conversations c where c.id = conversation_id and auth.uid() in (c.buyer_id,c.seller_id)));
+create policy marketplace_messages_member_read_update on public.marketplace_messages for update to authenticated
+  using (sender_id <> auth.uid() and exists (select 1 from public.marketplace_conversations c where c.id = conversation_id and auth.uid() in (c.buyer_id,c.seller_id)))
+  with check (sender_id <> auth.uid() and exists (select 1 from public.marketplace_conversations c where c.id = conversation_id and auth.uid() in (c.buyer_id,c.seller_id)));
 create policy marketplace_reports_reporter_insert on public.marketplace_reports for insert to authenticated with check (reporter_id = auth.uid());
-create policy marketplace_audit_moderator_select on public.marketplace_moderation_audit for select to authenticated using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'owner'));
+create policy marketplace_audit_moderator_select on public.marketplace_moderation_audit for select to authenticated using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'owner' and p.twofa_verified = true));
 create policy marketplace_reviews_public_read on public.marketplace_reviews for select to anon, authenticated using (true);
 create policy marketplace_preferences_owner on public.marketplace_notification_preferences for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 
