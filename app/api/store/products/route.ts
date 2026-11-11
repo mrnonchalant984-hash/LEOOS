@@ -6,7 +6,7 @@ import { productSlug, validateProductInput } from '@/lib/store/products';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const PRODUCT_FIELDS = 'id,slug,title,description,category,price,currency,condition,country_code,region,city,created_at';
+const PRODUCT_FIELDS = 'id,slug,title,description,category,price,currency,condition,country_code,region,city,image_urls,created_at';
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,22 +15,35 @@ export async function GET(request: NextRequest) {
     const query = params.get('q')?.trim().slice(0, 80) ?? '';
     const category = params.get('category')?.trim().slice(0, 80) ?? '';
     const country = params.get('country')?.trim().toUpperCase() ?? '';
+    const region = params.get('region')?.trim().slice(0, 100) ?? '';
+    const city = params.get('city')?.trim().slice(0, 100) ?? '';
+    const currency = params.get('currency')?.trim().toUpperCase() ?? '';
+    const minPrice = Number(params.get('minPrice'));
+    const maxPrice = Number(params.get('maxPrice'));
+    const page = Math.max(1, Math.min(10_000, Number.parseInt(params.get('page') ?? '1', 10) || 1));
+    const pageSize = Math.max(1, Math.min(48, Number.parseInt(params.get('pageSize') ?? '24', 10) || 24));
+    const from = (page - 1) * pageSize;
     let listingQuery = db.from('marketplace_products')
       .select(PRODUCT_FIELDS)
       .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(24);
+      .order('published_at', { ascending: false })
+      .range(from, from + pageSize - 1);
 
     if (query) listingQuery = listingQuery.ilike('title', `%${query.replace(/[%_,]/g, ' ')}%`);
     if (category) listingQuery = listingQuery.eq('category', category);
     if (/^[A-Z]{2}$/.test(country)) listingQuery = listingQuery.eq('country_code', country);
+    if (region) listingQuery = listingQuery.ilike('region', region);
+    if (city) listingQuery = listingQuery.ilike('city', city);
+    if (/^[A-Z]{3}$/.test(currency)) listingQuery = listingQuery.eq('currency', currency);
+    if (Number.isFinite(minPrice) && minPrice >= 0) listingQuery = listingQuery.gte('price', minPrice);
+    if (Number.isFinite(maxPrice) && maxPrice >= 0) listingQuery = listingQuery.lte('price', maxPrice);
 
     const { data, error } = await listingQuery;
     if (error) {
       console.error('Marketplace listing query failed:', error.message);
       return NextResponse.json({ error: 'Marketplace listings are temporarily unavailable.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
     }
-    return NextResponse.json({ products: data ?? [] }, { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' } });
+    return NextResponse.json({ products: data ?? [], page, pageSize, hasMore: (data?.length ?? 0) === pageSize }, { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' } });
   } catch (error) {
     console.error('Marketplace configuration is unavailable:', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json({ error: 'Marketplace listings are temporarily unavailable.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
@@ -66,6 +79,11 @@ export async function POST(request: NextRequest) {
     const db = adminSupabase();
     const id = globalThis.crypto.randomUUID();
     const product = validation.value;
+    const imagePaths = Array.isArray((body as Record<string, unknown>).imagePaths) ? (body as Record<string, unknown>).imagePaths as unknown[] : [];
+    if (imagePaths.length > 8 || imagePaths.some((path) => typeof path !== 'string' || !new RegExp(`^${user.id}/[0-9a-f-]{36}\\.webp$`, 'i').test(path))) {
+      return NextResponse.json({ error: 'Product images must be uploaded to your own Store image area (up to 8 images).' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
+    }
+    const imageUrls = imagePaths.map((path) => db.storage.from('marketplace-products').getPublicUrl(path as string).data.publicUrl);
     const { data, error } = await db.from('marketplace_products').insert({
       id,
       seller_id: user.id,
@@ -79,6 +97,7 @@ export async function POST(request: NextRequest) {
       country_code: product.countryCode,
       region: product.region || null,
       city: product.city,
+      image_urls: imageUrls,
       status: 'pending_review',
     }).select('id,slug,status').single();
 

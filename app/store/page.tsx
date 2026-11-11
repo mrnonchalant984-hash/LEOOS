@@ -21,6 +21,7 @@ type StoreProduct = {
   condition: string;
   country_code: string;
   city: string;
+  image_urls: string[];
 };
 
 export default async function StorePage({ searchParams }: PageProps<'/store'>) {
@@ -32,7 +33,7 @@ export default async function StorePage({ searchParams }: PageProps<'/store'>) {
 
   try {
     let query = adminSupabase().from('marketplace_products')
-      .select('slug,title,description,category,price,currency,condition,country_code,city')
+      .select('slug,title,description,category,price,currency,condition,country_code,city,image_urls')
       .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(24);
@@ -80,6 +81,7 @@ export default async function StorePage({ searchParams }: PageProps<'/store'>) {
               {products.map((product) => (
                 <li key={product.slug}>
                   <Link href={`/store/product/${product.slug}`} className="block h-full rounded-2xl border border-white/10 bg-white/[.035] p-5 transition hover:-translate-y-0.5 hover:border-amber-200/30">
+                    {product.image_urls?.[0] && <div role="img" aria-label={product.title} className="mb-4 aspect-[4/3] rounded-xl bg-cover bg-center" style={{ backgroundImage: `url("${product.image_urls[0]}")` }} />}
                     <p className="text-xs uppercase tracking-wider text-white/45">{product.category} · {product.condition}</p>
                     <h3 className="mt-3 text-lg font-semibold text-white">{product.title}</h3>
                     <p className="mt-2 line-clamp-2 text-sm leading-6 text-white/60">{product.description}</p>

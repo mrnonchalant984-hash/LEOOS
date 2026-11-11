@@ -14,10 +14,21 @@ export function NewProductForm() {
     setError('');
     setBusy(true);
     const form = new FormData(event.currentTarget);
-    const payload: Record<string, string | number> = Object.fromEntries(form.entries()) as Record<string, string>;
+    const payload: Record<string, unknown> = Object.fromEntries([...form.entries()].filter(([key]) => key !== 'images')) as Record<string, string>;
     payload.price = Number(form.get('price'));
 
     try {
+      const imagePaths: string[] = [];
+      const images = form.getAll('images').filter((value): value is File => value instanceof File && value.size > 0);
+      if (images.length > 8) { setError('Upload up to 8 product images.'); return; }
+      for (const image of images) {
+        const upload = new FormData(); upload.set('image', image);
+        const uploaded = await fetch('/api/store/images', { method: 'POST', body: upload });
+        const result = await uploaded.json().catch(() => ({}));
+        if (!uploaded.ok) { setError(typeof result.error === 'string' ? result.error : 'An image could not be uploaded.'); return; }
+        imagePaths.push(result.path);
+      }
+      payload.imagePaths = imagePaths;
       const response = await fetch('/api/store/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -96,6 +107,11 @@ export function NewProductForm() {
       <div>
         <label htmlFor="city" className="mb-2 block text-sm font-medium text-white">City</label>
         <input id="city" name="city" required maxLength={100} className="w-full rounded-xl border border-white/10 px-4 py-3" />
+      </div>
+      <div>
+        <label htmlFor="images" className="mb-2 block text-sm font-medium text-white">Product images (up to 8)</label>
+        <input id="images" name="images" type="file" accept="image/jpeg,image/png,image/webp" multiple className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm" />
+        <p className="mt-2 text-xs text-white/50">JPEG, PNG, or WebP images up to 6 MB each. Images are resized and converted to WebP.</p>
       </div>
       {error && (
         <div className="rounded-xl border border-rose-300/20 bg-rose-300/5 p-4 text-sm text-rose-100" role="alert">

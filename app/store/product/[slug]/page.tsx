@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { adminSupabase } from '@/lib/auth';
 import { formatProductPrice } from '@/lib/store/products';
 import { serializeJsonLd, SITE_ORIGIN } from '@/lib/seo';
+import { ProductActions } from '../product-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,13 +21,14 @@ type Product = {
   region: string | null;
   city: string;
   published_at: string;
+  image_urls: string[];
 };
 
 async function getProduct(slug: string): Promise<Product | null> {
   try {
     const { data, error } = await adminSupabase()
       .from('marketplace_products')
-      .select('id,slug,title,description,category,price,currency,condition,country_code,region,city,published_at')
+      .select('id,slug,title,description,category,price,currency,condition,country_code,region,city,published_at,image_urls')
       .eq('slug', slug)
       .eq('status', 'active')
       .maybeSingle();
@@ -85,6 +87,7 @@ export default async function ProductPage({ params }: PageProps<'/store/product/
             <span>{product.category}</span><span aria-hidden="true">·</span><span>{product.condition}</span>
           </div>
           <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-5xl">{product.title}</h1>
+          {product.image_urls?.length > 0 && <div className="mt-5 grid gap-3 sm:grid-cols-2">{product.image_urls.map((url) => <div key={url} role="img" aria-label={product.title} className="aspect-[4/3] rounded-2xl bg-cover bg-center" style={{ backgroundImage: `url("${url}")` }} />)}</div>}
           <p className="mt-5 text-3xl font-semibold text-amber-100">{formatProductPrice(Number(product.price), product.currency)}</p>
           <p className="mt-3 text-sm text-white/55">{[product.city, product.region, product.country_code].filter(Boolean).join(', ')}</p>
           <div className="mt-8 border-t border-white/10 pt-7">
@@ -94,7 +97,7 @@ export default async function ProductPage({ params }: PageProps<'/store/product/
           <aside className="mt-8 rounded-2xl border border-amber-200/15 bg-amber-100/[.035] p-5">
             <h2 className="font-semibold text-white">Contact and delivery</h2>
             <p className="mt-2 text-sm leading-6 text-white/60">Buyer and seller communication, payment, and delivery arrangements are made independently. LeoX Store does not provide escrow or delivery services.</p>
-            <p className="mt-3 text-xs text-white/45">Messaging is not available in this Store release.</p>
+            <ProductActions productId={product.id} />
           </aside>
         </div>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }} />
