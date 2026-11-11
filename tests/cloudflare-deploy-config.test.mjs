@@ -19,3 +19,11 @@ test('Cloudflare uses the OpenNext worker build and deploy commands', async () =
   assert.equal(packageJson.scripts['cloudflare:preview'], 'npm run cloudflare:build && opennextjs-cloudflare preview');
   assert.equal(packageJson.devDependencies['@opennextjs/cloudflare'], '1.19.11');
 });
+
+test('Cloudflare auth middleware uses the Edge middleware convention', async () => {
+  const middleware = await readFile(new URL('../middleware.ts', import.meta.url), 'utf8');
+
+  assert.match(middleware, /export async function middleware\(/);
+  assert.doesNotMatch(middleware, /export async function proxy\(/);
+  assert.match(middleware, /@\/lib\/auth-cookies/);
+});
