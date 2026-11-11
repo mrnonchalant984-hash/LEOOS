@@ -55,7 +55,7 @@ export default async function StorePage({ searchParams }: PageProps<'/store'>) {
           <p className="mt-5 max-w-2xl text-base leading-7 text-white/65">Browse independent listings and contact sellers directly. Buyers and sellers arrange payment and delivery privately.</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/store/seller/products/new" className="rounded-xl bg-amber-200 px-5 py-3 font-semibold text-neutral-950">Advertise a product</Link>
-            <Link href="/auth" className="rounded-xl border border-white/15 px-5 py-3 font-medium text-white">Sign in</Link>
+            <Link href="/auth?next=%2Fstore" className="rounded-xl border border-white/15 px-5 py-3 font-medium text-white">Sign in</Link>
           </div>
         </section>
 

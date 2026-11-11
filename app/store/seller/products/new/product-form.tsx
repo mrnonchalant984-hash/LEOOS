@@ -116,7 +116,7 @@ export function NewProductForm() {
       {error && (
         <div className="rounded-xl border border-rose-300/20 bg-rose-300/5 p-4 text-sm text-rose-100" role="alert">
           <p>{error}</p>
-          {error.startsWith('Sign in') && <Link href="/auth" className="mt-3 inline-flex underline underline-offset-4">Open sign in</Link>}
+          {error.startsWith('Sign in') && <Link href="/auth?next=%2Fstore%2Fseller%2Fproducts%2Fnew" className="mt-3 inline-flex underline underline-offset-4">Open sign in</Link>}
         </div>
       )}
       <button type="submit" disabled={busy} className="w-full rounded-xl bg-amber-200 px-5 py-3 font-semibold text-neutral-950 disabled:opacity-60">{busy ? 'Submitting…' : 'Submit for review'}</button>

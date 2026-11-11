@@ -97,7 +97,7 @@ export default async function ProductPage({ params }: PageProps<'/store/product/
           <aside className="mt-8 rounded-2xl border border-amber-200/15 bg-amber-100/[.035] p-5">
             <h2 className="font-semibold text-white">Contact and delivery</h2>
             <p className="mt-2 text-sm leading-6 text-white/60">Buyer and seller communication, payment, and delivery arrangements are made independently. LeoX Store does not provide escrow or delivery services.</p>
-            <ProductActions productId={product.id} />
+            <ProductActions productId={product.id} productSlug={product.slug} />
           </aside>
         </div>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }} />
