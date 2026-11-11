@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "leonardx",
+  "compatibility_date": "2026-11-09",
+  "upload_source_maps": false,
+  "observability": {
+    "enabled": true
+  }
+}
