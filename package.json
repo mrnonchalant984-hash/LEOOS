@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "node scripts/build-production.mjs",
-    "cloudflare:build": "npm run typecheck && opennextjs-cloudflare build",
+    "cloudflare:build": "node scripts/build-cloudflare.mjs",
     "cloudflare:deploy": "opennextjs-cloudflare deploy",
     "cloudflare:preview": "npm run cloudflare:build && opennextjs-cloudflare preview",
     "start": "next start",

@@ -9,7 +9,7 @@ Cloudflare deployment uses the OpenNext adapter, not a plain Next.js build follo
 - Build command: `npm run cloudflare:build`
 - Deploy command: `npm run cloudflare:deploy`
 
-The build command runs typecheck, then lets the OpenNext adapter run Next.js in its required standalone mode and adapt the result into `.open-next/worker.js`. The deploy command uses the OpenNext adapter to deploy that Worker. `wrangler.jsonc` points Wrangler to this generated entry point and disables source-map uploads because the generated maps exceed Cloudflare's upload limit. Do not configure `npm run build` and `npx wrangler deploy` as the Cloudflare commands; that combination does not produce the Worker entry point.
+The build command runs typecheck with a 3 GB Node.js heap, then lets the OpenNext adapter run Next.js in its required standalone mode and adapt the result into `.open-next/worker.js`. The deploy command uses the OpenNext adapter to deploy that Worker. `wrangler.jsonc` points Wrangler to this generated entry point and disables source-map uploads because the generated maps exceed Cloudflare's upload limit. Do not configure `npm run build` and `npx wrangler deploy` as the Cloudflare commands; that combination does not produce the Worker entry point.
 
 The adapter dependency is recorded in `package.json` and `package-lock.json`; it will be installed by the normal clean install in Cloudflare's build environment.
 

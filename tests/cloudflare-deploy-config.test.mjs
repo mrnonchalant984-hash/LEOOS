@@ -11,13 +11,18 @@ test('Cloudflare deployment does not upload source maps over the Worker size lim
 test('Cloudflare uses the OpenNext worker build and deploy commands', async () => {
   const config = JSON.parse(await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
   const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  const buildScript = await readFile(new URL('../scripts/build-cloudflare.mjs', import.meta.url), 'utf8');
 
   assert.equal(config.main, '.open-next/worker.js');
   assert.deepEqual(config.assets, { directory: '.open-next/assets', binding: 'ASSETS' });
-  assert.equal(packageJson.scripts['cloudflare:build'], 'npm run typecheck && opennextjs-cloudflare build');
+  assert.equal(packageJson.scripts['cloudflare:build'], 'node scripts/build-cloudflare.mjs');
   assert.equal(packageJson.scripts['cloudflare:deploy'], 'opennextjs-cloudflare deploy');
   assert.equal(packageJson.scripts['cloudflare:preview'], 'npm run cloudflare:build && opennextjs-cloudflare preview');
   assert.equal(packageJson.devDependencies['@opennextjs/cloudflare'], '1.19.11');
+  assert.match(buildScript, /requestedHeapMb = 3072/);
+  assert.match(buildScript, /--max-old-space-size=\$\{requestedHeapMb\}/);
+  assert.match(buildScript, /\['run', 'typecheck'\]/);
+  assert.match(buildScript, /\['exec', '--', 'opennextjs-cloudflare', 'build'\]/);
 });
 
 test('Cloudflare auth middleware uses the Edge middleware convention', async () => {
