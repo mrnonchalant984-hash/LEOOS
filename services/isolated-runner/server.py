@@ -24,7 +24,7 @@ MAX_FILE_SIZE = 2 * 1024 * 1024
 ID_RE = re.compile(r'^[a-zA-Z0-9_-]{8,80}$')
 WORKSPACE_ID_RE = re.compile(r'^[a-f0-9-]{36}$')
 TENANT_ID_RE = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$', re.I)
-OPERATIONS = {'inspect', 'apply_patch', 'install', 'test', 'typecheck', 'lint', 'build', 'git_status', 'git_diff', 'git_log', 'git_branch', 'git_commit'}
+OPERATIONS = {'inspect', 'apply_patch', 'install', 'test', 'typecheck', 'lint', 'build', 'git_status', 'git_diff', 'git_log', 'git_branch', 'git_commit', 'run_skill_script'}
 
 class RequestError(Exception): pass
 
@@ -133,11 +133,37 @@ def create_workspace_archive(workspace: Path, output: Path) -> str | None:
         return None
     return base64.b64encode(output.read_bytes()).decode()
 
-def run_container(workspace: Path, operation: str, patch: str = '', branch: str = '', message: str = '') -> dict:
+def validate_skill_script(workspace: Path, script_path: str) -> str:
+    if not isinstance(script_path, str) or '\\' in script_path:
+        raise RequestError('invalid_skill_script_path')
+    relative = PurePosixPath(script_path)
+    if relative.is_absolute() or not relative.parts or relative.parts[0] != 'scripts' or any(part in ('', '.', '..') for part in relative.parts):
+        raise RequestError('invalid_skill_script_path')
+    if relative.suffix.lower() not in ('.js', '.mjs', '.cjs'):
+        raise RequestError('unsupported_skill_script_language')
+    target = workspace.joinpath(*relative.parts)
+    if target.is_symlink() or not target.is_file():
+        raise RequestError('skill_script_not_found')
+    resolved_workspace = workspace.resolve()
+    resolved_target = target.resolve()
+    try:
+        resolved_target.relative_to(resolved_workspace)
+    except ValueError:
+        raise RequestError('invalid_skill_script_path')
+    if resolved_target.stat().st_size > 256 * 1024:
+        raise RequestError('skill_script_too_large')
+    return relative.as_posix()
+
+def run_container(workspace: Path, operation: str, patch: str = '', branch: str = '', message: str = '', script_path: str = '', script_input_json: str = '') -> dict:
     if operation not in OPERATIONS: raise RequestError('unsupported_operation')
     if operation == 'apply_patch' and (not patch or len(patch.encode()) > 128_000): raise RequestError('invalid_patch')
     if operation == 'git_branch' and not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._/-]{0,90}', branch): raise RequestError('invalid_branch')
     if operation == 'git_commit' and (not message or len(message) > 180 or '\n' in message or '\r' in message): raise RequestError('invalid_commit_message')
+    if operation == 'run_skill_script':
+        script_path = validate_skill_script(workspace, script_path)
+        if len(script_input_json.encode()) > 16 * 1024: raise RequestError('skill_script_input_too_large')
+        try: json.loads(script_input_json)
+        except (ValueError, json.JSONDecodeError): raise RequestError('invalid_skill_script_input')
     commands = {
         'inspect': ['sh', '-lc', 'find . -maxdepth 3 -type f -not -path "./.git/*" -not -path "./node_modules/*" | sort | head -500'],
         'apply_patch': ['sh', '-lc', 'git apply --check /tmp/task.patch && git apply /tmp/task.patch'],
@@ -151,18 +177,23 @@ def run_container(workspace: Path, operation: str, patch: str = '', branch: str 
         'git_log': ['git', 'log', '-8', '--oneline', '--decorate'],
         'git_branch': ['git', 'switch', '-c', branch],
         'git_commit': ['sh', '-lc', "git add --all -- . ':!.env*' ':!**/.env*' ':!*.pem' ':!*.key' ':!**/*credentials*' && if git diff --cached --quiet; then exit 3; else git -c user.name='LeonardX Worker' -c user.email='worker@invalid.local' commit -m \"$COMMIT_MESSAGE\"; fi"],
+        'run_skill_script': ['node', '--disable-proto=throw', script_path],
     }
     if operation == 'apply_patch': (workspace / '.runner-task.patch').write_text(patch, encoding='utf-8'); commands[operation] = ['sh', '-lc', 'git apply --check .runner-task.patch && git apply .runner-task.patch']
     env = os.environ.copy()
     env['COMMIT_MESSAGE'] = message
     cmd = [ENGINE, 'run', '--rm', f'--runtime={CONTAINER_RUNTIME}', '--network', 'none', '--read-only', '--userns=keep-id:uid=10001,gid=10001', '--user', '10001:10001', '--cap-drop', 'all', '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--memory', '1536m', '--cpus', '2', '--tmpfs', '/tmp:rw,noexec,nosuid,size=256m', '-v', f'{workspace}:/workspace:rw,Z']
+    if operation == 'run_skill_script': cmd.append('-i')
     npm_cache = os.getenv('RUNNER_NPM_CACHE', '').strip()
     if npm_cache and Path(npm_cache).is_dir(): cmd += ['-v', f'{Path(npm_cache).resolve()}:/opt/runner-npm-cache:ro,Z']
-    cmd += ['-w', '/workspace', '--env', 'COMMIT_MESSAGE', IMAGE, *commands[operation]]
+    cmd += ['-w', '/workspace']
+    if operation == 'git_commit': cmd += ['--env', 'COMMIT_MESSAGE']
+    cmd += [IMAGE, *commands[operation]]
     try:
-        result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=270, check=False)
+        result = subprocess.run(cmd, env=env, input=script_input_json if operation == 'run_skill_script' else None,
+                                capture_output=True, text=True, timeout=60 if operation == 'run_skill_script' else 270, check=False)
     except subprocess.TimeoutExpired:
-        return {'ok': False, 'exit_code': 124, 'stdout': '', 'stderr': 'runner_timeout'}
+        return {'ok': False, 'exit_code': 124, 'stdout': '', 'stderr': 'skill_execution_timeout' if operation == 'run_skill_script' else 'runner_timeout'}
     return {'ok': result.returncode == 0, 'exit_code': result.returncode, 'stdout': result.stdout[-24000:], 'stderr': result.stderr[-12000:]}
 
 class Handler(BaseHTTPRequestHandler):
@@ -225,6 +256,12 @@ class Handler(BaseHTTPRequestHandler):
             tenant_root = tenant_workspace_root(tenant_id)
             op = body.get('operation')
             if op not in OPERATIONS: raise RequestError('unsupported_operation')
+            script_path = body.get('script_path', '')
+            script_input_json = body.get('script_input_json', '{}')
+            if op == 'run_skill_script':
+                if set(body) - {'job_id', 'tenant_id', 'operation', 'workspace_id', 'workspace_zip_base64', 'script_path', 'script_input_json'}:
+                    raise RequestError('invalid_skill_script_request')
+                if not isinstance(script_path, str) or not isinstance(script_input_json, str): raise RequestError('invalid_skill_script_request')
             tenant_root.mkdir(parents=True, exist_ok=True, mode=0o700)
             workspace_id = str(body.get('workspace_id') or '')
             created_workspace = False
@@ -265,7 +302,7 @@ class Handler(BaseHTTPRequestHandler):
             except FileExistsError: raise RequestError('workspace_busy')
             try:
                 os.write(lock_fd, str(time.time()).encode()); os.close(lock_fd)
-                result = run_container(workspace, op, str(body.get('patch', '')), str(body.get('branch', '')), str(body.get('commit_message', '')))
+                result = run_container(workspace, op, str(body.get('patch', '')), str(body.get('branch', '')), str(body.get('commit_message', '')), script_path, script_input_json)
                 (workspace / '.runner-task.patch').unlink(missing_ok=True)
                 out = root / 'result.zip'
                 zipped = create_workspace_archive(workspace, out)

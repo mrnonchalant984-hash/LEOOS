@@ -11,6 +11,65 @@ const MAX_ARCHIVE_BYTES = 4 * 1024 * 1024;
 const OPERATIONS = new Set(['inspect', 'apply_patch', 'install', 'test', 'typecheck', 'lint', 'build']);
 const WORKSPACE_ID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 
+function cloudflareAccessHeaders(): Record<string, string> {
+  const clientId = process.env.LEO_SANDBOX_ACCESS_CLIENT_ID?.trim() || '';
+  const clientSecret = process.env.LEO_SANDBOX_ACCESS_CLIENT_SECRET?.trim() || '';
+  if (Boolean(clientId) !== Boolean(clientSecret)) throw new Error('sandbox_access_token_incomplete');
+  return clientId ? { 'CF-Access-Client-Id': clientId, 'CF-Access-Client-Secret': clientSecret } : {};
+}
+
+export async function DELETE(req: NextRequest) {
+  if (!trustedRequestOrigin(req)) return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 });
+  const context = await getProfile(req);
+  if (!context) return NextResponse.json({ error: 'Sign in to delete an isolated workspace.' }, { status: 401 });
+  const workspaceId = req.nextUrl.searchParams.get('workspaceId') || '';
+  if (!WORKSPACE_ID_RE.test(workspaceId)) return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 });
+
+  const userLimited = await enforceUserRateLimit(context.user.id, 'leocode-sandbox-delete', 10, 3600);
+  if (userLimited) return userLimited;
+  const ipLimited = await enforceIpRateLimit(req, 'leocode-sandbox-delete-ip', 30, 3600);
+  if (ipLimited) return ipLimited;
+
+  const secret = process.env.LEO_SANDBOX_HMAC_SECRET;
+  if (!secret || secret.length < 32) return NextResponse.json({ error: 'The isolated execution service is not configured.' }, { status: 503 });
+  let baseUrl: string;
+  try { baseUrl = getRunnerUrl(); }
+  catch { return NextResponse.json({ error: 'The isolated execution service URL is missing or invalid.' }, { status: 503 }); }
+
+  const rawBody = JSON.stringify({ tenant_id: context.user.id });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
+  try {
+    const accessHeaders = cloudflareAccessHeaders();
+    const response = await fetch(`${baseUrl}/v1/workspaces/${encodeURIComponent(workspaceId)}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Runner-Timestamp': timestamp,
+        'X-Runner-Signature': signature,
+        ...accessHeaders,
+      },
+      body: rawBody,
+      cache: 'no-store',
+      redirect: 'error',
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (response.status === 404) return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 });
+    if (response.status === 409) return NextResponse.json({ error: 'Workspace is busy and cannot be deleted yet.' }, { status: 409 });
+    if (!response.ok) {
+      console.error('LeoCode sandbox workspace deletion failed', { status: response.status, userId: context.user.id });
+      return NextResponse.json({ error: 'The isolated workspace could not be deleted.' }, { status: response.status >= 500 ? 502 : 400 });
+    }
+    return NextResponse.json({ workspaceId, deleted: true }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) {
+    console.error('LeoCode sandbox workspace deletion request failed', {
+      userId: context.user.id,
+      error: error instanceof Error ? error.name : 'unknown',
+    });
+    return NextResponse.json({ error: 'The isolated execution service is unavailable.' }, { status: 503 });
+  }
+}
+
 function trustedRequestOrigin(req: NextRequest) {
   const origin = req.headers.get('origin');
   if (origin) return origin === req.nextUrl.origin;
@@ -101,12 +160,14 @@ export async function POST(req: NextRequest) {
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
   try {
+    const accessHeaders = cloudflareAccessHeaders();
     const response = await fetch(`${baseUrl}/v1/jobs`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Runner-Timestamp': timestamp,
         'X-Runner-Signature': signature,
+        ...accessHeaders,
       },
       body: rawBody,
       cache: 'no-store',

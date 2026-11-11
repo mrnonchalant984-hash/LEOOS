@@ -16,4 +16,8 @@ test('runner requests derive the tenant scope from the authenticated account', a
   assert.match(runner, /def do_DELETE/);
   assert.match(sandboxRoute, /export async function DELETE/);
   assert.match(sandboxRoute, /tenant_id: context\.user\.id/);
+  assert.match(sandboxRoute, /LEO_SANDBOX_ACCESS_CLIENT_ID/);
+  assert.match(sandboxRoute, /LEO_SANDBOX_ACCESS_CLIENT_SECRET/);
+  assert.match(sandboxRoute, /CF-Access-Client-Id/);
+  assert.match(sandboxRoute, /CF-Access-Client-Secret/);
 });

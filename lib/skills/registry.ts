@@ -1,41 +1,15 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
 import { adminSupabase } from '../auth';
-
-export const skillNameSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Skill names must use lowercase letters, numbers, and dashes.');
-export const skillFrontmatterSchema = z.object({
-  name: skillNameSchema,
-  description: z.string().trim().min(1).max(500),
-  version: z.string().regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/),
-});
-export type SkillSource = 'builtin' | 'user' | 'plugin';
-export type SkillSummary = { name: string; description: string; version: string; source: SkillSource; ownerId?: string; enabled: boolean };
+import { normalizeSkillRelativePath, skillNameSchema, validateSkillMarkdown } from './contracts.ts';
+import type { SkillSource, SkillSummary } from './contracts.ts';
+export { decodeSkillFileContent, encodeSkillFileContent, MAX_SKILL_BUNDLE_BYTES, MAX_SKILL_FILES, normalizeSkillRelativePath, skillFrontmatterSchema, skillNameSchema, validateSkillFileMap, validateSkillMarkdown } from './contracts.ts';
+export type { SkillSource, SkillSummary } from './contracts.ts';
 
 const ROOT = path.join(process.cwd(), 'skills');
-const MAX_MARKDOWN_BYTES = 256 * 1024;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
-const allowedFile = (relative: string) => relative.startsWith('references' + path.sep) || relative.startsWith('assets' + path.sep) || relative.startsWith('scripts' + path.sep);
-
-function parseFrontmatter(markdown: string) {
-  const match = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n([\s\S]*)$/m.exec(markdown);
-  if (!match) throw new Error('SKILL.md must start with YAML frontmatter.');
-  const values: Record<string, string> = {};
-  for (const line of match[1].split(/\r?\n/)) {
-    const separator = line.indexOf(':');
-    if (separator < 1) continue;
-    values[line.slice(0, separator).trim()] = line.slice(separator + 1).trim().replace(/^['"]|['"]$/g, '');
-  }
-  return { metadata: skillFrontmatterSchema.parse(values), body: match[2].trim() };
-}
-
-export function validateSkillMarkdown(markdown: string) {
-  if (Buffer.byteLength(markdown, 'utf8') > MAX_MARKDOWN_BYTES) throw new Error('SKILL.md is too large. Move long material into references/.');
-  const lines = markdown.split(/\r?\n/);
-  if (lines.length > 500) throw new Error('SKILL.md must be 500 lines or fewer.');
-  return parseFrontmatter(markdown);
-}
+const allowedFile = (relative: string) => /^(?:references|assets|scripts)[/\\]/.test(relative);
 
 function safeRelative(relative: string) {
   const normalized = relative.replaceAll('\\', '/');

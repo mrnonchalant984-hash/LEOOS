@@ -47,6 +47,7 @@ import {
   Puzzle,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
+import { GoogleGenAI, Modality } from "@google/genai";
 import type { LucideIcon } from "lucide-react";
 
 type BuildProgressState = { status: string; step: string; message: string; liveUrl?: string | null; events?: Array<{ id: string; message: string; status: string; created_at: string }> };
@@ -85,7 +86,47 @@ type ToolOption = { name: string; description: string };
 type CustomAgentOption = { id: string; name: string; description: string; allowed_tools: string[] };
 type ModelOption = { id: string; name: string; provider: string; model: string; capabilities: string[]; configured: boolean };
 type OfflineDraft = { text: string; mode: "normal" | "deep" | "tools"; selectedToolName?: string; selectedAgentId?: string; savedAt: string };
+type GeminiLiveSession = Awaited<ReturnType<GoogleGenAI["live"]["connect"]>>;
 const OFFLINE_DRAFT_KEY = "leo_offline_chat_draft_v1";
+const LIVE_VOICE_SYSTEM_INSTRUCTION = "You are Leo, a concise and friendly voice assistant. Speak naturally and keep answers focused. Do not claim to have performed actions you did not perform.";
+
+function resampleTo16k(samples: Float32Array, sourceRate: number) {
+  if (sourceRate === 16000) return samples;
+  const ratio = sourceRate / 16000;
+  const output = new Float32Array(Math.max(1, Math.floor(samples.length / ratio)));
+  for (let index = 0; index < output.length; index += 1) {
+    const start = Math.floor(index * ratio);
+    const end = Math.min(samples.length, Math.floor((index + 1) * ratio));
+    let total = 0;
+    for (let sample = start; sample < end; sample += 1) total += samples[sample];
+    output[index] = total / Math.max(1, end - start);
+  }
+  return output;
+}
+
+function encodePcm16(samples: Float32Array) {
+  const bytes = new Uint8Array(samples.length * 2);
+  const view = new DataView(bytes.buffer);
+  for (let index = 0; index < samples.length; index += 1) {
+    const value = Math.max(-1, Math.min(1, samples[index]));
+    view.setInt16(index * 2, value < 0 ? value * 0x8000 : value * 0x7fff, true);
+  }
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length)));
+  }
+  return btoa(binary);
+}
+
+function decodePcm16(data: string) {
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  const view = new DataView(bytes.buffer);
+  const samples = new Float32Array(Math.floor(bytes.length / 2));
+  for (let index = 0; index < samples.length; index += 1) samples[index] = view.getInt16(index * 2, true) / 0x8000;
+  return samples;
+}
 const actions = [
   {
     label: "Let’s brainstorm",
@@ -128,7 +169,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     [plan, setPlan] = useState<string | null>(null),
     [menu, setMenu] = useState(false),
     [voiceOpen, setVoiceOpen] = useState(false),
-    [voice, setVoice] = useState("marin"),
+    [voice, setVoice] = useState("Kore"),
     [muted, setMuted] = useState(false),
     [voiceLocked, setVoiceLocked] = useState(false),
     [voiceFallbackMode, setVoiceFallbackMode] = useState(false);
@@ -232,6 +273,15 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   const pc = useRef<RTCPeerConnection | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
+  const geminiLiveSession = useRef<GeminiLiveSession | null>(null);
+  const liveAudioContext = useRef<AudioContext | null>(null);
+  const liveMicSource = useRef<MediaStreamAudioSourceNode | null>(null);
+  const liveMicProcessor = useRef<ScriptProcessorNode | null>(null);
+  const liveSilentGain = useRef<GainNode | null>(null);
+  const livePlaybackSources = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const livePlaybackAt = useRef(0);
+  const liveSessionTimer = useRef<number | null>(null);
+  const liveSessionActive = useRef(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const photoRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
@@ -705,6 +755,104 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       setError("Microphone permission was denied or unavailable.");
     }
   }
+  async function connectGeminiLive(session: { token: string; model: string; voice?: string }) {
+    const local = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        ...(selectedAudioDevice ? { deviceId: { exact: selectedAudioDevice } } : {}),
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+    stream.current = local;
+    const context = new AudioContext();
+    liveAudioContext.current = context;
+    await context.resume();
+    const ai = new GoogleGenAI({ apiKey: session.token, httpOptions: { apiVersion: "v1alpha" } });
+    const liveConfig = {
+      responseModalities: [Modality.AUDIO],
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: session.voice || "Kore" } } },
+      systemInstruction: LIVE_VOICE_SYSTEM_INSTRUCTION,
+    };
+    liveSessionActive.current = true;
+    const connected = await ai.live.connect({
+      model: session.model,
+      config: liveConfig,
+      callbacks: {
+        onopen: () => setVoiceStatus("Listening"),
+        onmessage: (message) => {
+          const content = message.serverContent;
+          if (content?.interrupted) {
+            livePlaybackSources.current.forEach((source) => { try { source.stop(); } catch {} });
+            livePlaybackSources.current.clear();
+            livePlaybackAt.current = 0;
+          }
+          for (const part of content?.modelTurn?.parts || []) {
+            const blob = part.inlineData;
+            if (!blob?.data || !blob.mimeType?.startsWith("audio/pcm")) continue;
+            const outputContext = liveAudioContext.current;
+            if (!outputContext) continue;
+            const samples = decodePcm16(blob.data);
+            if (!samples.length) continue;
+            const sampleRate = Number(blob.mimeType.match(/rate=(\d+)/)?.[1]) || 24000;
+            const buffer = outputContext.createBuffer(1, samples.length, sampleRate);
+            buffer.copyToChannel(samples, 0);
+            const source = outputContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(outputContext.destination);
+            livePlaybackSources.current.add(source);
+            source.onended = () => livePlaybackSources.current.delete(source);
+            const startAt = Math.max(outputContext.currentTime + 0.02, livePlaybackAt.current);
+            source.start(startAt);
+            livePlaybackAt.current = startAt + buffer.duration;
+            setVoiceLocked(true);
+            setVoiceStatus("Speaking");
+          }
+          if (content?.turnComplete || content?.waitingForInput) {
+            setVoiceStatus("Listening");
+          }
+        },
+        onerror: () => {
+          setError("The live voice connection encountered an error. End the call and try again.");
+          endVoiceChat();
+          setVoiceStatus("Error");
+        },
+        onclose: () => {
+          if (!liveSessionActive.current) return;
+          setError("The live voice connection closed. Start a new call to continue.");
+          endVoiceChat();
+        },
+      },
+    });
+    geminiLiveSession.current = connected;
+
+    const source = context.createMediaStreamSource(local);
+    const processor = context.createScriptProcessor(2048, 1, 1);
+    const silentGain = context.createGain();
+    silentGain.gain.value = 0;
+    source.connect(processor);
+    processor.connect(silentGain);
+    silentGain.connect(context.destination);
+    processor.onaudioprocess = (event) => {
+      if (!liveSessionActive.current || local.getAudioTracks().every((track) => !track.enabled)) return;
+      const samples = resampleTo16k(event.inputBuffer.getChannelData(0), context.sampleRate);
+      if (!samples.length) return;
+      try {
+        connected.sendRealtimeInput({ audio: { data: encodePcm16(samples), mimeType: "audio/pcm;rate=16000" } });
+      } catch {
+        setVoiceStatus("Error");
+      }
+    };
+    liveMicSource.current = source;
+    liveMicProcessor.current = processor;
+    liveSilentGain.current = silentGain;
+    setVoiceLocked(true);
+    setVoiceStatus("Listening");
+    liveSessionTimer.current = window.setTimeout(() => {
+      setError("This live voice session reached its five-minute limit. Start a new call to continue.");
+      endVoiceChat();
+    }, 5 * 60 * 1000);
+  }
   async function startVoiceChat() {
     if (voiceOpen) {
       endVoiceChat();
@@ -726,6 +874,11 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       });
       const session = await r.json();
       if (!r.ok) throw new Error(session.error || "Unable to start voice chat");
+      if (session.mode === "gemini_live" && typeof session.token === "string" && typeof session.model === "string") {
+        setVoiceFallbackMode(false);
+        await connectGeminiLive(session);
+        return;
+      }
       if (session.mode === "gemini_turn_based") {
         setVoiceFallbackMode(true);
         setVoiceStatus("Gemini voice ready · tap to speak");
@@ -790,6 +943,23 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   }
   function endVoiceChat() {
     if (recording) stopRecording();
+    liveSessionActive.current = false;
+    if (liveSessionTimer.current !== null) window.clearTimeout(liveSessionTimer.current);
+    liveSessionTimer.current = null;
+    if (liveMicProcessor.current) liveMicProcessor.current.onaudioprocess = null;
+    try { liveMicProcessor.current?.disconnect(); } catch {}
+    try { liveMicSource.current?.disconnect(); } catch {}
+    try { liveSilentGain.current?.disconnect(); } catch {}
+    liveMicProcessor.current = null;
+    liveMicSource.current = null;
+    liveSilentGain.current = null;
+    try { geminiLiveSession.current?.close(); } catch {}
+    geminiLiveSession.current = null;
+    livePlaybackSources.current.forEach((source) => { try { source.stop(); } catch {} });
+    livePlaybackSources.current.clear();
+    livePlaybackAt.current = 0;
+    void liveAudioContext.current?.close().catch(() => {});
+    liveAudioContext.current = null;
     setVoiceFallbackMode(false);
     stream.current?.getTracks().forEach((t) => t.stop());
     stream.current = null;
@@ -797,6 +967,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     pc.current = null;
     setVoiceOpen(false);
     setMuted(false);
+    setVoiceLocked(false);
     setVoiceStatus("Ended");
   }
   function toggleMute() {
@@ -1339,6 +1510,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
                   </div>
                   <h2 className="mt-6 text-2xl font-black">Live Leo Voice</h2>
                   <p className="mt-2 text-sm text-zinc-500">{voiceStatus}</p>
+                  <p className="mx-auto mt-2 max-w-sm text-xs text-zinc-600">Voice audio streams to Google Gemini. Free-tier quotas may apply; if your Google project uses paid billing, usage can incur charges. Calls stop after five minutes.</p>
                   <div className="mt-6 flex items-center justify-center gap-2">
                     <label className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-zinc-400">
                       <Settings2 size={14} />
@@ -1348,18 +1520,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
                         className="bg-transparent outline-none"
                         disabled={voiceLocked}
                       >
-                        {[
-                          "alloy",
-                          "ash",
-                          "ballad",
-                          "coral",
-                          "echo",
-                          "sage",
-                          "shimmer",
-                          "verse",
-                          "marin",
-                          "cedar",
-                        ].map((v) => (
+                        {["Kore", "Puck", "Charon", "Fenrir", "Aoede"].map((v) => (
                           <option key={v} value={v} className="bg-black">
                             {v}
                           </option>
