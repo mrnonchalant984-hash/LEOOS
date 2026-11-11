@@ -16,6 +16,7 @@ export function NewProductForm() {
     const form = new FormData(event.currentTarget);
     const payload: Record<string, unknown> = Object.fromEntries([...form.entries()].filter(([key]) => key !== 'images')) as Record<string, string>;
     payload.price = Number(form.get('price'));
+    payload.stockQuantity = Number(form.get('stockQuantity'));
 
     try {
       const imagePaths: string[] = [];
@@ -93,6 +94,10 @@ export function NewProductForm() {
           <label htmlFor="currency" className="mb-2 block text-sm font-medium text-white">Currency</label>
           <input id="currency" name="currency" required minLength={3} maxLength={3} defaultValue="NGN" autoCapitalize="characters" className="w-full rounded-xl border border-white/10 px-4 py-3 uppercase" />
         </div>
+      </div>
+      <div>
+        <label htmlFor="stockQuantity" className="mb-2 block text-sm font-medium text-white">Available quantity</label>
+        <input id="stockQuantity" name="stockQuantity" type="number" required min="1" max="10000" step="1" defaultValue="1" className="w-full rounded-xl border border-white/10 px-4 py-3" />
       </div>
       <div className="grid gap-5 sm:grid-cols-2">
         <div>

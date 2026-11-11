@@ -79,6 +79,8 @@ export async function POST(request: NextRequest) {
     const db = adminSupabase();
     const id = globalThis.crypto.randomUUID();
     const product = validation.value;
+    const stockQuantity = Number((body as Record<string, unknown>).stockQuantity ?? 1);
+    if (!Number.isInteger(stockQuantity) || stockQuantity < 1 || stockQuantity > 10_000) return NextResponse.json({ error: 'Available quantity must be from 1 to 10,000.' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
     const imagePaths = Array.isArray((body as Record<string, unknown>).imagePaths) ? (body as Record<string, unknown>).imagePaths as unknown[] : [];
     if (imagePaths.length > 8 || imagePaths.some((path) => typeof path !== 'string' || !new RegExp(`^${user.id}/[0-9a-f-]{36}\\.webp$`, 'i').test(path))) {
       return NextResponse.json({ error: 'Product images must be uploaded to your own Store image area (up to 8 images).' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
@@ -92,6 +94,7 @@ export async function POST(request: NextRequest) {
       description: product.description,
       category: product.category,
       price: product.price,
+      stock_quantity: stockQuantity,
       currency: product.currency,
       condition: product.condition,
       country_code: product.countryCode,

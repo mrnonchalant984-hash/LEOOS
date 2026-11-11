@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 
 type Product = {
   id: string;
+  seller_id: string;
   slug: string;
   title: string;
   description: string;
@@ -28,7 +29,7 @@ async function getProduct(slug: string): Promise<Product | null> {
   try {
     const { data, error } = await adminSupabase()
       .from('marketplace_products')
-      .select('id,slug,title,description,category,price,currency,condition,country_code,region,city,published_at,image_urls')
+      .select('id,seller_id,slug,title,description,category,price,currency,condition,country_code,region,city,published_at,image_urls')
       .eq('slug', slug)
       .eq('status', 'active')
       .maybeSingle();
@@ -60,6 +61,10 @@ export default async function ProductPage({ params }: PageProps<'/store/product/
   const { slug } = await params;
   const product = await getProduct(slug);
   if (!product) notFound();
+  const [{ data: seller }, { data: deliveryOptions }] = await Promise.all([
+    adminSupabase().from('marketplace_sellers').select('display_name,is_verified').eq('user_id', product.seller_id).maybeSingle(),
+    adminSupabase().from('marketplace_delivery_options').select('name,details,price,currency').eq('seller_id', product.seller_id).is('product_id', null).eq('active', true).limit(10),
+  ]);
 
   const structuredData = {
     '@context': 'https://schema.org',
@@ -96,8 +101,10 @@ export default async function ProductPage({ params }: PageProps<'/store/product/
           </div>
           <aside className="mt-8 rounded-2xl border border-amber-200/15 bg-amber-100/[.035] p-5">
             <h2 className="font-semibold text-white">Contact and delivery</h2>
-            <p className="mt-2 text-sm leading-6 text-white/60">Buyer and seller communication, payment, and delivery arrangements are made independently. LeoX Store does not provide escrow or delivery services.</p>
-            <ProductActions productId={product.id} productSlug={product.slug} />
+            {seller && <p className="mt-2 text-sm text-white/65">Sold by <Link href={`/store/seller/${product.seller_id}`} className="underline">{seller.display_name}</Link>{seller.is_verified ? ' · Verified seller' : ''}</p>}
+            <p className="mt-2 text-sm leading-6 text-white/60">Pay securely through Paystack checkout for NGN listings. Confirm delivery coverage and timing with the seller; delivery fees are not included in checkout.</p>
+            {deliveryOptions?.length ? <ul className="mt-3 space-y-2 text-sm text-white/65">{deliveryOptions.map((option) => <li key={option.name}><strong>{option.name} · {formatProductPrice(Number(option.price), option.currency)}</strong>{option.details ? ` — ${option.details}` : ''}</li>)}</ul> : null}
+            <ProductActions productId={product.id} productSlug={product.slug} purchasable={product.currency === 'NGN'} />
           </aside>
         </div>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }} />
