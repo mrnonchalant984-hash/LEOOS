@@ -5,6 +5,7 @@ import { createBrowserClient } from '@supabase/ssr';
 import { ArrowRight, Chrome, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, UserRound } from 'lucide-react';
 
 type Mode = 'login' | 'signup' | 'forgot' | 'reset';
+type StoreAccountType = 'buyer' | 'seller';
 
 function subscribeAuthLocation(onChange: () => void) {
   window.addEventListener('popstate', onChange);
@@ -22,11 +23,30 @@ function getAuthLocationMode(): Mode {
 }
 
 function getServerAuthLocationMode(): Mode { return 'login'; }
+function getStoreSignupMode() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('store') === '1' || params.get('next') === '/store' || params.get('next')?.startsWith('/store/') === true;
+}
+function getServerStoreSignupMode() { return false; }
+function getRequestedStoreAccountType(): StoreAccountType {
+  return new URLSearchParams(window.location.search).get('account_type') === 'seller' ? 'seller' : 'buyer';
+}
+function getServerStoreAccountType(): StoreAccountType { return 'buyer'; }
+function safeInternalNext(value: string | null) {
+  return value?.startsWith('/') && !value.startsWith('//') && !value.includes('\\') ? value : null;
+}
+function storeDestination(accountType: StoreAccountType) {
+  return accountType === 'seller' ? '/store/seller' : '/store/account';
+}
 
 export function AuthForm() {
   const locationMode = useSyncExternalStore(subscribeAuthLocation, getAuthLocationMode, getServerAuthLocationMode);
+  const storeSignup = useSyncExternalStore(subscribeAuthLocation, getStoreSignupMode, getServerStoreSignupMode);
+  const requestedStoreAccountType = useSyncExternalStore(subscribeAuthLocation, getRequestedStoreAccountType, getServerStoreAccountType);
   const [modeOverride, setModeOverride] = useState<Mode | null>(null);
   const mode = modeOverride ?? locationMode;
+  const [storeAccountTypeChoice, setStoreAccountTypeChoice] = useState<{ requested: StoreAccountType; selected: StoreAccountType } | null>(null);
+  const storeAccountType = storeAccountTypeChoice?.requested === requestedStoreAccountType ? storeAccountTypeChoice.selected : requestedStoreAccountType;
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -62,15 +82,20 @@ export function AuthForm() {
         return;
       }
       const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/signup';
-      const payload = mode === 'login' ? { email, password } : { email, password, full_name: fullName.trim() };
+      const payload = mode === 'login'
+        ? { email, password }
+        : { email, password, full_name: fullName.trim(), ...(storeSignup ? { store_account_type: storeAccountType } : {}) };
       const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Authentication failed. Please try again.');
       if (result.session) {
         const { error } = await supabase.auth.setSession(result.session);
         if (error) throw error;
-        const requestedNext = new URLSearchParams(window.location.search).get('next');
-        const next = requestedNext?.startsWith('/') && !requestedNext.startsWith('//') && !requestedNext.includes('\\') ? requestedNext : '/dashboard';
+        const requestedNext = safeInternalNext(new URLSearchParams(window.location.search).get('next'));
+        const accountType = result.user?.storeAccountType;
+        const next = mode === 'signup' && storeSignup
+          ? storeDestination(storeAccountType)
+          : requestedNext ?? (accountType === 'buyer' || accountType === 'seller' ? storeDestination(accountType) : '/dashboard');
         const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (assuranceError) throw assuranceError;
         const destination = assurance.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2'
@@ -96,8 +121,10 @@ export function AuthForm() {
         throw new Error('Authentication is not configured yet. Please contact the platform owner.');
       }
       const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-      const requestedNext = new URLSearchParams(window.location.search).get('next');
-      const next = requestedNext?.startsWith('/') && !requestedNext.startsWith('//') && !requestedNext.includes('\\') ? requestedNext : '/dashboard';
+      const requestedNext = safeInternalNext(new URLSearchParams(window.location.search).get('next'));
+      const next = mode === 'signup' && storeSignup
+        ? storeDestination(storeAccountType)
+        : requestedNext ?? '/dashboard';
       const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -111,8 +138,8 @@ export function AuthForm() {
     }
   }
 
-  const title = mode === 'login' ? 'Welcome back.' : mode === 'signup' ? 'Create your workspace.' : mode === 'reset' ? 'Set a new password.' : 'Recover your account.';
-  const description = mode === 'login' ? 'Sign in to continue building with LeonardX.' : mode === 'signup' ? 'One account for your projects, builds, deployments, and Leo workspace.' : mode === 'reset' ? 'Choose a new password for your LeonardX account.' : 'Enter your account email and we’ll request password recovery instructions.';
+  const title = mode === 'login' ? 'Welcome back.' : mode === 'signup' ? storeSignup ? 'Join LeoX Store.' : 'Create your workspace.' : mode === 'reset' ? 'Set a new password.' : 'Recover your account.';
+  const description = mode === 'login' ? 'Sign in to continue building with LeonardX.' : mode === 'signup' ? storeSignup ? 'Choose your buyer or seller experience. Seller tools unlock after verification.' : 'One account for your projects, builds, deployments, and Leo workspace.' : mode === 'reset' ? 'Choose a new password for your LeonardX account.' : 'Enter your account email and we’ll request password recovery instructions.';
 
   return <section className="auth-shell mx-auto max-w-6xl">
     <div className="auth-story"><div className="auth-brand-lockup"><span className="auth-brand-mark">LX</span><span>LEONARDX<small>SOFTWARE CREATION PLATFORM</small></span></div><p className="auth-story-kicker">YOUR WORKSPACE, CONNECTED</p><h2>From first idea<br/>to <span>real software.</span></h2><p>Keep projects, AI-assisted work, builds, integrations, and deployments connected in one workspace.</p><div className="auth-flow"><span>IDEA</span><i>—</i><span>BUILD</span><i>—</i><span>TEST</span><i>—</i><span>DEPLOY</span></div><div className="auth-visual" aria-hidden="true"><div className="auth-visual-window window-back"><div/><div/><div/><div/></div><div className="auth-visual-laptop"><div className="laptop-screen"><div className="laptop-topline"><i/><i/><i/><span>workspace.tsx</span></div><div className="laptop-code"><b/><b/><i/><b/><i/><i/><b/></div><div className="laptop-terminal"><span/> checks complete</div></div><div className="laptop-base"/></div><div className="auth-visual-server"><i/><i/><i/><i/><i/><i/></div><div className="auth-visual-orbit orbit-a"/><div className="auth-visual-orbit orbit-b"/></div><p className="auth-story-foot">Designed for builders. Grounded in real workflows.</p></div>
@@ -120,6 +147,7 @@ export function AuthForm() {
       <div className="auth-form-top"><span className="auth-form-icon"><LockKeyhole size={17}/></span><span className="auth-form-caption">SECURE ACCOUNT ACCESS</span></div>
       <h1 className="mt-5 text-3xl font-black tracking-tight">{title}</h1><p className="mt-3 text-sm leading-7 text-zinc-400">{description}</p>
       <div className="mt-7 grid gap-4">
+        {mode === 'signup' && storeSignup && <fieldset className="grid gap-3"><legend className="mb-1 text-sm font-semibold text-zinc-200">How will you use LeoX Store?</legend><div className="grid gap-3 sm:grid-cols-2">{(['buyer', 'seller'] as const).map(accountType => <button key={accountType} type="button" aria-pressed={storeAccountType === accountType} onClick={() => setStoreAccountTypeChoice({ requested: requestedStoreAccountType, selected: accountType })} className={`rounded-xl border p-4 text-left transition ${storeAccountType === accountType ? 'border-amber-300 bg-amber-300/10' : 'border-white/10 bg-white/[.02] hover:border-white/25'}`}><span className="block font-semibold text-white">{accountType === 'buyer' ? 'Buyer' : 'Seller'}</span><span className="mt-1 block text-xs leading-5 text-zinc-400">{accountType === 'buyer' ? 'Discover products, contact sellers, and manage orders.' : 'Set up a storefront and submit it for seller verification.'}</span></button>)}</div></fieldset>}
         {mode === 'signup' && <label className="auth-field"><span>Full name</span><div><UserRound size={16}/><input value={fullName} onChange={event => setFullName(event.target.value)} type="text" autoComplete="name" placeholder="Your name" minLength={2} required/></div></label>}
         <label className="auth-field"><span>Email address</span><div><Mail size={16}/><input value={email} onChange={event => setEmail(event.target.value)} type="email" required autoComplete="email" placeholder="you@example.com"/></div></label>
         {mode !== 'forgot' && <label className="auth-field"><span>Password</span><div><LockKeyhole size={16}/><input value={password} onChange={event => setPassword(event.target.value)} type={showPassword ? 'text' : 'password'} required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder={mode === 'login' ? 'Enter your password' : 'At least 8 characters'}/><button type="button" className="auth-password-toggle" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div></label>}

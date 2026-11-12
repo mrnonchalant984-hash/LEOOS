@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { PRODUCT_CONDITIONS, STORE_CATEGORIES } from '@/lib/store/products';
 
@@ -8,6 +8,21 @@ export function NewProductForm() {
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [verification, setVerification] = useState<'loading' | 'approved' | 'required' | 'signed-out' | 'unavailable'>('loading');
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/store/seller/verification', { cache: 'no-store' })
+      .then(async response => {
+        const result = await response.json().catch(() => ({}));
+        if (!active) return;
+        if (response.status === 401) setVerification('signed-out');
+        else if (!response.ok) setVerification('unavailable');
+        else setVerification(result.verified ? 'approved' : 'required');
+      })
+      .catch(() => { if (active) setVerification('unavailable'); });
+    return () => { active = false; };
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,6 +72,17 @@ export function NewProductForm() {
         <Link href="/store" className="mt-5 inline-flex rounded-xl border border-white/15 px-4 py-2.5 text-sm font-medium text-white">Back to LeoX Store</Link>
       </div>
     );
+  }
+
+  if (verification !== 'approved') {
+    const signedOut = verification === 'signed-out';
+    return <section className="mt-8 rounded-2xl border border-white/10 bg-white/[.025] p-6 text-white">
+      <h2 className="text-lg font-semibold">{verification === 'loading' ? 'Checking seller verification…' : signedOut ? 'Sign in to continue' : verification === 'required' ? 'Seller verification required' : 'Verification status unavailable'}</h2>
+      <p className="mt-2 text-sm leading-6 text-white/65">{verification === 'required' ? 'Complete the seller review before creating listings. Your listing tools will unlock after approval.' : signedOut ? 'Sign in to check your seller status and continue.' : verification === 'unavailable' ? 'We could not confirm your seller status. Please retry from the seller dashboard.' : 'Your seller status is being checked.'}</p>
+      {verification === 'required' && <Link href="/store/seller#seller-verification" className="mt-5 inline-flex rounded-xl bg-amber-200 px-4 py-2.5 text-sm font-semibold text-neutral-950">Open seller verification</Link>}
+      {signedOut && <Link href="/auth?mode=login&next=%2Fstore%2Fseller" className="mt-5 inline-flex rounded-xl bg-amber-200 px-4 py-2.5 text-sm font-semibold text-neutral-950">Sign in</Link>}
+      {verification === 'unavailable' && <Link href="/store/seller" className="mt-5 inline-flex rounded-xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-white">Open seller dashboard</Link>}
+    </section>;
   }
 
   return (

@@ -2,11 +2,10 @@ import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import './globals.css';
 import './premium-theme.css';
-import { Header } from '@/components/Header';
-import { Footer } from '@/components/Footer';
+import './store/store-theme.css';
 import { Providers } from './providers';
 import VisualBackground from '@/components/VisualBackground';
-import { GlobalLEOWidget } from '@/components/GlobalLEOWidget';
+import { StoreChrome } from '@/components/StoreChrome';
 import { ObservabilityScripts } from './observability-scripts';
 import {
   SITE_DESCRIPTION,
@@ -112,10 +111,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         />
         <VisualBackground />
         <Providers>
-          <Header />
-          {children}
-          <GlobalLEOWidget />
-          <Footer />
+          <StoreChrome>{children}</StoreChrome>
         </Providers>
         <ObservabilityScripts />
       </body>
