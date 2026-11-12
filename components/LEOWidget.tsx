@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { sharePrivateImage } from "@/lib/client/share-private-media";
 import {
   Bot,
   Mic,
@@ -33,6 +34,8 @@ import {
   CreditCard,
   Library,
   Compass,
+  Download,
+  Share2,
   Laptop,
   PanelLeftClose,
   Menu,
@@ -266,6 +269,8 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   const [activeVideoJobId, setActiveVideoJobId] = useState("");
   const [videoStatus, setVideoStatus] = useState("");
   const [error, setError] = useState("");
+  const [sharingAssetId, setSharingAssetId] = useState("");
+  const [sharedAssetStatus, setSharedAssetStatus] = useState<{ id: string; message: string } | null>(null);
   const sidRef = useRef("");
   const [activeChatId, setActiveChatId] = useState("");
   const media = useRef<MediaRecorder | null>(null);
@@ -627,17 +632,19 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     try {
       const t = await token();
       const requestId = crypto.randomUUID();
-      const r = await fetch("/api/generate-image", {
+      const prompt = input.trim() || "A modern business website hero image";
+      const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": requestId, Authorization: `Bearer ${t}` },
-        body: JSON.stringify({ prompt: input || "A modern business website hero image", request_id: requestId }),
+        body: JSON.stringify({ session_id: sidRef.current, message: `Generate an image: ${prompt}`, request_id: requestId }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Image generation failed");
-      if (Number.isSafeInteger(d.platform_credits_remaining)) setPlatformCredits(d.platform_credits_remaining);
+      if (Number.isSafeInteger(d.platformCreditsRemaining)) setPlatformCredits(d.platformCreditsRemaining);
       setMessages((m) => [
         ...m,
-        { role: "assistant", content: `Image saved to your private assets. ${Number.isSafeInteger(d.platform_credits_charged) && d.platform_credits_charged > 0 ? `${d.platform_credits_charged} platform credit${d.platform_credits_charged === 1 ? '' : 's'} charged.` : 'Your plan image allowance was used.'}`, image: typeof d.asset_id === "string" ? `/api/media/${encodeURIComponent(d.asset_id)}?view=1` : d.url, assetId: d.asset_id },
+        { role: "user", content: `Generate an image: ${prompt}` },
+        { role: "assistant", content: d.reply, image: d.image, assetId: d.assetId },
       ]);
       setInput("");
     } catch (e) {
@@ -653,20 +660,20 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     try {
       const t = await token();
       const requestId = crypto.randomUUID();
-      const r = await fetch("/api/generate-visual", {
+      const prompt = input.trim() || "A premium futuristic visual concept";
+      const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": requestId, Authorization: `Bearer ${t}` },
-        body: JSON.stringify({ prompt: input || "A premium futuristic visual concept", mode, request_id: requestId }),
+        body: JSON.stringify({ session_id: sidRef.current, message: `Generate an image: ${prompt}`, image_mode: mode, request_id: requestId }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Visual generation failed");
-      const src =
-        d.url || (d.b64_json ? `data:image/png;base64,${d.b64_json}` : null);
-      if (!src) throw new Error("No visual was returned.");
-      if (Number.isSafeInteger(d.platform_credits_remaining)) setPlatformCredits(d.platform_credits_remaining);
+      if (typeof d.image !== "string") throw new Error("No visual was returned.");
+      if (Number.isSafeInteger(d.platformCreditsRemaining)) setPlatformCredits(d.platformCreditsRemaining);
       setMessages((m) => [
         ...m,
-        { role: "assistant", content: `${mode === "3d" ? '3D-rendered still image' : 'Visual'} saved to your private assets. ${Number.isSafeInteger(d.platform_credits_charged) && d.platform_credits_charged > 0 ? `${d.platform_credits_charged} platform credit${d.platform_credits_charged === 1 ? '' : 's'} charged.` : 'Your plan image allowance was used.'}`, image: src, assetId: d.asset_id },
+        { role: "user", content: `Generate an image: ${prompt}` },
+        { role: "assistant", content: d.reply, image: d.image, assetId: d.assetId },
       ]);
       setInput("");
     } catch (e) {
@@ -1299,6 +1306,25 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       setLoading(false);
     }
   }
+  async function shareImage(assetId: string) {
+    setSharingAssetId(assetId);
+    setSharedAssetStatus(null);
+    setError("");
+    try {
+      const result = await sharePrivateImage(assetId);
+      setSharedAssetStatus({
+        id: assetId,
+        message: result === "copied" ? "One-hour private share link copied." : "Image shared.",
+      });
+    } catch (cause) {
+      if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+        setError(cause instanceof Error ? cause.message : "The image could not be shared.");
+      }
+    } finally {
+      setSharingAssetId("");
+    }
+  }
+
   const messagesView = (
     <div className="mx-auto w-full max-w-[760px] space-y-5">
       {messages.map((m, i) => (
@@ -1341,7 +1367,18 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             </a>
           )}
           {m.video && <video src={m.video} controls playsInline preload="metadata" className="mt-3 max-h-72 w-full rounded-2xl border border-white/10" aria-label="Generated video" />}
-          {m.assetId && <a href={`/api/media/${encodeURIComponent(m.assetId)}?download=1`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-[var(--gold)] underline">Open saved private asset</a>}
+          {m.assetId && m.image && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <a href={`/api/media/${encodeURIComponent(m.assetId)}?download=1`} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-200 hover:bg-white/5">
+                <Download size={13} /> Download image
+              </a>
+              <button type="button" disabled={Boolean(sharingAssetId)} onClick={() => { if (m.assetId) void shareImage(m.assetId); }} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-200 hover:bg-white/5 disabled:opacity-50">
+                <Share2 size={13} /> {sharingAssetId === m.assetId ? "Sharing…" : "Share image"}
+              </button>
+              {sharedAssetStatus?.id === m.assetId && <span role="status" className="text-xs text-zinc-400">{sharedAssetStatus.message}</span>}
+            </div>
+          )}
+          {m.assetId && !m.image && <a href={`/api/media/${encodeURIComponent(m.assetId)}?download=1`} className="mt-2 inline-block text-xs text-[var(--gold)] underline">Download saved private asset</a>}
         </div>
       ))}
       {buildProgress && (

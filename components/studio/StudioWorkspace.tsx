@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { Download, ImagePlus, LoaderCircle, RefreshCw, Sparkles, Video } from 'lucide-react';
+import { Download, ImagePlus, LoaderCircle, RefreshCw, Share2, Sparkles, Trash2, Video } from 'lucide-react';
 import { Panel } from '@/components/LEOAppShell';
+import { sharePrivateImage } from '@/lib/client/share-private-media';
 
 type StudioMode = 'image' | 'edit' | 'video';
 type StudioAsset = { id: string; job_id: string; kind: string; mime_type: string; url: string; url_expires_in: number };
@@ -43,6 +44,8 @@ export default function StudioWorkspace() {
   const [jobs, setJobs] = useState<StudioJob[]>([]);
   const [assets, setAssets] = useState<StudioAsset[]>([]);
   const [activeAsset, setActiveAsset] = useState<StudioAsset | null>(null);
+  const [deletingAssetId, setDeletingAssetId] = useState('');
+  const [sharingAssetId, setSharingAssetId] = useState('');
   const previewUrl = useRef<string | null>(null);
   const pollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
@@ -178,6 +181,48 @@ export default function StudioWorkspace() {
     }
   }
 
+  async function deleteImage(asset: StudioAsset) {
+    if (asset.kind !== 'image' || deletingAssetId) return;
+    if (!window.confirm('Permanently delete this generated image from your private library?')) return;
+    setDeletingAssetId(asset.id);
+    setError('');
+    setStatus('');
+    try {
+      const response = await fetch(`/api/media/${encodeURIComponent(asset.id)}`, {
+        method: 'DELETE',
+        cache: 'no-store',
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Image could not be deleted.');
+      if (activeAsset?.id === asset.id) setActiveAsset(null);
+      setAssets(current => current.filter(item => item.id !== asset.id));
+      setJobs(current => current.map(job => job.asset_id === asset.id ? { ...job, asset_id: null } : job));
+      setStatus(body.warning || 'Image permanently deleted from your private library.');
+      await loadHistory();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Image could not be deleted.');
+    } finally {
+      setDeletingAssetId('');
+    }
+  }
+
+  async function shareImage(asset: StudioAsset) {
+    if (asset.kind !== 'image' || sharingAssetId) return;
+    setSharingAssetId(asset.id);
+    setError('');
+    setStatus('');
+    try {
+      const result = await sharePrivateImage(asset.id);
+      setStatus(result === 'copied' ? 'One-hour private share link copied.' : 'Image shared.');
+    } catch (cause) {
+      if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
+        setError(cause instanceof Error ? cause.message : 'The image could not be shared.');
+      }
+    } finally {
+      setSharingAssetId('');
+    }
+  }
+
   function resumeVideo(jobId: string) {
     setBusy(true);
     setError('');
@@ -228,7 +273,11 @@ export default function StudioWorkspace() {
           <div className="flex items-center justify-between"><div><h3 className="text-sm font-semibold text-white">Latest result</h3><p className="mt-1 text-xs text-zinc-500">Private signed previews expire after one hour.</p></div><button type="button" onClick={() => void reloadHistory()} aria-label="Refresh studio history" className="rounded-lg border border-white/10 p-2 text-zinc-400 hover:text-white"><RefreshCw size={15}/></button></div>
           {activeResult ? <div className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-black/20 p-2">
             {activeResult.kind === 'video' ? <video src={activeResult.url} controls playsInline preload="metadata" className="max-h-[440px] w-full rounded-lg" aria-label="Generated video"/> : <Image src={activeResult.url} alt="Generated AI artwork" width={1200} height={900} unoptimized className="max-h-[440px] w-full rounded-lg object-contain"/>}
-            <a href={`/api/media/${encodeURIComponent(activeResult.id)}?download=1`} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-200"><Download size={14}/> Download private result</a>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <a href={`/api/media/${encodeURIComponent(activeResult.id)}?download=1`} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-200"><Download size={14}/> Download result</a>
+              {activeResult.kind === 'image' && <button type="button" disabled={Boolean(sharingAssetId)} onClick={() => void shareImage(activeResult)} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-200 disabled:opacity-50"><Share2 size={14}/>{sharingAssetId === activeResult.id ? 'Sharing…' : 'Share image'}</button>}
+              {activeResult.kind === 'image' && <button type="button" disabled={Boolean(deletingAssetId)} onClick={() => void deleteImage(activeResult)} className="inline-flex items-center gap-2 rounded-lg border border-red-300/20 px-3 py-2 text-xs text-red-200 disabled:opacity-50"><Trash2 size={14}/>{deletingAssetId === activeResult.id ? 'Deleting…' : 'Delete image'}</button>}
+            </div>
           </div> : <div className="mt-5 flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-white/10 p-6 text-center"><Sparkles size={23} className="text-zinc-600"/><p className="mt-3 text-sm text-zinc-300">Your next result will appear here.</p><p className="mt-1 max-w-xs text-xs leading-5 text-zinc-500">No preview is shown until a configured provider returns and saves a real result.</p></div>}
         </Panel>
       </div>
@@ -242,6 +291,9 @@ export default function StudioWorkspace() {
             <div className="flex gap-2">
               {job.job_type === 'video' && job.status === 'processing' && <button type="button" disabled={busy} onClick={() => resumeVideo(job.id)} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300 hover:text-white disabled:opacity-50">Check status</button>}
               {resultAsset && <button type="button" onClick={() => setActiveAsset(resultAsset)} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300 hover:text-white">View result</button>}
+              {resultAsset && <a href={`/api/media/${encodeURIComponent(resultAsset.id)}?download=1`} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300 hover:text-white"><Download size={13}/>Download</a>}
+              {resultAsset?.kind === 'image' && <button type="button" disabled={Boolean(sharingAssetId)} onClick={() => void shareImage(resultAsset)} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300 hover:text-white disabled:opacity-50"><Share2 size={13}/>{sharingAssetId === resultAsset.id ? 'Sharing…' : 'Share'}</button>}
+              {resultAsset?.kind === 'image' && <button type="button" disabled={Boolean(deletingAssetId)} onClick={() => void deleteImage(resultAsset)} className="inline-flex items-center gap-2 rounded-lg border border-red-300/20 px-3 py-2 text-xs text-red-200 disabled:opacity-50"><Trash2 size={13}/>{deletingAssetId === resultAsset.id ? 'Deleting…' : 'Delete image'}</button>}
             </div>
           </article>;
         })}</div>}

@@ -143,7 +143,7 @@ export async function generateAndPersistImage(options: ImageJobOptions) {
         const { data: asset } = await db.from('media_assets').select('id').eq('id', existing.metadata.asset_id).eq('user_id', options.userId).maybeSingle();
         if (asset) {
           const { data: signed } = await db.storage.from(BUCKET).createSignedUrl(String(existing.metadata.storage_path), SIGNED_URL_SECONDS);
-          if (signed?.signedUrl) return { job_id: existing.id, asset_id: asset.id, url: signed.signedUrl, credits_remaining: null, platform_credits_charged: existing.platform_credits_charged, duplicate: true };
+          if (signed?.signedUrl) return { job_id: existing.id, asset_id: asset.id, url: signed.signedUrl, credits_remaining: null, platform_credits_charged: existing.platform_credits_charged, credit_source: existing.credit_source, duplicate: true };
         }
       }
       throw Object.assign(new Error('This request is already being processed or has already failed. Use a new request ID to retry.'), { statusCode: 409 });
@@ -158,23 +158,27 @@ export async function generateAndPersistImage(options: ImageJobOptions) {
   let platformCost = Math.max(1, Number.parseInt(process.env.LEO_IMAGE_PLATFORM_CREDITS || '1', 10) || 1);
   let creditsRemaining: number | null = null;
   try {
-    platformReservationAttempted = true;
-    const reserve = await db.rpc('reserve_platform_credits', { p_user_id: options.userId, p_job_id: job.id, p_cost: platformCost });
-    if (!reserve.error) {
-      creditSource = 'platform';
-      const balance = reserve.data;
-      if (typeof balance !== 'number' || !Number.isSafeInteger(balance) || balance < 0) throw new Error('Platform credit reservation could not be confirmed.');
-      creditsRemaining = balance;
-    } else if (/insufficient platform credits/i.test(reserve.error.message || '')) {
-      platformReservationAttempted = false;
-      const legacy = await consumeCredit(options.userId, 'image_generation');
-      const isOwner = 'owner' in legacy && legacy.owner === true;
-      creditSource = isOwner ? null : 'legacy_feature';
-      creditsRemaining = 'remaining' in legacy ? legacy.remaining : legacy.credits;
+    if (access.owner) {
       platformCost = 0;
     } else {
-      creditSource = 'platform';
-      throw new Error('Platform credit accounting is unavailable. Apply the required database migration before generating images.');
+      platformReservationAttempted = true;
+      const reserve = await db.rpc('reserve_platform_credits', { p_user_id: options.userId, p_job_id: job.id, p_cost: platformCost });
+      if (!reserve.error) {
+        creditSource = 'platform';
+        const balance = reserve.data;
+        if (typeof balance !== 'number' || !Number.isSafeInteger(balance) || balance < 0) throw new Error('Platform credit reservation could not be confirmed.');
+        creditsRemaining = balance;
+      } else if (/insufficient platform credits|platform credit account not found/i.test(reserve.error.message || '')) {
+        platformReservationAttempted = false;
+        const legacy = await consumeCredit(options.userId, 'image_generation');
+        creditSource = 'legacy_feature';
+        creditsRemaining = 'remaining' in legacy ? legacy.remaining : legacy.credits;
+        platformCost = 0;
+      } else {
+        platformReservationAttempted = !reserve.error.code;
+        if (platformReservationAttempted) creditSource = 'platform';
+        throw new Error('Platform credit accounting is unavailable. Apply the required database migration before generating images.');
+      }
     }
     const { data: processingJob, error: processingError } = await db.from('generation_jobs')
       .update({ status: 'processing', credit_source: creditSource, platform_credits_reserved: platformCost, updated_at: new Date().toISOString() })
@@ -222,7 +226,16 @@ export async function generateAndPersistImage(options: ImageJobOptions) {
     if (completeError || !completedJob) throw new Error('Generation completed but job history could not be finalized.');
 
     const { data: platformAccount } = await db.from('platform_credit_accounts').select('balance').eq('user_id', options.userId).maybeSingle();
-    return { job_id: job.id, asset_id: asset.id, url: signed.signedUrl, credits_remaining: creditsRemaining, platform_credits_remaining: platformAccount?.balance ?? null, platform_credits_charged: platformCost, url_expires_in: SIGNED_URL_SECONDS };
+    return {
+      job_id: job.id,
+      asset_id: asset.id,
+      url: signed.signedUrl,
+      credits_remaining: creditsRemaining,
+      platform_credits_remaining: platformAccount?.balance ?? null,
+      platform_credits_charged: platformCost,
+      credit_source: access.owner ? 'owner' : creditSource,
+      url_expires_in: SIGNED_URL_SECONDS,
+    };
   } catch (error) {
     let cleanupFailed = false;
     if (assetId) {

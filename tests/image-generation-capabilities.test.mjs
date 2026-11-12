@@ -21,6 +21,9 @@ test('image generation rejects offline-provider use and reports failed accountin
   assert.match(source, /credit refund could not be confirmed/);
   assert.match(source, /failureUpdateError/);
   assert.match(source, /processingError/);
+  assert.match(source, /platformReservationAttempted = !reserve\.error\.code/);
+  assert.match(source, /insufficient platform credits/i);
+  assert.match(source, /platform credit account not found/i);
 });
 
 test('image persistence uses private user-scoped assets and signed URLs', () => {
@@ -35,4 +38,6 @@ test('image editing validates image-capable models and deduplicates request keys
   assert.match(source, /resolveGeminiImageModel/);
   assert.match(source, /request_key: requestKey/);
   assert.match(source, /duplicate: true/);
+  assert.match(source, /platformReservationAttempted = !reserve\.error\.code/);
+  assert.match(source, /platform credit account not found/i);
 });

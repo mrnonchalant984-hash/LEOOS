@@ -13,13 +13,38 @@ test('normal chat recognizes explicit image-generation requests without treating
   assert.equal(requestsImageGeneration('Create a website with an image section'), false);
 });
 
-test('chat persists an authenticated image asset reference and returns it for rendering', () => {
+test('Leo workspace image actions persist user and assistant messages for reload', () => {
   const route = read('app/api/chat/route.ts');
   const media = read('app/api/media/[id]/route.ts');
   const widget = read('components/LEOWidget.tsx');
+  const workspace = read('components/AppWorkspaceEntry.tsx');
+  const appPage = read('app/app/page.tsx');
   assert.match(route, /generateAndPersistImage/);
   assert.match(route, /\/api\/media\/\$\{encodeURIComponent\(result\.asset_id\)\}\?view=1/);
   assert.match(route, /generatedImage\.assetId/);
+  assert.match(route, /messages: data\?\.messages \|\| \[\]/);
+  assert.match(route, /const messages = \[\s*\.\.\.history,\s*\{ role: "user" as const, content: message \}/);
+  assert.match(widget, /fetch\("\/api\/chat"/);
+  assert.match(widget, /session_id: sidRef\.current/);
+  assert.match(widget, /image_mode: mode/);
+  assert.match(widget, /image: d\.image, assetId: d\.assetId/);
+  assert.match(widget, /m\.image &&/);
+  assert.match(widget, /fetch\(`\/api\/chat\?session_id=/);
+  assert.match(workspace, /<LEOWidget full initialSessionId=/);
+  assert.match(appPage, /<AppWorkspaceEntry \/>/);
   assert.match(media, /searchParams\.get\('view'\) === '1'/);
-  assert.match(widget, /d\.assetId/);
+});
+
+test('image generation exposes owner billing without reserving credits', () => {
+  const generation = read('lib/generation/images.ts');
+  const route = read('app/api/chat/route.ts');
+  assert.match(generation, /if \(access\.owner\) \{\s*platformCost = 0;/);
+  assert.match(generation, /credit_source: access\.owner \? 'owner' : creditSource/);
+  assert.match(route, /No credits were charged \(owner access\)/);
+});
+
+test('chat image generation validates and forwards supported visual styles', () => {
+  const route = read('app/api/chat/route.ts');
+  assert.match(route, /requestedImageMode !== undefined && !\['image', '3d', 'diagram'\]\.includes\(requestedImageMode\)/);
+  assert.match(route, /mode: requestedImageMode === '3d' \|\| requestedImageMode === 'diagram' \? requestedImageMode : 'image'/);
 });

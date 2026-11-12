@@ -95,6 +95,7 @@ export async function editAndPersistImage(options: EditOptions) {
   }
 
   let creditSource: string | null = null;
+  let platformReservationAttempted = false;
   let creditCost = Math.max(1, Number.parseInt(process.env.LEO_IMAGE_PLATFORM_CREDITS || '1', 10) || 1);
   let inputStoragePath: string | null = null;
   let outputStoragePath: string | null = null;
@@ -103,10 +104,13 @@ export async function editAndPersistImage(options: EditOptions) {
 
   try {
     if (!access.owner) {
+      platformReservationAttempted = true;
       const reserve = await db.rpc('reserve_platform_credits', { p_user_id: options.userId, p_job_id: job.id, p_cost: creditCost });
       if (!reserve.error) {
         creditSource = 'platform';
-      } else if (/insufficient platform credits/i.test(reserve.error.message || '')) {
+        platformReservationAttempted = false;
+      } else if (/insufficient platform credits|platform credit account not found/i.test(reserve.error.message || '')) {
+        platformReservationAttempted = false;
         try {
           await consumeCredit(options.userId, 'image_generation');
           creditSource = 'legacy_feature';
@@ -115,6 +119,8 @@ export async function editAndPersistImage(options: EditOptions) {
           throw new ImageEditError('Your image credit balance is insufficient. No image was edited.', 402);
         }
       } else {
+        platformReservationAttempted = !reserve.error.code;
+        if (platformReservationAttempted) creditSource = 'platform';
         throw new ImageEditError('Credit accounting is unavailable. No image was edited.', 503);
       }
     }
@@ -206,7 +212,7 @@ export async function editAndPersistImage(options: EditOptions) {
     if (inputStoragePath) await db.storage.from(BUCKET).remove([inputStoragePath]);
 
     let refundFailed = false;
-    if (creditSource === 'platform') {
+    if (creditSource === 'platform' || platformReservationAttempted) {
       const { error: refundError } = await db.rpc('refund_platform_credits', { p_user_id: options.userId, p_job_id: job.id, p_cost: creditCost });
       refundFailed = Boolean(refundError);
     } else if (creditSource === 'legacy_feature') {

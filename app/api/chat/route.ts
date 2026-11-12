@@ -130,6 +130,7 @@ export async function POST(req: NextRequest) {
       custom_agent_id: requestedCustomAgentId,
       request_id,
       web_search: requestedWebSearch,
+      image_mode: requestedImageMode,
     } = await req.json();
     if (!session_id || typeof message !== "string" || !message.trim())
       return NextResponse.json(
@@ -142,6 +143,9 @@ export async function POST(req: NextRequest) {
     if (!["normal", "deep", "tools"].includes(mode)) return NextResponse.json({ error: "Choose a supported chat mode." }, { status: 400 });
     if (requestedWebSearch !== undefined && typeof requestedWebSearch !== 'boolean') {
       return NextResponse.json({ error: "Web Search must be enabled or disabled explicitly." }, { status: 400 });
+    }
+    if (requestedImageMode !== undefined && !['image', '3d', 'diagram'].includes(requestedImageMode)) {
+      return NextResponse.json({ error: "Choose a supported image generation style." }, { status: 400 });
     }
     if (requestedToolName !== undefined && (typeof requestedToolName !== "string" || !/^[A-Za-z0-9_-]{1,96}$/.test(requestedToolName))) {
       return NextResponse.json({ error: "Choose an available read-only tool." }, { status: 400 });
@@ -367,6 +371,7 @@ export async function POST(req: NextRequest) {
       assetId: string;
       platformCreditsCharged: number;
       platformCreditsRemaining: number | null;
+      creditSource: string | null;
     } | undefined;
     let usage: { inputTokens: number; outputTokens: number; totalTokens: number } | null = null;
     const directImageRequest = explicitImageIntent && !buildMode;
@@ -404,14 +409,27 @@ export async function POST(req: NextRequest) {
       const limited = await enforceUserRateLimit(ctx.user.id, 'image-generation', 10, 60);
       if (limited) return limited;
       try {
-        const result = await generateAndPersistImage({ userId: ctx.user.id, prompt: message.trim(), requestKey: requestId });
+        const result = await generateAndPersistImage({
+          userId: ctx.user.id,
+          prompt: message.trim(),
+          mode: requestedImageMode === '3d' || requestedImageMode === 'diagram' ? requestedImageMode : 'image',
+          requestKey: requestId,
+        });
         generatedImage = {
           image: `/api/media/${encodeURIComponent(result.asset_id)}?view=1`,
           assetId: result.asset_id,
           platformCreditsCharged: result.platform_credits_charged,
           platformCreditsRemaining: result.platform_credits_remaining,
+          creditSource: result.credit_source,
         };
-        reply = `I generated the image and saved it to your private assets. ${result.platform_credits_charged > 0 ? `${result.platform_credits_charged} platform credit${result.platform_credits_charged === 1 ? '' : 's'} charged.` : 'Your plan image allowance was used.'}`;
+        const billingNotice = result.credit_source === 'owner'
+          ? 'No credits were charged (owner access).'
+          : result.platform_credits_charged > 0
+            ? `${result.platform_credits_charged} platform credit${result.platform_credits_charged === 1 ? '' : 's'} charged.`
+            : result.credit_source === 'legacy_feature'
+              ? 'Your plan image allowance was used.'
+              : 'No credits were charged.';
+        reply = `I generated the image and saved it to your private assets. ${billingNotice}`;
       } catch (error) {
         reportFailure(error);
         const errorStatusCode = typeof error === 'object' && error !== null && 'statusCode' in error && typeof error.statusCode === 'number'
@@ -622,6 +640,7 @@ export async function POST(req: NextRequest) {
         assetId: generatedImage.assetId,
         platformCreditsCharged: generatedImage.platformCreditsCharged,
         platformCreditsRemaining: generatedImage.platformCreditsRemaining,
+        creditSource: generatedImage.creditSource,
       } : {}),
     });
   } catch (e) {

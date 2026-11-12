@@ -6,9 +6,15 @@ Status definitions: **Implemented** means code exists; **Automated test** means 
 | --- | --- |
 | Uses the existing Next.js App Router, authentication, credit controls, and private Supabase media bucket | Implemented |
 | Text-to-image workflow and existing generation persistence | Implemented; live provider use not verified in this change |
+| Leo AI workspace image actions display generated images and persist them in the signed-in user's chat history | Implemented for the shared owner/user workspace; automated coverage added |
+| Owner image generation bypasses platform-credit reservation and reports zero charged credits | Implemented in source; automated coverage added |
 | Gemini image edit with upload size, MIME, and file-signature validation | Implemented in source; staging provider/storage/credit tests still required |
 | Original and edited images stored separately in private storage | Implemented; requires configured Supabase storage |
 | User-scoped image history and signed asset access | Implemented; no cross-user live test performed |
+| Download generated images and share them from Leo AI and Studio | Implemented with one-hour signed share links; automated coverage added; cross-user link and browser compatibility tests still required |
+| Delete a generated image from private storage and Studio history | Implemented in source; automated ownership and lifecycle tests added |
+| Platform-credit accounts for profiles created before the welcome-credit trigger | Forward migration added; not yet applied |
+| Credit reservation failures distinguish known database rejections from ambiguous network outcomes | Implemented in source; provider/database fault-injection still required |
 | Runway Gen-4.5 text-to-video and status polling | Existing implementation reused; live provider use not verified in this change |
 | Image-to-video, creative projects, and project save/reuse | Not implemented |
 | Real-provider edit/generation smoke test | Not run; credentials and provider credits were not tested |
@@ -31,14 +37,14 @@ Configure these values in the server environment, not in client variables:
 | `RUNWAY_VIDEO_MODEL` | Optional | Existing video workflow currently supports `gen4.5` only |
 | `RUNWAY_GEN45_PLATFORM_CREDITS_PER_SECOND` | Required for non-owner video credits | Application credit conversion; not Runway's provider-credit unit |
 
-Apply the existing generation migration and confirm the private `leo-files` bucket is configured before release. Do not put real credentials in `.env.example`, source control, or chat.
+Apply the existing generation migration and the pending platform-credit-account backfill, and confirm the private `leo-files` bucket is configured before release. The backfill creates missing accounts at zero balance and does not issue retroactive credits. Do not put real credentials in `.env.example`, source control, or chat.
 
 ## Deployment, smoke test, and rollback
 
 1. Apply migrations to a staging database using the repository's migration process and verify the private bucket.
 2. Configure server-only provider credentials and valid credit settings in Vercel Preview.
-3. Test with an authorized staging account: create an image, upload a supported image for edit, confirm both assets are private and distinct, verify status/history, and download only through the ownership-checked media endpoint.
+3. Test with an authorized staging account: create an image, upload a supported image for edit, confirm both assets are private and distinct, verify status/history, download only through the ownership-checked media endpoint, and delete an output image from Studio.
 4. Test unauthorized access, cross-user asset IDs, malformed files, mismatched MIME/signatures, oversized uploads, duplicate request IDs, credit exhaustion, and provider errors.
 5. Verify logs and responses contain no provider secret or private storage path. Run lint, typecheck, tests, and production build.
 6. Promote only after a real non-production provider smoke test and migration review. Production status must be confirmed in Vercel and Supabase; this implementation has not done so.
-7. Roll back by reverting the Studio page/component, `/api/studio` handlers, image-edit helper, navigation entry, and associated tests/docs. No new migration was introduced; existing image/video endpoints and tables are unchanged.
+7. Roll back application code by reverting the Studio page/component, `/api/media/[id]` deletion handler, `/api/studio` handlers, image-edit helper, navigation entry, and associated tests/docs. The account-backfill migration is additive and idempotent; it creates only missing zero-balance rows and does not change existing balances.
