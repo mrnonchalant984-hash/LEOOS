@@ -27,6 +27,25 @@ export async function PATCH(request: NextRequest) {
     if (requestItem?.request_type === 'deletion') return NextResponse.json({ error: 'Deletion cannot be marked complete until the approved retention and deletion procedure has been carried out.' }, { status: 409 });
   }
   const { data, error } = await db.from(body.kind).update(update).eq('id',body.id).select('*').single();
-  if (!error && body.kind === 'marketplace_seller_verification_requests' && body.status === 'approved' && data) await db.from('marketplace_sellers').update({ is_verified: true }).eq('user_id',data.seller_id);
-  return error ? NextResponse.json({ error: 'Queue item could not be updated.' }, { status: 503 }) : NextResponse.json({ item: data });
+  if (error) return NextResponse.json({ error: 'Queue item could not be updated.' }, { status: 503 });
+  if (body.kind === 'marketplace_seller_verification_requests' && body.status === 'approved' && data) {
+    const { error: sellerError } = await db.from('marketplace_sellers').upsert({
+      user_id: data.seller_id,
+      display_name: String(data.business_name).trim().slice(0, 80),
+      bio: '',
+      country_code: data.country_code,
+      is_verified: true,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id', ignoreDuplicates: true });
+    if (sellerError) {
+      console.error('Approved seller profile could not be provisioned:', sellerError.message);
+      return NextResponse.json({ error: 'Verification was approved, but seller access could not be enabled. Retry the approval.' }, { status: 503 });
+    }
+    const { error: verifyError } = await db.from('marketplace_sellers').update({ is_verified: true, updated_at: new Date().toISOString() }).eq('user_id', data.seller_id);
+    if (verifyError) {
+      console.error('Approved seller access could not be enabled:', verifyError.message);
+      return NextResponse.json({ error: 'Verification was approved, but seller access could not be enabled. Retry the approval.' }, { status: 503 });
+    }
+  }
+  return NextResponse.json({ item: data });
 }

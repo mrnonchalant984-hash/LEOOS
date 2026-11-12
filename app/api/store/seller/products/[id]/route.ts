@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getUserFromRequest } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { requireVerifiedStoreSeller } from '@/lib/store/seller-access';
 import { validateProductInput } from '@/lib/store/products';
 
 export const runtime = 'nodejs';
@@ -12,6 +13,8 @@ export async function PATCH(request: NextRequest, context: Context) {
   if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Request origin is invalid.' }, { status: 403 });
   const user = await getUserFromRequest(request);
   if (!user) return NextResponse.json({ error: 'Sign in to manage listings.' }, { status: 401 });
+  const sellerAccess = await requireVerifiedStoreSeller(user.id);
+  if (sellerAccess) return sellerAccess;
   const limited = await enforceUserRateLimit(user.id, 'store-listing-manage', 30, 3600);
   if (limited) return limited;
   const { id } = await context.params;
@@ -47,4 +50,3 @@ export async function PATCH(request: NextRequest, context: Context) {
   if (!data) return NextResponse.json({ error: 'Listing was not found or cannot make that change.' }, { status: 404 });
   return NextResponse.json({ product: data }, { headers: { 'Cache-Control': 'no-store' } });
 }
-

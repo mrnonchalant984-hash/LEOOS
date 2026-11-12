@@ -8,6 +8,13 @@
 4. Verify the migration history, RLS enabled state, grants, policies, and expected indexes. Run cross-user access tests before deploying application code.
 5. Deploy the matching application revision to staging and test with separate buyer, seller, and owner accounts.
 
+## Buyer and seller account operations
+
+- Store signup records the user's chosen buyer or seller landing preference. The choice is not an authorization grant.
+- Seller applicants submit storefront name, country, and business context from the seller dashboard. Staff reviews the request in the owner work queue; identity documents are not collected.
+- Listing creation and management, image uploads, public seller pages, and checkout require `marketplace_sellers.is_verified = true`. After approval, confirm the seller profile is provisioned and can open the seller tools before closing the review.
+- Buyers use `/store/account` for orders, messages, and cart links. Sellers use `/store/seller` for verification, storefront setup, inventory, and delivery settings.
+
 ## Operational decisions
 
 - Checkout stays disabled unless `STORE_CHECKOUT_ENABLED=true`. Set it only after the Paystack environment, callback/webhook URLs, settlement, refund handling, seller payouts, currency, delivery charges and tax rules have written approval.

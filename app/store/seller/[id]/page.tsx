@@ -10,7 +10,7 @@ export default async function SellerStorefrontPage({ params }: PageProps<'/store
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const db = adminSupabase();
   const { data: seller, error } = await db.from('marketplace_sellers').select('user_id,display_name,bio,country_code,is_verified').eq('user_id', id).maybeSingle();
-  if (error || !seller) notFound();
+  if (error || !seller?.is_verified) notFound();
   const [{ data: products }, { data: delivery }] = await Promise.all([
     db.from('marketplace_products').select('slug,title,category,price,currency,condition,city,image_urls').eq('seller_id', id).eq('status', 'active').order('published_at', { ascending: false }).limit(48),
     db.from('marketplace_delivery_options').select('id,name,details,price,currency').eq('seller_id', id).is('product_id', null).eq('active', true).limit(20),

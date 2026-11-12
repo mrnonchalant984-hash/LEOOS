@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
 import { adminSupabase, getUserFromRequest } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { requireVerifiedStoreSeller } from '@/lib/store/seller-access';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,6 +12,8 @@ export async function POST(request: NextRequest) {
   if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Request origin is invalid.' }, { status: 403 });
   const user = await getUserFromRequest(request);
   if (!user) return NextResponse.json({ error: 'Sign in to upload product images.' }, { status: 401 });
+  const sellerAccess = await requireVerifiedStoreSeller(user.id);
+  if (sellerAccess) return sellerAccess;
   const limited = await enforceUserRateLimit(user.id, 'store-image-upload', 20, 3600);
   if (limited) return limited;
   const form = await request.formData().catch(() => null);

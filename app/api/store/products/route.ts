@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getUserFromRequest } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 import { productSlug, validateProductInput } from '@/lib/store/products';
+import { getVerifiedStoreSellerIds, requireVerifiedStoreSeller } from '@/lib/store/seller-access';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,9 +24,13 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, Math.min(10_000, Number.parseInt(params.get('page') ?? '1', 10) || 1));
     const pageSize = Math.max(1, Math.min(48, Number.parseInt(params.get('pageSize') ?? '24', 10) || 24));
     const from = (page - 1) * pageSize;
+    const verifiedSellerIds = await getVerifiedStoreSellerIds();
+    if (!verifiedSellerIds) return NextResponse.json({ error: 'Marketplace listings are temporarily unavailable.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+    if (verifiedSellerIds.length === 0) return NextResponse.json({ products: [], page, pageSize, hasMore: false }, { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' } });
     let listingQuery = db.from('marketplace_products')
       .select(PRODUCT_FIELDS)
       .eq('status', 'active')
+      .in('seller_id', verifiedSellerIds)
       .order('published_at', { ascending: false })
       .range(from, from + pageSize - 1);
 
@@ -57,6 +62,8 @@ export async function POST(request: NextRequest) {
 
   const user = await getUserFromRequest(request);
   if (!user) return NextResponse.json({ error: 'Sign in to advertise a product.' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
+  const sellerAccess = await requireVerifiedStoreSeller(user.id);
+  if (sellerAccess) return sellerAccess;
 
   const limited = await enforceUserRateLimit(user.id, 'store-listing-submit', 5, 3600);
   if (limited) return limited;

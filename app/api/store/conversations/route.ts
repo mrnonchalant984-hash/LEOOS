@@ -25,6 +25,9 @@ export async function POST(request: NextRequest) {
   if (typeof body?.productId !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.productId) || typeof body.message !== 'string' || body.message.trim().length < 1 || body.message.length > 4000) return NextResponse.json({ error: 'Enter a message of up to 4,000 characters.' }, { status: 400 });
   const db = adminSupabase(); const { data: product } = await db.from('marketplace_products').select('id,seller_id').eq('id', body.productId).eq('status', 'active').maybeSingle();
   if (!product) return NextResponse.json({ error: 'Product is not available.' }, { status: 404 });
+  const { data: seller, error: sellerError } = await db.from('marketplace_sellers').select('is_verified').eq('user_id', product.seller_id).maybeSingle();
+  if (sellerError) return NextResponse.json({ error: 'Seller status could not be checked.' }, { status: 503 });
+  if (!seller?.is_verified) return NextResponse.json({ error: 'This seller is not currently accepting messages.' }, { status: 404 });
   if (product.seller_id === user.id) return NextResponse.json({ error: 'You cannot contact yourself.' }, { status: 400 });
   const { data: conversation, error } = await db.from('marketplace_conversations').upsert({ product_id: product.id, buyer_id: user.id, seller_id: product.seller_id }, { onConflict: 'product_id,buyer_id', ignoreDuplicates: true }).select('id').maybeSingle();
   let conversationId = conversation?.id;

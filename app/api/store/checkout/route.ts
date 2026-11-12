@@ -18,6 +18,17 @@ export async function POST(request: NextRequest) {
   catch { return NextResponse.json({ error: 'Secure checkout URL is not configured.' }, { status: 503 }); }
   if (process.env.NODE_ENV === 'production' && base.protocol !== 'https:') return NextResponse.json({ error: 'Secure checkout URL is not configured.' }, { status: 503 });
   const db = adminSupabase();
+  const { data: cartItems, error: cartError } = await db.from('marketplace_cart_items').select('product_id').eq('buyer_id', user.id);
+  if (cartError) return NextResponse.json({ error: 'Your cart is temporarily unavailable.' }, { status: 503 });
+  const productIds = (cartItems ?? []).map((item) => item.product_id);
+  if (productIds.length === 0) return NextResponse.json({ error: 'Your cart is empty.' }, { status: 409 });
+  const { data: products, error: productsError } = await db.from('marketplace_products').select('id,seller_id,status').in('id', productIds);
+  if (productsError) return NextResponse.json({ error: 'Your cart is temporarily unavailable.' }, { status: 503 });
+  if (!products || products.length !== productIds.length || products.some((product) => product.status !== 'active')) return NextResponse.json({ error: 'Some cart items are unavailable. Refresh your cart and try again.' }, { status: 409 });
+  const sellerIds = [...new Set(products.map((product) => product.seller_id))];
+  const { data: verifiedSellers, error: sellersError } = await db.from('marketplace_sellers').select('user_id').in('user_id', sellerIds).eq('is_verified', true);
+  if (sellersError) return NextResponse.json({ error: 'Seller verification could not be checked. Please try again.' }, { status: 503 });
+  if ((verifiedSellers ?? []).length !== sellerIds.length) return NextResponse.json({ error: 'A seller in your cart is not verified. Remove unavailable items and try again.' }, { status: 409 });
   const orderId = randomUUID();
   const reference = `leo_store_${randomUUID().replaceAll('-', '')}`;
   const { data: order, error: createError } = await db.rpc('create_marketplace_order', { p_buyer_id: user.id, p_order_id: orderId, p_reference: reference });

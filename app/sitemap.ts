@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next';
 import { big12Projects } from '@/data/site';
 import { LEO_TEMPLATES } from '@/data/website-templates';
 import { SITE_ORIGIN } from '@/lib/seo';
+import { getVerifiedStoreSellerIds } from '@/lib/store/seller-access';
 import { adminSupabase } from '@/lib/auth';
 
 type SitemapPage = {
@@ -60,14 +61,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   let products: { slug: string; published_at: string }[] = [];
   try {
-    const { data, error } = await adminSupabase()
-      .from('marketplace_products')
-      .select('slug,published_at')
-      .eq('status', 'active')
-      .order('published_at', { ascending: false })
-      .limit(5000);
-    if (!error) products = data ?? [];
-    else console.error('Could not load public store pages for sitemap:', error.message);
+    const verifiedSellerIds = await getVerifiedStoreSellerIds();
+    if (verifiedSellerIds?.length) {
+      const { data, error } = await adminSupabase()
+        .from('marketplace_products')
+        .select('slug,published_at')
+        .eq('status', 'active')
+        .in('seller_id', verifiedSellerIds)
+        .order('published_at', { ascending: false })
+        .limit(5000);
+      if (!error) products = data ?? [];
+      else console.error('Could not load public store pages for sitemap:', error.message);
+    }
   } catch {
     // Keep the rest of the site's sitemap available before Store is configured.
   }

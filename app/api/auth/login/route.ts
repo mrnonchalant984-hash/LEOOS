@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     if (error || !data.session) throw error || new Error('Login failed');
     const res = NextResponse.json({
       ok: true,
-      user: { id: data.user.id, email: data.user.email },
+      user: { id: data.user.id, email: data.user.email, storeAccountType: data.user.user_metadata.store_account_type },
       session: { access_token: data.session.access_token, refresh_token: data.session.refresh_token },
     });
     res.cookies.set('leo_access_token', data.session.access_token, AUTH_COOKIE);
