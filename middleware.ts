@@ -45,7 +45,9 @@ async function enforceMfa(
   return NextResponse.redirect(new URL(`/auth/mfa?next=${encodeURIComponent(`${pathname}${request.nextUrl.search}`)}`, request.url));
 }
 
-export const runtime = 'edge';
+// OpenNext deploys this request interceptor at the edge. Next's legacy
+// middleware convention requires the explicit experimental runtime label.
+export const runtime = 'experimental-edge';
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
