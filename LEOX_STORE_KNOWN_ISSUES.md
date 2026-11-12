@@ -1,16 +1,14 @@
 # LeoX Store known issues and launch blockers
 
-This implementation is a tested foundation slice, **not a production-ready marketplace**.
+The earlier “foundation slice” issue list is obsolete. The application now contains broader buyer, seller, moderation, messaging, and payment code; presence in source does not prove a feature is complete or release-ready.
 
-## Blocking gaps
+The current gaps are tracked in one place: [LEOX_STORE_RELEASE_GAPS.md](./LEOX_STORE_RELEASE_GAPS.md). Key blockers include:
 
-- The new migration is not applied or validated against staging; credentials and live schema status are unverified.
-- The repository-wide test and lint commands fail on NUL-filled tracked test files; an existing sandbox contract test also expects an unimplemented `DELETE` route.
-- No moderator/admin workflow can approve or reject submitted listings. New listings remain private in `pending_review` until that system exists.
-- No seller profile onboarding/dashboard, listing editing/removal, product images or secure storage, buyer-seller messaging, saved items, delivery configuration, reviews, verification, notifications, or seller analytics.
-- Country/currency data is not authoritative or complete; the current form accepts a user-entered ISO-style code and does not convert currencies.
-- No prohibited-product moderation, reporting, appeals, account enforcement, or marketplace audit trail.
-- No dynamic country/city/category/seller discovery routes or browser-level/mobile acceptance evidence.
-- Production configuration, migration state, backups, and deployment health are unverified; no deployment occurred.
+- Paystack checkout/payout transfers require explicit environment flags, provider approval, credentials, reconciliation operations, and environment-specific test evidence.
+- The new delivery/payout/push migration is local only and has not been applied; recorded remote migration history predates it.
+- Seller delivery is arranged by the seller, with manually entered courier/tracking details; external courier booking/status APIs are not part of the selected workflow.
+- Product image upload/edit/removal exists with a 2 MB input cap and 700 KB optimized WebP limit, but malware scanning and retention policy are unresolved.
+- In-app/email and opt-in VAPID push code exists; VAPID configuration, browser end-to-end tests, delivery guarantees, and complete event coverage are outstanding.
+- Live cross-account RLS/security testing, end-to-end browser/mobile validation, backup recovery, monitoring, legal approval, and production health checks are not evidenced.
 
-Do not select a production-ready or deployed release status until these controls and release gates are implemented and verified.
+Do not treat the feature set as production-ready. Preserve the fail-closed checkout gate until all release blockers are closed with recorded evidence.

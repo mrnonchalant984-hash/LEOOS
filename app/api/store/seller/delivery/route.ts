@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   const details = typeof body.details === 'string' ? body.details.trim() : '';
   const currency = typeof body.currency === 'string' ? body.currency.trim().toUpperCase() : '';
   const price = Number(body.price);
-  if (name.length < 2 || name.length > 80 || details.length > 500 || !/^[A-Z]{3}$/.test(currency) || !Number.isFinite(price) || price < 0 || price > 1_000_000_000_000) return NextResponse.json({ error: 'Enter a valid delivery name, details, currency, and non-negative fee.' }, { status: 400 });
+  if (name.length < 2 || name.length > 80 || details.length > 500 || currency !== 'NGN' || !Number.isFinite(price) || price < 0 || price > 1_000_000_000_000) return NextResponse.json({ error: 'Enter a valid delivery name, NGN currency, and non-negative fee.' }, { status: 400 });
   const { data, error } = await adminSupabase().from('marketplace_delivery_options').insert({ seller_id: user.id, product_id: null, name, details, price, currency, active: true }).select('id,name,details,price,currency,active,created_at').single();
   if (error) return NextResponse.json({ error: 'Delivery setting could not be saved.' }, { status: 503 });
   return NextResponse.json({ option: data }, { status: 201, headers: { 'Cache-Control': 'no-store' } });

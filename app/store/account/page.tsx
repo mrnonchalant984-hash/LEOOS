@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { StorePushNotifications } from '../push-notifications';
 
 export const metadata = { title: 'Buyer account | LeoX Store', robots: { index: false, follow: false } };
 
@@ -23,5 +24,6 @@ export default function BuyerAccountPage() {
       <Link href="/store" className="mt-4 inline-flex rounded-lg bg-[#201a14] px-4 py-2.5 text-sm font-semibold text-white">Shop LeoX Store</Link>
       <Link href="/auth?mode=login&next=%2Fstore%2Faccount" className="ml-3 mt-4 inline-flex rounded-lg border border-stone-300 px-4 py-2.5 text-sm font-semibold text-stone-700">Sign in to your account</Link>
     </div>
+    <div className="mt-6 rounded-2xl border border-stone-200 bg-[#1d1915] p-5 text-white"><StorePushNotifications /></div>
   </main>;
 }

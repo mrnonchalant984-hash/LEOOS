@@ -12,10 +12,18 @@ export async function GET(request: NextRequest) {
   const { error: expiryError } = await db.rpc('expire_marketplace_orders');
   if (expiryError) return NextResponse.json({ error: 'Your cart is temporarily unavailable.' }, { status: 503 });
   const { data, error } = await db.from('marketplace_cart_items')
-    .select('id,quantity,product:marketplace_products(id,slug,title,price,currency,image_urls,status,stock_quantity,reserved_quantity)')
+    .select('id,quantity,product:marketplace_products(id,seller_id,slug,title,price,currency,image_urls,status,stock_quantity,reserved_quantity)')
     .eq('buyer_id', user.id).order('updated_at', { ascending: false });
   if (error) return NextResponse.json({ error: 'Your cart is temporarily unavailable.' }, { status: 503 });
-  return NextResponse.json({ items: data ?? [] }, { headers: { 'Cache-Control': 'no-store' } });
+  const sellerIds = [...new Set((data ?? []).flatMap(item => {
+    const product = Array.isArray(item.product) ? item.product[0] : item.product;
+    return product?.seller_id ? [product.seller_id] : [];
+  }))];
+  const { data: deliveryOptions, error: deliveryError } = sellerIds.length
+    ? await db.from('marketplace_delivery_options').select('id,seller_id,name,details,price,currency').in('seller_id', sellerIds).is('product_id', null).eq('active', true)
+    : { data: [], error: null };
+  if (deliveryError) return NextResponse.json({ error: 'Delivery options are temporarily unavailable.' }, { status: 503 });
+  return NextResponse.json({ items: data ?? [], deliveryOptions: deliveryOptions ?? [] }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(request: NextRequest) {

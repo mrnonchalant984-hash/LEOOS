@@ -1,5 +1,5 @@
 # LeoX Store SEO
 
-Implemented public surfaces include a Store landing page and active product detail pages. Product pages generate unique titles/descriptions, canonical URLs, Open Graph fields, and Schema.org Product/Offer JSON-LD. Active listing URLs are loaded into the existing sitemap (up to 5,000 most recently published entries). Pending and other non-active listings are excluded. Store seller-form URLs are marked noindex; robots rules reserve private Store paths.
+Implemented public surfaces include Store discovery, active product detail, and verified seller pages. Product details include canonical metadata, Open Graph title/description, and Product/Offer JSON-LD; public listing images are rendered when present. Active listing URLs are included in the existing sitemap with a bounded recent-item limit. Non-active listings and seller tools are not intended for indexing.
 
-The detail page currently omits product images because secure storage and image upload have not been implemented. Country, city, category, and seller landing pages, breadcrumbs, image metadata, broken-link checks, and crawler verification remain unimplemented. Search engine indexing/ranking is not guaranteed.
+Image upload/storage, display, and seller image edit/removal are implemented; explicit social preview image metadata remains a gap. Dedicated location/category landing pages, complete breadcrumb and crawler QA, and indexing/ranking guarantees are not implemented. See [LEOX_STORE_RELEASE_GAPS.md](./LEOX_STORE_RELEASE_GAPS.md) for the full feature and release status.

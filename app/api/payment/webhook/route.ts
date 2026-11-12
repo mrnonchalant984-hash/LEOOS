@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
 import { verifyAndApplyPaystack, verifyPaystackTransaction } from '@/lib/payments';
+import { notifyMarketplaceUser } from '@/lib/store-notifications';
 import { matchesHostingRenewal } from '@/lib/payments-core';
 import { promoteVercelDeployment } from '@/lib/vercel-hosting';
 import { withOperationalMonitoring } from '@/lib/monitoring';
@@ -199,6 +200,37 @@ export async function POST(req: NextRequest) {
       }
       const donation = await verifyAndConfirmDonation(reference);
       return NextResponse.json({ received: true, idempotent: donation.alreadyApplied });
+    }
+
+    if (['transfer.success', 'transfer.failed', 'transfer.reversed'].includes(eventName) && reference) {
+      const { data: payout, error: payoutReadError } = await db.from('marketplace_seller_payouts')
+        .select('id,seller_id,status').eq('reference', reference).maybeSingle();
+      if (payoutReadError) throw payoutReadError;
+      if (!payout) return NextResponse.json({ received: true });
+      const payoutStatus = eventName === 'transfer.success' ? 'paid' : eventName === 'transfer.failed' ? 'failed' : 'reversed';
+      if (payout.status === payoutStatus) return NextResponse.json({ received: true, idempotent: true });
+      const allowedStatuses = eventName === 'transfer.reversed' ? ['initiating', 'pending', 'paid'] : ['initiating', 'pending'];
+      const { data: updatedPayout, error: payoutUpdateError } = await db.from('marketplace_seller_payouts')
+        .update({
+          status: payoutStatus,
+          failure_reason: payoutStatus === 'failed' ? 'Paystack transfer failed; review the Paystack dashboard before retrying.' : null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', payout.id).in('status', allowedStatuses).select('id').maybeSingle();
+      if (payoutUpdateError) throw payoutUpdateError;
+      if (!updatedPayout) return NextResponse.json({ received: true, idempotent: true });
+      try {
+        await notifyMarketplaceUser({
+          userId: payout.seller_id,
+          kind: 'payout',
+          title: payoutStatus === 'paid' ? 'Seller payout sent' : payoutStatus === 'failed' ? 'Seller payout needs review' : 'Seller payout reversed',
+          body: payoutStatus === 'paid' ? 'Your LeoX Store payout has been sent to your saved bank account.' : 'Your LeoX Store payout requires review. Contact support before changing your payout account.',
+          href: '/store/seller',
+          preference: 'order_updates',
+        });
+      } catch (notificationError) {
+        console.error('Seller payout notification failed:', notificationError instanceof Error ? notificationError.message : 'unknown error');
+      }
+      return NextResponse.json({ received: true });
     }
 
     if (eventName === 'charge.success' && metadata.type === 'marketplace_order' && reference) {

@@ -1,34 +1,33 @@
-# LeoX Store launch checklist
+# LeoX Store operator launch checklist
 
-This is an implementation and release checklist. A checked-in feature is not a production approval. Live checkout remains gated until the operator confirms that the configured Supabase and Paystack accounts are the intended production accounts and completes the business configuration below.
+This is the operational companion to [the authoritative implementation status](../LEOX_STORE_RELEASE_GAPS.md). Repository implementation and migration-history evidence are not production approval.
 
-## Implemented in application code
+## Confirm before any release activity
 
-- Seller-managed fulfillment status, delivery notes, courier name, HTTPS tracking link and delivery issue capture. Buyers receive an in-app order notification. No courier API or live rate quote is connected.
-- Buyers and sellers can open order disputes; staff has an owner/2FA-protected work queue for dispute review and resolution.
-- Report review endpoint with moderation audit records, plus an appeal submission path for affected users.
-- Seller verification requests and staff decision workflow. Verification does not collect identity documents; define a safe provider and evidence policy before treating the badge as identity assurance.
-- Separate buyer and seller workspaces, a Store signup choice, and seller verification gating for listing, product-image, delivery, public listing, and checkout paths.
-- Support ticket submission and owner work queue.
-- Usable signed-in inbox with block/unblock, reporting, constrained image/PDF upload, private storage and short-lived participant-scoped signed download links. Malware scanning and retention/cleanup still require an operational decision.
-- Privacy export endpoint for account and marketplace records, and a deletion request workflow. Deletion requests are reviewed and do not hard-delete financial records automatically.
-- In-app notifications and optional email delivery for new messages and fulfillment changes, controlled by per-user preferences. Email requires configured Resend credentials and verified sender. Push delivery is not connected.
+- [ ] Record the Supabase project reference, environment designation, operator, backup/recovery owner, and current migration history.
+- [ ] Read-only CLI output shows local/remote migration versions in agreement through `20261111160000`. Verify target schema and RLS behavior independently; do not reapply migrations based on this summary.
+- [ ] Confirm a recoverable backup and reviewed rollback/forward-fix procedure.
+- [ ] Keep `STORE_CHECKOUT_ENABLED` unset or `false` until each payment and business gate is approved.
 
-## Required before live buyers
+## Payments and commerce decisions
 
-- [ ] Confirm Supabase project reference, environment, backup and recovery owner. Do not assume a project is staging because it is linked.
-- [ ] Reconcile the linked database migration history before applying anything. Migration `20261111140000_leox_store_launch_workflows.sql` was previously reported in remote history, but the latest CLI check timed out; do not reapply it blindly.
-- [ ] Run cross-account RLS checks with at least two buyers and two sellers: orders, fulfillments, disputes, inbox, reports, verification requests, tickets, data requests, notifications, and private storage.
-- [ ] Add automated tests for migration idempotency, state transitions and access control. The current buyer/seller application changes have not been deployed or verified against live database credentials.
-- [ ] Confirm Paystack account, webhook signature validation, callback URLs, refund process, seller payout model, settlement timing and reconciliation. Keep live payment routing disabled until a responsible operator approves these values.
-- [ ] Set `STORE_CHECKOUT_ENABLED=true` only after the preceding payment and business settings have written approval. Checkout returns 503 while it is unset or false.
-- [ ] Decide delivery collection, seller delivery rules, courier coverage/rates, tracking provider, delivery issue SLA, return policy, and tax/VAT rules for each launch market.
-- [ ] Configure email provider and sender domain. Push notifications need a selected provider, user consent and device-token lifecycle.
-- [ ] Approve marketplace terms, privacy notice, prohibited items, returns, seller verification, dispute and retention policies with qualified reviewers.
-- [ ] Provide user deletion/data export service-level targets and retention exceptions for orders, payments, disputes and abuse evidence.
-- [ ] Complete end-to-end browser and mobile checks, keyboard/accessibility checks, payment sandbox tests, abuse/security review, backup restore drill, rollback rehearsal, and monitoring/alert ownership.
-- [ ] Verify production health after a controlled launch: checkout success/failure rates, webhook lag, refund exceptions, order fulfillment age, report backlog, support response time, database errors and storage access.
+- [ ] Confirm Paystack marketplace/business approval, secret handling, callback/webhook URLs, signature validation, sandbox outcomes, and provider reconciliation ownership.
+- [ ] Approve the 5% commission on item subtotal (delivery fee is passed through), merchant of record, seller payout/settlement, delivery fee collection, taxes, chargebacks, cancellation, refund, and late-payment handling.
+- [ ] Confirm NGN-only checkout is appropriate for the first supported market.
+- [ ] Test successful, failed, duplicate, expired-reservation, late, refunded, and webhook-retry paths in a confirmed non-production environment.
 
-## Rollback notes
+## Access, security, and user experience
 
-Take and verify a database backup before applying a production migration. Prefer a forward-fix for schema changes. If rollback is required, stop checkout and writes first, preserve orders/payment records, and have the database operator assess dependent records before removing any tables or columns. Restore from the pre-migration backup only under the approved recovery plan. Reconcile Paystack transactions and webhook deliveries after any restore.
+- [ ] Exercise cross-account RLS for listings, seller data, carts/orders, fulfillment, conversations/attachments, disputes, appeals, notifications, and moderation.
+- [ ] Test seller-facing order management and manual tracking entry; sellers arrange delivery, no courier API is connected.
+- [ ] Decide image and private attachment scanning, retention and deletion workflow; verify image editing/removal and storage cleanup.
+- [ ] Configure VAPID keys and test push opt-in, delivery, unsubscribe, stale endpoint cleanup, notification preferences, and email monitoring.
+- [ ] Complete browser/mobile, accessibility, abuse/security, monitoring/alert, backup restore, and rollback checks.
+- [ ] Approve legal terms, privacy, prohibited-item, verification, return, dispute, retention, and deletion policies with qualified reviewers.
+
+## Production and rollback
+
+- [ ] Capture fresh test, typecheck, lint, and production-build output plus environment-specific end-to-end evidence.
+- [ ] Obtain written deployment and migration authorization. This reconciliation did not deploy or apply migrations.
+- [ ] Enable both `STORE_CHECKOUT_ENABLED=true` and `STORE_PAYOUTS_ENABLED=true` only after all blockers are closed and an accountable operator approves.
+- [ ] For an incident, pause checkout/writes, preserve order/payment evidence, and follow the approved recovery process. Do not drop marketplace data as a rollback shortcut.

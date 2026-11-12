@@ -1,27 +1,26 @@
-# LeoX Store launch checklist
+# LeoX Store release checklist
 
-## Implemented in this worktree
+The current implementation and production status are maintained in [LEOX_STORE_RELEASE_GAPS.md](./LEOX_STORE_RELEASE_GAPS.md). This checklist supersedes older checkboxes and must not be read as a deployment approval.
 
-- [x] Repository and app architecture inspected; existing App Router, auth, Supabase, and visual design reused.
-- [x] Public listing discovery and active product details added.
-- [x] Authenticated submissions validated and held for moderation.
-- [x] Additive database migration and Store SEO metadata/sitemap support added.
-- [x] Buyer cart, NGN Paystack checkout, payment verification/webhook, order cancellation requests, owner-reviewed refunds, and printable receipts added locally.
-- [x] Seller storefront profiles, listing edits, inventory management, delivery options, and paid-sales dashboard added locally.
-- [x] Listing validation unit tests, typecheck, and targeted lint pass.
+## Code present
 
-## Release gates still open
+- [x] Buyer and seller workspaces, listing discovery/detail, seller storefront, listing moderation, and seller verification workflow.
+- [x] Cart, NGN Paystack initialization, server-side verification/webhook, buyer order history, cancellation requests, and owner-reviewed refund code.
+- [x] Seller inventory, buyer-selected delivery fees, seller order UI/manual tracking, payout recipient/ledger code with 5% commission and buyer-confirmed Paystack transfer flow.
+- [x] Listing image edit/removal and 2 MB input / 700 KB optimized WebP limits; opt-in VAPID push code.
+- [x] Checkout/payouts fail closed unless `STORE_CHECKOUT_ENABLED=true` and `STORE_PAYOUTS_ENABLED=true`.
 
-- [ ] Repair the two NUL-filled tracked test files and resolve the existing sandbox contract test failure.
-- [x] Apply buying and seller tools migrations to linked Supabase project `xqyrbdsdojbxgqgghucf`; confirm migration history, table RLS, access policies, and existing rate-limit schema.
-- [ ] Confirm the linked project's staging or production designation in deployment settings before routing live buyers.
-- [ ] Configure Paystack webhook and secret in staging; test success, failure, refund, duplicate, expired-reservation, and late-payment paths.
-- [ ] Decide merchant-of-record, commission, seller payout/split settlement, delivery fee, tax, and refund operations before accepting live orders.
-- [ ] Implement seller order fulfillment and delivery updates, seller cancellation response, and refund reconciliation UI.
-- [ ] Finish moderator report review, appeals, seller verification workflows, and order administration UI.
-- [ ] Implement seller fulfillment/order status updates, buyer delivery selection and fee collection, and notification delivery.
-- [ ] Complete full African country/currency data and safe location/category filters.
-- [ ] Verify constraints, RLS, and limiter RPC against the applied staging schema.
-- [ ] Pass full lint, full test suite, production build, API/security/RLS and browser/mobile tests.
-- [ ] Verify staging configuration, backups, monitoring, and rollout/rollback.
-- [ ] Obtain explicit authorization before production migration or deployment.
+## Still required before live checkout
+
+- [ ] Confirm target Supabase environment and migration/schema state. Read-only history matches local through `20261111160000`; the new `20261112100000` migration is not applied. This does not verify live RLS behavior or authorize a migration.
+- [ ] Run cross-account RLS, security, abuse, and payment sandbox tests.
+- [ ] Obtain Paystack marketplace/transfer approval and approve merchant of record, 5% item commission, seller payouts/settlement, chargeback/refund operations, delivery fee flow, and tax.
+- [ ] Complete payout sandbox, transfer failure/reversal, buyer delivery confirmation, webhook, and reconciliation tests.
+- [ ] Decide attachment/product image scanning and retention controls.
+- [ ] Configure VAPID keys and complete browser push subscription/delivery/unsubscribe tests; assign notification incident/support ownership.
+- [ ] Approve legal policies, retention and deletion service levels, and seller verification evidence model.
+- [ ] Confirm backups, recovery drill, monitoring, accessibility, browser/mobile coverage, and rollback procedure.
+- [ ] Record passing tests/typecheck/lint/build and environment-specific end-to-end evidence.
+- [ ] Enable both `STORE_CHECKOUT_ENABLED=true` and `STORE_PAYOUTS_ENABLED=true` only after written approval in the intended environment.
+
+No production deployment or migration was performed for this reconciliation. See [docs/LEOX_STORE_LAUNCH_CHECKLIST.md](./docs/LEOX_STORE_LAUNCH_CHECKLIST.md) for the operator checklist.

@@ -32,19 +32,23 @@ export function NewProductForm() {
     const payload: Record<string, unknown> = Object.fromEntries([...form.entries()].filter(([key]) => key !== 'images')) as Record<string, string>;
     payload.price = Number(form.get('price'));
     payload.stockQuantity = Number(form.get('stockQuantity'));
+    const uploadedPaths: string[] = [];
 
     try {
-      const imagePaths: string[] = [];
       const images = form.getAll('images').filter((value): value is File => value instanceof File && value.size > 0);
       if (images.length > 8) { setError('Upload up to 8 product images.'); return; }
       for (const image of images) {
         const upload = new FormData(); upload.set('image', image);
         const uploaded = await fetch('/api/store/images', { method: 'POST', body: upload });
         const result = await uploaded.json().catch(() => ({}));
-        if (!uploaded.ok) { setError(typeof result.error === 'string' ? result.error : 'An image could not be uploaded.'); return; }
-        imagePaths.push(result.path);
+        if (!uploaded.ok) {
+          if (uploadedPaths.length) await fetch('/api/store/images', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: uploadedPaths }) });
+          setError(typeof result.error === 'string' ? result.error : 'An image could not be uploaded.'); return;
+        }
+        if (typeof result.path !== 'string') throw new Error('Image upload did not return a stored image path.');
+        uploadedPaths.push(result.path);
       }
-      payload.imagePaths = imagePaths;
+      payload.imagePaths = uploadedPaths;
       const response = await fetch('/api/store/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,12 +56,14 @@ export function NewProductForm() {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (uploadedPaths.length) await fetch('/api/store/images', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: uploadedPaths }) });
         if (response.status === 401) setError('Sign in to submit a listing. Your details are saved only in this form until you submit.');
         else setError(typeof result.error === 'string' ? result.error : 'The listing could not be submitted. Try again.');
         return;
       }
       setSubmitted(true);
     } catch {
+      if (uploadedPaths.length) await fetch('/api/store/images', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: uploadedPaths }) });
       setError('The marketplace could not be reached. Check your connection and try again.');
     } finally {
       setBusy(false);
@@ -142,7 +148,7 @@ export function NewProductForm() {
       <div>
         <label htmlFor="images" className="mb-2 block text-sm font-medium text-white">Product images (up to 8)</label>
         <input id="images" name="images" type="file" accept="image/jpeg,image/png,image/webp" multiple className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm" />
-        <p className="mt-2 text-xs text-white/50">JPEG, PNG, or WebP images up to 6 MB each. Images are resized and converted to WebP.</p>
+        <p className="mt-2 text-xs text-white/50">JPEG, PNG, or WebP images up to 2 MB each. Images are resized and compressed to WebP (700 KB maximum).</p>
       </div>
       {error && (
         <div className="rounded-xl border border-rose-300/20 bg-rose-300/5 p-4 text-sm text-rose-100" role="alert">

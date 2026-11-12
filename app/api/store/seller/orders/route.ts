@@ -9,12 +9,17 @@ export async function GET(request: NextRequest) {
   const user = await getUserFromRequest(request);
   if (!user) return NextResponse.json({ error: 'Sign in to view seller orders.' }, { status: 401 });
   const db = adminSupabase();
-  const { data: rows, error } = await db.from('marketplace_order_items').select('order_id,title,quantity,unit_price_kobo,line_total_kobo,order:marketplace_orders(id,order_number,status,currency,created_at,buyer_id)').eq('seller_id', user.id).order('created_at', { ascending: false }).limit(100);
+  const { data: rows, error } = await db.from('marketplace_order_items').select('order_id,title,quantity,unit_price_kobo,line_total_kobo,order:marketplace_orders(id,order_number,status,currency,created_at,buyer_id,total_kobo,paid_at)').eq('seller_id', user.id).order('created_at', { ascending: false }).limit(100);
   if (error) return NextResponse.json({ error: 'Seller orders are unavailable.' }, { status: 503 });
   const ids = [...new Set((rows ?? []).map(row => row.order_id))];
-  const { data: fulfillments } = ids.length ? await db.from('marketplace_fulfillments').select('*').in('order_id', ids).eq('seller_id', user.id) : { data: [] };
+  const [{ data: fulfillments, error: fulfillmentError }, { data: deliveries, error: deliveryError }] = await Promise.all([
+    ids.length ? db.from('marketplace_fulfillments').select('order_id,status,method,courier_name,tracking_reference,tracking_url,delivery_notes,issue_details,buyer_confirmed_at').in('order_id', ids).eq('seller_id', user.id) : { data: [], error: null },
+    ids.length ? db.from('marketplace_order_deliveries').select('order_id,name,details,fee_kobo').in('order_id', ids).eq('seller_id', user.id) : { data: [], error: null },
+  ]);
+  if (fulfillmentError || deliveryError) return NextResponse.json({ error: 'Seller order details are unavailable.' }, { status: 503 });
   const byOrder = new Map((fulfillments ?? []).map(row => [row.order_id, row]));
-  return NextResponse.json({ orders: (rows ?? []).map(row => ({ ...row, fulfillment: byOrder.get(row.order_id) ?? null })) }, { headers: { 'Cache-Control': 'no-store' } });
+  const deliveryByOrder = new Map((deliveries ?? []).map(row => [row.order_id, row]));
+  return NextResponse.json({ orders: (rows ?? []).map(row => ({ ...row, fulfillment: byOrder.get(row.order_id) ?? null, delivery: deliveryByOrder.get(row.order_id) ?? null })) }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -39,6 +44,10 @@ export async function PATCH(request: NextRequest) {
   if (!['paid', 'cancellation_requested'].includes(order.status)) return NextResponse.json({ error: 'This order is not ready for fulfillment updates.' }, { status: 409 });
   const { data, error } = await db.from('marketplace_fulfillments').upsert({ order_id: orderId, seller_id: user.id, status, method, courier_name: typeof input?.courierName === 'string' ? input.courierName.trim().slice(0, 100) : null, tracking_reference: typeof input?.trackingReference === 'string' ? input.trackingReference.trim().slice(0, 200) : null, tracking_url: trackingUrl, delivery_notes: typeof input?.deliveryNotes === 'string' ? input.deliveryNotes.trim().slice(0, 2000) : '', issue_details: status === 'delivery_issue' ? issue.slice(0, 2000) : null, updated_at: new Date().toISOString() }, { onConflict: 'order_id,seller_id' }).select().single();
   if (error) return NextResponse.json({ error: 'Fulfillment could not be updated.' }, { status: 503 });
-  await notifyMarketplaceUser({ userId: order.buyer_id, kind: 'fulfillment', title: status === 'delivery_issue' ? 'Delivery update needed' : 'Order delivery updated', body: status === 'delivery_issue' ? issue.slice(0, 1000) : `Your order is now marked ${String(status).replace('_', ' ')}.`, href: '/store/orders', preference: 'order_updates' }).catch(() => undefined);
+  try {
+    await notifyMarketplaceUser({ userId: order.buyer_id, kind: 'fulfillment', title: status === 'delivery_issue' ? 'Delivery update needed' : 'Order delivery updated', body: status === 'delivery_issue' ? issue.slice(0, 1000) : `Your order is now marked ${String(status).replace('_', ' ')}.`, href: '/store/orders', preference: 'order_updates' });
+  } catch (error) {
+    console.error('Buyer fulfillment notification could not be delivered:', error instanceof Error ? error.message : 'unknown error');
+  }
   return NextResponse.json({ fulfillment: data });
 }

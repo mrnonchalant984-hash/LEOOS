@@ -1,10 +1,7 @@
-# LeoX Store security
+# LeoX Store security status
 
-- Authentication reuses `getUserFromRequest` and the existing verified Supabase access token; no role or seller ID is accepted from the browser.
-- Writes occur server-side only. `SUPABASE_SERVICE_ROLE_KEY` is not imported by client code.
-- The database grants public roles select access with an RLS condition restricted to active listings and no direct write permissions.
-- New submissions are held as `pending_review`, are rate-limited, have bounded bodies, validated values, and server-generated slugs.
-- Public API failures are sanitized; only server logs receive database error messages.
-- Search text is length-bounded and wildcard characters are removed before the `ilike` filter.
+Implemented controls found in source include session-based authentication, same-origin checks on sensitive writes, verified-seller gates for seller operations, owner + verified-2FA gates for moderation/refunds, request limits, bounded/validated inputs, participant and ownership checks, signed Paystack webhook verification, and migration-defined RLS/grants/storage policies. Product images and private message attachments have upload/storage paths; the older claim that image upload is absent is incorrect.
 
-Unverified gates: live RLS behavior, rate-limit migration availability, staging authorization tests, security scanning, storage policy, and full abuse/moderation controls. The current product slice does not accept images, so no upload path is exposed.
+These controls have not been independently security-audited. No cross-account RLS/security integration suite was run for this reconciliation. Service-role APIs bypass database RLS and depend on correct server authorization. Test private/public storage, ownership, participant boundaries, refund/checkout abuse, rate-limit failure behavior, and owner/2FA controls against an authorized non-production environment.
+
+Do not infer production safety from migration-history agreement or static tests. Detailed test and release gaps are in [LEOX_STORE_RELEASE_GAPS.md](./LEOX_STORE_RELEASE_GAPS.md). Do not share secrets or place them in client-side environment variables.

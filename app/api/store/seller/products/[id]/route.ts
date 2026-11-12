@@ -26,19 +26,38 @@ export async function PATCH(request: NextRequest, context: Context) {
     const quantity = Number(body.stockQuantity);
     if (!Number.isInteger(quantity) || quantity < 0 || quantity > 10_000) return NextResponse.json({ error: 'Inventory must be a whole number from 0 to 10,000.' }, { status: 400 });
     const db = adminSupabase();
-    const { data: current, error: readError } = await db.from('marketplace_products').select('status,reserved_quantity').eq('id', id).eq('seller_id', user.id).maybeSingle();
+    const { data: current, error: readError } = await db.from('marketplace_products').select('status,reserved_quantity,image_paths').eq('id', id).eq('seller_id', user.id).maybeSingle();
     if (readError || !current) return NextResponse.json({ error: 'Listing was not found.' }, { status: 404 });
     if (quantity < Number(current.reserved_quantity)) return NextResponse.json({ error: 'Inventory cannot be lower than units reserved for checkout.' }, { status: 409 });
+    const hasImagePaths = Object.prototype.hasOwnProperty.call(body, 'imagePaths');
+    const imagePaths = hasImagePaths ? body.imagePaths : current.image_paths ?? [];
+    if (!Array.isArray(imagePaths) || imagePaths.length > 8
+      || imagePaths.some((path) => typeof path !== 'string' || !new RegExp(`^${user.id}/[0-9a-f-]{36}\\.webp$`, 'i').test(path))) {
+      return NextResponse.json({ error: 'Keep or upload up to 8 images from your own Store image area.' }, { status: 400 });
+    }
     const value = validation.value;
     const requiresReview = current.status === 'active' || current.status === 'rejected';
+    const imageUrls = imagePaths.map((path) => db.storage.from('marketplace-products').getPublicUrl(path).data.publicUrl);
     const { data, error } = await db.from('marketplace_products').update({
       title: value.title, description: value.description, category: value.category, price: value.price,
       currency: value.currency, condition: value.condition, country_code: value.countryCode,
       region: value.region || null, city: value.city, stock_quantity: quantity,
+      ...(hasImagePaths ? { image_paths: imagePaths, image_urls: imageUrls } : {}),
       ...(requiresReview ? { status: 'pending_review', published_at: null } : {}),
     }).eq('id', id).eq('seller_id', user.id).select('id,slug,status,stock_quantity').maybeSingle();
     if (error) return NextResponse.json({ error: 'Listing could not be saved.' }, { status: 503 });
-    return NextResponse.json({ product: data, message: requiresReview ? 'Changes saved. The listing is under review before becoming public again.' : 'Listing updated.' }, { headers: { 'Cache-Control': 'no-store' } });
+    let imageCleanupWarning: string | null = null;
+    if (hasImagePaths) {
+      const removedPaths = (current.image_paths ?? []).filter((path: string) => !imagePaths.includes(path));
+      if (removedPaths.length) {
+        const { error: cleanupError } = await db.storage.from('marketplace-products').remove(removedPaths);
+        if (cleanupError) {
+          console.error('Removed product images could not be cleaned from storage:', cleanupError.message);
+          imageCleanupWarning = 'Listing saved, but removed image files could not be cleaned up. Contact support.';
+        }
+      }
+    }
+    return NextResponse.json({ product: data, message: requiresReview ? 'Changes saved. The listing is under review before becoming public again.' : 'Listing updated.', warning: imageCleanupWarning }, { headers: { 'Cache-Control': 'no-store' } });
   }
   const transitions: Record<string, string> = { pause: 'paused', resume: 'pending_review', sold: 'sold' };
   const status = typeof body?.action === 'string' ? transitions[body.action] : undefined;

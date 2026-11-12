@@ -1,9 +1,15 @@
 # LeoX Store database
 
-Migration: `supabase/migrations/20261110210000_leox_store_product_listings.sql`.
+Store schema is delivered by additive migrations under `supabase/migrations/`:
 
-The migration is additive and creates `public.marketplace_products`, referencing existing `public.profiles(id)`. It stores title, description, category, price and currency independently, condition, country and city, seller ID, moderation state, and timestamps. Checks constrain field lengths, currency and country code formats, positive prices, condition values, and slug shape. Partial indexes support public listing/category/location queries; another index supports seller listing history.
+- `20261110210000_leox_store_product_listings.sql` — listings, inventory, moderation state, seller and public-listing policy.
+- `20261111100000_leox_store_commerce.sql` — storefront, saved products, conversations, reports, reviews, and image/storage foundations.
+- `20261111120000_leox_store_buying.sql` — carts, orders, stock reservations, payment application, and cancellation RPCs.
+- `20261111130000_leox_store_seller_tools.sql` — seller tools, delivery options, seller metrics, and related policies.
+- `20261111140000_leox_store_launch_workflows.sql` — fulfillment, disputes, seller verification, notifications, appeals, support, consent, and data-request records.
 
-RLS is enabled. Anonymous and authenticated roles can select active rows only. They receive no write privileges. Server writes use the existing service-role client after verifying the Supabase user; the server sets `seller_id` and `pending_review` itself. The update trigger maintains `updated_at` and publication timestamps.
+Migration-history output from a read-only Supabase CLI check showed local and remote versions in agreement through `20261111160000`. This is migration bookkeeping evidence only; it is not proof of the current target environment, actual grants/catalog state, RLS behavior, or recoverability.
 
-Migration application and live RLS behavior have not been verified. Review and dry-run against staging, then apply through the approved database release process. No live database was modified.
+The migrations enable RLS and define grants/policies, while application APIs use the service-role client with server-side authorization checks. Because service-role access bypasses RLS, cross-account API and direct authenticated-database tests remain required. No migration was applied during this reconciliation; do not apply or repair production migrations without explicit authorization.
+
+See [LEOX_STORE_RELEASE_GAPS.md](./LEOX_STORE_RELEASE_GAPS.md) for data areas whose implementation or production status remains incomplete.

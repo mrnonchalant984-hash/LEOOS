@@ -112,6 +112,7 @@ export async function POST(request: NextRequest) {
       region: product.region || null,
       city: product.city,
       image_urls: imageUrls,
+      image_paths: imagePaths,
       status: 'pending_review',
       moderation_note: flaggedTerms.length ? `Keyword screening flag for moderator review: ${flaggedTerms.join(', ')}` : null,
     }).select('id,slug,status').single();

@@ -65,3 +65,65 @@ test('seller verification is rate-limited and reports pending or rejected status
   assert.match(verificationPanel, /request\?\.status === 'rejected'/);
   assert.match(verificationPanel, /Do not send identity documents/);
 });
+
+test('checkout charges one seller-configured delivery option and requires seller payout setup', () => {
+  const checkout = source('app/api/store/checkout/route.ts');
+  const cart = source('app/store/cart/cart-client.tsx');
+  const migration = source('supabase/migrations/20261112100000_leox_store_delivery_payout_push.sql');
+  assert.match(checkout, /p_delivery_options/);
+  assert.match(checkout, /marketplace_seller_payout_accounts/);
+  assert.match(cart, /deliveryOptions/);
+  assert.match(cart, /Continue to secure payment/);
+  assert.match(migration, /marketplace_order_deliveries/);
+  assert.match(migration, /v_delivery_total/);
+});
+
+test('seller commission is 5 percent and payout waits for buyer-confirmed delivery', () => {
+  const migration = source('supabase/migrations/20261112100000_leox_store_delivery_payout_push.sql');
+  const accountApi = source('app/api/store/seller/payout-account/route.ts');
+  const transferHelper = source('lib/store-payouts.ts');
+  const buyerOrders = source('app/api/store/orders/route.ts');
+  assert.match(migration, /commission_bps integer not null default 500 check \(commission_bps = 500\)/);
+  assert.match(migration, /buyer_confirmed_at is not null/);
+  assert.match(accountApi, /transferrecipient/);
+  assert.match(transferHelper, /api\.paystack\.co\/transfer/);
+  assert.match(buyerOrders, /prepare_marketplace_seller_payout/);
+  assert.match(source('app/api/payment/webhook/route.ts'), /eventName === 'transfer\.reversed' \? \['initiating', 'pending', 'paid'\]/);
+  assert.match(source('app/store/seller/seller-payout-settings.tsx'), /5% commission/);
+});
+
+test('seller can manage order tracking and buyer can confirm receipt', () => {
+  const sellerUi = source('app/store/seller/orders/seller-orders-client.tsx');
+  const sellerApi = source('app/api/store/seller/orders/route.ts');
+  const buyerUi = source('app/store/orders/orders-client.tsx');
+  assert.match(sellerUi, /trackingReference/);
+  assert.match(sellerUi, /trackingUrl/);
+  assert.match(source('app/store/seller/seller-dashboard.tsx'), /Manage orders/);
+  assert.match(sellerApi, /marketplace_fulfillments/);
+  assert.match(buyerUi, /Confirm I received this delivery/);
+});
+
+test('product images enforce a 2 MB input cap and support seller image removal', () => {
+  const imageApi = source('app/api/store/images/route.ts');
+  const productApi = source('app/api/store/seller/products/[id]/route.ts');
+  const productUi = source('app/store/seller/products/page.tsx');
+  assert.match(imageApi, /2 \* 1024 \* 1024/);
+  assert.match(imageApi, /MAX_OPTIMIZED_BYTES/);
+  assert.match(productApi, /storage\.from\('marketplace-products'\)\.remove/);
+  assert.match(productUi, /keepImagePaths/);
+  assert.match(productUi, /Uncheck images to remove them/);
+});
+
+test('web push is user-opt-in, VAPID-configured, and prunes expired subscriptions', () => {
+  const subscriptionApi = source('app/api/store/push/route.ts');
+  const notifications = source('lib/store-notifications.ts');
+  const serviceWorker = source('public/store-push-sw.js');
+  assert.match(subscriptionApi, /WEB_PUSH_PUBLIC_KEY/);
+  assert.match(subscriptionApi, /marketplace_push_subscriptions/);
+  assert.match(subscriptionApi, /isSupportedPushEndpoint/);
+  assert.match(subscriptionApi, /updates\.push\.services\.mozilla\.com/);
+  assert.match(source('app/store/push-notifications.tsx'), /Notification\.requestPermission/);
+  assert.match(notifications, /webPush\.sendNotification/);
+  assert.match(notifications, /statusCode === 404 \|\| statusCode === 410/);
+  assert.match(serviceWorker, /showNotification/);
+});
