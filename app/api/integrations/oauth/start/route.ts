@@ -20,6 +20,9 @@ function callbackUrl(request: NextRequest) {
   return new URL('/api/integrations/oauth/callback', request.nextUrl.origin).toString();
 }
 export async function POST(request: NextRequest) {
+  if (request.headers.get('origin') !== new URL(request.url).origin) {
+    return NextResponse.json({ error: 'Request origin is invalid.' }, { status: 403 });
+  }
   const ctx = await getProfile(request);
   if (!ctx) return NextResponse.json({ error: 'Sign in before connecting an account.' }, { status: 401 });
   const limited = await enforceUserRateLimit(ctx.user.id, 'integration-oauth-start', 10, 60);
@@ -28,22 +31,39 @@ export async function POST(request: NextRequest) {
   if (!providers.includes(body?.provider)) return NextResponse.json({ error: 'OAuth is not available for this provider.' }, { status: 400 });
   const provider = body.provider as OAuthProvider;
   const label = typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, 100) : `My ${provider}`;
+  const projectId = provider === 'firebase' && typeof body.project_id === 'string' ? body.project_id.trim() : '';
+  if (provider === 'firebase' && !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(projectId)) {
+    return NextResponse.json({ error: 'Enter a valid Firebase project ID before connecting.' }, { status: 400 });
+  }
   const redirectUri = callbackUrl(request);
   if (process.env.NODE_ENV === 'production' && !process.env.INTEGRATION_OAUTH_CALLBACK_URL) return NextResponse.json({ error: 'Set INTEGRATION_OAUTH_CALLBACK_URL to the exact registered HTTPS callback URL before enabling OAuth in production.' }, { status: 503 });
   if (process.env.NODE_ENV === 'production' && !redirectUri.startsWith('https://')) return NextResponse.json({ error: 'Production OAuth callbacks must use HTTPS.' }, { status: 503 });
   const clientId = provider === 'github' ? process.env.GITHUB_OAUTH_CLIENT_ID : provider === 'vercel' ? process.env.VERCEL_OAUTH_CLIENT_ID : provider === 'meta' || provider === 'whatsapp_business' ? process.env.META_APP_ID : process.env.GOOGLE_OAUTH_CLIENT_ID;
   const clientSecret = provider === 'github' ? process.env.GITHUB_OAUTH_CLIENT_SECRET : provider === 'vercel' ? process.env.VERCEL_OAUTH_CLIENT_SECRET : provider === 'meta' || provider === 'whatsapp_business' ? process.env.META_APP_SECRET : process.env.GOOGLE_OAUTH_CLIENT_SECRET;
   if (!clientId || !clientSecret) return NextResponse.json({ error: `Missing OAuth client ID or secret for ${provider}.` }, { status: 503 });
+  let resourceId: string | null = null;
+  if (provider === 'whatsapp_business') {
+    const rawResourceId = typeof body.resource_id === 'string' ? body.resource_id.trim() : '';
+    if (!/^\d{5,32}$/.test(rawResourceId)) {
+      return NextResponse.json({ error: 'Enter the WhatsApp phone-number ID or business resource ID before reconnecting.' }, { status: 400 });
+    }
+    resourceId = rawResourceId;
+  }
   const state = randomBytes(32).toString('base64url');
   const { error } = await adminSupabase().from('integration_oauth_states').insert({
     state_hash: createHash('sha256').update(state).digest('hex'), user_id: ctx.user.id,
     provider, label, expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+    ...((resourceId || projectId) ? { metadata: { ...(resourceId ? { resource_id: resourceId } : {}), ...(projectId ? { project_id: projectId } : {}) } } : {}),
   });
   if (error) return NextResponse.json({ error: 'OAuth state storage is unavailable. Apply the integration OAuth migration and retry.' }, { status: 503 });
   const url = new URL(provider === 'github' ? 'https://github.com/login/oauth/authorize' : provider === 'vercel' ? 'https://vercel.com/oauth/authorize' : provider === 'meta' || provider === 'whatsapp_business' ? `https://www.facebook.com/${process.env.META_GRAPH_VERSION || 'v23.0'}/dialog/oauth` : 'https://accounts.google.com/o/oauth2/v2/auth');
   url.searchParams.set('client_id', clientId);
   url.searchParams.set('redirect_uri', redirectUri);
-  url.searchParams.set('state', state);
+  if (provider === 'vercel') {
+    url.searchParams.set('next', `${redirectUri}?state=${encodeURIComponent(state)}`);
+  } else {
+    url.searchParams.set('state', state);
+  }
   if (provider === 'github') url.searchParams.set('scope', scopes[provider].join(' '));
   else if (provider === 'vercel') url.searchParams.set('scope', scopes[provider].join(' '));
   else if (provider === 'meta' || provider === 'whatsapp_business') {

@@ -1,7 +1,7 @@
 import { decryptMcpCredential, encryptMcpCredential } from '@/lib/mcp/outbound-security';
 
 export const CUSTOMER_PROVIDERS = [
-  'github', 'vercel', 'supabase', 'firebase',
+  'github', 'vercel', 'supabase', 'firebase', 'openai', 'anthropic',
   'google_gemini', 'whatsapp_business', 'meta', 'youtube', 'custom_mcp',
 ] as const;
 export type CustomerProvider = typeof CUSTOMER_PROVIDERS[number];
@@ -9,6 +9,31 @@ export type CustomerConnectionConfig = Record<string, string>;
 
 export function isCustomerProvider(value: unknown): value is CustomerProvider {
   return typeof value === 'string' && CUSTOMER_PROVIDERS.includes(value as CustomerProvider);
+}
+
+const CAPABILITY_CATALOG: Record<CustomerProvider, { id: string; label: string; requiredScopes: string[] }[]> = {
+  github: [{ id: 'repositories', label: 'Repository access', requiredScopes: ['repo'] }],
+  vercel: [{ id: 'deployments', label: 'Projects and deployments', requiredScopes: [] }],
+  supabase: [{ id: 'projects', label: 'Project management', requiredScopes: [] }],
+  firebase: [{ id: 'firebase-projects', label: 'Firebase project access', requiredScopes: ['https://www.googleapis.com/auth/firebase'] }],
+  openai: [{ id: 'models', label: 'Model inventory', requiredScopes: [] }],
+  anthropic: [{ id: 'models', label: 'Model inventory', requiredScopes: [] }],
+  google_gemini: [{ id: 'models', label: 'Model inventory', requiredScopes: [] }],
+  whatsapp_business: [{ id: 'whatsapp-messaging', label: 'WhatsApp messaging', requiredScopes: ['whatsapp_business_messaging'] }],
+  meta: [{ id: 'pages-insights', label: 'Page insights', requiredScopes: ['pages_read_engagement', 'read_insights'] }],
+  youtube: [{ id: 'youtube-analytics', label: 'YouTube analytics', requiredScopes: ['https://www.googleapis.com/auth/yt-analytics.readonly'] }],
+  custom_mcp: [{ id: 'mcp-tools', label: 'MCP tool discovery', requiredScopes: [] }],
+};
+
+export function getCustomerProviderCapabilities(provider: CustomerProvider, scopes: readonly string[], verified: boolean) {
+  const granted = new Set(scopes);
+  return CAPABILITY_CATALOG[provider].map(capability => {
+    const missingScopes = capability.requiredScopes.filter(scope => !granted.has(scope));
+    const status = !verified ? 'unverified' as const
+      : missingScopes.length ? 'permission_review' as const
+        : capability.requiredScopes.length ? 'scope_granted' as const : 'provider_verified_only' as const;
+    return { id: capability.id, label: capability.label, status, missingScopes };
+  });
 }
 
 export function validateConnectionConfig(provider: CustomerProvider, config: unknown): CustomerConnectionConfig {
@@ -25,6 +50,7 @@ export function validateConnectionConfig(provider: CustomerProvider, config: unk
     if (missing.length) throw new Error(`Missing required fields: ${missing.join(', ')}.`);
   };
   if (provider === 'github' || provider === 'vercel') requireFields(['token']);
+  if (provider === 'openai' || provider === 'anthropic') requireFields(['api_key']);
   if (provider === 'supabase') {
     requireFields(['project_url', 'access_token']);
     let url: URL;
@@ -77,5 +103,13 @@ export async function verifyCustomerConnection(provider: CustomerProvider, confi
     const status = response.status;
     return { status: 'verification_failed' as const, code: `HTTP_${status}`, message: status === 401 || status === 403 ? 'The credential was rejected or lacks the required permission.' : `Provider verification returned HTTP ${status}.` };
   }
-  return { status: 'verified' as const, message: 'The provider accepted the credential.' };
+  const providerScopes = response.headers.get('x-oauth-scopes')
+    || response.headers.get('x-oauth-granted-scopes')
+    || config.scope
+    || '';
+  return {
+    status: 'verified' as const,
+    message: 'The provider accepted the credential for the provider-specific verification request.',
+    scopes: providerScopes.split(/[ ,]+/).filter(Boolean).slice(0, 40),
+  };
 }

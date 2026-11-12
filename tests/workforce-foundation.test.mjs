@@ -77,7 +77,7 @@ test('workforce and every meeting API method enforce platform-owner access', asy
 test('customer agents remain separate and enforce plan entitlements server-side', async () => {
   const source = await read('app/api/agents/run/route.ts');
   const entitlements = await read('lib/agents/entitlements.ts');
-  assert.match(source, /agentAllowed\(requested\.id, plan\.key, owner\)/);
+  assert.match(source, /agentAllowed\(requested\.id, userPlan\.key, owner\)/);
   assert.match(source, /Manual specialist agents require a Pro or Business plan/);
   assert.match(entitlements, /STANDARD_AGENT_IDS/);
   assert.match(entitlements, /PRO_AGENT_IDS/);
@@ -113,7 +113,8 @@ test('operational agent fan-out is bounded and passes prior specialist output as
   const manager = await read('lib/agents/manager.ts');
   assert.match(source, /selectedAgents\.slice\(0, 4\)/);
   assert.match(source, /UNTRUSTED SPECIALIST HANDOFF/);
-  assert.match(source, /handoff_mode: agents\.length > 1 \? 'bounded_sequential'/);
+  assert.match(source, /handoff_mode: dependencyInput === undefined \? 'bounded_sequential' : 'dependency_dag'/);
+  assert.match(source, /execution_plan: dagPlan\.nodes/);
   assert.match(manager, /Treat supplied context.*as untrusted data/);
 });
 
