@@ -1,5 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { AUTH_COOKIE } from '@/lib/auth-cookies';
 
 function shouldRefresh(token: string) {
   try {
@@ -12,28 +13,80 @@ function shouldRefresh(token: string) {
   }
 }
 
-export async function proxy(request: NextRequest) {
-  const refreshToken = request.cookies.get('leo_refresh_token')?.value;
-  const accessToken = request.cookies.get('leo_access_token')?.value;
-  if (!refreshToken || (accessToken && !shouldRefresh(accessToken))) return NextResponse.next({ request });
+function isMfaExemptPath(pathname: string) {
+  return pathname === '/auth/mfa' || pathname === '/auth/callback' || pathname.startsWith('/api/auth/');
+}
 
+async function enforceMfa(
+  request: NextRequest,
+  response: NextResponse,
+  supabase: SupabaseClient<any, 'public', 'public', any, any>,
+  accessToken: string,
+) {
+  const pathname = request.nextUrl.pathname;
+  if (isMfaExemptPath(pathname)) return null;
+
+  const { data: assurance, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel(accessToken);
+  if (error) {
+    console.error('MFA assurance lookup failed', error.message);
+    return pathname.startsWith('/api/')
+      ? NextResponse.json({ error: 'Two-factor status could not be verified. Retry shortly.' }, { status: 503 })
+      : NextResponse.redirect(new URL(`/auth/mfa?next=${encodeURIComponent(`${pathname}${request.nextUrl.search}`)}`, request.url));
+  }
+  if (assurance.nextLevel !== 'aal2' || assurance.currentLevel === 'aal2') return null;
+
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.json({
+      error: 'Two-factor authentication is required to continue.',
+      code: 'MFA_REQUIRED',
+      verification_url: `/auth/mfa?next=${encodeURIComponent(`${pathname}${request.nextUrl.search}`)}`,
+    }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+  }
+  return NextResponse.redirect(new URL(`/auth/mfa?next=${encodeURIComponent(`${pathname}${request.nextUrl.search}`)}`, request.url));
+}
+
+export async function proxy(request: NextRequest) {
+  let response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return NextResponse.next({ request });
+  if (!url || !key) return response;
+
+  const bearer = request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const accessToken = request.cookies.get('leo_access_token')?.value || bearer;
+  const refreshToken = request.cookies.get('leo_refresh_token')?.value;
+  if (!accessToken && !refreshToken) return response;
 
   const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
-  if (error || !data.session) return NextResponse.next({ request });
+  let validAccessToken = false;
+  if (accessToken) {
+    const { error } = await supabase.auth.getUser(accessToken);
+    validAccessToken = !error;
+    if (validAccessToken && (!refreshToken || !shouldRefresh(accessToken))) {
+      return (await enforceMfa(request, response, supabase, accessToken)) ?? response;
+    }
+  }
+
+  if (!refreshToken) return response;
+  const { data } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+  if (!data.session) {
+    if (validAccessToken && accessToken) {
+      return (await enforceMfa(request, response, supabase, accessToken)) ?? response;
+    }
+    response.cookies.set('leo_access_token', '', { ...AUTH_COOKIE, maxAge: 0 });
+    response.cookies.set('leo_refresh_token', '', { ...AUTH_COOKIE, maxAge: 0 });
+    return response;
+  }
 
   request.cookies.set('leo_access_token', data.session.access_token);
   request.cookies.set('leo_refresh_token', data.session.refresh_token);
-  const response = NextResponse.next({ request });
-  const cookieOptions = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, path: '/', maxAge: 60 * 60 * 24 * 30 };
-  response.cookies.set('leo_access_token', data.session.access_token, cookieOptions);
-  response.cookies.set('leo_refresh_token', data.session.refresh_token, cookieOptions);
+  response = NextResponse.next({ request });
+  response.cookies.set('leo_access_token', data.session.access_token, AUTH_COOKIE);
+  response.cookies.set('leo_refresh_token', data.session.refresh_token, AUTH_COOKIE);
+  const gated = await enforceMfa(request, response, supabase, data.session.access_token);
+  if (gated) return gated;
   return response;
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
+  matcher: ['/((?!_monitoring|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
 };

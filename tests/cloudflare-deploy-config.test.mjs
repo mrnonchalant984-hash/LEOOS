@@ -25,10 +25,11 @@ test('Cloudflare uses the OpenNext worker build and deploy commands', async () =
   assert.match(buildScript, /\['exec', '--', 'opennextjs-cloudflare', 'build'\]/);
 });
 
-test('Cloudflare auth middleware uses the Edge middleware convention', async () => {
-  const middleware = await readFile(new URL('../middleware.ts', import.meta.url), 'utf8');
+test('Cloudflare auth uses the Next.js proxy convention and enforces MFA', async () => {
+  const proxy = await readFile(new URL('../proxy.ts', import.meta.url), 'utf8');
 
-  assert.match(middleware, /export async function middleware\(/);
-  assert.doesNotMatch(middleware, /export async function proxy\(/);
-  assert.match(middleware, /@\/lib\/auth-cookies/);
+  assert.match(proxy, /export async function proxy\(/);
+  assert.doesNotMatch(proxy, /export async function middleware\(/);
+  assert.match(proxy, /@\/lib\/auth-cookies/);
+  assert.match(proxy, /enforceMfa/);
 });
