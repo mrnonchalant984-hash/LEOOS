@@ -3,7 +3,68 @@ import type { AgentDefinition, AgentJsonSchema, AgentPermission } from './types'
 
 export const AGENT_TASK_MAX_CHARS = 4_000;
 export const AGENT_CONTEXT_MAX_CHARS = 18_000;
+export const UAI_PROTOCOL_VERSION = '1.0';
 const TOOL_WRITE_PATTERN = /(?:_write|deployment|website_builder|form_submit|shopping)/;
+
+/**
+ * Unified Agent Interface (UAI) is the stable boundary between Leo, durable
+ * workers, and specialist implementations. It is intentionally additive: the
+ * established agent-run tables remain the source of truth while new callers
+ * can validate a portable, versioned execution envelope before persistence.
+ */
+export const UAI_EXECUTION_STATUSES = [
+  'created', 'queued', 'running', 'waiting_approval', 'completed', 'failed',
+  'paused', 'cancelled', 'retrying', 'expired',
+] as const;
+
+const UaiIdentifierSchema = z.string().trim().min(1).max(128)
+  .regex(/^[A-Za-z0-9._:-]+$/, 'Identifiers may contain letters, numbers, dots, underscores, colons, and hyphens.');
+const UaiPayloadSchema = z.record(z.string(), z.unknown());
+const UaiStatusSchema = z.enum(UAI_EXECUTION_STATUSES);
+
+export const UaiTaskEnvelopeSchema = z.object({
+  protocol_version: z.literal(UAI_PROTOCOL_VERSION),
+  task_id: UaiIdentifierSchema,
+  conversation_id: UaiIdentifierSchema.optional(),
+  agent_id: UaiIdentifierSchema,
+  action: z.string().trim().min(1).max(128).regex(/^[a-z][a-z0-9_]*$/),
+  status: UaiStatusSchema,
+  idempotency_key: UaiIdentifierSchema,
+  correlation_id: UaiIdentifierSchema,
+  input: UaiPayloadSchema,
+  output: UaiPayloadSchema.nullable().optional(),
+  approval_required: z.boolean(),
+  checkpoint_id: UaiIdentifierSchema.nullable().optional(),
+  created_at: z.string().datetime({ offset: true }),
+  execution: z.object({
+    attempt: z.number().int().min(0).max(10),
+    max_attempts: z.number().int().min(1).max(10),
+  }).strict(),
+}).strict();
+
+export const UaiEventSchema = z.object({
+  protocol_version: z.literal(UAI_PROTOCOL_VERSION),
+  event_id: UaiIdentifierSchema,
+  task_id: UaiIdentifierSchema,
+  conversation_id: UaiIdentifierSchema.optional(),
+  agent_id: UaiIdentifierSchema,
+  correlation_id: UaiIdentifierSchema,
+  event_type: z.string().trim().min(1).max(128).regex(/^[a-z][a-z0-9_]*$/),
+  status: UaiStatusSchema,
+  occurred_at: z.string().datetime({ offset: true }),
+  payload: UaiPayloadSchema,
+}).strict();
+
+export type UaiTaskEnvelope = z.infer<typeof UaiTaskEnvelopeSchema>;
+export type UaiEvent = z.infer<typeof UaiEventSchema>;
+
+export function validateUaiTaskEnvelope(value: unknown) {
+  return UaiTaskEnvelopeSchema.safeParse(value);
+}
+
+export function validateUaiEvent(value: unknown) {
+  return UaiEventSchema.safeParse(value);
+}
 
 const AgentInputSchema = z.object({
   task: z.string().trim().min(1).max(AGENT_TASK_MAX_CHARS),
