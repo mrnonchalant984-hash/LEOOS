@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const route = await readFile(new URL('../app/api/research/route.ts', import.meta.url), 'utf8');
-const migration = await readFile(new URL('../supabase/migrations/20261111110000_research_reports.sql', import.meta.url), 'utf8');
+const migration = await readFile(new URL('../supabase/migrations/20261111160000_research_reports.sql', import.meta.url), 'utf8');
 
 test('standalone research uses authenticated Gemini grounding and bounded public URLs', () => {
   assert.match(route, /getProfile\(req\)/);

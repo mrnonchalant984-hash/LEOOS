@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { AUTH_COOKIE } from '@/lib/auth';
+import { AUTH_COOKIE } from '@/lib/auth-cookies';
 
 function isMfaExemptPath(pathname: string) {
   return pathname === '/auth/mfa' || pathname === '/auth/callback' || pathname.startsWith('/api/auth/');
@@ -29,7 +29,7 @@ async function enforceMfa(request: NextRequest, response: NextResponse, sb: Supa
   return NextResponse.redirect(new URL(`/auth/mfa?next=${encodeURIComponent(`${pathname}${request.nextUrl.search}`)}`, request.url));
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

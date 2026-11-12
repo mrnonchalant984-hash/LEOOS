@@ -18,6 +18,7 @@ type PaystackEvent = {
     customer?: { customer_code?: unknown };
     subscription_code?: unknown;
     subscription?: { subscription_code?: unknown };
+    transaction_reference?: unknown;
   };
 };
 
@@ -59,7 +60,10 @@ export async function POST(req: NextRequest) {
   const eventName = typeof event.event === 'string' ? event.event : '';
   const transaction = event.data || {};
   const metadata = getMetadata(transaction.metadata);
-  const reference = typeof transaction.reference === 'string' ? transaction.reference : '';
+  const reference = eventName.includes('refund') && typeof transaction.transaction_reference === 'string'
+    ? transaction.transaction_reference
+    : typeof transaction.reference === 'string' ? transaction.reference
+      : typeof transaction.transaction_reference === 'string' ? transaction.transaction_reference : '';
   const db = adminSupabase();
   const providerEventId = typeof transaction.id === 'string' || typeof transaction.id === 'number'
     ? `${eventName}:${String(transaction.id)}`
@@ -197,6 +201,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, idempotent: donation.alreadyApplied });
     }
 
+    if (eventName === 'charge.success' && metadata.type === 'marketplace_order' && reference) {
+      const verified = await verifyPaystackTransaction(reference);
+      const verifiedMetadata = getMetadata(verified.metadata);
+      const orderId = typeof metadata.order_id === 'string' ? metadata.order_id : '';
+      const userId = typeof metadata.user_id === 'string' ? metadata.user_id : '';
+      if (verifiedMetadata.type !== 'marketplace_order' || verifiedMetadata.order_id !== orderId || verifiedMetadata.user_id !== userId || String(verified.currency).toUpperCase() !== 'NGN') {
+        return NextResponse.json({ error: 'Verified marketplace payment metadata does not match.' }, { status: 409 });
+      }
+      const { data: order, error: orderError } = await db.from('marketplace_orders').select('id,buyer_id,total_kobo,payment_reference').eq('id', orderId).maybeSingle();
+      if (orderError) throw orderError;
+      if (!order || order.buyer_id !== userId || order.payment_reference !== reference || Number(verified.amount) !== Number(order.total_kobo)) {
+        return NextResponse.json({ error: 'Verified marketplace payment does not match the order.' }, { status: 409 });
+      }
+      const { data: applied, error: applyError } = await db.rpc('apply_marketplace_payment', {
+        p_reference: reference,
+        p_amount_kobo: Number(verified.amount),
+        p_paid_at: safePaidAt(verified.paid_at),
+      });
+      if (applyError) throw applyError;
+      return NextResponse.json({ received: true, idempotent: applied === false });
+    }
+
     if (eventName === 'charge.success' && metadata.user_id && reference) {
       const payment = await verifyAndApplyPaystack(reference);
       if (providerEventColumnAvailable && providerEventId) await db.from('payments').update({ provider_event_id: providerEventId }).eq('reference', reference);
@@ -226,6 +252,18 @@ export async function POST(req: NextRequest) {
 
     if (eventName === 'refund.processed' || eventName === 'charge.refund') {
       if (reference) {
+        const { data: marketplaceRefund, error: marketplaceRefundReadError } = await db.from('marketplace_refunds').select('id,order_id').eq('provider_reference', reference).maybeSingle();
+        if (marketplaceRefundReadError) throw marketplaceRefundReadError;
+        if (marketplaceRefund) {
+          const refundStatus = eventName === 'refund.processed' ? 'processed' : 'pending';
+          const { error: refundUpdateError } = await db.from('marketplace_refunds').update({ status: refundStatus, updated_at: new Date().toISOString() }).eq('id', marketplaceRefund.id).neq('status', refundStatus);
+          if (refundUpdateError) throw refundUpdateError;
+          if (refundStatus === 'processed') {
+            const { error: orderUpdateError } = await db.from('marketplace_orders').update({ status: 'refunded', updated_at: new Date().toISOString() }).eq('id', marketplaceRefund.order_id).eq('status', 'refund_pending');
+            if (orderUpdateError) throw orderUpdateError;
+            await db.from('marketplace_order_events').insert({ order_id: marketplaceRefund.order_id, event_type: 'refund_processed' });
+          }
+        }
         const refundUpdate: Record<string, string> = { status: 'refunded', refunded_at: new Date().toISOString() };
         if (providerEventColumnAvailable && providerEventId) refundUpdate.provider_event_id = providerEventId;
         const { error: refundError } = await db.from('payments').update(refundUpdate).eq('reference', reference);

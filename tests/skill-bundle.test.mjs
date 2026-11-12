@@ -44,7 +44,7 @@ test('skill APIs and UI preserve ownership, version history, explicit execution 
   const updateRoute = await readFile(new URL('../app/api/skills/[name]/route.ts', import.meta.url), 'utf8');
   const historyRoute = await readFile(new URL('../app/api/skills/[name]/history/route.ts', import.meta.url), 'utf8');
   const executionRoute = await readFile(new URL('../app/api/skills/[name]/executions/route.ts', import.meta.url), 'utf8');
-  const migration = await readFile(new URL('../supabase/migrations/20261111100000_skill_versions_and_executions.sql', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../supabase/migrations/20261111150000_skill_versions_and_executions.sql', import.meta.url), 'utf8');
   const ui = await readFile(new URL('../components/skills/SkillManager.tsx', import.meta.url), 'utf8');
   for (const route of [importRoute, exportRoute, updateRoute, historyRoute, executionRoute]) assert.match(route, /getProfile/);
   assert.match(exportRoute, /eq\('owner_id', auth\.user\.id\)/);

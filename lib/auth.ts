@@ -1,19 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
+import { AUTH_COOKIE } from '@/lib/auth-cookies';
 
 async function sha256(value: string) {
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export const AUTH_COOKIE = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
-  path: '/',
-  maxAge: 60 * 60 * 24 * 30,
-};
+export { AUTH_COOKIE } from '@/lib/auth-cookies';
 
 function getBearer(req: NextRequest) {
   const header = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');

@@ -85,7 +85,12 @@ export function validateAgentOutput(value: unknown) {
 export function validateAgentDefinition<T extends Omit<AgentDefinition, 'inputSchema' | 'outputSchema'>>(
   definition: T,
 ): AgentDefinition {
-  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(definition.id) ||
+  if (!definition || typeof definition.id !== 'string' ||
+      typeof definition.name !== 'string' ||
+      typeof definition.instructions !== 'string' ||
+      !Array.isArray(definition.allowedTools) ||
+      !Array.isArray(definition.permissions) ||
+      !/^[a-z0-9][a-z0-9-]{0,63}$/.test(definition.id) ||
       !definition.name.trim() ||
       !definition.instructions.trim() ||
       !definition.allowedTools.every(tool => CAPABILITY_PATTERN.test(tool)) ||

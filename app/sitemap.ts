@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next';
 import { big12Projects } from '@/data/site';
 import { LEO_TEMPLATES } from '@/data/website-templates';
 import { SITE_ORIGIN } from '@/lib/seo';
+import { adminSupabase } from '@/lib/auth';
 
 type SitemapPage = {
   path: string;
@@ -42,7 +43,7 @@ const publicPages: SitemapPage[] = [
   { path: '/refund-policy', priority: 0.3, changeFrequency: 'yearly' },
 ];
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const pages = [
     ...publicPages,
     ...LEO_TEMPLATES.map(({ id }): SitemapPage => ({
@@ -57,8 +58,31 @@ export default function sitemap(): MetadataRoute.Sitemap {
     })),
   ];
 
-  return pages.map(({ path, ...page }) => ({
+  let products: { slug: string; published_at: string }[] = [];
+  try {
+    const { data, error } = await adminSupabase()
+      .from('marketplace_products')
+      .select('slug,published_at')
+      .eq('status', 'active')
+      .order('published_at', { ascending: false })
+      .limit(5000);
+    if (!error) products = data ?? [];
+    else console.error('Could not load public store pages for sitemap:', error.message);
+  } catch {
+    // Keep the rest of the site's sitemap available before Store is configured.
+  }
+
+  return [
+    ...pages.map(({ path, ...page }) => ({
     url: `${SITE_ORIGIN}${path === '/' ? '/' : path}`,
     ...page,
-  }));
+    })),
+    { url: `${SITE_ORIGIN}/store`, changeFrequency: 'daily' as const, priority: 0.8 },
+    ...products.map((product) => ({
+      url: `${SITE_ORIGIN}/store/product/${product.slug}`,
+      lastModified: product.published_at,
+      changeFrequency: 'weekly' as const,
+      priority: 0.6,
+    })),
+  ];
 }

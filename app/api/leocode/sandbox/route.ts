@@ -18,58 +18,6 @@ function cloudflareAccessHeaders(): Record<string, string> {
   return clientId ? { 'CF-Access-Client-Id': clientId, 'CF-Access-Client-Secret': clientSecret } : {};
 }
 
-export async function DELETE(req: NextRequest) {
-  if (!trustedRequestOrigin(req)) return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 });
-  const context = await getProfile(req);
-  if (!context) return NextResponse.json({ error: 'Sign in to delete an isolated workspace.' }, { status: 401 });
-  const workspaceId = req.nextUrl.searchParams.get('workspaceId') || '';
-  if (!WORKSPACE_ID_RE.test(workspaceId)) return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 });
-
-  const userLimited = await enforceUserRateLimit(context.user.id, 'leocode-sandbox-delete', 10, 3600);
-  if (userLimited) return userLimited;
-  const ipLimited = await enforceIpRateLimit(req, 'leocode-sandbox-delete-ip', 30, 3600);
-  if (ipLimited) return ipLimited;
-
-  const secret = process.env.LEO_SANDBOX_HMAC_SECRET;
-  if (!secret || secret.length < 32) return NextResponse.json({ error: 'The isolated execution service is not configured.' }, { status: 503 });
-  let baseUrl: string;
-  try { baseUrl = getRunnerUrl(); }
-  catch { return NextResponse.json({ error: 'The isolated execution service URL is missing or invalid.' }, { status: 503 }); }
-
-  const rawBody = JSON.stringify({ tenant_id: context.user.id });
-  const timestamp = String(Math.floor(Date.now() / 1000));
-  const signature = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
-  try {
-    const accessHeaders = cloudflareAccessHeaders();
-    const response = await fetch(`${baseUrl}/v1/workspaces/${encodeURIComponent(workspaceId)}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Runner-Timestamp': timestamp,
-        'X-Runner-Signature': signature,
-        ...accessHeaders,
-      },
-      body: rawBody,
-      cache: 'no-store',
-      redirect: 'error',
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (response.status === 404) return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 });
-    if (response.status === 409) return NextResponse.json({ error: 'Workspace is busy and cannot be deleted yet.' }, { status: 409 });
-    if (!response.ok) {
-      console.error('LeoCode sandbox workspace deletion failed', { status: response.status, userId: context.user.id });
-      return NextResponse.json({ error: 'The isolated workspace could not be deleted.' }, { status: response.status >= 500 ? 502 : 400 });
-    }
-    return NextResponse.json({ workspaceId, deleted: true }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (error) {
-    console.error('LeoCode sandbox workspace deletion request failed', {
-      userId: context.user.id,
-      error: error instanceof Error ? error.name : 'unknown',
-    });
-    return NextResponse.json({ error: 'The isolated execution service is unavailable.' }, { status: 503 });
-  }
-}
-
 function trustedRequestOrigin(req: NextRequest) {
   const origin = req.headers.get('origin');
   if (origin) return origin === req.nextUrl.origin;
@@ -199,5 +147,73 @@ export async function POST(req: NextRequest) {
       error: error instanceof Error ? error.name : 'unknown',
     });
     return NextResponse.json({ error: 'The isolated execution service is unavailable or timed out.' }, { status: 503 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  if (!trustedRequestOrigin(req)) return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 });
+  const context = await getProfile(req);
+  if (!context) return NextResponse.json({ error: 'Sign in to manage isolated workspaces.' }, { status: 401 });
+
+  const body: unknown = await req.json().catch(() => null);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: 'Provide a valid workspace ID.' }, { status: 400 });
+  }
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).length !== 1 || typeof input.workspaceId !== 'string'
+    || !WORKSPACE_ID_RE.test(input.workspaceId)) {
+    return NextResponse.json({ error: 'Provide a valid workspace ID.' }, { status: 400 });
+  }
+  const workspaceId = input.workspaceId;
+  const secret = process.env.LEO_SANDBOX_HMAC_SECRET;
+  if (!secret || secret.length < 32) return NextResponse.json({ error: 'The isolated execution service is not configured.' }, { status: 503 });
+
+  let baseUrl: string;
+  try {
+    baseUrl = getRunnerUrl();
+  } catch {
+    return NextResponse.json({ error: 'The isolated execution service URL is missing or invalid.' }, { status: 503 });
+  }
+
+  const userLimited = await enforceUserRateLimit(context.user.id, 'leocode-sandbox-delete', 10, 3600);
+  if (userLimited) return userLimited;
+  const ipLimited = await enforceIpRateLimit(req, 'leocode-sandbox-delete-ip', 30, 3600);
+  if (ipLimited) return ipLimited;
+
+  const payload = { tenant_id: context.user.id };
+  const rawBody = JSON.stringify(payload);
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
+  try {
+    const response = await fetch(`${baseUrl}/v1/workspaces/${workspaceId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Runner-Timestamp': timestamp,
+        'X-Runner-Signature': signature,
+        ...cloudflareAccessHeaders(),
+      },
+      body: rawBody,
+      cache: 'no-store',
+      redirect: 'error',
+      signal: AbortSignal.timeout(30_000),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result || typeof result !== 'object' || result.deleted !== true) {
+      console.error('LeoCode sandbox workspace deletion failed', {
+        status: response.status,
+        userId: context.user.id,
+      });
+      return NextResponse.json({ error: 'The isolated workspace could not be deleted.' }, {
+        status: response.status >= 400 && response.status < 500 ? response.status : 502,
+      });
+    }
+    return NextResponse.json({ deleted: true, workspaceId }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) {
+    console.error('LeoCode sandbox workspace deletion request failed', {
+      userId: context.user.id,
+      error: error instanceof Error ? error.name : 'unknown',
+    });
+    return NextResponse.json({ error: 'The isolated execution service is unavailable.' }, { status: 503 });
   }
 }

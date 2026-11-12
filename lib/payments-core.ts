@@ -5,6 +5,7 @@ export type PaystackTransaction = {
   currency?: unknown;
   paid_at?: unknown;
   metadata?: unknown;
+  customer?: { email?: unknown };
 };
 
 export type HostingRenewalExpectation = {

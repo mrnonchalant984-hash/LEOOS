@@ -4,6 +4,17 @@ import { test } from 'node:test';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
+test('agent execution keeps tool policy, cancellation, and retry handling explicit', async () => {
+  const manager = await read('lib/agents/manager.ts');
+  const contracts = await read('lib/agents/contracts.ts');
+  const orchestrator = await read('lib/ai/tool-orchestrator.ts');
+
+  assert.match(manager, /AbortSignal\.timeout\(agent\.timeoutMs\)/);
+  assert.match(manager, /agent\.maxRetries/);
+  assert.match(contracts, /approvalRequired/);
+  assert.match(orchestrator, /agentPolicy/);
+});
+
 test('durable agent worker authenticates, claims bounded jobs, and scopes each run to its owner', async () => {
   const worker = await read('app/api/internal/agents/worker/route.ts');
   assert.match(worker, /CRON_SECRET/);
@@ -27,4 +38,11 @@ test('cancellation is limited to the authenticated owner and persisted queued jo
   assert.match(route, /\.eq\('user_id',\s*ctx\.user\.id\)/);
   assert.match(route, /cancelledRun/);
   assert.match(route, /waiting_approval/);
+});
+
+test('agent registry keeps the SEO tuple aligned and validates instruction types', async () => {
+  const registry = await read('lib/agents/registry.ts');
+  const contracts = await read('lib/agents/contracts.ts');
+  assert.match(registry, /'seo','SEO Agent'.*'website','Review the public site/);
+  assert.match(contracts, /typeof definition\.instructions !== 'string'/);
 });

@@ -3,8 +3,19 @@ const { test } = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const root = path.resolve(__dirname, '..');
-const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
+const extensionRoot = path.resolve(__dirname, '..');
+const read = (...parts) => fs.readFileSync(path.join(extensionRoot, ...parts), 'utf8');
+
+test('workspace agent support protects workspace context and confirms commands', () => {
+  const context = read('src', 'workspace', 'context.ts');
+  const policy = read('src', 'workspace', 'policy.ts');
+  const extension = read('src', 'extension.ts');
+
+  assert.match(context, /getActiveWorkspaceContext/);
+  assert.match(policy, /isSafeWorkspacePath/);
+  assert.match(extension, /showWarningMessage/);
+  assert.match(extension, /terminal\.sendText/);
+});
 
 test('workspace context rejects unsafe paths and symlink traversal', () => {
   const policy = read('src', 'workspace', 'policy.ts');
