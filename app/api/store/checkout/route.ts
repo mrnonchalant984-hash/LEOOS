@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
   if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Request origin is invalid.' }, { status: 403 });
   const user = await getUserFromRequest(request);
   if (!user?.email) return NextResponse.json({ error: 'Sign in with an account email to check out.' }, { status: 401 });
+  if (process.env.STORE_CHECKOUT_ENABLED !== 'true') return NextResponse.json({ error: 'Marketplace checkout is paused until payment, seller payout, delivery and tax settings are confirmed.' }, { status: 503 });
   const limited = await enforceUserRateLimit(user.id, 'store-checkout', 5, 3600); if (limited) return limited;
   const secret = process.env.PAYSTACK_SECRET_KEY;
   if (!secret) return NextResponse.json({ error: 'Marketplace payments are not configured.' }, { status: 503 });

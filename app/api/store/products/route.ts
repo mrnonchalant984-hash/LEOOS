@@ -79,6 +79,10 @@ export async function POST(request: NextRequest) {
     const db = adminSupabase();
     const id = globalThis.crypto.randomUUID();
     const product = validation.value;
+    const { data: terms, error: termsError } = await db.from('marketplace_prohibited_terms').select('term').eq('active', true).limit(500);
+    if (termsError) return NextResponse.json({ error: 'Listing safety checks are temporarily unavailable.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+    const listingText = `${product.title} ${product.description} ${product.category}`.toLocaleLowerCase();
+    const flaggedTerms = (terms ?? []).map(row => row.term as string).filter(term => term.trim().length >= 2 && listingText.includes(term.toLocaleLowerCase())).slice(0, 10);
     const stockQuantity = Number((body as Record<string, unknown>).stockQuantity ?? 1);
     if (!Number.isInteger(stockQuantity) || stockQuantity < 1 || stockQuantity > 10_000) return NextResponse.json({ error: 'Available quantity must be from 1 to 10,000.' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
     const imagePaths = Array.isArray((body as Record<string, unknown>).imagePaths) ? (body as Record<string, unknown>).imagePaths as unknown[] : [];
@@ -102,6 +106,7 @@ export async function POST(request: NextRequest) {
       city: product.city,
       image_urls: imageUrls,
       status: 'pending_review',
+      moderation_note: flaggedTerms.length ? `Keyword screening flag for moderator review: ${flaggedTerms.join(', ')}` : null,
     }).select('id,slug,status').single();
 
     if (error) {

@@ -23,10 +23,9 @@ export async function getUserFromRequest(req: NextRequest) {
   const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data } = await client.auth.getUser(token);
   if (data.user) return data.user;
-  const refreshToken = req.cookies.get('leo_refresh_token')?.value;
-  if (!refreshToken) return null;
-  const refreshed = await client.auth.refreshSession({ refresh_token: refreshToken });
-  return refreshed.data.user || null;
+  // Refresh tokens rotate. The root proxy persists rotated cookies before routes
+  // run; refreshing here would invalidate the browser's old refresh cookie.
+  return null;
 }
 
 export const getAdminSupabase = () => adminSupabase();

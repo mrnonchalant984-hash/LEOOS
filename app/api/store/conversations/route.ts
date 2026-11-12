@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getUserFromRequest } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { notifyMarketplaceUser } from '@/lib/store-notifications';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,10 +28,11 @@ export async function POST(request: NextRequest) {
   if (product.seller_id === user.id) return NextResponse.json({ error: 'You cannot contact yourself.' }, { status: 400 });
   const { data: conversation, error } = await db.from('marketplace_conversations').upsert({ product_id: product.id, buyer_id: user.id, seller_id: product.seller_id }, { onConflict: 'product_id,buyer_id', ignoreDuplicates: true }).select('id').maybeSingle();
   let conversationId = conversation?.id;
-  if (!conversationId) { const existing = await db.from('marketplace_conversations').select('id').eq('product_id', product.id).eq('buyer_id', user.id).single(); conversationId = existing.data?.id; }
+  if (!conversationId) { const existing = await db.from('marketplace_conversations').select('id,blocked_by').eq('product_id', product.id).eq('buyer_id', user.id).single(); conversationId = existing.data?.id; if (existing.data?.blocked_by) return NextResponse.json({ error: 'Messaging is unavailable for this conversation.' }, { status: 403 }); }
   if (error && !conversationId) return NextResponse.json({ error: 'Conversation could not be started.' }, { status: 503 });
   if (!conversationId) return NextResponse.json({ error: 'Conversation could not be started.' }, { status: 503 });
   const sent = await db.from('marketplace_messages').insert({ conversation_id: conversationId, sender_id: user.id, body: body.message.trim() }).select('id').single();
   if (sent.error) return NextResponse.json({ error: 'Message could not be sent.' }, { status: 503 });
+  await notifyMarketplaceUser({ userId: product.seller_id, kind: 'message', title: 'New marketplace message', body: body.message.trim().slice(0,500), href: '/store/messages', preference: 'messages' }).catch(() => undefined);
   return NextResponse.json({ conversationId, messageId: sent.data.id }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
 }
