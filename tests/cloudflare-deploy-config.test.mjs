@@ -28,7 +28,7 @@ test('Cloudflare uses the OpenNext worker build and deploy commands', async () =
 test('Cloudflare auth uses Edge Middleware and enforces MFA', async () => {
   const middleware = await readFile(new URL('../middleware.ts', import.meta.url), 'utf8');
 
-  assert.match(middleware, /export const runtime = 'edge'/);
+  assert.match(middleware, /export const runtime = 'experimental-edge'/);
   assert.match(middleware, /export async function middleware\(/);
   assert.doesNotMatch(middleware, /export async function proxy\(/);
   assert.match(middleware, /@\/lib\/auth-cookies/);
