@@ -45,7 +45,9 @@ async function enforceMfa(
   return NextResponse.redirect(new URL(`/auth/mfa?next=${encodeURIComponent(`${pathname}${request.nextUrl.search}`)}`, request.url));
 }
 
-export async function proxy(request: NextRequest) {
+export const runtime = 'edge';
+
+export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
