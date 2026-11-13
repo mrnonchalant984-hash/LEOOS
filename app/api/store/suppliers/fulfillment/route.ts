@@ -1,0 +1,12 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { adminSupabase, getUserFromRequest } from '@/lib/auth';
+export const runtime = 'nodejs'; export const dynamic = 'force-dynamic';
+export async function PATCH(request: NextRequest) {
+  if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Request origin is invalid.' }, { status: 403 });
+  const user = await getUserFromRequest(request); if (!user) return NextResponse.json({ error: 'Sign in to update supplier fulfilment.' }, { status: 401 });
+  const body = await request.json().catch(() => null) as { requestId?: unknown; status?: unknown; supplierReference?: unknown; trackingReference?: unknown; trackingUrl?: unknown } | null;
+  if (typeof body?.requestId !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.requestId) || !['accepted','rejected','processing','shipped','delivered','cancelled','failed'].includes(String(body.status)) || (body.supplierReference !== undefined && (typeof body.supplierReference !== 'string' || body.supplierReference.length > 200)) || (body.trackingReference !== undefined && (typeof body.trackingReference !== 'string' || body.trackingReference.length > 200)) || (body.trackingUrl !== undefined && (typeof body.trackingUrl !== 'string' || body.trackingUrl.length > 1000 || (body.trackingUrl.trim() !== '' && !/^https:\/\//.test(body.trackingUrl))))) return NextResponse.json({ error: 'Invalid supplier fulfilment update.' }, { status: 400 });
+  const { data, error } = await adminSupabase().rpc('update_marketplace_supplier_fulfillment', { p_request_id: body.requestId, p_supplier_id: user.id, p_status: body.status, p_supplier_reference: typeof body.supplierReference === 'string' ? body.supplierReference.trim() : null, p_tracking_reference: typeof body.trackingReference === 'string' ? body.trackingReference.trim() : null, p_tracking_url: typeof body.trackingUrl === 'string' && body.trackingUrl.trim() ? body.trackingUrl.trim() : null });
+  if (error) return NextResponse.json({ error: /not found/i.test(error.message) ? 'Fulfilment request not found.' : /terminal|invalid|tracking/i.test(error.message) ? error.message : 'Supplier fulfilment update could not be saved.' }, { status: /not found/i.test(error.message) ? 404 : /terminal|invalid|tracking/i.test(error.message) ? 409 : 503 });
+  return NextResponse.json({ fulfillment: data }, { headers: { 'Cache-Control': 'no-store' } });
+}

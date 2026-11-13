@@ -272,6 +272,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   const [sharingAssetId, setSharingAssetId] = useState("");
   const [sharedAssetStatus, setSharedAssetStatus] = useState<{ id: string; message: string } | null>(null);
   const sidRef = useRef("");
+  const chatAbortController = useRef<AbortController | null>(null);
   const [activeChatId, setActiveChatId] = useState("");
   const media = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
@@ -574,37 +575,77 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     setError("");
     try {
       const t = await token();
-      const r = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(t ? { Authorization: `Bearer ${t}` } : {}),
-        },
-        body: JSON.stringify({
-          session_id: sidRef.current,
-          message: next,
-          mode: effectiveMode,
-          request_id: crypto.randomUUID(),
-          ...(attachedTool ? { tool_name: attachedTool.name } : {}),
-          ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}),
-          ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}),
-        }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Leo is unavailable");
-      setMessages((m) => [...m, { role: "assistant", content: d.reply, projectBuilder: d.projectBuilder, ...(typeof d.image === "string" ? { image: d.image } : {}), ...(typeof d.assetId === "string" ? { assetId: d.assetId } : {}) }]);
-      if (Number.isSafeInteger(d.platformCreditsRemaining)) setPlatformCredits(d.platformCreditsRemaining);
+      const imageIntent = /\b(generate|create|make|draw)\b.{0,40}\b(image|picture|illustration|visual)\b/i.test(next);
+      const repositoryIntent = /\b(github|git\s?hub|repository|repo)\b/i.test(next);
+      const shouldStream = effectiveMode === "normal" && !attachedTool && !attachedAgent && !buildIntent && !imageIntent && !repositoryIntent;
+      if (shouldStream) {
+        const aborter = new AbortController();
+        chatAbortController.current = aborter;
+        setMessages((current) => [...current, { role: "assistant", content: "" }]);
+        const response = await fetch("/api/chat/stream", {
+          method: "POST",
+          signal: aborter.signal,
+          headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+          body: JSON.stringify({ session_id: sidRef.current, message: next, ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}) }),
+        });
+        if (!response.ok) {
+          const failure = await response.json().catch(() => ({}));
+          throw new Error(failure.error || "Leo streaming is unavailable.");
+        }
+        if (!response.body) throw new Error("The streaming response was empty.");
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let streamedText = "";
+        let finished = false;
+        while (!finished) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() || "";
+          for (const frame of frames) {
+            const line = frame.split("\n").find((part) => part.startsWith("data: "));
+            if (!line) continue;
+            const event = JSON.parse(line.slice(6)) as { type?: string; text?: string; error?: string };
+            if (event.type === "delta" && typeof event.text === "string") {
+              streamedText += event.text;
+              setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, content: streamedText } : item));
+            } else if (event.type === "error") {
+              throw new Error(event.error || "Leo could not complete the response.");
+            } else if (event.type === "done") finished = true;
+          }
+        }
+        if (!streamedText.trim() && !aborter.signal.aborted) throw new Error("Leo returned an empty response.");
+      } else {
+        const r = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+          body: JSON.stringify({ session_id: sidRef.current, message: next, mode: effectiveMode, request_id: crypto.randomUUID(), ...(attachedTool ? { tool_name: attachedTool.name } : {}), ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}), ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}) }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Leo is unavailable");
+        setMessages((m) => [...m, { role: "assistant", content: d.reply, projectBuilder: d.projectBuilder, ...(typeof d.image === "string" ? { image: d.image } : {}), ...(typeof d.assetId === "string" ? { assetId: d.assetId } : {}) }]);
+        if (Number.isSafeInteger(d.platformCreditsRemaining)) setPlatformCredits(d.platformCreditsRemaining);
+      }
       if (offlineDraft?.text === next && offlineDraft.mode === effectiveMode) {
         setOfflineDraft(null);
         window.localStorage.removeItem(OFFLINE_DRAFT_KEY);
       }
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Leo is temporarily unavailable.",
-      );
+      setMessages((current) => current.filter((item, index) => !(index === current.length - 1 && item.role === "assistant" && !item.content)));
+      if (!(e instanceof DOMException && e.name === "AbortError")) {
+        setError(e instanceof Error ? e.message : "Leo is temporarily unavailable.");
+      }
     } finally {
+      chatAbortController.current = null;
       setLoading(false);
     }
+  }
+  function stopGeneration() {
+    chatAbortController.current?.abort();
+    chatAbortController.current = null;
+    setLoading(false);
   }
   async function loadToolOptions() {
     setLoadingToolOptions(true);
@@ -1392,9 +1433,10 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         </div>
       )}
       {loading && (
-        <div className="flex max-w-fit items-center gap-2 rounded-3xl bg-black/40 p-3 text-sm text-zinc-400">
+        <div className="flex max-w-fit items-center gap-3 rounded-3xl bg-black/40 p-3 text-sm text-zinc-400">
           <Loader2 size={15} className="animate-spin" />
-          Leo is working…
+          <span>Leo is thinking…</span>
+          {chatAbortController.current && <button type="button" onClick={stopGeneration} className="rounded-lg border border-white/10 px-2 py-1 text-xs text-zinc-300 hover:bg-white/10">Stop</button>}
         </div>
       )}
       {offlineDraft && (

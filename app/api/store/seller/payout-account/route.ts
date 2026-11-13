@@ -58,9 +58,26 @@ export async function PUT(request: NextRequest) {
     if (!verifiedName || !verifiedNumber.endsWith(accountNumber.slice(-4)) || verifiedBankCode !== bankCode) {
       return NextResponse.json({ error: 'Paystack could not confirm the account name, number, and bank. Check the details and try again.' }, { status: 422 });
     }
+    let subaccountCode: string | null = null;
+    if (process.env.STORE_PAYSTACK_SPLIT_ENABLED === 'true') {
+      const { data: existingAccount } = await adminSupabase().from('marketplace_seller_payout_accounts').select('subaccount_code,bank_code,account_last4').eq('seller_id', user.id).maybeSingle();
+      if (existingAccount?.subaccount_code && existingAccount.bank_code === bankCode && existingAccount.account_last4 === accountNumber.slice(-4)) subaccountCode = existingAccount.subaccount_code;
+      if (!subaccountCode) {
+      const splitResponse = await fetch('https://api.paystack.co/subaccount', {
+        method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_name: verifiedName, settlement_bank: bankCode, account_number: accountNumber, percentage_charge: 0, primary_contact_email: user.email ?? undefined }),
+        cache: 'no-store', signal: AbortSignal.timeout(12_000),
+      });
+      const splitResult = await splitResponse.json().catch(() => null);
+      if (!splitResponse.ok || splitResult?.status !== true || typeof splitResult?.data?.subaccount_code !== 'string') {
+        return NextResponse.json({ error: 'Paystack verified the bank account but could not create its marketplace subaccount. Split settlement was not enabled.' }, { status: 422 });
+      }
+      subaccountCode = splitResult.data.subaccount_code;
+      }
+    }
     const { data, error } = await adminSupabase().from('marketplace_seller_payout_accounts')
-      .upsert({ seller_id: user.id, recipient_code: recipientCode, bank_code: bankCode, account_name: verifiedName, account_last4: accountNumber.slice(-4), updated_at: new Date().toISOString() }, { onConflict: 'seller_id' })
-      .select('bank_code,account_name,account_last4,updated_at').single();
+      .upsert({ seller_id: user.id, recipient_code: recipientCode, subaccount_code: subaccountCode, bank_code: bankCode, account_name: verifiedName, account_last4: accountNumber.slice(-4), updated_at: new Date().toISOString() }, { onConflict: 'seller_id' })
+      .select('bank_code,account_name,account_last4,subaccount_code,updated_at').single();
     if (error) return NextResponse.json({ error: 'Payout destination could not be saved.' }, { status: 503 });
     return NextResponse.json({ account: data }, { headers: { 'Cache-Control': 'no-store' } });
   } catch {

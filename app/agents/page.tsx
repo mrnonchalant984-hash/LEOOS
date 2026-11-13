@@ -48,10 +48,35 @@ export default function Agents() {
     setBusy(true);
     setMessage('Submitting task…');
     try {
-      const response = await fetch('/api/agents/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task }) });
-      const data = await response.json();
-      setMessage(data.message || data.error || (response.ok ? 'Task submitted.' : 'Task could not be submitted.'));
-      if (response.ok) { setTask(''); await load(); }
+      const response = await fetch('/api/agents/run/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task }) });
+      const contentType = response.headers.get('content-type') || '';
+      if (!response.ok || !contentType.includes('text/event-stream')) {
+        const data = await response.json().catch(() => ({}));
+        setMessage(data.message || data.error || (response.ok ? 'Task submitted.' : 'Task could not be submitted.'));
+        if (response.ok && data.status === 'waiting_approval') { setTask(''); await load(); }
+        return;
+      }
+      if (!response.body) throw new Error('The agent event stream is unavailable.');
+      const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let completed = false;
+      while (true) {
+        const { value, done } = await reader.read(); if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split('\n\n'); buffer = frames.pop() || '';
+        for (const frame of frames) {
+          const line = frame.split('\n').find(item => item.startsWith('data: ')); if (!line) continue;
+          let event: Record<string, unknown>; try { event = JSON.parse(line.slice(6)); } catch { continue; }
+          if (event.type === 'status') setMessage(`Agent ${String(event.status || 'running')} · run ${String(event.run_id || '')}`);
+          else if (event.type === 'event') {
+            const detail = event.event as { type?: string; payload?: { name?: string; status?: string } } | undefined;
+            setMessage(detail?.type === 'tool_started' ? `Running tool ${detail.payload?.name || ''}…` : detail?.type === 'tool_completed' ? `Tool ${detail.payload?.name || ''} completed.` : `Agent update: ${detail?.type || 'working'}`);
+          } else if (event.type === 'done') {
+            completed = true; setMessage(`Agent run ${String(event.status || 'finished')}.`);
+          } else if (event.type === 'error') setMessage(String(event.error || 'Agent stream error.'));
+          else if (event.type === 'timeout') setMessage(String(event.message || 'The live stream timed out; the durable run continues.'));
+        }
+      }
+      if (completed) setTask('');
+      await load();
     } catch {
       setMessage('Could not reach the agent service. Check your connection and try again.');
     } finally {

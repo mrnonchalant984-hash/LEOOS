@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { ModelProviderError, isProviderConfigured, resolveModel, type ModelMessage, type ModelProvider } from './model-catalog';
 import { FunctionCallingConfigMode, type Content, type Part } from '@google/genai';
+import { retryProviderRequest } from './provider-retry';
 
 export { getDefaultTextModel, getModelProviderStatus, ModelProviderError, resolveModel } from './model-catalog';
 export type { ModelMessage, ModelProvider } from './model-catalog';
@@ -32,9 +33,9 @@ function normalizeUsage(inputTokens?: number | null, outputTokens?: number | nul
   return { inputTokens: input, outputTokens: output, totalTokens: input + output };
 }
 
-async function withProviderError<T>(provider: ModelProvider, model: string, request: () => Promise<T>): Promise<T> {
+async function withProviderError<T>(provider: ModelProvider, model: string, request: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   try {
-    return await request();
+    return await retryProviderRequest(request, { signal, maxAttempts: 3, baseDelayMs: 400, maxDelayMs: 4_000 });
   } catch (error) {
     if (error instanceof ModelProviderError) throw error;
     const candidate = error && typeof error === 'object' ? error as { status?: unknown; statusCode?: unknown } : {};
@@ -145,7 +146,7 @@ export async function generateTextWithTools(
         tools: [{ functionDeclarations: definitions }],
         ...(request.requiredToolName && callsMade === 0 ? { toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [request.requiredToolName] } } } : {}),
       },
-    }));
+    }), request.signal);
     addUsage(response);
     const candidate = response.candidates?.[0];
     const content = candidate?.content;
@@ -200,7 +201,7 @@ export async function generateTextWithTools(
         ...(request.signal ? { abortSignal: request.signal } : {}),
         ...(system ? { systemInstruction: system } : {}),
       },
-    }));
+    }), request.signal);
     addUsage(response);
     finalText = (response.text || response.candidates?.[0]?.content?.parts?.filter(part => typeof part.text === 'string').map(part => part.text || '').join('') || '').trim();
   }
@@ -217,6 +218,40 @@ export async function generateTextWithTools(
     usage: usageReported ? normalizeUsage(totalInputTokens, totalOutputTokens) : null,
     toolCalls,
   };
+}
+
+
+/** Streams genuine Gemini output chunks. Once any chunk is emitted, failures are
+ * surfaced to the caller rather than retried, avoiding duplicated partial text. */
+export async function generateTextStream(
+  request: TextGenerationRequest,
+  onText: (chunk: string) => void,
+): Promise<TextGenerationResult> {
+  const resolved = resolveModel(request.model);
+  if (resolved.provider !== 'google') throw new ModelProviderError('Only Gemini model execution is enabled. Configure GEMINI_API_KEY.', 503);
+  if (!isProviderConfigured('google')) throw new ModelProviderError('Gemini is not configured. Set GEMINI_API_KEY on the server.', 503);
+
+  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '', httpOptions: { timeout: 45_000 } });
+  const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
+  const maxOutputTokens = Math.max(64, Math.min(20_000, Math.trunc(request.maxOutputTokens || 1200)));
+  const temperature = Math.max(0, Math.min(2, request.temperature ?? 0.3));
+  const stream = await withProviderError('google', resolved.model, () => client.models.generateContentStream({
+    model: resolved.model,
+    contents: asProviderMessages(request.messages).map(message => ({ role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: message.content }] })),
+    config: { maxOutputTokens, temperature, ...(request.signal ? { abortSignal: request.signal } : {}), ...(system ? { systemInstruction: system } : {}) },
+  }), request.signal);
+
+  let fullText = '';
+  let inputTokens: number | undefined;
+  let outputTokens: number | undefined;
+  for await (const chunk of stream) {
+    if (request.signal?.aborted) throw request.signal.reason ?? new Error('Request aborted');
+    const text = chunk.text || '';
+    if (text) { fullText += text; onText(text); }
+    if (chunk.usageMetadata?.promptTokenCount !== undefined) inputTokens = chunk.usageMetadata.promptTokenCount;
+    if (chunk.usageMetadata?.candidatesTokenCount !== undefined) outputTokens = chunk.usageMetadata.candidatesTokenCount;
+  }
+  return { text: fullText, model: resolved.model, provider: 'google', usage: normalizeUsage(inputTokens, outputTokens), toolCalls: [] };
 }
 
 export async function generateText(request: TextGenerationRequest): Promise<TextGenerationResult> {
@@ -245,7 +280,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
       ...(system ? { systemInstruction: system } : {}),
       ...(request.webSearch ? { tools: [{ googleSearch: {} }] } : {}),
     },
-  }));
+  }), request.signal);
   const usage = response.usageMetadata;
   const grounded = response as typeof response & { candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { title?: string; uri?: string } }> } }> };
   const sources = (grounded.candidates?.[0]?.groundingMetadata?.groundingChunks || [])

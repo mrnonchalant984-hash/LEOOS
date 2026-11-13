@@ -16,6 +16,6 @@ test('build progress uses terminal states instead of an endless busy indicator',
 });
 
 test('Gemini provider requests have a bounded HTTP timeout', () => {
-  assert.equal((provider.match(/timeout: 45_000/g) || []).length, 2);
+  assert.equal((provider.match(/timeout: 45_000/g) || []).length, 3);
   assert.match(provider, /timed out before completing the request/);
 });

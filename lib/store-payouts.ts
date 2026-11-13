@@ -1,4 +1,5 @@
 import { adminSupabase } from '@/lib/auth';
+import { assertStoreSettlementReady } from '@/lib/store/settlement-provider';
 
 type MarketplacePayout = {
   id: string;
@@ -8,8 +9,8 @@ type MarketplacePayout = {
 };
 
 export async function initiateMarketplacePayout(payout: MarketplacePayout) {
-  if (process.env.STORE_PAYOUTS_ENABLED !== 'true') throw new Error('Store payouts are disabled for this environment.');
-  const secret = process.env.PAYSTACK_SECRET_KEY;
+  assertStoreSettlementReady();
+  const secret = process.env.PAYSTACK_SECRET_KEY?.trim();
   if (!secret) throw new Error('Paystack transfers are not configured.');
 
   const response = await fetch('https://api.paystack.co/transfer', {

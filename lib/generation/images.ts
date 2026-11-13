@@ -55,7 +55,7 @@ type ImageJobOptions = {
 
 function safeMessage(error: unknown) {
   const text = error instanceof Error ? error.message : '';
-  if (/credit|plan|entitled|subscription|configured model|image-capable|not configured|provider failed|returned no image|unsupported image/i.test(text)) return text.slice(0, 240);
+  if (/credit|plan|entitled|subscription|configured model|image-capable|not configured|provider failed|returned no image|unsupported image|image model|billing project/i.test(text)) return text.slice(0, 240);
   return 'Image generation failed. Any reserved credits were returned when possible. Please retry.';
 }
 

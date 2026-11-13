@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, type Part } from '@google/genai';
 
 type ImageInput = { bytes: Buffer; mimeType: string };
 
@@ -17,20 +17,34 @@ export async function generateGeminiImage(prompt: string, inputImage?: ImageInpu
   const apiKey = process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim();
   if (!apiKey) throw new Error('Gemini is not configured.');
   const model = resolveGeminiImageModel(requestedModel);
-  const input = inputImage
-    ? [
-      { type: 'text' as const, text: prompt },
-      { type: 'image' as const, mime_type: inputImage.mimeType, data: inputImage.bytes.toString('base64') },
-    ]
-    : prompt;
-  const response = await new GoogleGenAI({ apiKey }).interactions.create({ model, input });
-  const image = response.output_image;
-  if (!image?.data) throw new Error('Gemini image generation returned no image data.');
-  const mimeType = image.mime_type || 'image/png';
+
+  // Use Gemini's documented generateContent image response path. The previous
+  // Interactions API implementation expected `output_image`, which is not the
+  // stable response shape used by the Gemini image models in this project.
+  const parts: Part[] = [{ text: prompt }];
+  if (inputImage) {
+    parts.push({ inlineData: { mimeType: inputImage.mimeType, data: inputImage.bytes.toString('base64') } });
+  }
+  const client = new GoogleGenAI({ apiKey });
+  const response = await client.models.generateContent({
+    model,
+    contents: [{ role: 'user', parts }],
+    config: {
+      responseModalities: ['IMAGE'],
+      imageConfig: { aspectRatio: '1:1', imageSize: '1K' },
+      httpOptions: { timeout: 120_000 },
+    },
+  });
+
+  const responseParts = response.candidates?.flatMap(candidate => candidate.content?.parts ?? []) ?? [];
+  const generated = responseParts.find(part => part.inlineData?.data);
+  const base64 = generated?.inlineData?.data;
+  if (!base64) {
+    const text = responseParts.map(part => part.text).filter(Boolean).join(' ').slice(0, 240);
+    throw new Error(text || 'Gemini image generation returned no image data. Confirm the image model is enabled for this API key and billing project.');
+  }
+  const mimeType = generated?.inlineData?.mimeType || 'image/png';
   if (!mimeType.startsWith('image/')) throw new Error('Gemini returned an unsupported image format.');
   const outputFormat = mimeType === 'image/jpeg' ? 'jpeg' : mimeType === 'image/webp' ? 'webp' : 'png';
-  return {
-    model,
-    image: { b64_json: image.data, output_format: outputFormat },
-  };
+  return { model, image: { b64_json: base64, output_format: outputFormat } };
 }

@@ -54,7 +54,11 @@ export async function PUT(request: NextRequest) {
     if (confirmedError) return NextResponse.json({ error: 'Delivery confirmation could not be checked.' }, { status: 503 });
     if (!alreadyConfirmed) return NextResponse.json({ error: 'This delivery is not ready for confirmation.' }, { status: 409 });
   }
-  if (process.env.STORE_PAYOUTS_ENABLED !== 'true') return NextResponse.json({ confirmed: true, payout: 'disabled' });
+  const { error: commissionError } = await db.rpc('prepare_marketplace_affiliate_commission', { p_order_id: body.orderId });
+  if (commissionError && !/order is not eligible|open dispute|buyer-confirmed|no eligible attribution/i.test(commissionError.message || '')) {
+    console.error('Affiliate commission preparation failed:', commissionError.message);
+  }
+  if (process.env.STORE_PAYOUTS_ENABLED !== 'true') return NextResponse.json({ confirmed: true, payout: 'disabled', affiliate_commission: commissionError ? 'not_prepared' : 'checked' });
   const { data: prepared, error: payoutError } = await db.rpc('prepare_marketplace_seller_payout', { p_order_id: body.orderId, p_seller_id: body.sellerId });
   if (payoutError) return NextResponse.json({ error: 'Delivery was confirmed, but seller settlement could not be started. Contact support.' }, { status: 503 });
   let payoutStatus = String(prepared?.payout?.status ?? 'initiating');

@@ -7,6 +7,7 @@ import { matchesHostingRenewal } from '@/lib/payments-core';
 import { promoteVercelDeployment } from '@/lib/vercel-hosting';
 import { withOperationalMonitoring } from '@/lib/monitoring';
 import { verifyAndConfirmDonation } from '@/lib/donations';
+import { dispatchSupplierFulfillment } from '@/lib/store/supplier-connectors';
 
 export const runtime = 'nodejs';
 
@@ -206,7 +207,23 @@ export async function POST(req: NextRequest) {
       const { data: payout, error: payoutReadError } = await db.from('marketplace_seller_payouts')
         .select('id,seller_id,status').eq('reference', reference).maybeSingle();
       if (payoutReadError) throw payoutReadError;
-      if (!payout) return NextResponse.json({ received: true });
+      if (!payout) {
+        const { data: affiliatePayout, error: affiliatePayoutReadError } = await db.from('marketplace_affiliate_payouts')
+          .select('id,affiliate_id,commission_id,status').eq('reference', reference).maybeSingle();
+        if (affiliatePayoutReadError) throw affiliatePayoutReadError;
+        if (!affiliatePayout) return NextResponse.json({ received: true });
+        const affiliateStatus = eventName === 'transfer.success' ? 'success' : eventName === 'transfer.failed' ? 'failed' : 'reversed';
+        if (affiliatePayout.status === affiliateStatus) return NextResponse.json({ received: true, idempotent: true });
+        const allowed = eventName === 'transfer.reversed' ? ['initiating','pending','success'] : ['initiating','pending'];
+        const { data: affiliateUpdated, error: affiliateUpdateError } = await db.from('marketplace_affiliate_payouts')
+          .update({ status: affiliateStatus, failure_reason: affiliateStatus === 'failed' ? `Paystack transfer ${eventName.replace('transfer.','')}; review provider records.` : null, updated_at: new Date().toISOString() })
+          .eq('id', affiliatePayout.id).in('status', allowed).select('id').maybeSingle();
+        if (affiliateUpdateError) throw affiliateUpdateError;
+        if (!affiliateUpdated) return NextResponse.json({ received: true, idempotent: true });
+        await db.from('marketplace_affiliate_commissions').update({ status: affiliateStatus === 'success' ? 'paid' : affiliateStatus === 'reversed' ? 'reversed' : 'failed', paid_at: affiliateStatus === 'success' ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq('id', affiliatePayout.commission_id);
+        await db.from('marketplace_affiliate_payout_requests').update({ status: affiliateStatus === 'success' ? 'paid' : affiliateStatus === 'reversed' ? 'reversed' : 'failed', updated_at: new Date().toISOString() }).eq('commission_id', affiliatePayout.commission_id);
+        return NextResponse.json({ received: true });
+      }
       const payoutStatus = eventName === 'transfer.success' ? 'paid' : eventName === 'transfer.failed' ? 'failed' : 'reversed';
       if (payout.status === payoutStatus) return NextResponse.json({ received: true, idempotent: true });
       const allowedStatuses = eventName === 'transfer.reversed' ? ['initiating', 'pending', 'paid'] : ['initiating', 'pending'];
@@ -252,6 +269,23 @@ export async function POST(req: NextRequest) {
         p_paid_at: safePaidAt(verified.paid_at),
       });
       if (applyError) throw applyError;
+      if (applied !== false) {
+        const { data: jobs, error: jobsError } = await db.from('marketplace_supplier_fulfillment_requests')
+          .select('id,order_id,supplier_id,supplier_product_id,quantity').eq('order_id', orderId).eq('status', 'requested').limit(50);
+        if (jobsError) reportFailure(jobsError, 'supabase');
+        for (const job of jobs ?? []) {
+          try {
+            const { data: product } = await db.from('marketplace_supplier_products').select('supplier_sku').eq('id', job.supplier_product_id).maybeSingle();
+            if (!product) continue;
+            const idempotencyKey = `leox-supplier-${job.id}`;
+            const dispatch = await dispatchSupplierFulfillment({ supplierId: job.supplier_id, fulfillmentId: job.id, orderId: job.order_id, sku: product.supplier_sku, quantity: job.quantity, idempotencyKey });
+            await db.from('marketplace_supplier_dispatch_events').upsert({ fulfillment_request_id: job.id, idempotency_key: idempotencyKey, provider: 'configured_supplier_webhook', status: dispatch.accepted ? 'accepted' : 'failed', provider_reference: dispatch.reference ?? null, response_code: dispatch.statusCode, updated_at: new Date().toISOString() }, { onConflict: 'idempotency_key' });
+            if (dispatch.accepted) await db.rpc('update_marketplace_supplier_fulfillment', { p_request_id: job.id, p_supplier_id: job.supplier_id, p_status: 'accepted', p_supplier_reference: dispatch.reference ?? idempotencyKey, p_tracking_reference: null, p_tracking_url: null });
+          } catch (dispatchError) {
+            reportFailure(dispatchError, 'supplier');
+          }
+        }
+      }
       return NextResponse.json({ received: true, idempotent: applied === false });
     }
 

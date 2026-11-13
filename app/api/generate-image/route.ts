@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     const status = typeof error === 'object' && error && 'statusCode' in error ? Number((error as { statusCode: number }).statusCode) : 0;
     const message = error instanceof Error ? error.message : '';
     const isCredit = /credit|plan|subscription|entitled/i.test(message);
-    const isSafeRecoveryMessage = /refund could not be confirmed|recovery could not be confirmed|hosted providers are disabled|configured model|text-capable|not configured|migration|accounting/i.test(message);
+    const isSafeRecoveryMessage = /refund could not be confirmed|recovery could not be confirmed|hosted providers are disabled|configured model|text-capable|not configured|migration|accounting|image model|no image data|billing project/i.test(message);
     const responseStatus = [400, 409, 503].includes(status) ? status : isCredit ? 402 : /migration|accounting/i.test(message) ? 503 : 502;
     const publicMessage = isCredit || status === 400 || status === 409 || isSafeRecoveryMessage
       ? message

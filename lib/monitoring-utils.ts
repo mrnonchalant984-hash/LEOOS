@@ -1,4 +1,4 @@
-export type MonitoringProvider = 'google' | 'openai' | 'supabase' | 'paystack' | 'vercel' | 'github';
+export type MonitoringProvider = 'google' | 'openai' | 'supabase' | 'paystack' | 'vercel' | 'github' | 'supplier';
 export type MonitoringOperation = 'leo.ai.request' | 'agent.run' | 'project.build_deploy' | 'payment.verify' | 'payment.webhook';
 export type MonitoringOutcome = 'success' | 'rejected' | 'failure';
 

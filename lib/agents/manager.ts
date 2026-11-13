@@ -197,9 +197,36 @@ export async function runAgent(
   const signal = meta?.request
     ? AbortSignal.any([timeoutSignal, meta.request.signal])
     : timeoutSignal;
-  const executeAgentTool: AssistantToolExecutor = (name, args) => {
+  const executeAgentTool: AssistantToolExecutor = async (name, args) => {
     toolExecutionStarted = true;
-    return available.execute(name, args, signal);
+    const startedAt = Date.now();
+    if (meta?.runId && meta.userId) {
+      const { error } = await adminSupabase().from('agent_execution_events').insert({
+        run_id: meta.runId, user_id: meta.userId, event_type: 'tool_started',
+        payload: { name: name.slice(0, 100), started_at: new Date(startedAt).toISOString() },
+      });
+      if (error) console.error('Agent tool-start event could not be persisted:', error.message);
+    }
+    try {
+      const result = await available.execute(name, args, signal);
+      if (meta?.runId && meta.userId) {
+        const { error } = await adminSupabase().from('agent_execution_events').insert({
+          run_id: meta.runId, user_id: meta.userId, event_type: result.isError ? 'tool_failed' : 'tool_completed',
+          payload: { name: name.slice(0, 100), success: !result.isError, duration_ms: Date.now() - startedAt },
+        });
+        if (error) console.error('Agent tool-result event could not be persisted:', error.message);
+      }
+      return result;
+    } catch (error) {
+      if (meta?.runId && meta.userId) {
+        const { error: eventError } = await adminSupabase().from('agent_execution_events').insert({
+          run_id: meta.runId, user_id: meta.userId, event_type: 'tool_failed',
+          payload: { name: name.slice(0, 100), success: false, duration_ms: Date.now() - startedAt },
+        });
+        if (eventError) console.error('Agent tool-failure event could not be persisted:', eventError.message);
+      }
+      throw error;
+    }
   };
 
   try {

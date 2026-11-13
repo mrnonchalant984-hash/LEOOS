@@ -48,18 +48,40 @@ export async function POST(request: NextRequest) {
     || sellerIds.some(id => !requestedDelivery.some(option => option.sellerId === id))) {
     return NextResponse.json({ error: 'Choose exactly one delivery option for each seller.' }, { status: 400 });
   }
-  const { data: payoutAccounts, error: payoutAccountError } = await db.from('marketplace_seller_payout_accounts').select('seller_id').in('seller_id', sellerIds);
+  const { data: payoutAccounts, error: payoutAccountError } = await db.from('marketplace_seller_payout_accounts').select('seller_id,subaccount_code').in('seller_id', sellerIds);
   if (payoutAccountError) return NextResponse.json({ error: 'Seller payout readiness could not be checked.' }, { status: 503 });
   if ((payoutAccounts ?? []).length !== sellerIds.length) return NextResponse.json({ error: 'A seller has not configured a payout account yet.' }, { status: 409 });
+  if (process.env.STORE_PAYSTACK_SPLIT_ENABLED === 'true' && (payoutAccounts ?? []).some(account => !account.subaccount_code)) return NextResponse.json({ error: 'A seller is missing a verified Paystack split subaccount. Ask the seller to refresh payout details before checkout.' }, { status: 409 });
   const orderId = randomUUID();
   const reference = `leo_store_${randomUUID().replaceAll('-', '')}`;
   const deliveryPayload = requestedDelivery.map(option => ({ seller_id: option.sellerId, option_id: option.optionId }));
   const { data: order, error: createError } = await db.rpc('create_marketplace_order', { p_buyer_id: user.id, p_order_id: orderId, p_reference: reference, p_delivery_options: deliveryPayload });
   if (createError) return NextResponse.json({ error: createError.message.includes('cart is empty') ? 'Your cart is empty.' : 'Some cart items are unavailable. Refresh your cart and try again.' }, { status: 409 });
+  const affiliateClickId = request.cookies.get('leo_affiliate_click')?.value;
+  if (affiliateClickId && /^[0-9a-f-]{36}$/i.test(affiliateClickId)) {
+    const { error: attributionError } = await db.rpc('attribute_marketplace_order', { p_order_id: orderId, p_click_id: affiliateClickId, p_buyer_id: user.id });
+    if (attributionError) console.error('Affiliate attribution could not be recorded for checkout:', attributionError.message);
+  }
   try {
+    let split: { type: 'flat'; bearer_type: 'account'; subaccounts: { subaccount: string; share: number }[] } | undefined;
+    if (process.env.STORE_PAYSTACK_SPLIT_ENABLED === 'true') {
+      const { data: orderItems, error: itemError } = await db.from('marketplace_order_items').select('seller_id,line_total_kobo').eq('order_id', orderId);
+      if (itemError || !orderItems?.length) throw new Error('Order split data could not be verified.');
+      const grossBySeller = new Map<string, number>();
+      for (const item of orderItems) grossBySeller.set(item.seller_id, (grossBySeller.get(item.seller_id) ?? 0) + Number(item.line_total_kobo));
+      const accountBySeller = new Map((payoutAccounts ?? []).map(account => [account.seller_id, account.subaccount_code]));
+      const subaccounts = [...grossBySeller.entries()].map(([sellerId, gross]) => {
+        const subaccount = accountBySeller.get(sellerId);
+        if (!subaccount) throw new Error('A seller split account is missing.');
+        const platformCommission = Math.round(gross * 500 / 10_000);
+        return { subaccount, share: gross - platformCommission };
+      });
+      if (subaccounts.some(item => !Number.isSafeInteger(item.share) || item.share <= 0) || subaccounts.reduce((sum, item) => sum + item.share, 0) > Number(order.total_kobo)) throw new Error('Marketplace split shares are invalid.');
+      split = { type: 'flat', bearer_type: 'account', subaccounts };
+    }
     const response = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: user.email, amount: Number(order.total_kobo), currency: 'NGN', reference, callback_url: new URL('/store/payment/return', base.origin).toString(), metadata: { type: 'marketplace_order', user_id: user.id, order_id: orderId, order_number: order.order_number } }),
+      body: JSON.stringify({ email: user.email, amount: Number(order.total_kobo), currency: 'NGN', reference, callback_url: new URL('/store/payment/return', base.origin).toString(), ...(split ? { split } : {}), metadata: { type: 'marketplace_order', user_id: user.id, order_id: orderId, order_number: order.order_number } }),
       cache: 'no-store', signal: AbortSignal.timeout(12_000),
     });
     const result = await response.json().catch(() => null);
