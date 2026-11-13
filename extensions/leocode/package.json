@@ -3,7 +3,7 @@
   "publisher": "leonardx",
   "displayName": "LeoCode by LeonardX",
   "description": "Workspace-aware AI coding assistance from your LeonardX account.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "MIT",
   "engines": {
     "vscode": "^1.100.0"
@@ -34,7 +34,14 @@
     "onCommand:leocode.applyGeneratedCode",
     "onCommand:leocode.runCommand",
     "onCommand:leocode.viewUsage",
-    "onCommand:leocode.signOut"
+    "onCommand:leocode.signOut",
+    "onCommand:leocode.reviewSelection",
+    "onCommand:leocode.reviewWorkspace",
+    "onCommand:leocode.reviewGitChanges",
+    "onCommand:leocode.openReviewCentre",
+    "onCommand:leocode.coordinateAgents",
+    "onCommand:leocode.runTests",
+    "onCommand:leocode.inspectGit"
   ],
   "contributes": {
     "chatAgents": [
@@ -77,7 +84,11 @@
               "additionalProperties": true
             }
           },
-          "required": ["serverId", "toolName", "arguments"],
+          "required": [
+            "serverId",
+            "toolName",
+            "arguments"
+          ],
           "additionalProperties": false
         }
       }
@@ -111,19 +122,86 @@
       ]
     },
     "commands": [
-      { "command": "leocode.openChat", "title": "LeoCode: Open Chat" },
-      { "command": "leocode.connect", "title": "LeoCode: Connect LeonardX" },
-      { "command": "leocode.explainSelection", "title": "LeoCode: Explain Selected Code" },
-      { "command": "leocode.reviewFile", "title": "LeoCode: Review Current File" },
-      { "command": "leocode.fixSelection", "title": "LeoCode: Fix Selected Code" },
-      { "command": "leocode.generateCode", "title": "LeoCode: Generate Code" },
-      { "command": "leocode.analyzeWorkspace", "title": "LeoCode: Analyze Workspace" },
-      { "command": "leocode.generateTests", "title": "LeoCode: Generate Tests" },
-      { "command": "leocode.runAgent", "title": "LeoCode: Run Specialist Agent" },
-      { "command": "leocode.applyGeneratedCode", "title": "LeoCode: Apply Generated Code" },
-      { "command": "leocode.runCommand", "title": "LeoCode: Run Approved Terminal Command" },
-      { "command": "leocode.viewUsage", "title": "LeoCode: View Usage" },
-      { "command": "leocode.signOut", "title": "LeoCode: Sign Out" }
+      {
+        "command": "leocode.openChat",
+        "title": "LeoCode: Open Chat"
+      },
+      {
+        "command": "leocode.connect",
+        "title": "LeoCode: Connect LeonardX"
+      },
+      {
+        "command": "leocode.explainSelection",
+        "title": "LeoCode: Explain Selected Code"
+      },
+      {
+        "command": "leocode.reviewFile",
+        "title": "LeoCode: Review Current File"
+      },
+      {
+        "command": "leocode.fixSelection",
+        "title": "LeoCode: Fix Selected Code"
+      },
+      {
+        "command": "leocode.generateCode",
+        "title": "LeoCode: Generate Code"
+      },
+      {
+        "command": "leocode.analyzeWorkspace",
+        "title": "LeoCode: Analyze Workspace"
+      },
+      {
+        "command": "leocode.generateTests",
+        "title": "LeoCode: Generate Tests"
+      },
+      {
+        "command": "leocode.runAgent",
+        "title": "LeoCode: Run Specialist Agent"
+      },
+      {
+        "command": "leocode.applyGeneratedCode",
+        "title": "LeoCode: Apply Generated Code"
+      },
+      {
+        "command": "leocode.runCommand",
+        "title": "LeoCode: Run Approved Terminal Command"
+      },
+      {
+        "command": "leocode.viewUsage",
+        "title": "LeoCode: View Usage"
+      },
+      {
+        "command": "leocode.signOut",
+        "title": "LeoCode: Sign Out"
+      },
+      {
+        "command": "leocode.reviewSelection",
+        "title": "LeoCode: Review Selected Code"
+      },
+      {
+        "command": "leocode.reviewWorkspace",
+        "title": "LeoCode: Review Entire Workspace"
+      },
+      {
+        "command": "leocode.reviewGitChanges",
+        "title": "LeoCode: Review Git Changes"
+      },
+      {
+        "command": "leocode.openReviewCentre",
+        "title": "LeoCode: Open Code Review Centre"
+      },
+      {
+        "command": "leocode.coordinateAgents",
+        "title": "LeoCode: Coordinate Specialist Agents"
+      },
+      {
+        "command": "leocode.runTests",
+        "title": "LeoCode: Discover and Run Tests"
+      },
+      {
+        "command": "leocode.inspectGit",
+        "title": "LeoCode: Inspect Git Status"
+      }
     ]
   },
   "scripts": {

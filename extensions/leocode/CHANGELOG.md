@@ -1,3 +1,14 @@
+# Change Log
+
+## 0.1.2
+
+- Added local Code Review Centre for file, selection, workspace, and Git changes.
+- Added structured findings with confidence, evidence, line locations, classifications, and diagnostic provenance.
+- Added diff-first, approval-gated safe formatting fixes with stale-file checks.
+- Added Leo Manager delegation to the existing LeonardX specialist registry, with user approval and actual result collection.
+- Added test-script discovery, approved terminal execution with shell output capture, and Git status inspection.
+- Preserved existing extension identity, authentication, chat view, MCP tools, and workspace proposal flow.
+
 # Changelog
 
 ## 0.1.0

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { siteData } from '@/data/site';
-const appPrefixes = ['/dashboard','/app','/projects','/agents','/deployments','/analytics','/api-keys','/audit','/auth','/account','/admin','/developers','/docs','/integrations','/leo-ai','/notifications','/observability','/organizations','/resources','/setup','/support','/status','/team','/templates','/tutorials','/webhooks','/whats-new'];
+const appPrefixes = ['/dashboard','/app','/projects','/agents','/deployments','/analytics','/api-keys','/audit','/auth','/account','/admin','/developers','/docs','/integrations','/notifications','/observability','/organizations','/engineering','/leocode-early-access','/resources','/setup/keys','/support','/status','/team','/templates','/tutorials','/webhooks','/cli','/plugins','/ide','/meeting-room','/offline','/mcp','/payment','/studio','/settings','/workflows','/workforce'];
 export function Footer(){
   const pathname=usePathname();
   if (appPrefixes.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`))) return null;

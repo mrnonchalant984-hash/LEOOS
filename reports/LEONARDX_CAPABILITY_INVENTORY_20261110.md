@@ -1,8 +1,8 @@
 # LeonardX capability inventory
 
-Audit date: 2026-11-10
-Repository: `mrnonchalant984-hash/LEOOS`
-Commit inspected: `1f8ab8d` (`Fix Cloudflare build memory limit`)
+Audit date: 2026-11-10  
+Repository: `mrnonchalant984-hash/LEOOS`  
+Commit inspected: `1f8ab8d` (`Fix Cloudflare build memory limit`)  
 Scope: source, migrations, tests, GitHub Actions, and Vercel configuration. No production writes or deployment were performed.
 
 ## Baseline and limits

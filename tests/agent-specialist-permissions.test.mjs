@@ -49,3 +49,15 @@ test('MCP connection UI exposes specialist grants and migration defaults old app
   assert.match(migration, /allowed_agent_ids text\[\] not null default '\{\}'::text\[\]/);
   assert.match(migration, /cardinality\(allowed_agent_ids\) <= 20/);
 });
+
+test('read-only repository tools are injected independently of builder/write capabilities', async () => {
+  const orchestrator = await read('lib/ai/tool-orchestrator.ts');
+  const buildGate = orchestrator.indexOf('if (options?.allowBuildActions)');
+  const repositoryGate = orchestrator.indexOf('if (options?.allowRepositoryAccess)');
+  const mcpGate = orchestrator.indexOf("from('mcp_remote_servers')");
+  assert.ok(buildGate >= 0 && repositoryGate > buildGate && mcpGate > repositoryGate);
+  assert.match(orchestrator, /Repository read tools are independent of project-builder\/write capabilities/);
+  assert.match(orchestrator, /if \(options\.allowRepositoryWrites\) repositoryTools\.push/);
+  assert.match(orchestrator, /github_repository_tree/);
+  assert.match(orchestrator, /github_read_file/);
+});

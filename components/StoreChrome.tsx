@@ -58,8 +58,18 @@ function StoreHeader() {
   </>;
 }
 
+const preservedThemePrefixes = [
+  '/app', '/dashboard', '/admin', '/account', '/agents', '/analytics', '/api-keys',
+  '/audit', '/deployments', '/integrations', '/notifications', '/observability',
+  '/organizations', '/projects', '/settings', '/studio', '/team', '/webhooks',
+  '/workflows', '/workforce', '/ide', '/meeting-room', '/offline', '/mcp', '/payment',
+  '/developers', '/docs', '/cli', '/plugins', '/engineering', '/leocode-early-access',
+  '/resources', '/status', '/support', '/templates', '/tutorials', '/setup/keys',
+];
+
 export function StoreChrome({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  if (pathname === '/store' || pathname?.startsWith('/store/')) return <div className="store-shell min-h-screen bg-[#f5f2ea] text-stone-900"><StoreHeader />{children}<footer className="mt-16 border-t border-stone-200 bg-[#201a14] px-5 py-9 text-sm text-amber-50"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5"><div><strong className="text-lg">LeoX Market</strong><p className="mt-1 text-xs text-amber-100/65">A marketplace from LeonardX · Made for discovery across Africa</p></div><nav className="flex flex-wrap gap-4 text-xs text-amber-100/75"><Link href="/store/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/support">Help</Link><Link href="/">LeonardX</Link></nav></div></footer></div>;
-  return <><Header />{children}<GlobalLEOWidget /><Footer /></>;
+  const pathname = usePathname() || '/';
+  if (pathname === '/store' || pathname.startsWith('/store/')) return <div className="store-shell min-h-screen bg-[#f5f2ea] text-stone-900"><StoreHeader />{children}<footer className="mt-16 border-t border-stone-200 bg-[#201a14] px-5 py-9 text-sm text-amber-50"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5"><div><strong className="text-lg">LeoX Market</strong><p className="mt-1 text-xs text-amber-100/65">A marketplace from LeonardX · Made for discovery across Africa</p></div><nav className="flex flex-wrap gap-4 text-xs text-amber-100/75"><Link href="/store/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/support">Help</Link><Link href="/">LeonardX</Link></nav></div></footer></div>;
+  const preserveExistingVisualSystem = preservedThemePrefixes.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  return <div className="lx-route-scope" data-lx-theme-scope={preserveExistingVisualSystem ? 'preserve' : 'public'}><Header />{children}<GlobalLEOWidget /><Footer /></div>;
 }

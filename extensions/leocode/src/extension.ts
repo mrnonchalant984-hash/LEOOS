@@ -3,6 +3,10 @@ import { LeonardXApi } from './api/client';
 import { applyPendingEdit, createProposalContentProvider, LeoChatView } from './views/chat-view';
 import { analyzeWorkspace, getActiveWorkspaceContext } from './workspace/context';
 import { registerLeonardXMcpTools } from './tools/mcp-tools';
+import { reviewFile, reviewGitChanges, reviewSelection, reviewWorkspace } from './review/engine';
+import { CodeReviewCentre } from './review/centre';
+import { coordinateSpecialists } from './review/orchestration';
+import { discoverWorkspaceTests, runApprovedTerminalCommand } from './workspace/terminal';
 
 let chatView: LeoChatView | undefined;
 
@@ -10,6 +14,7 @@ export function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('LeoCode');
   const api = new LeonardXApi(context.secrets);
   const proposals = createProposalContentProvider();
+  const reviewCentre = new CodeReviewCentre(context.extensionUri, prompt => chatView?.queuePrompt(prompt));
   context.subscriptions.push(output, vscode.workspace.registerTextDocumentContentProvider('leocode-proposal', proposals));
   registerLeonardXMcpTools(context, api);
   chatView = new LeoChatView(context.extensionUri, api, context, proposals);
@@ -40,7 +45,29 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
     vscode.commands.registerCommand('leocode.explainSelection', () => chatView?.queuePrompt('Explain this selected code in context.')),
-    vscode.commands.registerCommand('leocode.reviewFile', () => chatView?.queuePrompt('Review the open file for correctness, security, and maintainability. Prioritize actionable findings.')),
+    vscode.commands.registerCommand('leocode.reviewFile', async () => {
+      try { reviewCentre.show(await reviewFile()); }
+      catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'File review failed.'); }
+    }),
+    vscode.commands.registerCommand('leocode.reviewSelection', async () => {
+      try { reviewCentre.show(await reviewSelection()); }
+      catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Selection review failed.'); }
+    }),
+    vscode.commands.registerCommand('leocode.reviewWorkspace', async () => {
+      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'LeoCode is reviewing the workspace', cancellable: false }, async () => {
+        try { reviewCentre.show(await reviewWorkspace()); }
+        catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Workspace review failed.'); }
+      });
+    }),
+    vscode.commands.registerCommand('leocode.reviewGitChanges', async () => {
+      try { reviewCentre.show(await reviewGitChanges()); }
+      catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Git change review failed.'); }
+    }),
+    vscode.commands.registerCommand('leocode.openReviewCentre', () => vscode.commands.executeCommand('leocode.reviewWorkspace')),
+    vscode.commands.registerCommand('leocode.coordinateAgents', async () => {
+      try { await coordinateSpecialists(api, output); }
+      catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Specialist coordination failed.'); }
+    }),
     vscode.commands.registerCommand('leocode.fixSelection', () => chatView?.queuePrompt('Suggest a corrected version of the selected code. Explain the issue briefly and return a fenced code block for review.')),
     vscode.commands.registerCommand('leocode.generateCode', async () => {
       const request = await vscode.window.showInputBox({ prompt: 'Describe the code to generate', ignoreFocusOut: true });
@@ -126,21 +153,36 @@ export function activate(context: vscode.ExtensionContext) {
         validateInput: value => value.trim() && value.length <= 2_000 ? null : 'Enter a command of at most 2,000 characters.',
       });
       if (!command) return;
-      const potentiallySensitive = /\b(?:git\s+(?:push|reset|clean)|npm\s+(?:install|uninstall)|pnpm\s+(?:add|install|remove)|yarn\s+(?:add|install|remove)|(?:rm|rmdir|del|format|shutdown|diskpart))\b/i.test(command);
-      const approval = await vscode.window.showWarningMessage(
-        'Run this command in a workspace terminal?',
-        {
-          modal: true,
-          detail: `${command.trim()}\n\n${potentiallySensitive
-            ? 'This command may modify dependencies, delete files, or publish changes. Review it carefully before approving.'
-            : 'The command may read or modify your workspace and can access anything available to your shell.'}`,
-        },
-        'Run command',
-      );
-      if (approval !== 'Run command') return;
-      const terminal = vscode.window.createTerminal({ name: 'LeoCode — approved command' });
-      terminal.show();
-      terminal.sendText(command.trim(), true);
+      try {
+        const result = await runApprovedTerminalCommand(command, output);
+        if (result) void vscode.window.showInformationMessage(`Command finished. Exit code: ${typeof result.exitCode === 'number' ? result.exitCode : 'not reported'}.`);
+      } catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'The approved command could not run.'); }
+    }),
+    vscode.commands.registerCommand('leocode.runTests', async () => {
+      try {
+        const tests = await discoverWorkspaceTests();
+        if (!tests.length) { void vscode.window.showInformationMessage('No supported test or verification scripts were discovered in the workspace manifests.'); return; }
+        const selected = await vscode.window.showQuickPick(tests.map(item => ({ label: item.label, description: item.description, command: item.command })), { placeHolder: 'Choose a discovered test, lint, typecheck, or build script' });
+        if (!selected) return;
+        const result = await runApprovedTerminalCommand(selected.command, output);
+        if (result) void vscode.window.showInformationMessage(`Verification command finished. Exit code: ${typeof result.exitCode === 'number' ? result.exitCode : 'not reported'}.`);
+      } catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Test discovery or execution failed.'); }
+    }),
+    vscode.commands.registerCommand('leocode.inspectGit', async () => {
+      try {
+        const extension = vscode.extensions.getExtension<{ getAPI(version: number): { repositories: Array<{ rootUri: vscode.Uri; state: { HEAD?: { name?: string }; workingTreeChanges: Array<{ uri: vscode.Uri }>; indexChanges: Array<{ uri: vscode.Uri }>; mergeChanges: Array<{ uri: vscode.Uri }> } }> } }>('vscode.git');
+        if (!extension) throw new Error('The built-in VS Code Git extension is unavailable.');
+        const git = extension.isActive ? extension.exports : await extension.activate();
+        const repositories = git.getAPI(1).repositories;
+        output.clear(); output.appendLine('LeoCode · Git workspace status');
+        for (const repository of repositories) {
+          const state = repository.state;
+          output.appendLine(`\n${vscode.workspace.asRelativePath(repository.rootUri, false)} · branch ${state.HEAD?.name || '(detached or unavailable)'}`);
+          output.appendLine(`Working tree: ${state.workingTreeChanges.length} · Staged: ${state.indexChanges.length} · Merge conflicts: ${state.mergeChanges.length}`);
+          for (const change of [...state.indexChanges, ...state.workingTreeChanges, ...state.mergeChanges]) output.appendLine(`  ${vscode.workspace.asRelativePath(change.uri, false)}`);
+        }
+        output.show(true);
+      } catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Git status could not be inspected.'); }
     }),
     vscode.commands.registerCommand('leocode.viewUsage', async () => {
       try {

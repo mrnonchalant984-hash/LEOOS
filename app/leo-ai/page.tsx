@@ -1,19 +1,19 @@
 import { createPublicMetadata } from '@/lib/seo';
 import Link from 'next/link';
-import { ArrowRight, Bot, Code2, Globe, Workflow, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Bot, Code2, Globe, Workflow, ShieldCheck, Sparkles } from 'lucide-react';
 
 export const metadata = createPublicMetadata({
-  title: "Meet Leo AI",
-  description: "Learn how Leo AI helps organize software ideas, project context and development work inside the LeonardX workspace.",
+  title: 'Meet Leo AI',
+  description: 'Learn how Leo AI helps organize software ideas, project context and development work inside the LeonardX workspace.',
   path: "/leo-ai",
-  type: "website",
+  type: 'website',
 });
 
 const features = [
-  { icon: Code2, title: 'Build with project context', text: 'Keep your development work connected to project files, requirements and next steps instead of treating every task as a disconnected chat.' },
+  { icon: Code2, title: 'Build with project context', text: 'Keep development work connected to project files, requirements and next steps instead of treating every task as a disconnected chat.' },
   { icon: Workflow, title: 'Coordinate specialist workflows', text: 'Organize coding, research, design, testing and delivery tasks with clear checkpoints and review before important changes.' },
-  { icon: Globe, title: 'Create websites and web apps', text: 'Use AI-assisted workflows to plan pages, develop product features and prepare projects for deployment through connected services.' },
-  { icon: ShieldCheck, title: 'Keep control of delivery', text: 'Review generated work, manage integrations and use the permissions available in your account before taking action.' },
+  { icon: Globe, title: 'Create websites and web apps', text: 'Plan pages, develop product features and prepare projects for deployment through the services connected to your account.' },
+  { icon: ShieldCheck, title: 'Keep control of delivery', text: 'Review generated work, manage integrations and use account permissions before taking important actions.' },
 ];
 
 export default function LeoAIPage() {
@@ -23,12 +23,42 @@ export default function LeoAIPage() {
     ['Is LeonardX only for developers?', 'No. The platform is intended for developers, creators, freelancers and businesses, with more technical tools available for advanced workflows.'],
   ];
   const faqSchema = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq.map(([question, answer]) => ({ '@type': 'Question', name: question, acceptedAnswer: { '@type': 'Answer', text: answer } })) };
-  return <main className="mx-auto max-w-6xl px-5 py-16 md:py-24">
+
+  return <main className="leo-ai-marketing">
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema).replace(/</g, '\\u003c') }} />
-    <section className="mx-auto max-w-4xl text-center"><p className="mb-5 inline-flex items-center gap-2 rounded-full border border-orange-400/30 bg-orange-400/10 px-4 py-2 text-sm text-orange-200"><Bot size={16}/> AI assistant for building software</p><h1 className="text-4xl font-black tracking-tight md:text-6xl">Meet Leo AI. Turn ideas into <span className="text-orange-400">real project work.</span></h1><p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-zinc-300">Leo AI helps you shape software ideas into plans, work with project context, coordinate development tasks and move toward a finished website or application inside LeonardX.</p><div className="mt-8 flex flex-wrap justify-center gap-3"><Link href="/app" className="inline-flex items-center gap-2 rounded-full bg-orange-500 px-6 py-3 font-bold text-black">Open Leo AI <ArrowRight size={17}/></Link><Link href="/pricing" className="rounded-full border border-white/20 px-6 py-3 font-semibold">Explore plans</Link></div></section>
-    <section className="mt-20 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{features.map(({ icon: Icon, title, text }) => <article key={title} className="rounded-2xl border border-white/10 bg-white/[.04] p-6"><div className="mb-5 inline-flex rounded-xl bg-orange-400/10 p-3 text-orange-300"><Icon size={22}/></div><h2 className="text-xl font-bold">{title}</h2><p className="mt-3 leading-7 text-zinc-400">{text}</p></article>)}</section>
-    <section className="mt-20 grid gap-10 md:grid-cols-2"><div><p className="text-sm font-bold uppercase tracking-[.2em] text-orange-300">How it works</p><h2 className="mt-3 text-3xl font-black md:text-4xl">A more connected way to create software.</h2></div><div className="space-y-5 text-zinc-300 leading-7"><p><strong className="text-white">1. Describe the outcome.</strong> Start with a website, application, feature or problem you want to solve.</p><p><strong className="text-white">2. Organize the work.</strong> Turn the request into requirements and practical steps, then review the proposed direction.</p><p><strong className="text-white">3. Build and verify.</strong> Work with project files and available tools, run the checks your setup supports and review results before deployment.</p></div></section>
-    <section className="mt-20 rounded-3xl border border-white/10 bg-white/[.035] p-7 md:p-10"><h2 className="text-3xl font-black">Frequently asked questions</h2><div className="mt-6 divide-y divide-white/10">{faq.map(([question, answer]) => <article key={question} className="py-5"><h3 className="text-lg font-bold">{question}</h3><p className="mt-2 leading-7 text-zinc-400">{answer}</p></article>)}</div></section>
-    <section className="mt-16 text-center"><h2 className="text-3xl font-black">Start with the idea you want to build.</h2><p className="mx-auto mt-3 max-w-2xl text-zinc-400">Explore the workspace, review the available plans and choose the tools that fit your project.</p><Link href="/app" className="mt-6 inline-flex items-center gap-2 rounded-full bg-orange-500 px-6 py-3 font-bold text-black">Get started with Leo <ArrowRight size={17}/></Link></section>
+    <section className="leo-ai-hero">
+      <div className="leo-ai-hero-copy">
+        <p className="leo-ai-eyebrow"><span><Sparkles size={15}/></span> AI assistant for building software</p>
+        <h1>Meet Leo AI.<br/><em>Make the work move.</em></h1>
+        <p className="leo-ai-lead">Turn your ideas into structured project work. Leo helps you plan, coordinate specialist tasks, work with project context and verify progress inside LeonardX.</p>
+        <div className="leo-ai-actions">
+          <Link href="/app" className="leo-ai-primary">Open Leo AI <ArrowRight size={17}/></Link>
+          <Link href="/pricing" className="leo-ai-secondary">Explore plans</Link>
+        </div>
+        <div className="leo-ai-proof"><span><Bot size={15}/> Project-aware assistance</span><span><ShieldCheck size={15}/> Review before action</span></div>
+      </div>
+      <div className="leo-ai-product-card" aria-label="Leo AI workflow overview">
+        <div className="leo-ai-card-head"><span className="leo-ai-avatar"><Bot size={21}/></span><div><strong>Leo AI</strong><small>Software workspace assistant</small></div><span className="leo-ai-online"><i/> READY</span></div>
+        <div className="leo-ai-card-message"><small>YOUR IDEA</small><p>Build a customer portal with account access, project tracking and a responsive dashboard.</p></div>
+        <div className="leo-ai-card-step"><span>01</span><div><strong>Understand the request</strong><small>Requirements and project context</small></div><span className="leo-ai-step-state">Ready</span></div>
+        <div className="leo-ai-card-step"><span>02</span><div><strong>Coordinate the work</strong><small>Design, engineering and testing</small></div><span className="leo-ai-step-state">Planned</span></div>
+        <div className="leo-ai-card-step"><span>03</span><div><strong>Review the result</strong><small>Evidence, checks and approvals</small></div><span className="leo-ai-step-state">Review</span></div>
+        <p className="leo-ai-card-foot">Illustrative workflow · Not a live execution report</p>
+      </div>
+    </section>
+
+    <section className="leo-ai-section leo-ai-features">
+      <div className="leo-ai-section-heading"><span>WHAT LEO CAN HELP WITH</span><h2>One assistant. A connected way to work.</h2><p>Keep the idea, the plan and the work connected as your product takes shape.</p></div>
+      <div className="leo-ai-feature-grid">{features.map(({ icon: Icon, title, text }) => <article className="leo-ai-feature-card" key={title}><span className="leo-ai-feature-icon"><Icon size={22}/></span><h3>{title}</h3><p>{text}</p></article>)}</div>
+    </section>
+
+    <section className="leo-ai-section leo-ai-process">
+      <div><span className="leo-ai-section-kicker">A CLEARER PROCESS</span><h2>From first idea to verified work.</h2><p>Leo helps keep each stage visible, so you can review what is proposed and what has actually happened.</p></div>
+      <div className="leo-ai-process-list"><article><b>01</b><div><strong>Describe the outcome</strong><p>Start with the website, application, feature or problem you want to solve.</p></div></article><article><b>02</b><div><strong>Organize the work</strong><p>Turn the request into requirements and practical steps, then review the proposed direction.</p></div></article><article><b>03</b><div><strong>Build and verify</strong><p>Work with project files and available tools, run supported checks and review results before deployment.</p></div></article></div>
+    </section>
+
+    <section className="leo-ai-section leo-ai-faq"><div className="leo-ai-section-heading"><span>COMMON QUESTIONS</span><h2>Frequently asked questions</h2></div><div className="leo-ai-faq-list">{faq.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div></section>
+
+    <section className="leo-ai-cta"><div><span>READY WHEN YOU ARE</span><h2>Start with the idea you want to build.</h2><p>Open your workspace and bring your next project into focus.</p></div><Link href="/app" className="leo-ai-primary">Get started with Leo <ArrowRight size={17}/></Link></section>
   </main>;
 }

@@ -14,7 +14,7 @@ test('workspace agent support protects workspace context and confirms commands',
   assert.match(context, /getActiveWorkspaceContext/);
   assert.match(policy, /isSafeWorkspacePath/);
   assert.match(extension, /showWarningMessage/);
-  assert.match(extension, /terminal\.sendText/);
+  assert.match(extension, /runApprovedTerminalCommand/);
 });
 
 test('workspace context rejects unsafe paths and symlink traversal', () => {

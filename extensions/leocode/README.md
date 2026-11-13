@@ -13,18 +13,23 @@ LeoCode is a native Visual Studio Code extension project that connects to the ex
 - Use the existing server-side MCP/tool path only when the user explicitly selects tool mode in chat.
 - Discover and call LeonardX-authorized MCP tools through VS Code's language-model tool API; the backend remains the authorization boundary.
 - Discover and run only specialist agents returned for the signed-in account; the existing agent API still enforces plan access and approvals.
-- Explain or review the active file, request code, generate tests, and preview/apply an extracted code block after confirmation.
+- Explain selected code, request code, generate tests, and preview/apply extracted code proposals after confirmation.
+- Run a local Code Review Centre against the current file, selection, workspace, or Git staged/unstaged changes. Findings include severity, category, evidence, line locations, confidence, classification, and verification state.
+- Open review findings at their source location. The only built-in automatic correction is a narrow trailing-whitespace cleanup; it always opens a diff, requires explicit approval, and checks that the source has not changed. Other findings receive recommendations rather than speculative automatic edits.
+- Discover package scripts and common Python/Rust/Go test commands, then execute the exact selected command only after approval. Supported VS Code shell integration captures actual output and exit status.
+- Inspect current Git branch, staged/unstaged changes, and merge-conflict counts through the built-in Git extension.
+- Ask the existing LeonardX Leo Manager to plan and run up to four available specialist agents. The extension requests approval before delegation, uses the existing `/api/agents` registry and `/api/agents/run` endpoint, and records the actual returned results in the LeoCode output channel.
 - Run a command typed by the user in a VS Code terminal only after confirming the exact command. LeoCode does not execute model-generated commands and does not capture terminal output.
 - Inspect workspace structure without automatically uploading file contents.
 - Read account usage from the authenticated dashboard endpoint.
 
-The model picker uses only configured text models advertised by the LeonardX server and currently supports Gemini. Auto delegates to the server's Gemini-first default. Other model families are deliberately excluded unless the backend advertises and implements them. No provider credentials are included in the extension. The chat API currently returns a completed JSON response rather than a token stream, so this extension does not claim streaming.
+The model picker uses only configured text models advertised by the LeonardX server and currently supports Gemini. Auto delegates to the server's Gemini-first default. Other model families are deliberately excluded unless the backend advertises and implements them. No provider credentials are included in the extension. The existing webview chat transport still uses the platform chat API and is not claimed to stream tokens. The contributed native VS Code custom-agent manifest is a separate native chat surface; local review and execution commands are implemented in the extension host.
 
 Founders Early Access accounts share a server-enforced limit of 40 Leo chat and sandbox requests per rolling 24-hour window. The entitlement and usage counter are checked by LeonardX; the extension does not store or enforce the quota locally.
 
 Workspace context is not sent automatically in chat. Use the context controls to select files/snippets, or opt in to the active editor/selection. Review the listed context before sending. Secret filtering and redaction are best-effort safeguards, not a guarantee that every sensitive value is detected. File edits are proposals only; LeoCode does not yet rename or delete workspace files and does not run an autonomous local edit/test loop. Specialist-agent runs operate through LeonardX's account-scoped server tools, not directly on the local workspace. The terminal command is entered by the user, shown in a confirmation dialog, and then executed in a visible VS Code terminal.
 
-The extension's MCP tools currently discover and call LeonardX-connected MCP servers through LeonardX endpoints. Direct connections to arbitrary third-party MCP servers, native local repository indexing, Git publishing, and multi-agent orchestration over local files are not implemented.
+The extension's MCP tools currently discover and call LeonardX-connected MCP servers through LeonardX endpoints. Direct connections to arbitrary third-party MCP servers and Git publishing from the extension are not implemented. MCP discovery and calls remain routed through LeonardX authorization. Leo Manager delegation is implemented as a bounded server-side orchestration flow; local workspace operations remain inside the VS Code extension host.
 
 ## Local development
 

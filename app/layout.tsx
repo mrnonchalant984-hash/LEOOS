@@ -3,6 +3,7 @@ import Script from 'next/script';
 import './globals.css';
 import './premium-theme.css';
 import './store/store-theme.css';
+import './design-system.css';
 import { Providers } from './providers';
 import VisualBackground from '@/components/VisualBackground';
 import { StoreChrome } from '@/components/StoreChrome';
@@ -18,8 +19,8 @@ import {
 } from '@/lib/seo';
 
 export const viewport: Viewport = {
-  themeColor: '#08090d',
-  colorScheme: 'dark',
+  themeColor: '#F8F9FA',
+  colorScheme: 'light dark',
   width: 'device-width',
   initialScale: 1,
 };
@@ -70,7 +71,7 @@ export const metadata: Metadata = {
   },
   other: {
     'format-detection': 'telephone=no',
-    'color-scheme': 'dark',
+    'color-scheme': 'light dark',
   },
 };
 
@@ -100,10 +101,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: "try{var t=localStorage.getItem('leonardx-theme');if(t==='dark'){document.documentElement.dataset.theme='dark';}else{document.documentElement.dataset.theme='light';}}catch(e){document.documentElement.dataset.theme='light';}" }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(organizationSchema) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(websiteSchema) }} />
       </head>
-      <body className="min-h-screen bg-black text-white">
+      <body className="min-h-screen">
         <Script
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8872751811502892"
           strategy="beforeInteractive"

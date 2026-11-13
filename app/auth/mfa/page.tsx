@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
 import { LoaderCircle, ShieldCheck } from 'lucide-react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 function safeNextPath() {
   const next = new URLSearchParams(window.location.search).get('next');
@@ -93,18 +94,18 @@ export default function MfaVerificationPage() {
     }
   }
 
-  return <main className="flex min-h-screen items-center justify-center bg-[#09090b] px-4 py-12 text-white">
-    <section className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[.03] p-6 shadow-2xl sm:p-8">
-      <span className="inline-flex rounded-xl border border-emerald-300/20 bg-emerald-300/[.05] p-3 text-emerald-200"><ShieldCheck size={20}/></span>
-      <p className="mt-5 text-xs font-semibold uppercase tracking-[.18em] text-[var(--gold)]">Account security</p>
-      <h1 className="mt-2 text-2xl font-bold">Verify it’s you</h1>
-      <p className="mt-2 text-sm leading-6 text-zinc-400">Enter the current code from your authenticator app to continue to your LeonardX workspace.</p>
+  return <main className="lx-auth-mfa">
+    <section className="lx-auth-mfa-card">
+      <div className="lx-auth-mfa-top"><span className="lx-auth-mfa-icon"><ShieldCheck size={20}/></span><ThemeToggle /></div>
+      <p className="lx-auth-mfa-eyebrow">Account security</p>
+      <h1>Verify it’s you</h1>
+      <p className="lx-auth-mfa-description">Enter the current code from your authenticator app to continue to your LeonardX workspace.</p>
       {!supabase ? <p role="alert" className="mt-6 text-sm text-red-200">Supabase authentication is not configured.</p> : loading ? <p role="status" className="mt-6 flex items-center gap-2 text-sm text-zinc-400"><LoaderCircle size={15} className="animate-spin"/>Preparing secure sign-in…</p> : (
-        <form onSubmit={verify} className="mt-6 space-y-4">
-          <label htmlFor="mfa-code" className="block text-sm text-zinc-300">Authenticator code</label>
-          <input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,8}" maxLength={8} required value={code} onChange={event => setCode(event.target.value)} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-center text-lg tracking-[.3em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"/>
-          {error && <p role="alert" className="rounded-lg border border-red-400/20 bg-red-950/30 p-3 text-sm text-red-200">{error}</p>}
-          <button disabled={busy || !factorId} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-semibold text-black disabled:opacity-50">
+        <form onSubmit={verify} className="lx-auth-mfa-form">
+          <label htmlFor="mfa-code">Authenticator code</label>
+          <input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,8}" maxLength={8} required value={code} onChange={event => setCode(event.target.value)}/>
+          {error && <p role="alert" className="lx-auth-mfa-error">{error}</p>}
+          <button disabled={busy || !factorId} className="lx-auth-mfa-submit">
             {busy && <LoaderCircle size={15} className="animate-spin"/>}{busy ? 'Verifying…' : 'Verify and continue'}
           </button>
           <button type="button" onClick={() => {
@@ -124,10 +125,10 @@ export default function MfaVerificationPage() {
                 setBusy(false);
               }
             })();
-          }} disabled={busy} className="block w-full text-center text-sm text-zinc-400 underline disabled:opacity-50">Sign out</button>
+          }} disabled={busy} className="lx-auth-mfa-signout">Sign out</button>
         </form>
       )}
-      {loading && error && <p role="alert" className="mt-4 text-sm text-red-200">{error}</p>}
+      {loading && error && <p role="alert" className="lx-auth-mfa-error">{error}</p>}
     </section>
   </main>;
 }

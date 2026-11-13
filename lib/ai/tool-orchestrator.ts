@@ -185,17 +185,20 @@ export async function createUserAssistantTools(
       tools.push(tool as AssistantTool);
       references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
     }
-    if (options?.allowRepositoryAccess) {
-      const repositoryTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [
-        { name: 'github_repository_tree', description: 'Read a bounded list of files in a repository using the authenticated user’s connected GitHub account.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, branch: { type: 'string' } }, required: ['repo'], additionalProperties: false } },
-        { name: 'github_read_file', description: 'Read a safe text source file from a repository using the authenticated user’s connected GitHub account. Secret, credential, environment, binary, and oversized files are rejected server-side.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, path: { type: 'string' }, branch: { type: 'string' } }, required: ['repo', 'path'], additionalProperties: false } },
-        { name: 'github_commit_status', description: 'Read bounded commit check and status information from the authenticated user’s connected GitHub account.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, sha: { type: 'string' } }, required: ['repo', 'sha'], additionalProperties: false } },
-      ];
-      if (options.allowRepositoryWrites) repositoryTools.push({ name: 'github_commit_files', description: 'Commit 1–50 validated source files atomically to the connected repository. Use only after the user explicitly requested this commit and set confirm=true. Secret files and secret-like contents are rejected server-side.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, branch: { type: 'string' }, message: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } }, confirm: { type: 'boolean', const: true } }, required: ['repo', 'files', 'confirm'], additionalProperties: false } });
-      for (const tool of repositoryTools) {
-        tools.push(tool as AssistantTool);
-        references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
-      }
+  }
+
+  // Repository read tools are independent of project-builder/write capabilities.
+  // This is essential for read-only specialists such as Code Review and Security.
+  if (options?.allowRepositoryAccess) {
+    const repositoryTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [
+      { name: 'github_repository_tree', description: 'Read a bounded list of files in a repository using the authenticated user’s connected GitHub account.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, branch: { type: 'string' } }, required: ['repo'], additionalProperties: false } },
+      { name: 'github_read_file', description: 'Read a safe text source file from a repository using the authenticated user’s connected GitHub account. Secret, credential, environment, binary, and oversized files are rejected server-side.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, path: { type: 'string' }, branch: { type: 'string' } }, required: ['repo', 'path'], additionalProperties: false } },
+      { name: 'github_commit_status', description: 'Read bounded commit check and status information from the authenticated user’s connected GitHub account.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, sha: { type: 'string' } }, required: ['repo', 'sha'], additionalProperties: false } },
+    ];
+    if (options.allowRepositoryWrites) repositoryTools.push({ name: 'github_commit_files', description: 'Commit 1–50 validated source files atomically to the connected repository. Use only after the user explicitly requested this commit and set confirm=true. Secret files and secret-like contents are rejected server-side.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, branch: { type: 'string' }, message: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } }, confirm: { type: 'boolean', const: true } }, required: ['repo', 'files', 'confirm'], additionalProperties: false } });
+    for (const tool of repositoryTools) {
+      tools.push(tool as AssistantTool);
+      references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
     }
   }
 

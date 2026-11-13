@@ -282,7 +282,7 @@ export async function POST(req: NextRequest) {
             await db.from('marketplace_supplier_dispatch_events').upsert({ fulfillment_request_id: job.id, idempotency_key: idempotencyKey, provider: 'configured_supplier_webhook', status: dispatch.accepted ? 'accepted' : 'failed', provider_reference: dispatch.reference ?? null, response_code: dispatch.statusCode, updated_at: new Date().toISOString() }, { onConflict: 'idempotency_key' });
             if (dispatch.accepted) await db.rpc('update_marketplace_supplier_fulfillment', { p_request_id: job.id, p_supplier_id: job.supplier_id, p_status: 'accepted', p_supplier_reference: dispatch.reference ?? idempotencyKey, p_tracking_reference: null, p_tracking_url: null });
           } catch (dispatchError) {
-            reportFailure(dispatchError, 'supplier');
+            reportFailure(dispatchError, 'supplier_dispatch');
           }
         }
       }
