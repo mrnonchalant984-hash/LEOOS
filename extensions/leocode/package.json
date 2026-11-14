@@ -6,7 +6,7 @@
   "version": "0.1.2",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.106.0"
   },
   "categories": [
     "Other",
@@ -123,6 +123,14 @@
     },
     "commands": [
       {
+        "command": "leocode.startAgentHost",
+        "title": "LeoCode: Start Local Agent Host"
+      },
+      {
+        "command": "leocode.stopAgentHost",
+        "title": "LeoCode: Stop Local Agent Host"
+      },
+      {
         "command": "leocode.openChat",
         "title": "LeoCode: Open Chat"
       },
@@ -207,6 +215,10 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "@ahpd/agent-cofold": "0.14.0",
+    "@ahpd/sdk": "0.14.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -84,7 +84,7 @@ const nextConfig = {
       { source: '/blog/leo-vs-chatgpt-nigeria', destination: '/blog/leo-vs-chatgpt', permanent: true },
     ];
   },
-  images: { remotePatterns: [{ protocol: 'https', hostname: 'source.unsplash.com' }, { protocol: 'https', hostname: 'images.unsplash.com' }, { protocol: 'https', hostname: 'localhost' }] },
+  images: { unoptimized: true, remotePatterns: [{ protocol: 'https', hostname: 'source.unsplash.com' }, { protocol: 'https', hostname: 'images.unsplash.com' }, { protocol: 'https', hostname: 'localhost' }] },
 };
 const sentryConfigured = Boolean(
   process.env.SENTRY_DSN

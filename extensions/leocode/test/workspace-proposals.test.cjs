@@ -107,9 +107,11 @@ test('sign-in refreshes chat state and expired requests do not disguise network 
 test('workspace content is opt-in and terminal commands require confirmation', () => {
   const chat = fs.readFileSync(path.join(extensionRoot, 'src', 'views', 'chat-view.ts'), 'utf8');
   const extension = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+  const terminal = fs.readFileSync(path.join(extensionRoot, 'src', 'workspace', 'terminal.ts'), 'utf8');
   assert.match(chat, /getActiveWorkspaceContext\(includeActiveContext\)/);
   assert.match(chat, /includeActiveContext:document\.getElementById\('activeContext'\)\.checked/);
-  assert.match(extension, /showWarningMessage\([\s\S]*Run command[\s\S]*terminal\.sendText\(command\.trim\(\), true\)/);
+  assert.match(extension, /runApprovedTerminalCommand\(command, output\)/);
+  assert.match(terminal, /showWarningMessage\([\s\S]*Run command[\s\S]*integration\.executeCommand\(normalized\)/);
   assert.match(extension, /registerLeonardXMcpTools\(context, api\)/);
 });
 

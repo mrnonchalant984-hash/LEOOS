@@ -22,7 +22,7 @@ type RemoteToolReference = {
   agentId?: string;
 };
 
-type LocalToolReference = { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'publish_browser_game' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'publish_browser_game' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -79,6 +79,9 @@ async function postAsUser(request: Request, path: string, body: Record<string, u
   let response: Response;
   if (url.pathname === '/api/setup/projects') {
     const { POST } = await import('@/app/api/setup/projects/route');
+    response = await POST(internalRequest);
+  } else if (url.pathname === '/api/agents/run') {
+    const { POST } = await import('@/app/api/agents/run/route');
     response = await POST(internalRequest);
   } else if (url.pathname.startsWith('/api/integrations/')) {
     const { POST } = await import('@/app/api/integrations/[provider]/[action]/route');
@@ -156,6 +159,7 @@ type LeoBuildToolOptions = {
   allowRepositoryAccess?: boolean;
   allowRepositoryWrites?: boolean;
   allowBrowserGame?: boolean;
+  allowAgentExecution?: boolean;
 };
 
 type AgentToolPolicy = {
@@ -174,6 +178,11 @@ export async function createUserAssistantTools(
     references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
     return tool;
   });
+  if (options?.allowAgentExecution) {
+    const tool = { name: 'run_agent', description: 'Start an authorized LeonardX specialist-agent run for the user’s explicitly requested task. Existing plan, entitlement, approval, rate-limit and user-ownership checks remain enforced by the agent execution API. This queues work; it does not mean the work is completed.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, agent_id: { type: 'string' } }, required: ['task'], additionalProperties: false } };
+    tools.push(tool as AssistantTool);
+    references.set('run_agent', { kind: 'run_agent' });
+  }
   if (options?.allowBuildActions) {
     const buildTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [
       { name: 'create_project', description: 'Create a real, plan-authorized LeonardX website, web-app, SaaS, or browser-game project workspace. Only use this when the user explicitly asked to build or create a project. Returns the persisted source project ID.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, project_type: { type: 'string', enum: ['website', 'web_app', 'saas', 'game'] }, brief: { type: 'string' } }, required: ['name', 'project_type'], additionalProperties: false } },
@@ -243,6 +252,18 @@ export async function createUserAssistantTools(
     const reference = references.get(name);
     if (!reference) return { text: 'That tool is not available for this account.', isError: true };
     if (signal?.aborted) return { text: 'Agent execution timed out or was cancelled. No tool call was started.', isError: true };
+    if (reference.kind === 'run_agent') {
+      if (!options?.request || !options.allowAgentExecution) return { text: 'Agent execution is not enabled for this request.', isError: true };
+      const task = typeof args.task === 'string' ? args.task.trim().slice(0, 12_000) : '';
+      const agentId = typeof args.agent_id === 'string' ? args.agent_id.trim() : undefined;
+      if (!task) return { text: 'Provide a specific task for the specialist agent.', isError: true };
+      try {
+        const result = await postAsUser(options.request, '/api/agents/run', { task, ...(agentId ? { agent_id: agentId } : {}), async: true, context: 'Started from Leo Voice using the shared Leo orchestration layer.' });
+        return { text: JSON.stringify(result) };
+      } catch (error) {
+        return { text: error instanceof Error ? error.message : 'The specialist agent could not be started.', isError: true };
+      }
+    }
     if (reference.kind === 'get_project_files') {
       const projectId = typeof args.project_id === 'string' ? args.project_id : '';
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) return { text: 'Provide a valid project UUID.', isError: true };

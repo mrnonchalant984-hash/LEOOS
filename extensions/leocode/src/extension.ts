@@ -7,15 +7,21 @@ import { reviewFile, reviewGitChanges, reviewSelection, reviewWorkspace } from '
 import { CodeReviewCentre } from './review/centre';
 import { coordinateSpecialists } from './review/orchestration';
 import { discoverWorkspaceTests, runApprovedTerminalCommand } from './workspace/terminal';
+import { LeoAgentHost } from './ahp/host';
 
 let chatView: LeoChatView | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('LeoCode');
   const api = new LeonardXApi(context.secrets);
+  const agentHost = new LeoAgentHost();
   const proposals = createProposalContentProvider();
   const reviewCentre = new CodeReviewCentre(context.extensionUri, prompt => chatView?.queuePrompt(prompt));
-  context.subscriptions.push(output, vscode.workspace.registerTextDocumentContentProvider('leocode-proposal', proposals));
+  context.subscriptions.push(
+    output,
+    vscode.workspace.registerTextDocumentContentProvider('leocode-proposal', proposals),
+    { dispose: () => { void agentHost.stop(output); } },
+  );
   registerLeonardXMcpTools(context, api);
   chatView = new LeoChatView(context.extensionUri, api, context, proposals);
   context.subscriptions.push(vscode.window.registerWebviewViewProvider('leocode.chat', chatView, { webviewOptions: { retainContextWhenHidden: true } }));
@@ -42,6 +48,23 @@ export function activate(context: vscode.ExtensionContext) {
         await api.signOut();
         await chatView?.refresh();
         void vscode.window.showInformationMessage('LeoCode tokens were removed from this device.');
+      }
+    }),
+    vscode.commands.registerCommand('leocode.startAgentHost', async () => {
+      try {
+        const url = await agentHost.start(api, context, output);
+        await vscode.env.clipboard.writeText(url);
+        void vscode.window.showInformationMessage('Leo Agent Host is running on this workspace. Its one-time connection URL was copied to the clipboard.');
+      } catch (error) {
+        void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Leo Agent Host could not be started.');
+      }
+    }),
+    vscode.commands.registerCommand('leocode.stopAgentHost', async () => {
+      try {
+        await agentHost.stop(output);
+        void vscode.window.showInformationMessage('Leo Agent Host stopped.');
+      } catch (error) {
+        void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Leo Agent Host could not be stopped.');
       }
     }),
     vscode.commands.registerCommand('leocode.explainSelection', () => chatView?.queuePrompt('Explain this selected code in context.')),

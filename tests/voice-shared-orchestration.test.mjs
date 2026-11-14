@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const voice = readFileSync(new URL('../app/api/voice/route.ts', import.meta.url), 'utf8');
+const session = readFileSync(new URL('../app/api/realtime/session/route.ts', import.meta.url), 'utf8');
+const tools = readFileSync(new URL('../lib/ai/tool-orchestrator.ts', import.meta.url), 'utf8');
+const widget = readFileSync(new URL('../components/LEOWidget.tsx', import.meta.url), 'utf8');
+
+test('voice uses the shared Leo system prompt, memory and curated knowledge retrieval', () => {
+  assert.match(voice, /getLeoSystemPrompt\(\)/);
+  assert.match(voice, /from\('leo_memories'\)/);
+  assert.match(voice, /retrieveLeoKnowledge\(transcript, 4\)/);
+  assert.match(voice, /chats_v2/);
+});
+
+test('voice uses the existing account-scoped tool executor and supports agent execution', () => {
+  assert.match(voice, /createUserAssistantTools\(ctx\.user\.id/);
+  assert.match(voice, /generateTextWithTools/);
+  assert.match(voice, /allowRepositoryAccess: asksRepository/);
+  assert.match(voice, /allowAgentExecution: asksAgentRun/);
+  assert.match(tools, /postAsUser\(options\.request, '\/api\/agents\/run'/);
+});
+
+test('browser voice sessions do not mint a direct Gemini Live token that bypasses shared orchestration', () => {
+  assert.match(session, /mode: 'gemini_turn_based'/);
+  assert.match(session, /shared-leo-chat/);
+  assert.doesNotMatch(session, /authTokens\.create/);
+});
+
+test('voice UI no longer displays the obsolete Gemini quota and five-minute disclaimer', () => {
+  assert.doesNotMatch(widget, /Voice audio streams to Google Gemini/);
+  assert.doesNotMatch(widget, /Free-tier quotas may apply/);
+  assert.doesNotMatch(widget, /Calls stop after five minutes/);
+});

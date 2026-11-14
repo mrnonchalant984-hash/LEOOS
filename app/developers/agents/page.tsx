@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { LEOAppShell } from '@/components/LEOAppShell';
 import { AgentStudio } from '@/components/developers/AgentStudio';
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-static';
 
 export default function DeveloperAgentsPage() {
   return <LEOAppShell title="Developer Agent Studio" subtitle="Create private custom agents and safely attach approved read-only tools.">

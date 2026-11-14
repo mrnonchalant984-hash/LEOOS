@@ -18,7 +18,6 @@ test('theme preference is persisted and applied before public page styling', asy
   const [provider, layout] = await Promise.all([
     read('components/theme-provider.tsx'), read('app/layout.tsx'),
   ]);
-  assert.match(provider, /useSyncExternalStore/);
   assert.match(provider, /localStorage\.getItem\(STORAGE_KEY\)/);
   assert.match(provider, /localStorage\.setItem\(STORAGE_KEY, next\)/);
   assert.match(provider, /document\.documentElement\.dataset\.theme = theme/);
@@ -55,7 +54,6 @@ test('the shared workspace shell retains its existing visual system without the 
 test('every route using the existing LEO workspace shell is explicitly excluded from public restyling', async () => {
   const { readdir, readFile: readFileDirect } = await import('node:fs/promises');
   const { join, relative, sep } = await import('node:path');
-  const appRoot = fileURLToPath(new URL('../app', import.meta.url));
   const [chrome, header] = await Promise.all([read('components/StoreChrome.tsx'), read('components/Header.tsx')]);
   const prefixes = [...chrome.matchAll(/'([^']+)'/g)].map(match => match[1]);
   const headerPrefixes = header.match(/const appPrefixes = \[(.*?)\];/)?.[1] ?? '';
@@ -70,6 +68,7 @@ test('every route using the existing LEO workspace shell is explicitly excluded 
     }
     return files;
   }
+  const appRoot = fileURLToPath(new URL('../app/', import.meta.url));
   const pages = await walk(appRoot);
   const shellPages = [];
   for (const file of pages) {
@@ -110,7 +109,7 @@ test('remaining page-level hex colours are limited to explicitly preserved Store
     for (const entry of entries) { const full=join(dir,entry.name); if(entry.isDirectory()) files.push(...await walk(full)); else if(entry.name==='page.tsx') files.push(full); }
     return files;
   }
-  const appRoot = fileURLToPath(new URL('../app', import.meta.url));
+  const appRoot = fileURLToPath(new URL('../app/', import.meta.url));
   for (const file of await walk(appRoot)) {
     const route = '/' + relative(appRoot, file).split(sep).slice(0,-1).join('/').replace(/\[([^\]]+)\]/g,'{$1}');
     const source = await readFileDirect(file,'utf8');

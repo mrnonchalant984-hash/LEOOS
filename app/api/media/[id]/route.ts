@@ -12,15 +12,18 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const { id } = await context.params;
   const db = adminSupabase();
   const { data: asset, error } = await db.from('media_assets')
-    .select('id,user_id,bucket,storage_path,mime_type,created_at')
+    .select('id,user_id,bucket,storage_path,mime_type,metadata,created_at')
     .eq('id', id).eq('user_id', user.user.id).maybeSingle();
   if (error) return NextResponse.json({ error: 'Asset metadata is unavailable.' }, { status: 500 });
   if (!asset) return NextResponse.json({ error: 'Asset not found.' }, { status: 404 });
   const isDownload = request.nextUrl.searchParams.get('download') === '1';
+  const filename = typeof asset.metadata?.file_name === 'string'
+    ? asset.metadata.file_name.replace(/[\r\n"\\/]+/g, '_').slice(0, 120)
+    : undefined;
   const { data: signed, error: signError } = await db.storage.from(asset.bucket).createSignedUrl(
     asset.storage_path,
     60 * 60,
-    isDownload ? { download: true } : undefined,
+    isDownload ? { download: filename || true } : undefined,
   );
   if (signError || !signed?.signedUrl) return NextResponse.json({ error: 'A secure asset URL could not be created.' }, { status: 502 });
   if (isDownload || request.nextUrl.searchParams.get('view') === '1') {

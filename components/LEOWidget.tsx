@@ -61,6 +61,15 @@ type ProjectBuilderAction = {
   href?: string;
   provider?: string;
 };
+type ChatDocument = {
+  assetId: string;
+  fileName: string;
+  mimeType: string;
+  previewText?: string;
+  previewUrl: string;
+  downloadUrl: string;
+};
+type ChatCitation = { title?: string; url: string };
 type Msg = {
   role: "user" | "assistant";
   content: string;
@@ -69,11 +78,15 @@ type Msg = {
   video?: string;
   assetId?: string;
   projectBuilder?: ProjectBuilderAction;
+  documents?: ChatDocument[];
+  citations?: ChatCitation[];
 };
 type ChatHistoryItem = { id: string; title: string; updatedAt: number };
 type MemoryItem = { id: string; memory: string; source?: string; created_at?: string };
 type RemotePairing = { id: string; created_device_name: string; paired_device_name?: string | null; status: "pending" | "paired" | "revoked" | "expired"; expires_at: string; paired_at?: string | null; last_seen_at?: string | null; created_at?: string };
 type RemoteEvent = { id: number; event_type: string; payload: { text?: string; [key: string]: unknown }; device_id: string; created_at: string };
+const LIVE_VOICE_SYSTEM_INSTRUCTION = "Direct Gemini Live is disabled until a secure server-side tool bridge is available; use the shared Leo orchestration endpoint.";
+
 type VoiceStatus =
   | "Idle"
   | "Connecting"
@@ -84,14 +97,19 @@ type VoiceStatus =
   | "Reconnecting"
   | "Error"
   | "Ended"
-  | "Gemini voice ready · tap to speak";
+  | "Leo Voice ready · tap to speak";
 type ToolOption = { name: string; description: string };
 type CustomAgentOption = { id: string; name: string; description: string; allowed_tools: string[] };
 type ModelOption = { id: string; name: string; provider: string; model: string; capabilities: string[]; configured: boolean };
 type OfflineDraft = { text: string; mode: "normal" | "deep" | "tools"; selectedToolName?: string; selectedAgentId?: string; savedAt: string };
 type GeminiLiveSession = Awaited<ReturnType<GoogleGenAI["live"]["connect"]>>;
 const OFFLINE_DRAFT_KEY = "leo_offline_chat_draft_v1";
-const LIVE_VOICE_SYSTEM_INSTRUCTION = "You are Leo, a concise and friendly voice assistant. Speak naturally and keep answers focused. Do not claim to have performed actions you did not perform.";
+const CHAT_DOCUMENT_EXTENSIONS = /\.(pdf|docx|pptx|xlsx|txt|md|csv|json)$/i;
+const PDF_MIME_TYPE = "application/pdf";
+
+function isCurrentResearchRequest(message: string) {
+  return /\b(search (the )?web|web search|look (it )?up online|google (it|search)|find (current|recent|latest|today'?s?) (news|information|price|updates?)|browse (the )?web|research (this|the|online)|sources? and citations?|latest|current|currently|today|tonight|this week|this month|recent|right now|as of \d{4}|202[5-9]|news|price|pricing today|availability|release notes|newly released|updated recently)\b/i.test(message);
+}
 
 function resampleTo16k(samples: Float32Array, sourceRate: number) {
   if (sourceRate === 16000) return samples;
@@ -166,6 +184,9 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     [messages, setMessages] = useState<Msg[]>([]),
     [input, setInput] = useState(""),
     [loading, setLoading] = useState(false),
+    [pendingDocuments, setPendingDocuments] = useState<ChatDocument[]>([]),
+    [uploadingDocument, setUploadingDocument] = useState(false),
+    [documentBusy, setDocumentBusy] = useState(""),
     [recording, setRecording] = useState(false),
     [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("Idle"),
     [welcomeName, setWelcomeName] = useState("there"),
@@ -543,9 +564,10 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     return () => { cancelled = true; controller.abort(); };
   }, [remoteOpen, remoteSessionId, remoteCursor]);
 
-  async function send(text = input, mode: "normal" | "deep" | "tools" = "normal", attachedTool = selectedTool, attachedAgent = selectedAgent) {
+  async function send(text = input, mode: "normal" | "deep" | "tools" = "normal", attachedTool = selectedTool, attachedAgent = selectedAgent, forceWebSearch = false) {
     if (!text.trim() || loading) return;
     const next = text.trim();
+    const attachedDocuments = pendingDocuments;
     const requestedMode = effort === "deep" && mode === "normal" ? "deep" : mode;
     const effectiveMode = attachedTool || attachedAgent?.allowed_tools.length ? "tools" : requestedMode;
     if (!navigator.onLine) {
@@ -563,7 +585,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     }
     setInput("");
     setMenu(false);
-    setMessages((m) => [...m, { role: "user", content: next, ...((attachedTool || attachedAgent) ? { selectedToolLabel: attachedTool?.name || attachedAgent?.name } : {}) }]);
+    setMessages((m) => [...m, { role: "user", content: next, ...(attachedDocuments.length ? { documents: attachedDocuments } : {}), ...((attachedTool || attachedAgent) ? { selectedToolLabel: attachedTool?.name || attachedAgent?.name } : {}) }]);
     setSelectedTool(null);
     setSelectedAgent(null);
     const negatesBuild = /\b(?:do not|don't|never|not)\b.{0,32}\b(?:build|create|make|deploy|publish|launch)\b/i.test(next);
@@ -577,7 +599,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       const t = await token();
       const imageIntent = /\b(generate|create|make|draw)\b.{0,40}\b(image|picture|illustration|visual)\b/i.test(next);
       const repositoryIntent = /\b(github|git\s?hub|repository|repo)\b/i.test(next);
-      const shouldStream = effectiveMode === "normal" && !attachedTool && !attachedAgent && !buildIntent && !imageIntent && !repositoryIntent;
+      const shouldStream = effectiveMode === "normal" && !attachedTool && !attachedAgent && !buildIntent && !imageIntent && !repositoryIntent && !forceWebSearch && !attachedDocuments.length && !isCurrentResearchRequest(next);
       if (shouldStream) {
         const aborter = new AbortController();
         chatAbortController.current = aborter;
@@ -621,12 +643,25 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         const r = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
-          body: JSON.stringify({ session_id: sidRef.current, message: next, mode: effectiveMode, request_id: crypto.randomUUID(), ...(attachedTool ? { tool_name: attachedTool.name } : {}), ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}), ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}) }),
+          body: JSON.stringify({ session_id: sidRef.current, message: next, mode: effectiveMode, request_id: crypto.randomUUID(), ...(attachedTool ? { tool_name: attachedTool.name } : {}), ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}), ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}), ...(forceWebSearch ? { web_search: true } : {}), ...(attachedDocuments.length ? { document_asset_ids: attachedDocuments.map(document => document.assetId) } : {}) }),
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || "Leo is unavailable");
-        setMessages((m) => [...m, { role: "assistant", content: d.reply, projectBuilder: d.projectBuilder, ...(typeof d.image === "string" ? { image: d.image } : {}), ...(typeof d.assetId === "string" ? { assetId: d.assetId } : {}) }]);
+        const citations = Array.isArray(d.citations) ? d.citations.filter((item: unknown): item is ChatCitation => {
+          if (!item || typeof item !== 'object' || typeof (item as ChatCitation).url !== 'string') return false;
+          try {
+            const url = new URL((item as ChatCitation).url);
+            return url.protocol === 'https:' && !url.username && !url.password;
+          } catch {
+            return false;
+          }
+        }) : [];
+        setMessages((m) => [...m, { role: "assistant", content: d.reply, projectBuilder: d.projectBuilder, ...(typeof d.image === "string" ? { image: d.image } : {}), ...(typeof d.assetId === "string" ? { assetId: d.assetId } : {}), ...(citations.length ? { citations } : {}) }]);
         if (Number.isSafeInteger(d.platformCreditsRemaining)) setPlatformCredits(d.platformCreditsRemaining);
+      }
+      if (attachedDocuments.length) {
+        const sentIds = new Set(attachedDocuments.map(document => document.assetId));
+        setPendingDocuments(current => current.filter(document => !sentIds.has(document.assetId)));
       }
       if (offlineDraft?.text === next && offlineDraft.mode === effectiveMode) {
         setOfflineDraft(null);
@@ -723,7 +758,38 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       setLoading(false);
     }
   }
+  async function uploadChatDocument(file: File) {
+    if (pendingDocuments.length >= 3) {
+      setError("Attach up to three documents to one message.");
+      return;
+    }
+    setUploadingDocument(true);
+    setError("");
+    try {
+      const t = await token();
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/chat/documents", {
+        method: "POST",
+        headers: t ? { Authorization: `Bearer ${t}` } : {},
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Document upload failed.");
+      const document = data.document as ChatDocument;
+      setPendingDocuments(current => current.length < 3 ? [...current, document] : current);
+      setMenu(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The document could not be uploaded.");
+    } finally {
+      setUploadingDocument(false);
+    }
+  }
   async function reviewFile(file: File) {
+    if (CHAT_DOCUMENT_EXTENSIONS.test(file.name)) {
+      await uploadChatDocument(file);
+      return;
+    }
     setMenu(false);
     setLoading(true);
     setError("");
@@ -771,6 +837,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             "voice.webm",
           );
           fd.append("mode", voiceFallbackMode ? "chat" : "transcribe");
+          fd.append("session_id", sidRef.current);
           const r = await fetch("/api/voice", { method: "POST", body: fd });
           if (!r.ok) {
             const d = await r.json().catch(() => ({}));
@@ -929,7 +996,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       }
       if (session.mode === "gemini_turn_based") {
         setVoiceFallbackMode(true);
-        setVoiceStatus("Gemini voice ready · tap to speak");
+        setVoiceStatus("Leo Voice ready · tap to speak");
         return;
       }
       setVoiceFallbackMode(false);
@@ -1051,6 +1118,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       <input
         ref={fileRef}
         type="file"
+        accept="image/*,.pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.json,.zip"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -1091,6 +1159,14 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   ];
   const composer = (
     <div ref={menuRef} className="relative">
+      {pendingDocuments.length > 0 && <div className="mb-2 flex flex-wrap gap-2">
+        {pendingDocuments.map(document => <div key={document.assetId} className="inline-flex max-w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[.04] px-3 py-2 text-xs text-zinc-300">
+          <Paperclip size={13} className="shrink-0 text-[var(--gold)]"/>
+          <span className="max-w-48 truncate">{document.fileName}</span>
+          <button type="button" onClick={() => setPendingDocuments(current => current.filter(item => item.assetId !== document.assetId))} aria-label={`Remove ${document.fileName}`} className="text-zinc-500 hover:text-white"><X size={13}/></button>
+        </div>)}
+      </div>}
+      {uploadingDocument && <p className="mb-2 text-xs text-zinc-500" role="status">Uploading and reading document…</p>}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/[.13] bg-[#151515] p-2 shadow-[0_12px_35px_rgba(0,0,0,.22)]">
         <button
           type="button"
@@ -1134,12 +1210,12 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             <Mic size={19} />
           )}
         </button>
-        {microphoneMenuOpen && <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 w-64 rounded-xl border border-white/15 bg-[#191919] p-2 shadow-2xl"><p className="px-2 py-1 text-[10px] uppercase tracking-[.14em] text-zinc-600">Microphone</p><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceInput(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Mic size={14}/> Dictate into composer</button><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceChat(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Volume2 size={14}/> Live voice conversation</button><div className="my-1 border-t border-white/10"/><p className="px-2 py-1 text-[10px] text-zinc-600">Audio input</p>{audioDevices.length ? audioDevices.map((device, index) => <button key={device.deviceId} type="button" onClick={() => setSelectedAudioDevice(device.deviceId)} className={`block w-full truncate rounded-lg px-2 py-1.5 text-left text-[11px] ${selectedAudioDevice === device.deviceId ? "bg-white/10 text-white" : "text-zinc-500 hover:bg-white/5"}`}>{device.label || `Microphone ${index + 1}`}</button>) : <p className="px-2 py-1 text-[11px] text-zinc-600">Device names appear after permission is granted.</p>}</div>}
+        {microphoneMenuOpen && <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 w-64 rounded-xl border border-white/15 bg-[#191919] p-2 shadow-2xl"><p className="px-2 py-1 text-[10px] uppercase tracking-[.14em] text-zinc-600">Microphone</p><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceInput(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Mic size={14}/> Dictate into composer</button><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceChat(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Volume2 size={14}/> Leo Voice conversation</button><div className="my-1 border-t border-white/10"/><p className="px-2 py-1 text-[10px] text-zinc-600">Audio input</p>{audioDevices.length ? audioDevices.map((device, index) => <button key={device.deviceId} type="button" onClick={() => setSelectedAudioDevice(device.deviceId)} className={`block w-full truncate rounded-lg px-2 py-1.5 text-left text-[11px] ${selectedAudioDevice === device.deviceId ? "bg-white/10 text-white" : "text-zinc-500 hover:bg-white/5"}`}>{device.label || `Microphone ${index + 1}`}</button>) : <p className="px-2 py-1 text-[11px] text-zinc-600">Device names appear after permission is granted.</p>}</div>}
         </div>
         <button
           type="button"
           onClick={startVoiceChat}
-          aria-label="Start live voice chat"
+          aria-label="Start Leo voice chat"
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 hover:bg-white/[.06]"
         >
           <Volume2 size={19} />
@@ -1328,23 +1404,36 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   async function research() {
     const q = input.trim();
     if (!q) return;
-    setInput("");
     setMenu(false);
-    setMessages((m) => [...m, { role: "user", content: q }]);
-    setLoading(true);
+    void send(q, "normal", null, null, true);
+  }
+  async function createDownloadableDocument(index: number, message: Msg, format: "pdf" | "docx" | "txt" | "md") {
+    if (!message.content.trim() || documentBusy) return;
+    const operation = `${index}-${format}`;
+    setDocumentBusy(operation);
+    setError("");
     try {
-      const r = await fetch("/api/research", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q }),
+      const t = await token();
+      const response = await fetch("/api/chat/documents", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+        body: JSON.stringify({
+          session_id: sidRef.current,
+          title: message.content.split(/\r?\n/).find(line => line.trim())?.replace(/^#+\s*/, "").slice(0, 100) || "Leo response",
+          content: message.content,
+          format,
+        }),
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Research unavailable");
-      setMessages((m) => [...m, { role: "assistant", content: d.reply }]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Research unavailable");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "The document could not be created.");
+      const document = data.document as ChatDocument;
+      setMessages(current => current.map((item, itemIndex) => itemIndex === index
+        ? { ...item, documents: [...(item.documents || []), document] }
+        : item));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The document could not be created.");
     } finally {
-      setLoading(false);
+      setDocumentBusy("");
     }
   }
   async function shareImage(assetId: string) {
@@ -1381,6 +1470,29 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
           <div className="whitespace-pre-wrap text-sm leading-6">
             {m.content}
           </div>
+          {m.documents?.map(document => (
+            <section key={document.assetId} className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-black/25">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                <span className="inline-flex min-w-0 items-center gap-2 text-xs font-medium text-zinc-200"><Paperclip size={13} className="shrink-0 text-[var(--gold)]"/><span className="truncate">{document.fileName}</span></span>
+                <a href={document.downloadUrl} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-[var(--gold)] hover:bg-white/5"><Download size={12}/> Download</a>
+              </div>
+              {document.mimeType === PDF_MIME_TYPE
+                ? <iframe src={document.previewUrl} title={`Preview of ${document.fileName}`} loading="lazy" className="h-[min(55vh,520px)] w-full border-t border-white/10 bg-white"/>
+                : document.previewText && <pre className="max-h-52 overflow-auto whitespace-pre-wrap border-t border-white/10 p-3 text-xs leading-5 text-zinc-400">{document.previewText}</pre>}
+            </section>
+          ))}
+          {m.citations?.length ? <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Web sources</p>
+            <ul className="space-y-1.5">{m.citations.map((citation, citationIndex) => <li key={`${citation.url}-${citationIndex}`}><a href={citation.url} target="_blank" rel="noopener noreferrer" className="break-all text-xs text-sky-300 underline decoration-sky-300/30 underline-offset-2 hover:text-sky-200">{citation.title || citation.url}</a></li>)}</ul>
+          </div> : null}
+          {m.role === "assistant" && m.content.trim() && <div className="mt-3 flex flex-wrap gap-2">
+            {(["pdf", "docx", "txt"] as const).map(format => {
+              const operation = `${i}-${format}`;
+              return <button key={format} type="button" onClick={() => void createDownloadableDocument(i, m, format)} disabled={Boolean(documentBusy)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-400 hover:bg-white/5 hover:text-white disabled:opacity-40">
+                <Download size={12}/>{documentBusy === operation ? "Creating…" : `Save as ${format.toUpperCase()}`}
+              </button>;
+            })}
+          </div>}
           {m.projectBuilder && (
             <div className="mt-3 rounded-xl border border-white/10 bg-white/[.04] p-3">
               <p className="text-xs font-semibold uppercase text-[var(--gold)]">
@@ -1587,9 +1699,8 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
                   <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border border-[var(--gold)]/30 bg-[var(--gold)]/10">
                     <div className="h-14 w-14 rounded-full bg-[var(--gold)]/60 blur-sm" />
                   </div>
-                  <h2 className="mt-6 text-2xl font-black">Live Leo Voice</h2>
+                  <h2 className="mt-6 text-2xl font-black">Leo Voice</h2>
                   <p className="mt-2 text-sm text-zinc-500">{voiceStatus}</p>
-                  <p className="mx-auto mt-2 max-w-sm text-xs text-zinc-600">Voice audio streams to Google Gemini. Free-tier quotas may apply; if your Google project uses paid billing, usage can incur charges. Calls stop after five minutes.</p>
                   <div className="mt-6 flex items-center justify-center gap-2">
                     <label className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-zinc-400">
                       <Settings2 size={14} />

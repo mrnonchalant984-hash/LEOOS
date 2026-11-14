@@ -37,15 +37,15 @@ const MAX_REVIEW_FILES = 120;
 const MAX_REVIEW_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_FINDINGS = 300;
 
-type GitChange = { uri: vscode.Uri };
-type GitRepository = {
-  state: {
-    workingTreeChanges: GitChange[];
-    indexChanges: GitChange[];
-  };
-};
 type GitExtensionApi = {
-  getAPI(version: number): { repositories: GitRepository[] };
+  getAPI(version: number): {
+    repositories: Array<{
+      state: {
+        workingTreeChanges: Array<{ uri: vscode.Uri }>;
+        indexChanges: Array<{ uri: vscode.Uri }>;
+      };
+    }>;
+  };
 };
 
 function findingId(filePath: string, line: number, category: string, evidence: string) {

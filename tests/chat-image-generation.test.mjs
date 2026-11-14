@@ -23,7 +23,8 @@ test('Leo workspace image actions persist user and assistant messages for reload
   assert.match(route, /\/api\/media\/\$\{encodeURIComponent\(result\.asset_id\)\}\?view=1/);
   assert.match(route, /generatedImage\.assetId/);
   assert.match(route, /messages: data\?\.messages \|\| \[\]/);
-  assert.match(route, /const messages = \[\s*\.\.\.history,\s*\{ role: "user" as const, content: message \}/);
+  assert.match(route, /const messages = \[\s*\.\.\.history,\s*\{ role: "user" as const, content: message,/);
+  assert.match(route, /document_asset_ids: documentAssetIds, documents: attachedDocumentCards/);
   assert.match(widget, /fetch\("\/api\/chat"/);
   assert.match(widget, /session_id: sidRef\.current/);
   assert.match(widget, /image_mode: mode/);

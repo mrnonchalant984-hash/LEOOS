@@ -1,5 +1,5 @@
 export type MonitoringProvider = 'google' | 'openai' | 'supabase' | 'paystack' | 'vercel' | 'github' | 'supplier_dispatch';
-export type MonitoringOperation = 'leo.ai.request' | 'agent.run' | 'project.build_deploy' | 'payment.verify' | 'payment.webhook';
+export type MonitoringOperation = 'leo.ai.request' | 'agent.run' | 'project.build_deploy' | 'payment.verify' | 'payment.webhook' | 'leocode.agent_host.request';
 export type MonitoringOutcome = 'success' | 'rejected' | 'failure';
 
 type UnknownRecord = Record<string, unknown>;

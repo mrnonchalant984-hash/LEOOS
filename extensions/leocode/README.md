@@ -20,6 +20,7 @@ LeoCode is a native Visual Studio Code extension project that connects to the ex
 - Inspect current Git branch, staged/unstaged changes, and merge-conflict counts through the built-in Git extension.
 - Ask the existing LeonardX Leo Manager to plan and run up to four available specialist agents. The extension requests approval before delegation, uses the existing `/api/agents` registry and `/api/agents/run` endpoint, and records the actual returned results in the LeoCode output channel.
 - Run a command typed by the user in a VS Code terminal only after confirming the exact command. LeoCode does not execute model-generated commands and does not capture terminal output.
+- Start an experimental local AHP host for the active workspace. It binds only to loopback, uses a fresh random connection token, and routes model requests through the authenticated LeonardX Gemini proxy. Stop the host with the LeoCode stop command or by closing the extension host.
 - Inspect workspace structure without automatically uploading file contents.
 - Read account usage from the authenticated dashboard endpoint.
 
@@ -30,6 +31,8 @@ Founders Early Access accounts share a server-enforced limit of 40 Leo chat and 
 Workspace context is not sent automatically in chat. Use the context controls to select files/snippets, or opt in to the active editor/selection. Review the listed context before sending. Secret filtering and redaction are best-effort safeguards, not a guarantee that every sensitive value is detected. File edits are proposals only; LeoCode does not yet rename or delete workspace files and does not run an autonomous local edit/test loop. Specialist-agent runs operate through LeonardX's account-scoped server tools, not directly on the local workspace. The terminal command is entered by the user, shown in a confirmation dialog, and then executed in a visible VS Code terminal.
 
 The extension's MCP tools currently discover and call LeonardX-connected MCP servers through LeonardX endpoints. Direct connections to arbitrary third-party MCP servers and Git publishing from the extension are not implemented. MCP discovery and calls remain routed through LeonardX authorization. Leo Manager delegation is implemented as a bounded server-side orchestration flow; local workspace operations remain inside the VS Code extension host.
+
+The local AHP host is experimental and is not registered as a harness in VS Code's dedicated Agents window. Specialist-agent discovery, MCP tools, browser tools, and shared `chats_v2` history are not yet exposed through AHP. File writes and shell actions require approval; shell execution is not an operating-system sandbox.
 
 ## Local development
 

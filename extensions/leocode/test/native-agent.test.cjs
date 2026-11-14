@@ -16,7 +16,7 @@ test('LeoCode is contributed as a selectable VS Code custom agent', () => {
   const agent = fs.readFileSync(path.join(extensionRoot, agentPath.replace('./', '')), 'utf8');
 
   assert.equal(manifest.publisher, 'leonardx');
-  assert.equal(manifest.engines.vscode, '^1.100.0');
+  assert.equal(manifest.engines.vscode, '^1.106.0');
   assert.match(agent, /^---\s*\nname: LeoCode/m);
   assert.match(agent, /tools: \['\*'\]/);
   assert.match(agent, /VS Code's native agent tools/);

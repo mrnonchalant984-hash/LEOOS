@@ -178,20 +178,17 @@ test('central execution registry contains no direct alternative-provider SDK pat
   assert.doesNotMatch(legacyAdapter, /from ['\"]openai['\"]|new OpenAI|chat\.completions|responses\.create/);
 });
 
-test('legacy local models fail closed and realtime-session route mints a constrained Gemini Live token', async () => {
+test('legacy local models fail closed and realtime voice uses the shared server-side chat route', async () => {
   const { readFile } = await import('node:fs/promises');
   const localRoute = await readFile(new URL('../app/api/offline/chat/route.ts', import.meta.url), 'utf8');
   const realtimeRoute = await readFile(new URL('../app/api/realtime/session/route.ts', import.meta.url), 'utf8');
   const meetingRealtimeRoute = await readFile(new URL('../app/api/meetings/[id]/realtime-session/route.ts', import.meta.url), 'utf8');
   assert.match(localRoute, /LOCAL_MODEL_DISABLED/);
   assert.doesNotMatch(localRoute, /createTextResponse|LEO_LOCAL_MODEL_URL/);
-  assert.match(realtimeRoute, /gemini_live/);
+  assert.match(realtimeRoute, /gemini_turn_based/);
   assert.match(realtimeRoute, /enforceUserRateLimit/);
-  assert.match(realtimeRoute, /GEMINI_API_KEY/);
-  assert.match(realtimeRoute, /authTokens\.create/);
-  assert.match(realtimeRoute, /liveConnectConstraints/);
-  assert.match(realtimeRoute, /uses: 1/);
-  assert.match(realtimeRoute, /realtime: true/);
+  assert.match(realtimeRoute, /shared-leo-chat/);
+  assert.doesNotMatch(realtimeRoute, /authTokens\.create|liveConnectConstraints|gemini_live/);
   assert.doesNotMatch(realtimeRoute, /getOpenAI|clientSecrets\.create|api\.openai\.com/);
   assert.match(meetingRealtimeRoute, /GEMINI_AUDIO_WORKFLOW_NOT_VERIFIED/);
   assert.doesNotMatch(meetingRealtimeRoute, /getOpenAI|clientSecrets\.create|api\.openai\.com/);

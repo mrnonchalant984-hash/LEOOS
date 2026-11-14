@@ -53,7 +53,7 @@ test('terminal execution captures VS Code shell output after exact-command appro
   const source = read('src', 'workspace', 'terminal.ts');
   assert.match(source, /showWarningMessage/);
   assert.match(source, /integration\.executeCommand\(normalized\)/);
-  assert.match(source, /activeExecution\.read\(\)/);
+  assert.match(source, /execution\.read\(\)/);
   assert.match(source, /onDidEndTerminalShellExecution/);
   assert.match(source, /event\.exitCode/);
   assert.match(source, /discoverWorkspaceTests/);

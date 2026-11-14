@@ -25,6 +25,14 @@ export class LeonardXApi {
     this.origin = base.origin;
   }
 
+  get baseUrl() {
+    return this.origin;
+  }
+
+  async getAccessTokenForAgentHost() {
+    return this.accessToken();
+  }
+
   async signIn(email: string, password: string) {
     const response = await fetch(`${this.origin}/api/auth/login`, {
       method: 'POST',

@@ -16,6 +16,7 @@ const ROUTES: Record<MonitoringOperation, string> = {
   'project.build_deploy': '/api/build-deploy',
   'payment.verify': '/api/payment/verify',
   'payment.webhook': '/api/payment/webhook',
+  'leocode.agent_host.request': '/api/leocode/agent/v1/chat/completions',
 };
 
 const PROVIDERS: Record<MonitoringOperation, MonitoringProvider> = {
@@ -24,6 +25,7 @@ const PROVIDERS: Record<MonitoringOperation, MonitoringProvider> = {
   'project.build_deploy': 'vercel',
   'payment.verify': 'paystack',
   'payment.webhook': 'paystack',
+  'leocode.agent_host.request': 'google',
 };
 
 function errorType(error: unknown): string {

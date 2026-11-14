@@ -15,7 +15,7 @@ test('image deletion requires same-origin authentication and rate limits request
 test('media downloads return attachments while share URLs remain expiring and private', async () => {
   const route = await read('app/api/media/[id]/route.ts');
   const sharing = await read('lib/client/share-private-media.ts');
-  assert.match(route, /createSignedUrl\([\s\S]*isDownload \? \{ download: true \} : undefined/);
+  assert.match(route, /createSignedUrl\([\s\S]*isDownload \? \{ download: filename \|\| true \} : undefined/);
   assert.match(route, /60 \* 60/);
   assert.match(route, /getProfile\(request\)/);
   assert.match(sharing, /navigator\.share/);

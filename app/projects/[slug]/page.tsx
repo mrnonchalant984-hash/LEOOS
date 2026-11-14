@@ -5,6 +5,7 @@ import { big12Projects } from '@/data/site';
 import { createPublicMetadata } from '@/lib/seo';
 
 export function generateStaticParams(){ return big12Projects.map(p=>({slug:p.id})); }
+export const dynamicParams = false;
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

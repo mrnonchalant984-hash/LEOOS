@@ -26,31 +26,27 @@ export async function runApprovedTerminalCommand(command: string, output: vscode
   const terminal = vscode.window.createTerminal({ name: 'LeoCode — approved command' });
   terminal.show();
   const integration = await waitForShellIntegration(terminal);
-  let execution: vscode.TerminalShellExecution | undefined;
-  let endSubscription: vscode.Disposable | undefined;
-  const exitCodePromise = new Promise<number | undefined>(resolve => {
-    endSubscription = vscode.window.onDidEndTerminalShellExecution(event => {
-      if (event.execution !== execution) return;
-      endSubscription?.dispose();
-      resolve(event.exitCode);
-    });
+  let resolveExitCode: (exitCode: number | undefined) => void = () => {};
+  const commandEnded = new Promise<number | undefined>(resolve => { resolveExitCode = resolve; });
+  const endSubscription = vscode.window.onDidEndTerminalShellExecution(event => {
+    if (event.terminal !== terminal) return;
+    endSubscription.dispose();
+    resolveExitCode(event.exitCode);
   });
-  const activeExecution = integration.executeCommand(normalized);
-  execution = activeExecution;
-  const outputStream = activeExecution.read();
+  const execution = integration.executeCommand(normalized);
+  const outputStream = execution.read();
   output.appendLine(`$ ${normalized}`);
   try {
     for await (const chunk of outputStream) output.append(chunk);
-    const exitCode = await exitCodePromise;
+    const exitCode = await commandEnded;
     output.appendLine(`\n[LeoCode terminal exit code: ${typeof exitCode === 'number' ? exitCode : 'not reported'}]`);
     output.show(true);
     return { exitCode, outputCaptured: true };
   } catch (error) {
+    endSubscription.dispose();
     output.appendLine(`\n[Terminal output capture stopped: ${error instanceof Error ? error.message : 'unknown error'}]`);
     output.show(true);
     return { exitCode: undefined, outputCaptured: false };
-  } finally {
-    endSubscription?.dispose();
   }
 }
 

@@ -272,7 +272,7 @@ export async function POST(req: NextRequest) {
       if (applied !== false) {
         const { data: jobs, error: jobsError } = await db.from('marketplace_supplier_fulfillment_requests')
           .select('id,order_id,supplier_id,supplier_product_id,quantity').eq('order_id', orderId).eq('status', 'requested').limit(50);
-        if (jobsError) reportFailure(jobsError, 'supabase');
+        if (jobsError) reportFailure(jobsError, 'supplier_dispatch');
         for (const job of jobs ?? []) {
           try {
             const { data: product } = await db.from('marketplace_supplier_products').select('supplier_sku').eq('id', job.supplier_product_id).maybeSingle();
