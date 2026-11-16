@@ -96,7 +96,7 @@ export function AuthForm() {
         const accountType = result.user?.storeAccountType;
         const next = mode === 'signup' && storeSignup
           ? storeDestination(storeAccountType)
-          : requestedNext ?? (accountType === 'buyer' || accountType === 'seller' ? storeDestination(accountType) : '/dashboard');
+          : requestedNext ?? (mode === 'signup' ? '/onboarding' : (accountType === 'buyer' || accountType === 'seller' ? storeDestination(accountType) : '/dashboard'));
         const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (assuranceError) throw assuranceError;
         const destination = assurance.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2'
@@ -125,7 +125,7 @@ export function AuthForm() {
       const requestedNext = safeInternalNext(new URLSearchParams(window.location.search).get('next'));
       const next = mode === 'signup' && storeSignup
         ? storeDestination(storeAccountType)
-        : requestedNext ?? '/dashboard';
+        : requestedNext ?? (mode === 'signup' ? '/onboarding' : '/dashboard');
       const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',

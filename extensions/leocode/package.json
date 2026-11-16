@@ -49,6 +49,9 @@
         "path": "./agents/leocode-native.agent.md"
       }
     ],
+    "languageModelChatProviders": [
+      { "vendor": "leonardx", "displayName": "LeonardX · Leo" }
+    ],
     "languageModelTools": [
       {
         "name": "leocode_list_mcp_tools",
@@ -231,7 +234,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "@types/vscode": "^1.90.0",
+    "@types/vscode": "^1.106.0",
     "typescript": "^5.5.4"
   }
 }

@@ -4,6 +4,9 @@ LeoCode is a native Visual Studio Code extension project that connects to the ex
 
 ## Current functionality
 
+- Registers LeonardX as a stable VS Code Chat language-model provider using the supported `languageModelChatProviders` contribution and `vscode.lm.registerLanguageModelChatProvider` API. Available models are loaded from the authenticated LeonardX endpoint and text is streamed through the server-controlled Gemini route.
+- Keeps the separate LeoCode coding-agent experience distinct: its local AHP host remains experimental and approval-gated. The model provider does not advertise tool calling and does not claim native VS Code Agent Mode support.
+
 - Connect an existing LeonardX account using the platform's sign-in API. The password is requested only for the sign-in operation; access and refresh tokens are held in VS Code `SecretStorage`.
 - Open Leo chat inside VS Code and use the authenticated `/api/chat` endpoint.
 - Opt in to sharing the active file/selection or select up to five safe workspace files; context reads have file-count and byte limits, exclude credential/build/dependency paths, and redact common secret assignments.

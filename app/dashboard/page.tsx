@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserClient } from '@supabase/ssr';
+import { OnboardingWelcome } from '@/components/OnboardingWelcome';
 import { Activity, ArrowRight, Bell, Bot, ChevronRight, FolderKanban, Globe2, LayoutDashboard, LogOut, Menu, MessageSquare , Settings, Sparkles, X, Zap } from 'lucide-react';
 
 type Data = { user:{name:string;email:string}; owner:boolean; plan:string; status:string; billingPeriod:string|null; endsAt:string|null; credits:number|string; counts:{conversations:number;memories:number;projects:number;websites:number;unreadNotifications:number}; conversations:{id:string;title:string|null;updated_at:string}[]; projects:{id:string;project_name:string;type:string|null;status:string|null;progress:number|null;created_at:string}[]; websites:{id:string;business_name:string|null;website_type:string;status:string;live_url:string|null;updated_at:string;requirements:{template_name?:string}|null}[]; notifications:{id:string;title:string;body:string;created_at:string;read:boolean}[]; activity:{id:string;kind:string;title:string;created_at:string}[]; usageTrend:{date:string;tokens:number}[] };
@@ -19,7 +20,7 @@ export default function Dashboard(){
  if(error)return <main className="mx-auto max-w-7xl px-4 py-12"><Card><p role="alert" className="text-red-200">{error}</p></Card></main>;
  if(!data)return <main className="mx-auto max-w-7xl px-4 py-12"><div className="h-10 w-64 animate-pulse rounded-xl bg-white/10"/><div className="mt-8 grid gap-4 md:grid-cols-4">{[1,2,3,4].map(i=><div key={i} className="h-32 animate-pulse rounded-3xl bg-white/5"/>)}</div></main>;
  const metric=[['AI conversations',data.counts.conversations,MessageSquare],['Credits',data.credits,Zap],['Projects',data.counts.projects,FolderKanban],['Websites',data.counts.websites,Globe2]] as const;
- return <main className="min-h-[calc(100vh-64px)]"><div className="mx-auto flex max-w-[1600px] gap-4 px-3 py-3 sm:px-5 lg:px-6">
+ return <main className="min-h-[calc(100vh-64px)]"><OnboardingWelcome /><div className="mx-auto flex max-w-[1600px] gap-4 px-3 py-3 sm:px-5 lg:px-6">
   <aside className={`fixed inset-y-[65px] left-0 z-50 w-72 transform border-r border-white/10 bg-[#090909]/95 p-4 backdrop-blur-2xl transition-transform lg:sticky lg:top-[76px] lg:z-20 lg:h-[calc(100vh-88px)] lg:translate-x-0 lg:rounded-3xl lg:border ${drawer?'translate-x-0':'-translate-x-full'}`}>
    <div className="flex items-center justify-between px-2 py-2 lg:hidden"><b>LEO OS</b><button onClick={()=>setDrawer(false)} aria-label="Close sidebar"><X/></button></div>
    <div className="mb-7 hidden items-center gap-3 px-2 lg:flex"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--gold)] font-black text-black">L</div><div><b className="tracking-tight">LEO OS</b><p className="text-[11px] text-zinc-500">AI workspace</p></div></div>
