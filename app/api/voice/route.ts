@@ -58,7 +58,7 @@ async function geminiSpeak(text: string) {
   if (!key) throw new Error('Gemini is not configured.');
   const client = new GoogleGenAI({ apiKey: key });
   const response = await client.models.generateContent({
-    model: process.env.LEO_GEMINI_TTS_MODEL?.trim() || 'gemini-3.8-flash-tts',
+    model: process.env.LEO_GEMINI_TTS_MODEL?.trim() || 'gemini-2.5-flash-preview-tts',
     contents: [{ role: 'user', parts: [{ text }] }],
     config: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } },
   });
