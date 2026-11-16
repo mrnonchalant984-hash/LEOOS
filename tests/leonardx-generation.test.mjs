@@ -7,7 +7,7 @@ import { getPlanPriceNgn } from '../lib/pricing.ts';
 const migration = await readFile(new URL('../supabase/migrations/20261013110000_leonardx_generation_credits.sql', import.meta.url), 'utf8');
 const imageRoute = await readFile(new URL('../lib/generation/images.ts', import.meta.url), 'utf8');
 const videoRoute = await readFile(new URL('../app/api/generate-video/route.ts', import.meta.url), 'utf8');
-const runwayVideo = await readFile(new URL('../lib/agents/runway-video.ts', import.meta.url), 'utf8');
+const googleVideo = await readFile(new URL('../lib/agents/google-video.ts', import.meta.url), 'utf8');
 const studio = await readFile(new URL('../components/studio/StudioWorkspace.tsx', import.meta.url), 'utf8');
 const envExample = await readFile(new URL('../.env.example', import.meta.url), 'utf8');
 
@@ -62,25 +62,27 @@ test('image generation supports base64 provider output and private persisted ass
 
 test('video endpoint gates customers on plan and configured platform-credit conversion', () => {
   assert.match(videoRoute, /planAllows\(plan, 'video-generation'\)/);
-  assert.match(videoRoute, /RUNWAY_GEN45_PLATFORM_CREDITS_PER_SECOND/);
+  assert.match(videoRoute, /GOOGLE_VEO_PLATFORM_CREDITS_PER_SECOND/);
   assert.match(videoRoute, /No credits were charged/);
   assert.match(videoRoute, /reserve_platform_credits/);
   assert.match(videoRoute, /provider_cost_estimate_usd/);
 });
 
-test('image-to-video uses an owned private image and the existing Runway image-to-video API', () => {
-  assert.match(videoRoute, /body\?\.image_asset_id/);
-  assert.match(videoRoute, /\.eq\('user_id', ctx\.user\.id\)/);
-  assert.match(videoRoute, /createSignedUrl\(sourceAsset\.storage_path, 60 \* 10\)/);
-  assert.match(videoRoute, /createRunwayVideo\(\{ prompt, imageUrl,/);
-  assert.match(runwayVideo, /payload\.promptImage=opts\.imageUrl/);
-  assert.match(runwayVideo, /runway\('\/image_to_video'/);
-  assert.match(studio, /Source image/);
-  assert.match(studio, /image_asset_id: sourceAssetId/);
+test('Google Veo video generation is configured server-side and only advertises supported capabilities', () => {
+  assert.match(videoRoute, /googleVideoCapabilities\(\)/);
+  assert.match(videoRoute, /createGoogleVideo\(/);
+  assert.match(videoRoute, /GOOGLE_VEO_PLATFORM_CREDITS_PER_SECOND/);
+  assert.match(videoRoute, /\[4, 6, 8\]/);
+  assert.match(googleVideo, /GOOGLE_SERVICE_ACCOUNT_JSON/);
+  assert.match(googleVideo, /GOOGLE_VIDEO_OUTPUT_GCS_URI/);
+  assert.match(googleVideo, /models\.generateVideos/);
+  assert.match(googleVideo, /operations\.getVideosOperation/);
+  assert.match(studio, /Google Veo/);
+  assert.doesNotMatch(studio, /Runway|image_asset_id/);
 });
 
 test('environment template documents video credit conversion without secrets', () => {
   assert.match(envExample, /RUNWAY_GEN45_PLATFORM_CREDITS_PER_SECOND=/);
-  assert.match(envExample, /This is NOT the same unit as Runway provider credits/);
+  assert.match(envExample, /LEO_GOOGLE_VIDEO_MODEL=/);
   assert.doesNotMatch(envExample, /RUNWAY_GEN45_PLATFORM_CREDITS_PER_SECOND=\d+/);
 });
