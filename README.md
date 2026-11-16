@@ -108,7 +108,6 @@ LEO_GOOGLE_VIDEO_MODEL=veo-3.1-generate-001
 GOOGLE_VEO_PLATFORM_CREDITS_PER_SECOND=
 ```
 
-The Video Agent is not available to normal users.
 
 ## Google sign-in and MCP
 
