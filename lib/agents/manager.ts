@@ -57,7 +57,7 @@ function safeExecutionErrorCode(error: unknown) {
   if (message.includes('owner-only')) return 'agent_access_denied';
   if (message.includes('browser') || message.includes('computer_use')) return 'browser_integration_disabled';
   if (message.includes('image generation')) return 'image_generation_failed';
-  if (message.includes('runway')) return 'video_generation_failed';
+  if (message.includes('google video') || message.includes('veo')) return 'video_generation_failed';
   if (/rate.?limit|\b429\b/.test(message)) return 'provider_rate_limited';
   if (/timeout|timed out|aborterror/.test(message)) return 'provider_timeout';
   return 'agent_execution_failed';
