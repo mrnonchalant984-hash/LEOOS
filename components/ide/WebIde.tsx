@@ -353,7 +353,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
         </div>
         {rightPanel === 'leo' ? (
           <div className="min-h-0 min-w-0 flex-1">
-            <LEOWidget full embedded initialSessionId={`workspace-${workspaceId}`} initialProjectId={workspaceId} initialProjectName={workspace?.project_name || "Current project"} />
+            <LEOWidget full embedded initialSessionId={workspaceId} initialProjectId={workspaceId} initialProjectName={workspace?.project_name || "Current project"} />
           </div>
         ) : (
           <>
