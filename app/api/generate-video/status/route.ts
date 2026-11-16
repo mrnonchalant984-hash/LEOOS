@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const db = adminSupabase();
   const { data: job, error } = await db.from('generation_jobs').select('id,user_id,job_type,provider,model,status,provider_task_id,platform_credits_reserved,credit_source,metadata,error_message').eq('id', jobId).eq('user_id', ctx.user.id).maybeSingle();
   if (error) return NextResponse.json({ error: 'Video job history is unavailable.' }, { status: 500 });
-  if (!job || job.job_type !== 'video' || job.provider !== 'runway') return NextResponse.json({ error: 'Video job not found.' }, { status: 404 });
+  if (!job || job.job_type !== 'video' || job.provider !== 'google') return NextResponse.json({ error: 'Video job not found.' }, { status: 404 });
   if (job.status === 'completed') {
     const { data: asset } = await db.from('media_assets').select('id').eq('job_id', job.id).eq('user_id', ctx.user.id).maybeSingle();
     if (!asset) return NextResponse.json({ job_id: job.id, status: 'failed', error: 'The video output record is missing.' }, { status: 500 });
@@ -31,9 +31,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ job_id: job.id, status: 'failed', error: 'The video provider could not complete this task. Reserved platform credits were returned when possible.' });
     }
     const storagePath = result.storage_path;
-    const { data: fileList } = await db.storage.from('leo-files').list(`agent-videos/${ctx.user.id}`, { search: `${job.provider_task_id}.mp4`, limit: 1 });
-    const file = fileList?.find((item) => item.name === `${job.provider_task_id}.mp4`);
-    if (!file) throw new Error('VIDEO_STORAGE_FAILED');
+    const file = { metadata: { size: result.size_bytes } };
     const { data: asset, error: assetError } = await db.from('media_assets').insert({ user_id: ctx.user.id, job_id: job.id, kind: 'video', bucket: 'leo-files', storage_path: storagePath, mime_type: 'video/mp4', size_bytes: Number(file.metadata?.size || 0), metadata: { provider: 'google', model: job.model, duration_seconds: job.metadata?.duration_seconds, aspect_ratio: job.metadata?.aspect_ratio, resolution: job.metadata?.resolution } }).select('id').single();
     if (assetError && assetError.code !== '23505') throw new Error('VIDEO_STORAGE_FAILED');
     const { data: savedAsset } = assetError?.code === '23505'
