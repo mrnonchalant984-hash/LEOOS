@@ -39,7 +39,9 @@ async function generateImageWithProviderFallback(prompt: string, preferredModel:
   try {
     return await generate(primaryModel);
   } catch (primaryError) {
-    const fallbackModel = resolveGeminiImageModel(process.env.LEO_GEMINI_IMAGE_FALLBACK_MODEL?.trim() || 'gemini-nano-banana-2.1');
+    const configuredFallback = process.env.LEO_GEMINI_IMAGE_FALLBACK_MODEL?.trim();
+    if (!configuredFallback) throw primaryError;
+    const fallbackModel = resolveGeminiImageModel(configuredFallback);
     if (fallbackModel === primaryModel) throw primaryError;
     return generate(fallbackModel);
   }
