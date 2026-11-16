@@ -232,6 +232,15 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   const [remotePairings, setRemotePairings] = useState<RemotePairing[]>([]);
   const [remoteSessionId, setRemoteSessionId] = useState("");
   const [remoteEvents, setRemoteEvents] = useState<RemoteEvent[]>([]);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const initialPrompt = params.get("prompt");
+    if (!initialPrompt) return;
+    setInput(initialPrompt.slice(0, 4000));
+    params.delete("prompt");
+    const query = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+  }, []);
   const hour = new Date().getHours();
   const timeGreeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   useEffect(() => {
