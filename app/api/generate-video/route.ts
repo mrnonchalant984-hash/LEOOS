@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
-import { createRunwayVideo } from '@/lib/agents/runway-video';
+import { createGoogleVideo, googleVideoCapabilities } from '@/lib/agents/google-video';
 
 export const runtime = 'nodejs';
 
@@ -13,16 +13,17 @@ export async function GET(req: NextRequest) {
   const owner = isPlatformOwner(ctx.profile);
   const plan = await getEffectiveUserPlan(ctx.user.id, owner);
   if (!owner && !planAllows(plan, 'video-generation')) return NextResponse.json({ available: false, error: 'Video generation requires a Pro or Business plan.' }, { status: 403 });
-  const model = process.env.RUNWAY_VIDEO_MODEL || 'gen4.5';
-  const configuredRate = Number.parseInt(process.env.RUNWAY_GEN45_PLATFORM_CREDITS_PER_SECOND || '', 10);
+  const capabilities = googleVideoCapabilities();
+  const model = process.env.LEO_GOOGLE_VIDEO_MODEL || 'veo-3.1-generate-001';
+  const configuredRate = Number.parseInt(process.env.GOOGLE_VEO_PLATFORM_CREDITS_PER_SECOND || '', 10);
   const rate = Number.isSafeInteger(configuredRate) && configuredRate > 0 ? configuredRate : null;
-  if (model !== 'gen4.5') return NextResponse.json({ available: false, error: 'Only Runway Gen-4.5 is currently supported by this video workflow.' }, { status: 503 });
+  if (!capabilities.available) return NextResponse.json({ available: false, provider: 'google', error: capabilities.error }, { status: 503 });
   if (!owner && rate === null) return NextResponse.json({ available: false, model, error: 'Video generation is temporarily unavailable. Please try again later.' }, { status: 503 });
   const duration = Number.parseInt(req.nextUrl.searchParams.get('duration') || '5', 10);
-  if (!Number.isInteger(duration) || duration < 2 || duration > 10) return NextResponse.json({ error: 'Duration must be between 2 and 10 seconds.' }, { status: 400 });
+  if (![4, 6, 8].includes(duration)) return NextResponse.json({ error: 'Duration must be between 2 and 10 seconds.' }, { status: 400 });
   const { data: account } = await adminSupabase().from('platform_credit_accounts').select('balance').eq('user_id', ctx.user.id).maybeSingle();
   const required = owner ? 0 : (rate as number) * duration;
-  return NextResponse.json({ available: true, model, duration_seconds: duration, supported_durations: [2,3,4,5,6,7,8,9,10], aspect_ratios: ['landscape','portrait'], platform_credits_required: required, platform_credits_per_second: rate, platform_credits_available: account?.balance ?? 0, provider_cost_estimate_usd: Number((duration * 0.12).toFixed(2)), provider_cost_usd: null, mode: 'text_to_video' }, { headers: { 'Cache-Control': 'private, no-store' } });
+  return NextResponse.json({ available: true, model, duration_seconds: duration, supported_durations: [4,6,8], aspect_ratios: ['landscape','portrait'], resolutions: ['720p','1080p'], platform_credits_required: required, platform_credits_per_second: rate, platform_credits_available: account?.balance ?? 0, provider_cost_estimate_usd: null, provider_cost_usd: null, mode: 'text_to_video' }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
 export async function POST(req: NextRequest) {
@@ -34,17 +35,18 @@ export async function POST(req: NextRequest) {
   if (body?.image_asset_id !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceAssetId)) {
     return NextResponse.json({ error: 'Choose a valid source image from your private library.' }, { status: 400 });
   }
-  const duration = body?.duration === undefined ? 5 : Number(body.duration);
+  const duration = body?.duration === undefined ? 8 : Number(body.duration);
   const aspectRatio = body?.aspect_ratio === 'portrait' ? 'portrait' : body?.aspect_ratio === 'landscape' || body?.aspect_ratio === undefined ? 'landscape' : null;
   if (prompt.length < 3 || prompt.length > 2000) return NextResponse.json({ error: 'Enter a video prompt between 3 and 2,000 characters.' }, { status: 400 });
-  if (!Number.isInteger(duration) || duration < 2 || duration > 10) return NextResponse.json({ error: 'Gen-4.5 duration must be a whole number between 2 and 10 seconds.' }, { status: 400 });
+  if (![4, 6, 8].includes(duration)) return NextResponse.json({ error: 'Google Veo duration must be 4, 6, or 8 seconds.' }, { status: 400 });
+  if (body?.image_asset_id !== undefined) return NextResponse.json({ error: 'Image-to-video is not enabled for this Google provider configuration yet.' }, { status: 501 });
   if (!aspectRatio) return NextResponse.json({ error: 'Choose a supported aspect ratio: landscape or portrait.' }, { status: 400 });
 
   const owner = isPlatformOwner(ctx.profile);
   const plan = await getEffectiveUserPlan(ctx.user.id, owner);
   if (!owner && !planAllows(plan, 'video-generation')) return NextResponse.json({ error: 'Video generation is not included in your current plan. Review the available plans to upgrade.' }, { status: 403 });
 
-  const configuredCreditsPerSecond = Number.parseInt(process.env.RUNWAY_GEN45_PLATFORM_CREDITS_PER_SECOND || '', 10);
+  const configuredCreditsPerSecond = Number.parseInt(process.env.GOOGLE_VEO_PLATFORM_CREDITS_PER_SECOND || '', 10);
   const creditsPerSecond = Number.isSafeInteger(configuredCreditsPerSecond) && configuredCreditsPerSecond > 0 ? configuredCreditsPerSecond : null;
   if (!owner && creditsPerSecond === null) {
     return NextResponse.json({ error: 'Video generation is temporarily unavailable. No credits were charged.' }, { status: 503 });
@@ -56,8 +58,9 @@ export async function POST(req: NextRequest) {
 
   const requestKey = req.headers.get('idempotency-key') || (typeof body?.request_id === 'string' ? body.request_id : randomUUID());
   if (requestKey.length > 128 || /[\r\n]/.test(requestKey)) return NextResponse.json({ error: 'Invalid request ID.' }, { status: 400 });
-  const model = process.env.RUNWAY_VIDEO_MODEL || 'gen4.5';
-  if (model !== 'gen4.5') return NextResponse.json({ error: 'This endpoint currently supports the Runway Gen-4.5 model only.' }, { status: 503 });
+  const capabilities = googleVideoCapabilities();
+  const model = process.env.LEO_GOOGLE_VIDEO_MODEL || 'veo-3.1-generate-001';
+  if (!capabilities.available) return NextResponse.json({ error: capabilities.error }, { status: 503 });
 
   const db = adminSupabase();
   let imageUrl: string | undefined;
@@ -79,9 +82,9 @@ export async function POST(req: NextRequest) {
     imageUrl = signedSource.signedUrl;
   }
   const { data: job, error: insertError } = await db.from('generation_jobs').insert({
-    user_id: ctx.user.id, request_key: requestKey, job_type: 'video', provider: 'runway', model,
+    user_id: ctx.user.id, request_key: requestKey, job_type: 'video', provider: 'google', model,
     status: 'queued', prompt, platform_credits_reserved: platformCost,
-    metadata: { duration_seconds: duration, aspect_ratio: aspectRatio, mode: imageUrl ? 'image_to_video' : 'text_to_video', source_asset_id: sourceAssetId || null, platform_credits_per_second: creditsPerSecond, provider_cost_usd: null, provider_cost_estimate_usd: Number((duration * 0.12).toFixed(2)) },
+    metadata: { duration_seconds: duration, aspect_ratio: aspectRatio, resolution: body?.resolution === '1080p' ? '1080p' : '720p', mode: 'text_to_video', platform_credits_per_second: creditsPerSecond, provider_cost_usd: null, provider_cost_estimate_usd: null },
   }).select('id,status').single();
   if (insertError) {
     if (insertError.code === '23505') {
@@ -103,11 +106,11 @@ export async function POST(req: NextRequest) {
     }
     reserved = platformCost > 0;
     await db.from('generation_jobs').update({ status: 'processing', credit_source: platformCost > 0 ? 'platform' : null, platform_credits_reserved: platformCost, updated_at: new Date().toISOString() }).eq('id', job.id).eq('user_id', ctx.user.id);
-    const created = await createRunwayVideo({ prompt, imageUrl, duration, ratio: aspectRatio === 'portrait' ? '768:1280' : '1280:768', model });
-    const { error: updateError } = await db.from('generation_jobs').update({ provider_task_id: created.task_id, status: 'processing', updated_at: new Date().toISOString(), metadata: { duration_seconds: duration, aspect_ratio: aspectRatio, mode: imageUrl ? 'image_to_video' : 'text_to_video', source_asset_id: sourceAssetId || null, platform_credits_per_second: creditsPerSecond, provider_cost_usd: null, provider_cost_estimate_usd: Number((duration * 0.12).toFixed(2)) } }).eq('id', job.id).eq('user_id', ctx.user.id);
+    const created = await createGoogleVideo({ prompt, duration: duration as 4 | 6 | 8, aspectRatio: aspectRatio === 'portrait' ? '9:16' : '16:9', resolution: body?.resolution === '1080p' ? '1080p' : '720p' });
+    const { error: updateError } = await db.from('generation_jobs').update({ provider_task_id: created.task_id, status: 'processing', updated_at: new Date().toISOString(), metadata: { duration_seconds: duration, aspect_ratio: aspectRatio, resolution: body?.resolution === '1080p' ? '1080p' : '720p', mode: 'text_to_video', platform_credits_per_second: creditsPerSecond, provider_cost_usd: null, provider_cost_estimate_usd: null } }).eq('id', job.id).eq('user_id', ctx.user.id);
     if (updateError) throw new Error('Provider task started but its tracking record could not be updated. Contact support before retrying.');
     const { data: account } = await db.from('platform_credit_accounts').select('balance').eq('user_id', ctx.user.id).maybeSingle();
-    return NextResponse.json({ job_id: job.id, task_id: created.task_id, status: 'processing', provider: 'runway', model, mode: imageUrl ? 'image_to_video' : 'text_to_video', source_asset_id: sourceAssetId || null, duration_seconds: duration, aspect_ratio: aspectRatio, platform_credits_charged: platformCost, platform_credits_remaining: account?.balance ?? null, provider_cost_estimate_usd: Number((duration * 0.12).toFixed(2)), provider_cost_usd: null }, { status: 202, headers: { 'Cache-Control': 'private, no-store' } });
+    return NextResponse.json({ job_id: job.id, task_id: created.task_id, status: 'processing', provider: 'google', model, mode: 'text_to_video', duration_seconds: duration, aspect_ratio: aspectRatio, platform_credits_charged: platformCost, platform_credits_remaining: account?.balance ?? null, provider_cost_estimate_usd: null, provider_cost_usd: null }, { status: 202, headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     if (reserved) await db.rpc('refund_platform_credits', { p_user_id: ctx.user.id, p_job_id: job.id, p_cost: platformCost });
     await db.from('generation_jobs').update({ status: 'failed', error_code: 'provider_start_failed', error_message: 'Video generation could not be started. Any reserved platform credits were returned when possible.', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', job.id).eq('user_id', ctx.user.id);
