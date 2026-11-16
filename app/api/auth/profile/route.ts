@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProfile } from '@/lib/auth';
+import { adminSupabase, getProfile } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
@@ -26,7 +26,7 @@ export async function PATCH(req: NextRequest) {
   if (fullName.length < 2 || fullName.length > 80) {
     return NextResponse.json({ error: 'Enter a name between 2 and 80 characters.' }, { status: 400 });
   }
-  const { error } = await (await import('@/lib/auth')).adminSupabase()
+  const { error } = adminSupabase()
     .from('profiles')
     .update({ full_name: fullName })
     .eq('id', context.user.id);
