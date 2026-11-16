@@ -19,8 +19,8 @@ export async function GET(req: NextRequest) {
   const rate = Number.isSafeInteger(configuredRate) && configuredRate > 0 ? configuredRate : null;
   if (!capabilities.available) return NextResponse.json({ available: false, provider: 'google', error: capabilities.error }, { status: 503 });
   if (!owner && rate === null) return NextResponse.json({ available: false, model, error: 'Video generation is temporarily unavailable. Please try again later.' }, { status: 503 });
-  const duration = Number.parseInt(req.nextUrl.searchParams.get('duration') || '5', 10);
-  if (![4, 6, 8].includes(duration)) return NextResponse.json({ error: 'Duration must be between 2 and 10 seconds.' }, { status: 400 });
+  const duration = Number.parseInt(req.nextUrl.searchParams.get('duration') || '8', 10);
+  if (![4, 6, 8].includes(duration)) return NextResponse.json({ error: 'Google Veo supports 4, 6, or 8 seconds in this Studio workflow.' }, { status: 400 });
   const { data: account } = await adminSupabase().from('platform_credit_accounts').select('balance').eq('user_id', ctx.user.id).maybeSingle();
   const required = owner ? 0 : (rate as number) * duration;
   return NextResponse.json({ available: true, model, duration_seconds: duration, supported_durations: [4,6,8], aspect_ratios: ['landscape','portrait'], resolutions: ['720p','1080p'], platform_credits_required: required, platform_credits_per_second: rate, platform_credits_available: account?.balance ?? 0, provider_cost_estimate_usd: null, provider_cost_usd: null, mode: 'text_to_video' }, { headers: { 'Cache-Control': 'private, no-store' } });
@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: 'Sign in to generate video.' }, { status: 401 });
   const body = await req.json().catch(() => null);
   const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
-  const sourceAssetId = typeof body?.image_asset_id === 'string' ? body.image_asset_id : '';
+  const sourceAssetId = '';
+  if (body?.image_asset_id !== undefined) return NextResponse.json({ error: 'Image-to-video is not enabled for the current Google provider configuration.' }, { status: 501 });
   if (body?.image_asset_id !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceAssetId)) {
     return NextResponse.json({ error: 'Choose a valid source image from your private library.' }, { status: 400 });
   }
