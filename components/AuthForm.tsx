@@ -94,9 +94,15 @@ export function AuthForm() {
         if (error) throw error;
         const requestedNext = safeInternalNext(new URLSearchParams(window.location.search).get('next'));
         const accountType = result.user?.storeAccountType;
+        const profileResponse = await fetch('/api/auth/profile', { headers: { Authorization: 'Bearer ' + result.session.access_token }, cache: 'no-store' });
+        const profileResult = await profileResponse.json().catch(() => ({}));
+        if (!profileResponse.ok) throw new Error(profileResult.error || 'Your profile could not be checked.');
+        const onboardingComplete = profileResult.profile?.onboarding_completed === true;
         const next = mode === 'signup' && storeSignup
           ? storeDestination(storeAccountType)
-          : requestedNext ?? (mode === 'signup' ? '/onboarding' : (accountType === 'buyer' || accountType === 'seller' ? storeDestination(accountType) : '/dashboard'));
+          : !onboardingComplete
+            ? '/getting-started'
+            : requestedNext ?? (accountType === 'buyer' || accountType === 'seller' ? storeDestination(accountType) : '/dashboard');
         const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (assuranceError) throw assuranceError;
         const destination = assurance.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2'
@@ -125,7 +131,7 @@ export function AuthForm() {
       const requestedNext = safeInternalNext(new URLSearchParams(window.location.search).get('next'));
       const next = mode === 'signup' && storeSignup
         ? storeDestination(storeAccountType)
-        : requestedNext ?? (mode === 'signup' ? '/onboarding' : '/dashboard');
+        : requestedNext ?? (mode === 'signup' ? '/getting-started' : '/dashboard');
       const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
