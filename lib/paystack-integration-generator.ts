@@ -1,8 +1,10 @@
 export type PaystackProjectFiles = Record<string, string>;
 
-export function generatePaystackIntegrationFiles(): PaystackProjectFiles {
+export function generatePaystackIntegrationFiles(useSrcDirectory = false): PaystackProjectFiles {
+  const appRoot = useSrcDirectory ? 'src/app' : 'app';
+  const libRoot = useSrcDirectory ? 'src/lib' : 'lib';
   return {
-    "src/lib/paystack.ts": \`const PAYSTACK_API = "https://api.paystack.co";
+    [libRoot + "/paystack.ts"]: \`const PAYSTACK_API = "https://api.paystack.co";
 
 export async function initializePaystackTransaction(input: {
   email: string; amountKobo: number; reference: string; callbackUrl: string;
@@ -30,7 +32,7 @@ export async function verifyPaystackTransaction(reference: string) {
   return result.data as { status: string; reference: string; amount: number; currency: string; paid_at: string; customer: { email: string } };
 }
 \`,
-    "src/app/api/payments/initialize/route.ts": \`import { NextRequest, NextResponse } from "next/server";
+    [appRoot + "/api/payments/initialize/route.ts"]: \`import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { initializePaystackTransaction } from "@/lib/paystack";
 
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
   }
 }
 \`,
-    "src/app/api/payments/verify/route.ts": \`import { NextRequest, NextResponse } from "next/server";
+    [appRoot + "/api/payments/verify/route.ts"]: \`import { NextRequest, NextResponse } from "next/server";
 import { verifyPaystackTransaction } from "@/lib/paystack";
 
 export const runtime = "nodejs";
@@ -77,7 +79,7 @@ export async function POST(request: NextRequest) {
   }
 }
 \`,
-    "src/app/api/payments/webhook/route.ts": \`import { createHmac, timingSafeEqual } from "node:crypto";
+    [appRoot + "/api/payments/webhook/route.ts"]: \`import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
