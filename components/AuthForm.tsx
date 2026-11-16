@@ -103,7 +103,7 @@ export function AuthForm() {
           throw new Error(profileResult?.error || 'Your account profile could not be checked. Please try again.');
         }
         const destinationAfterProfile = profileResult.user.onboarding_completed !== true
-          ? '/getting-started'
+          ? `/getting-started?next=${encodeURIComponent(next)}`
           : next;
         const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (assuranceError) throw assuranceError;
