@@ -29,6 +29,11 @@ export default function Dashboard() {
         const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
         const { data: auth } = await supabase.auth.getSession();
         if (!auth.session) { router.replace("/auth?next=/dashboard"); return; }
+        const profileResponse = await fetch("/api/auth/profile", { headers: { Authorization: `Bearer ${auth.session.access_token}` }, cache: "no-store" });
+        const profileResult = await profileResponse.json().catch(() => ({}));
+        if (!profileResponse.ok) throw new Error(profileResult.error || "Your profile could not be checked.");
+        if (profileResult.profile?.onboarding_completed !== true) { router.replace("/getting-started"); return; }
+        if (profileResult.profile?.workspace_style === "dark") document.documentElement.dataset.theme = "dark";
         const response = await fetch("/api/dashboard", {
           headers: { Authorization: `Bearer ${auth.session.access_token}` },
           cache: "no-store",

@@ -10,7 +10,7 @@ export function WorkspaceBuilderSplit({ projectId, projectName, previewUrl, prev
 }) {
   const [messages, setMessages] = useState<ChatLine[]>([]);
   const [prompt, setPrompt] = useState('');
-  const [sessionId, setSessionId] = useState('');
+  const sessionIdRef = useRef(initialSessionId);
   const [busy, setBusy] = useState(false);
   const [viewport, setViewport] = useState<'desktop'|'mobile'>('desktop');
   const [error, setError] = useState('');
@@ -18,12 +18,12 @@ export function WorkspaceBuilderSplit({ projectId, projectName, previewUrl, prev
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const id = initialSessionId || crypto.randomUUID();
-    setSessionId(id);
+    if (!initialSessionId) return;
+    sessionIdRef.current = initialSessionId;
     const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
     void supabase.auth.getSession().then(({data}) => {
       if (!data.session) return;
-      void fetch('/api/chat?session_id=' + encodeURIComponent(id), {headers:{Authorization:'Bearer '+data.session.access_token},cache:'no-store'})
+      void fetch('/api/chat?session_id=' + encodeURIComponent(initialSessionId), {headers:{Authorization:'Bearer '+data.session.access_token},cache:'no-store'})
         .then(response=>response.json()).then(body=>setMessages(Array.isArray(body.messages)?body.messages.filter((m:unknown):m is ChatLine=>Boolean(m&&typeof m==='object'&&'role'in m&&'content'in m)).map((m:ChatLine)=>({role:m.role,content:m.content})):[])).catch(()=>{});
     });
   }, [initialSessionId]);
@@ -32,7 +32,9 @@ export function WorkspaceBuilderSplit({ projectId, projectName, previewUrl, prev
 
   const send = useCallback(async (value: string, requestType: 'build'|'repair' = 'build') => {
     const text=value.trim();
-    if(!text||busy||!sessionId)return;
+    if(!text||busy)return;
+    const activeSessionId = sessionIdRef.current || crypto.randomUUID();
+    sessionIdRef.current = activeSessionId;
     setBusy(true);setError('');
     setMessages(current=>[...current,{role:'user',content:text}]);
     try{
@@ -42,7 +44,7 @@ export function WorkspaceBuilderSplit({ projectId, projectName, previewUrl, prev
       const response=await fetch('/api/chat',{
         method:'POST',
         headers:{'Content-Type':'application/json',Authorization:'Bearer '+auth.session.access_token,'Idempotency-Key':crypto.randomUUID()},
-        body:JSON.stringify({session_id:sessionId,message:text,project_id:projectId,mode:'tools',work_mode:true,request_type:requestType,request_id:crypto.randomUUID()}),
+        body:JSON.stringify({session_id:activeSessionId,message:text,project_id:projectId,mode:'tools',work_mode:true,request_type:requestType,request_id:crypto.randomUUID()}),
       });
       const body=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(body.error||'Leo could not process this workspace request.');
@@ -50,7 +52,7 @@ export function WorkspaceBuilderSplit({ projectId, projectName, previewUrl, prev
       setPrompt('');
     }catch(cause){setError(cause instanceof Error?cause.message:'Leo could not process this request.');}
     finally{setBusy(false);}
-  },[busy,projectId,sessionId]);
+  },[busy,projectId]);
 
   function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();void send(prompt);}
   const effectivePreviewError=previewError||frameError;

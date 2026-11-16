@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
         'project-import.json': JSON.stringify({ source: 'website', url: fetched.url, title: structure.title, description: structure.description, headings: structure.headings, navigation: structure.navigation, brand_colors: structure.brandColors, upgrade_goal: upgradeGoal, imported_at: new Date().toISOString(), note: 'Reference import only; original source code was not available from the public website.' }, null, 2),
       };
       importDetails = { source, source_url: fetched.url, title: structure.title, upgrade_goal: upgradeGoal, imported_files: Object.keys(files).length, skipped_files: 0, import_mode: 'website_reference' };
-    } else {
+    } else if (source === 'github') {
       const parsed = parseGitHubRepository(body.repository_url);
       const connectionId = typeof body.github_connection_id === 'string' ? body.github_connection_id : '';
       if (!/^[0-9a-f-]{36}$/i.test(connectionId)) throw new Error('Select a saved GitHub connection before importing a repository.');

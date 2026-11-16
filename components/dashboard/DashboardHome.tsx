@@ -26,6 +26,19 @@ function getThemeSnapshot(): "light" | "dark" {
 function getRecentProjectsSnapshot() {
   return localStorage.getItem("leonardx_recent_projects") || "[]";
 }
+function subscribeInitialPrompt(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener("leonardx-initial-prompt", onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener("leonardx-initial-prompt", onChange);
+  };
+}
+function getInitialPromptSnapshot() {
+  return localStorage.getItem("leonardx_initial_prompt") || "";
+}
+function getServerInitialPromptSnapshot() { return ""; }
+
 
 const filters: Filter[] = ["My projects", "Recently viewed", "LeonardX templates"];
 const navItems = [
@@ -52,7 +65,7 @@ function relativeTime(value: string) {
 
 export function DashboardHome({ data }: { data: DashboardData }) {
   const router = useRouter();
-  const [prompt, setPrompt] = useState("");
+  const prompt = useSyncExternalStore(subscribeInitialPrompt, getInitialPromptSnapshot, getServerInitialPromptSnapshot);
   const [mode, setMode] = useState("Build");
   const [filter, setFilter] = useState<Filter>("My projects");
   const [query, setQuery] = useState("");
@@ -64,12 +77,13 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [recentIds, setRecentIds] = useState<string[]>([]);
   useEffect(() => { try { const recent = JSON.parse(localStorage.getItem("leonardx_recent_projects") || "[]"); if (Array.isArray(recent)) setRecentIds(recent.filter((id): id is string => typeof id === "string").slice(0, 20)); const saved = localStorage.getItem("leonardx-theme"); const preferred = saved === "dark" || saved === "light" ? saved : document.documentElement.dataset.theme === "dark" ? "dark" : "light"; setTheme(preferred); } catch { setTheme("light"); } }, []);
-  useEffect(() => {
+  function setPrompt(value: string) {
     try {
-      const initialPrompt = localStorage.getItem("leonardx_initial_prompt");
-      if (initialPrompt) setPrompt(initialPrompt);
+      if (value) localStorage.setItem("leonardx_initial_prompt", value);
+      else localStorage.removeItem("leonardx_initial_prompt");
+      window.dispatchEvent(new Event("leonardx-initial-prompt"));
     } catch {}
-  }, []);
+  }
   const name = firstName(data.user.name);
   const projects = useMemo(() => data.projects.filter(project => project.project_name.toLowerCase().includes(query.toLowerCase())), [data.projects, query]);
   const visibleProjects = useMemo(() => filter === "Recently viewed" ? recentIds.map(id => projects.find(project => project.id === id)).filter((project): project is DashboardData["projects"][number] => Boolean(project)) : projects, [filter, projects, recentIds]);
@@ -97,7 +111,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || "The project was created, but Leo could not start the build.");
-        try { localStorage.removeItem("leonardx_initial_prompt"); } catch {}
+        try { localStorage.removeItem("leonardx_initial_prompt"); window.dispatchEvent(new Event("leonardx-initial-prompt")); } catch {}
         router.push(`/ide/${encodeURIComponent(projectId)}?session_id=${encodeURIComponent(sessionId)}`);
       } else {
         const response = await fetch("/api/chat", {

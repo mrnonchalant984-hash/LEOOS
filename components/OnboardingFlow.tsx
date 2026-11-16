@@ -24,7 +24,7 @@ export function OnboardingFlow() {
 
   function chooseStyle(value: 'light'|'dark') {
     setStyle(value);
-    try { localStorage.setItem('leonardx-theme', value); document.documentElement.dataset.theme = value; } catch {}
+    try { localStorage.setItem('leonardx-theme', value); } catch {}
   }
 
   async function finish(team: string) {
@@ -42,7 +42,7 @@ export function OnboardingFlow() {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Your preferences could not be saved.');
-      try { localStorage.setItem('leonardx-theme', style); document.documentElement.dataset.theme = style; } catch {}
+      try { localStorage.setItem('leonardx-theme', style); } catch {}
       router.replace('/dashboard?welcome=true');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Preferences could not be saved.');
