@@ -39,11 +39,50 @@ export default function ContactPage() {
         throw new Error(result.error || 'Your message could not be submitted. Please try again.');
       }
 
+      let web3FormsSent = false;
+      let deliveryError = '';
+
+      // Web3Forms requires browser-originated requests on its free API.
+      // Calling it from /api/contact causes HTTP 403 unless the server IP is allowlisted on a paid plan.
+      if (!result.emailSent) {
+        const accessKey = process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY?.trim();
+        if (accessKey) {
+          try {
+            const web3Response = await fetch('https://api.web3forms.com/submit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({
+                access_key: accessKey,
+                name: submission.name,
+                email: submission.email,
+                replyto: submission.email,
+                subject: `New LeonardX contact: ${submission.service}`,
+                from_name: 'LeonardX Contact Form',
+                message: `Service requested: ${submission.service}\\n\\n${submission.message}`,
+                botcheck: '',
+              }),
+            });
+            const web3Result = await web3Response.json().catch(() => ({}));
+            web3FormsSent = web3Response.ok && web3Result.success === true;
+            if (!web3FormsSent) {
+              deliveryError = typeof web3Result.message === 'string'
+                ? web3Result.message
+                : `Web3Forms rejected the message (HTTP ${web3Response.status}). Check the access key and permitted domain in Web3Forms.`;
+            }
+          } catch {
+            deliveryError = 'Web3Forms could not be reached. Please try again or use the direct email link.';
+          }
+        } else {
+          deliveryError = 'Web3Forms is not configured for this deployment. Add NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY in Vercel.';
+        }
+      }
+
+      const delivered = result.emailSent === true || web3FormsSent;
       setStatus({
         type: 'success',
-        message: result.emailSent || result.web3FormsSent
+        message: delivered
           ? 'Your message has been received and LeonardX has been notified.'
-          : `Your message was saved, but notification delivery failed. ${result.web3FormsError || 'Configure Web3Forms or SMTP/Resend.'}`,
+          : `Your message was saved, but notification delivery is not confirmed. ${deliveryError || 'Configure Web3Forms or SMTP/Resend.'}`,
       });
       formElement.reset();
     } catch (error) {
