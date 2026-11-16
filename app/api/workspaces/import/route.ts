@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import JSZip from 'jszip';
 import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
@@ -84,6 +85,47 @@ async function importGitHubFiles(owner: string, repo: string, token: string) {
   if (!validateIdeFiles(files)) throw new Error('The imported repository exceeds LeonardX workspace file limits.');
   return { files, branch, fullName: repository.full_name || owner + '/' + repo, imported: Object.keys(files).length, skipped, private: Boolean(repository.private) };
 }
+const ZIP_MAX_BYTES = 10 * 1024 * 1024;
+const IMPORT_GOALS = new Set(['modernize_ui', 'paystack_ecommerce', 'exact_redesign']);
+
+async function importZipFile(file: File) {
+  if (file.size <= 0 || file.size > ZIP_MAX_BYTES) throw new Error('Choose a ZIP file smaller than 10 MB.');
+  const archive = await JSZip.loadAsync(await file.arrayBuffer(), { checkCRC32: true, createFolders: false });
+  const entries = Object.values(archive.files).filter(entry => !entry.dir);
+  if (entries.length > MAX_IDE_FILES * 3) throw new Error('This ZIP contains too many entries for a safe import.');
+  const files: Record<string, string> = {};
+  let total = 0, skipped = 0;
+  for (const entry of entries) {
+    const path = entry.name.replace(/\\/g, '/');
+    if (skipRepositoryPath(path) || path.split('/').some(part => part === '..' || part === '.')) { skipped++; continue; }
+    const safePath = normalizeIdePath(path);
+    if (!safePath) { skipped++; continue; }
+    try {
+      const bytes = await entry.async('uint8array');
+      if (bytes.byteLength > MAX_IDE_FILE_BYTES || total + bytes.byteLength > MAX_IDE_TOTAL_BYTES || bytes.includes(0)) { skipped++; continue; }
+      const content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      if (SECRET_CONTENT.test(content)) { skipped++; continue; }
+      files[safePath] = content;
+      total += bytes.byteLength;
+    } catch { skipped++; }
+    if (Object.keys(files).length >= MAX_IDE_FILES) break;
+  }
+  if (!Object.keys(files).length) throw new Error('No safe, readable source files were found in this ZIP.');
+  if (!files['README.md'] && !files['readme.md']) files['README.md'] = '# Imported ZIP project\n\nImported into LeonardX. Review source files and dependencies before building or deploying.';
+  if (!validateIdeFiles(files)) throw new Error('The ZIP exceeds LeonardX workspace file limits.');
+  return { files, imported: Object.keys(files).length, skipped };
+}
+
+function extractWebsiteStructure(html: string) {
+  const decode = (value: string) => value.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/\s+/g, ' ').trim().slice(0, 500);
+  const title = decode(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '') || 'Imported website';
+  const description = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)?.[1]?.slice(0, 500) || '';
+  const headings = [...html.matchAll(/<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/gi)].map(match => decode(match[1])).filter(Boolean).slice(0, 40);
+  const navigation = [...html.matchAll(/<nav\b[^>]*>([\s\S]*?)<\/nav>/gi)].flatMap(match => [...match[1].matchAll(/<(?:a|button)\b[^>]*>([\s\S]*?)<\/(?:a|button)>/gi)].map(item => decode(item[1]))).filter(Boolean).slice(0, 40);
+  const brandColors = [...new Set(html.match(/#[0-9a-f]{3,8}\b|rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}(?:\s*,\s*[\d.]+)?\s*\)/gi) || [])].slice(0, 24);
+  return { title, description, headings, navigation, brandColors, pageText: htmlText(html) };
+}
+
 function htmlText(html: string) {
   return html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
@@ -98,10 +140,22 @@ export async function POST(request: NextRequest) {
   if (!context) return NextResponse.json({ error: 'Sign in before importing a project.' }, { status: 401 });
   const limited = await enforceUserRateLimit(context.user.id, 'project-import', 5, 60);
   if (limited) return limited;
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: 'Send a valid import request.' }, { status: 400 });
+  const contentType = request.headers.get('content-type') || '';
+  let body: Record<string, unknown> | null = null;
+  let zipFile: File | null = null;
+  if (contentType.includes('multipart/form-data')) {
+    const form = await request.formData();
+    body = { source: form.get('source'), project_name: form.get('project_name'), upgrade_goal: form.get('upgrade_goal') };
+    const upload = form.get('zip');
+    if (upload instanceof File) zipFile = upload;
+  } else {
+    const parsed = await request.json().catch(() => null);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) body = parsed as Record<string, unknown>;
+  }
+  if (!body) return NextResponse.json({ error: 'Send a valid import request.' }, { status: 400 });
   const source = body.source;
-  if (source !== 'website' && source !== 'github') return NextResponse.json({ error: 'Choose a website or GitHub import.' }, { status: 400 });
+  if (source !== 'website' && source !== 'github' && source !== 'zip') return NextResponse.json({ error: 'Choose a website, GitHub or ZIP import.' }, { status: 400 });
+  const upgradeGoal = typeof body.upgrade_goal === 'string' && IMPORT_GOALS.has(body.upgrade_goal) ? body.upgrade_goal : 'modernize_ui';
   const platformOwner = isPlatformOwner(context.profile);
   const plan = await getEffectiveUserPlan(context.user.id, platformOwner);
   if (!platformOwner && (!plan.projectTypes.includes('web_app') || !planAllows(plan, 'web-app-builder'))) return NextResponse.json({ error: 'Project workspaces are not included in your current plan.' }, { status: 403 });
@@ -117,15 +171,15 @@ export async function POST(request: NextRequest) {
     if (source === 'website') {
       if (typeof body.website_url !== 'string') throw new Error('Enter the live website URL you want Leo to use as a reference.');
       const fetched = await fetchPublicHtml(body.website_url);
-      const title = fetched.html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 180) || new URL(fetched.url).hostname;
-      const description = fetched.html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)?.[1]?.slice(0, 500) || '';
-      projectName = projectName || safeProjectName(title);
+      const structure = extractWebsiteStructure(fetched.html);
+      projectName = projectName || safeProjectName(structure.title || new URL(fetched.url).hostname);
+      const goalLabels: Record<string, string> = { modernize_ui: 'Modernize the user interface', paystack_ecommerce: 'Convert to e-commerce with Paystack', exact_redesign: 'Create a close visual redesign' };
       files = {
-        'README.md': '# ' + projectName + '\n\nThis workspace was created from a live website reference. A public URL does not expose the original private source code; Leo can use the saved reference to plan and rebuild an equivalent project.\n\n- Source URL: ' + fetched.url + '\n- Imported: ' + new Date().toISOString() + '\n\nReview the reference content before asking Leo to implement changes.',
-        'website-reference.md': '# Website reference: ' + title + '\n\nSource: ' + fetched.url + '\n\n' + (description ? 'Description: ' + description + '\n\n' : '') + '## Extracted page text\n\n' + (htmlText(fetched.html) || 'No readable page text was found.'),
-        'project-import.json': JSON.stringify({ source: 'website', url: fetched.url, title, description, imported_at: new Date().toISOString(), note: 'Reference import only; original source code was not available from the public website.' }, null, 2),
+        'README.md': '# ' + projectName + '\n\nThis workspace was created from a public website reference. The original private source code was not retrieved.\n\n- Source URL: ' + fetched.url + '\n- Upgrade goal: ' + goalLabels[upgradeGoal] + '\n- Imported: ' + new Date().toISOString() + '\n\nAsk Leo to use website-reference.md as a design and content brief, then implement a new Next.js + Tailwind project.',
+        'website-reference.md': '# Website reference: ' + structure.title + '\n\nSource: ' + fetched.url + '\n\n' + (structure.description ? 'Description: ' + structure.description + '\n\n' : '') + '## Upgrade goal\n\n' + goalLabels[upgradeGoal] + '\n\n## Headings\n\n' + structure.headings.map(value => '- ' + value).join('\n') + '\n\n## Navigation\n\n' + structure.navigation.map(value => '- ' + value).join('\n') + '\n\n## Detected brand colours\n\n' + structure.brandColors.map(value => '- ' + value).join('\n') + '\n\n## Extracted page copy\n\n' + (structure.pageText || 'No readable page text was found.'),
+        'project-import.json': JSON.stringify({ source: 'website', url: fetched.url, title: structure.title, description: structure.description, headings: structure.headings, navigation: structure.navigation, brand_colors: structure.brandColors, upgrade_goal: upgradeGoal, imported_at: new Date().toISOString(), note: 'Reference import only; original source code was not available from the public website.' }, null, 2),
       };
-      importDetails = { source, source_url: fetched.url, title, imported_files: Object.keys(files).length, skipped_files: 0, import_mode: 'website_reference' };
+      importDetails = { source, source_url: fetched.url, title: structure.title, upgrade_goal: upgradeGoal, imported_files: Object.keys(files).length, skipped_files: 0, import_mode: 'website_reference' };
     } else {
       const parsed = parseGitHubRepository(body.repository_url);
       const connectionId = typeof body.github_connection_id === 'string' ? body.github_connection_id : '';
@@ -139,6 +193,12 @@ export async function POST(request: NextRequest) {
       files = imported.files;
       projectName = projectName || safeProjectName(imported.fullName.split('/')[1] || parsed.repo);
       importDetails = { source, repository: imported.fullName, branch: imported.branch, imported_files: imported.imported, skipped_files: imported.skipped, private_repository: imported.private };
+    } else {
+      if (!zipFile) throw new Error('Choose a .zip project file to import.');
+      const imported = await importZipFile(zipFile);
+      files = imported.files;
+      projectName = projectName || safeProjectName(zipFile.name.replace(/\.zip$/i, ''));
+      importDetails = { source: 'zip', filename: zipFile.name.slice(0, 160), imported_files: imported.imported, skipped_files: imported.skipped };
     }
     const { data: project, error: insertError } = await db.from('projects').insert({
       user_id: context.user.id, project_name: projectName || 'Imported project', type: 'web_app', status: 'draft', progress: 0, files,
