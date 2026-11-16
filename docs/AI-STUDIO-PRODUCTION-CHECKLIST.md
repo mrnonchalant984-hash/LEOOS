@@ -15,8 +15,8 @@ Status definitions: **Implemented** means code exists; **Automated test** means 
 | Delete a generated image from private storage and Studio history | Implemented in source; automated ownership and lifecycle tests added |
 | Platform-credit accounts for profiles created before the welcome-credit trigger | Forward migration added; not yet applied |
 | Credit reservation failures distinguish known database rejections from ambiguous network outcomes | Implemented in source; provider/database fault-injection still required |
-| Runway Gen-4.5 text-to-video and status polling | Existing implementation reused; live provider use not verified in this change |
-| Image-to-video, creative projects, and project save/reuse | Not implemented |
+| Google Veo text-to-video and operation polling | Implemented in source; live Google Cloud access and output storage must be verified in the target project |
+| Image-to-video, scene-level multi-clip projects, and project save/reuse | Not implemented |
 | Real-provider edit/generation smoke test | Not run; credentials and provider credits were not tested |
 | Database migration applied in staging or production | Not verified |
 | Vercel preview or production deployment | Not verified |
@@ -33,9 +33,9 @@ Configure these values in the server environment, not in client variables:
 | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Yes for image operations | Server-side Gemini image generation/edit credential |
 | `LEO_GEMINI_IMAGE_MODEL` | Optional | Server-side Gemini image model; must be image-capable and enabled for the configured Gemini key |
 | `LEO_IMAGE_PLATFORM_CREDITS` | Optional | Server-side platform credit reservation per image request |
-| `RUNWAYML_API_SECRET` | Required for video | Server-side Runway credential |
-| `RUNWAY_VIDEO_MODEL` | Optional | Existing video workflow currently supports `gen4.5` only |
-| `RUNWAY_GEN45_PLATFORM_CREDITS_PER_SECOND` | Required for non-owner video credits | Application credit conversion; not Runway's provider-credit unit |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Required for Google Veo | Server-side Google service-account JSON; never expose client-side |
+| `LEO_GOOGLE_VIDEO_MODEL` | Optional | Defaults to `veo-3.1-generate-001`; confirm model availability in the selected Google Cloud region |
+| `GOOGLE_VEO_PLATFORM_CREDITS_PER_SECOND` | Required for non-owner video credits | LeonardX platform-credit conversion; not a Google billing unit |
 
 Apply the existing generation migration and the pending platform-credit-account backfill, and confirm the private `leo-files` bucket is configured before release. The backfill creates missing accounts at zero balance and does not issue retroactive credits. Do not put real credentials in `.env.example`, source control, or chat.
 
