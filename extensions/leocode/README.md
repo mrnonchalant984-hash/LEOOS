@@ -37,6 +37,12 @@ The extension's MCP tools currently discover and call LeonardX-connected MCP ser
 
 The local AHP host is experimental and is not registered as a harness in VS Code's dedicated Agents window. Specialist-agent discovery, MCP tools, browser tools, and shared `chats_v2` history are not yet exposed through AHP. File writes and shell actions require approval; shell execution is not an operating-system sandbox.
 
+## Automated build and packaging
+
+The .github/workflows/leocode-ci.yml workflow installs the locked dependencies, compiles the extension, validates and packages a VSIX, and uploads the installable artifact for 14 days. It runs for relevant pushes to main and feat/**, pull requests into main, and manual dispatches.
+
+Marketplace publishing remains a separate, manually dispatched workflow on main using the existing Marketplace OIDC publisher configuration. CI packaging does not publish an extension.
+
 ## Local development
 
 1. Install the dependencies in this directory with `npm install`.
