@@ -6,6 +6,7 @@ import { ChevronRight, Download, FileCode2, FolderDown, Play, Save, TerminalSqua
 import CloudBuildPanel from '@/components/ide/CloudBuildPanel';
 import { LivePreviewFrame } from '@/components/engineering/LivePreviewFrame';
 import { PaystackIntegrationGenerator } from '@/components/ide/PaystackIntegrationGenerator';
+import { LEOWidget } from '@/components/LEOWidget';
 
 type Workspace = { id: string; project_name: string; type: string | null; status: string | null; files: Record<string, string> };
 type TerminalLine = { kind: 'input' | 'output' | 'error'; text: string };
@@ -38,6 +39,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [importing, setImporting] = useState(false);
+  const [rightPanel, setRightPanel] = useState<'leo' | 'terminal'>('leo');
   const importInputRef = useRef<HTMLInputElement>(null);
   const filePaths = useMemo(() => flattenFiles(files), [files]);
   const folderPaths = useMemo(() => [...new Set(filePaths.flatMap(filePath => {
@@ -315,10 +317,22 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
           <div className="flex min-h-[50vh] min-w-0 flex-col"><div className="flex h-10 items-center gap-2 border-b border-white/10 px-4 font-mono text-xs text-white/55"><span className="truncate">{selected || 'No file selected'}</span>{selected && /\.json$/i.test(selected) && <button onClick={formatSelectedFile} className="ml-auto rounded px-2 py-1 hover:bg-white/10">Format JSON</button>}</div>{selected ? <textarea aria-label={`Edit ${selected}`} spellCheck={false} value={files[selected] || ''} onChange={event => setFiles(previous => ({ ...previous, [selected]: event.target.value }))} className="min-h-[48vh] flex-1 resize-y bg-transparent p-4 font-mono text-[13px] leading-6 text-[#e6e7e9] outline-none focus:ring-1 focus:ring-inset focus:ring-[#d7aa70]/40" /> : <div className="grid flex-1 place-items-center p-8 text-center text-sm text-white/40">Choose a project file to start editing.</div>}</div>
         </div>
       </div>
-      <aside aria-label="Workspace terminal" className="flex min-h-[45vh] flex-col bg-[#0b0c0e]">
-        <div className="flex h-11 items-center gap-2 border-b border-white/10 px-4 text-xs text-white/60"><TerminalSquare size={15}/> Workspace tools <span className="ml-auto rounded bg-white/5 px-2 py-1 text-[10px] uppercase tracking-wide">Safe mode</span></div>
-        <div className="flex-1 space-y-3 overflow-auto p-4 font-mono text-xs leading-5" aria-live="polite">{terminal.map((line, index) => <pre key={`${index}-${line.text}`} className={`whitespace-pre-wrap break-words ${line.kind === 'input' ? 'text-[#d7aa70]' : line.kind === 'error' ? 'text-red-300' : 'text-white/65'}`}>{line.text}</pre>)}</div>
-        <form onSubmit={runPreviewCommand} className="flex items-center gap-2 border-t border-white/10 p-3"><span aria-hidden="true" className="font-mono text-[#d7aa70]">›</span><input aria-label="Preview command" value={terminalInput} onChange={event => setTerminalInput(event.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-xs text-white outline-none placeholder:text-white/35" placeholder="help, ls, find <name>, cat <path>"/><button aria-label="Run preview command" className="rounded p-2 text-white/60 hover:bg-white/10 hover:text-white"><Play size={14}/></button></form>
+      <aside aria-label="Leo chat and workspace terminal" className="flex min-h-[45vh] min-w-0 flex-col overflow-hidden bg-[#0b0c0e]">
+        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-white/10 px-3 text-xs text-white/60">
+          <button type="button" onClick={() => setRightPanel('leo')} aria-pressed={rightPanel === 'leo'} className={`rounded-md px-3 py-2 font-semibold ${rightPanel === 'leo' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>Leo chat</button>
+          <button type="button" onClick={() => setRightPanel('terminal')} aria-pressed={rightPanel === 'terminal'} className={`rounded-md px-3 py-2 font-semibold ${rightPanel === 'terminal' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>Terminal</button>
+          <span className="ml-auto rounded bg-white/5 px-2 py-1 text-[10px] uppercase tracking-wide">{rightPanel === 'leo' ? '35% assistant' : 'Safe mode'}</span>
+        </div>
+        {rightPanel === 'leo' ? (
+          <div className="min-h-0 min-w-0 flex-1">
+            <LEOWidget full embedded initialSessionId={`workspace-${workspaceId}`} />
+          </div>
+        ) : (
+          <>
+            <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4 font-mono text-xs leading-5" aria-live="polite">{terminal.map((line, index) => <pre key={`${index}-${line.text}`} className={`whitespace-pre-wrap break-words ${line.kind === 'input' ? 'text-[#d7aa70]' : line.kind === 'error' ? 'text-red-300' : 'text-white/65'}`}>{line.text}</pre>)}</div>
+            <form onSubmit={runPreviewCommand} className="flex shrink-0 items-center gap-2 border-t border-white/10 p-3"><span aria-hidden="true" className="font-mono text-[#d7aa70]">›</span><input aria-label="Preview command" value={terminalInput} onChange={event => setTerminalInput(event.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-xs text-white outline-none placeholder:text-white/35" placeholder="help, ls, find <name>, cat <path>"/><button aria-label="Run preview command" className="rounded p-2 text-white/60 hover:bg-white/10 hover:text-white"><Play size={14}/></button></form>
+          </>
+        )}
       </aside>
     </section>
   </main>;
