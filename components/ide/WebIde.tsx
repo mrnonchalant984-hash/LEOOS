@@ -304,12 +304,13 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
       const conflicts = Object.keys(generated).filter(path => path in files);
       if (conflicts.length) {
         setError(`Paystack generator did not overwrite existing files: ${conflicts.join(', ')}`);
-        return;
+        return false;
       }
       setFiles(previous => ({ ...previous, ...generated }));
       setSelected(Object.keys(generated)[0] || '');
       setError('');
       setTerminal(lines => [...lines, { kind: 'output', text: `Added ${Object.keys(generated).length} Paystack integration files. Review and save the changes.` }]);
+      return true;
     }} />
     {error && <div role="alert" className="mx-auto mb-3 max-w-[1600px] rounded-md border border-red-400/30 bg-red-950/30 px-4 py-2 text-sm text-red-200">{error}</div>}
     <section aria-label="Cloudflare static preview" className="mx-auto mb-4 max-w-[1600px] rounded-xl border border-white/10 bg-[#101114] p-4">
