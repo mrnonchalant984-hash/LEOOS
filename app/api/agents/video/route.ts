@@ -1,6 +1,6 @@
 import {NextRequest,NextResponse} from 'next/server';
 import {requireOwner,adminSupabase} from '@/lib/auth';
-import {getRunwayVideo} from '@/lib/agents/runway-video';
+import { getGoogleVideo } from '@/lib/agents/google-video';
 export const runtime='nodejs';
 export async function POST(req:NextRequest){
   try{
@@ -13,7 +13,7 @@ export async function POST(req:NextRequest){
     const db=adminSupabase();
     const {data:run}=await db.from('agent_runs').select('id,user_id,agent_id').eq('id',runId).eq('user_id',ctx.user.id).maybeSingle();
     if(!run||run.agent_id!=='video') return NextResponse.json({error:'Video agent run not found'},{status:404});
-    const result=await getRunwayVideo(taskId,runId,ctx.user.id);
+    const result=await getGoogleVideo(taskId,ctx.user.id);
     if(result.status==='completed') await db.from('agent_runs').update({status:'completed',result:JSON.stringify(result),completed_at:new Date().toISOString()}).eq('id',runId).eq('user_id',ctx.user.id);
     if(result.status==='failed') await db.from('agent_runs').update({status:'failed',error:result.error,completed_at:new Date().toISOString()}).eq('id',runId).eq('user_id',ctx.user.id);
     return NextResponse.json({run_id:runId,...result});
