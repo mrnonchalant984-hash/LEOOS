@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 const SECRET_PATH = /(^|\/)(?:\.env(?:\..*)?|\.npmrc|\.pypirc|\.netrc|id_rsa(?:\.pub)?|id_ed25519(?:\.pub)?|credentials(?:\.json)?|secrets?)(?:\/|$)/i;
 const SKIP_DIR = /(^|\/)(?:\.git|node_modules|vendor|dist|build|coverage|\.next|\.turbo|\.vercel|\.idea|\.vscode-test)(\/|$)/i;
 const BINARY_EXT = /\.(?:png|jpe?g|gif|webp|ico|pdf|zip|gz|tgz|7z|rar|mp4|mov|mp3|wav|woff2?|ttf|otf|eot|exe|dll|so|dylib|class|jar|wasm|sqlite|db)$/i;
-const SECRET_CONTENT = /(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:api[_-]?key|secret|password|access[_-]?token)\s*[:=]\s*["'][^"']{12,}["'])/i;
+const SECRET_CONTENT = /(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:api[_-]?key|secret|password|access[_-]?token)\s*[:=]\s*["'][^"']{12,}["']|(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{30,}|sk_(?:live|test|proj)_[A-Za-z0-9]{16,}|AIza[A-Za-z0-9_-]{30,}|AKIA[A-Z0-9]{16}|xox[baprs]-[A-Za-z0-9-]{20,}))/i;
 
 function safeProjectName(value: string) {
   return value.trim().replace(/[^\p{L}\p{N} _.-]/gu, '').replace(/\s+/g, ' ').slice(0, 100) || 'Imported project';
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
   if (!platformOwner && (count || 0) >= plan.limits.maxProjects) return NextResponse.json({ error: 'Project limit reached.' }, { status: 409 });
 
   try {
-    let projectName = typeof body.project_name === 'string' ? safeProjectName(body.project_name) : '';
+    let projectName = typeof body.project_name === 'string' && body.project_name.trim() ? safeProjectName(body.project_name) : '';
     let files: Record<string, string>;
     let importDetails: Record<string, unknown>;
     if (source === 'website') {
