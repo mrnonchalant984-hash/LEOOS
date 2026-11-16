@@ -166,7 +166,7 @@ function getRemoteDeviceId() {
   } catch { return "web-device"; }
 }
 
-export function LEOWidget({ full = false, initialSessionId = "", embedded = false }: { full?: boolean; initialSessionId?: string; embedded?: boolean }) {
+export function LEOWidget({ full = false, initialSessionId = "", embedded = false, initialProjectId = "", initialProjectName = "" }: { full?: boolean; initialSessionId?: string; embedded?: boolean; initialProjectId?: string; initialProjectName?: string }) {
   const [open, setOpen] = useState(full),
     [workspaceMode, setWorkspaceMode] = useState<"chat" | "work">("chat"),
     [workProject, setWorkProject] = useState<{ id: string; name: string } | null>(null),
@@ -241,6 +241,22 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     const query = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
   }, []);
+  useEffect(() => {
+    if (!initialProjectId) return;
+    let active = true;
+    setWorkspaceMode("work");
+    setWorkProject({ id: initialProjectId, name: initialProjectName || "Current project" });
+    void fetch(`/api/workspaces/${encodeURIComponent(initialProjectId)}/source`, { cache: "no-store" })
+      .then(async response => {
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Project source context could not be loaded.");
+        if (active) setWorkManifest(result.data);
+      })
+      .catch(cause => {
+        if (active) setError(cause instanceof Error ? cause.message : "Project source context could not be loaded.");
+      });
+    return () => { active = false; };
+  }, [initialProjectId, initialProjectName]);
   const hour = new Date().getHours();
   const timeGreeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   useEffect(() => {
