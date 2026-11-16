@@ -34,9 +34,9 @@ export default function StudioWorkspace() {
   const [prompt, setPrompt] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState('');
-  const [duration, setDuration] = useState(5);
+  const [duration, setDuration] = useState(8);
   const [aspectRatio, setAspectRatio] = useState<'landscape' | 'portrait'>('landscape');
-  const [sourceAssetId, setSourceAssetId] = useState('');
+  const [resolution, setResolution] = useState<'720p' | '1080p'>('720p');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
@@ -152,7 +152,7 @@ export default function StudioWorkspace() {
         response = await fetch('/api/generate-video', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-          body: JSON.stringify({ prompt: prompt.trim(), duration, aspect_ratio: aspectRatio, ...(sourceAssetId ? { image_asset_id: sourceAssetId } : {}) }),
+          body: JSON.stringify({ prompt: prompt.trim(), duration, aspect_ratio: aspectRatio, resolution }),
           cache: 'no-store',
         });
       }
@@ -226,7 +226,7 @@ export default function StudioWorkspace() {
   function resumeVideo(jobId: string) {
     setBusy(true);
     setError('');
-    setStatus('Checking the saved Runway job.');
+    setStatus('Checking the saved Google video job.');
     void pollVideo(jobId).catch(cause => {
       if (!mounted.current) return;
       setError(cause instanceof Error ? cause.message : 'Video status is temporarily unavailable.');
@@ -262,7 +262,7 @@ export default function StudioWorkspace() {
             </div>}
             <label htmlFor="studio-prompt" className="block text-xs font-semibold uppercase tracking-wider text-zinc-400">{mode === 'edit' ? 'Describe the changes' : mode === 'video' ? 'Describe your video' : 'Describe your image'}</label>
             <textarea id="studio-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} minLength={3} maxLength={2000} rows={5} required placeholder={mode === 'edit' ? 'Describe a transformation to make while keeping the original separate…' : mode === 'video' ? 'Describe the scene, motion, and visual style…' : 'Describe the image you want to create…'} className="w-full resize-y rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-zinc-600 focus:border-[var(--gold)]/50"/>
-            {mode === 'video' && <div className="grid gap-3 sm:grid-cols-3"><label className="text-xs text-zinc-400">Source image<select value={sourceAssetId} onChange={event => setSourceAssetId(event.target.value)} className="mt-1.5 block w-full rounded-lg border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white"><option value="">Text-to-video</option>{assets.filter(asset => asset.kind === 'image').map(asset => <option key={asset.id} value={asset.id}>Image · {asset.id.slice(0, 8)}</option>)}</select></label><label className="text-xs text-zinc-400">Duration<select value={duration} onChange={event => setDuration(Number(event.target.value))} className="mt-1.5 block w-full rounded-lg border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white">{[2,3,4,5,6,7,8,9,10].map(value => <option key={value} value={value}>{value} seconds</option>)}</select></label><label className="text-xs text-zinc-400">Aspect ratio<select value={aspectRatio} onChange={event => setAspectRatio(event.target.value as 'landscape'|'portrait')} className="mt-1.5 block w-full rounded-lg border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label></div>}
+            {mode === 'video' && <div className="grid gap-3 sm:grid-cols-3"><label className="text-xs text-zinc-400">Duration<select value={duration} onChange={event => setDuration(Number(event.target.value))} className="mt-1.5 block w-full rounded-lg border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white">{[4,6,8].map(value => <option key={value} value={value}>{value} seconds</option>)}</select></label><label className="text-xs text-zinc-400">Resolution<select value={resolution} onChange={event => setResolution(event.target.value as '720p'|'1080p')} className="mt-1.5 block w-full rounded-lg border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white"><option value="720p">720p</option><option value="1080p">1080p</option></select></label><label className="text-xs text-zinc-400">Aspect ratio<select value={aspectRatio} onChange={event => setAspectRatio(event.target.value as 'landscape'|'portrait')} className="mt-1.5 block w-full rounded-lg border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label></div>}
             <div className="flex flex-wrap items-center gap-3"><button type="submit" disabled={busy || prompt.trim().length < 3 || (mode === 'edit' && !file)} className="inline-flex items-center gap-2 rounded-xl bg-[var(--gold)] px-5 py-3 text-sm font-bold text-black disabled:cursor-not-allowed disabled:opacity-50">{busy ? <LoaderCircle size={16} className="animate-spin"/> : mode === 'video' ? <Video size={16}/> : <Sparkles size={16}/>} {busy ? 'Working…' : mode === 'edit' ? 'Edit image' : mode === 'video' ? 'Generate video' : 'Generate image'}</button><span className="text-[11px] text-zinc-500">Provider pricing can vary. Review your plan and credit balance before submitting.</span></div>
           </form>
           {status && <p role="status" aria-live="polite" className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3 text-xs text-emerald-100">{status}</p>}
