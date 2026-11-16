@@ -102,6 +102,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ received: true });
 }
 \`,
+    [root + "components/PaystackCheckoutButton.tsx"]: "\"use client\";\nimport { useState } from \"react\";\n\nexport function PaystackCheckoutButton({ orderId, email }: { orderId: string; email: string }) {\n  const [busy, setBusy] = useState(false);\n  const [error, setError] = useState(\"\");\n  async function checkout() {\n    if (busy || !orderId.trim() || !email.trim()) return;\n    setBusy(true); setError(\"\");\n    try {\n      const response = await fetch(\"/api/payments/initialize\", { method: \"POST\", headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify({ orderId, email }) });\n      const result = await response.json();\n      if (!response.ok || typeof result.authorizationUrl !== \"string\") throw new Error(result.error || \"Checkout could not be started.\");\n      window.location.assign(result.authorizationUrl);\n    } catch (cause) { setError(cause instanceof Error ? cause.message : \"Checkout could not be started.\"); setBusy(false); }\n  }\n  return <div><button type=\"button\" onClick={() => void checkout()} disabled={busy || !orderId.trim() || !email.trim()}>{busy ? \"Opening secure checkout…\" : \"Pay with Paystack\"}</button>{error && <p role=\"alert\">{error}</p>}</div>;\n}",
     ".env.example": \`# Server only. Never prefix this secret with NEXT_PUBLIC_.
 PAYSTACK_SECRET_KEY=sk_test_replace_me
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
