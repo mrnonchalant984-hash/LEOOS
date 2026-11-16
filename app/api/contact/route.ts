@@ -50,17 +50,14 @@ async function notifyContact(data: {
     data.message,
   ].join('\n');
 
-  const smtpConfigured = Boolean(
-    process.env.SMTP_HOST &&
-    process.env.SMTP_USER &&
-    process.env.SMTP_PASS &&
-    process.env.SMTP_FROM,
-  );
+  const smtpPassword = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
+  const smtpFrom = process.env.SMTP_FROM || process.env.SMTP_FORM || process.env.CONTACT_FROM_EMAIL;
+  const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && smtpPassword && smtpFrom);
   if (smtpConfigured) {
     try {
       if (await sendSmtpMail({
         to: destination,
-        from: process.env.SMTP_FROM,
+        from: smtpFrom,
         subject: `New LeonardX contact: ${data.name}`,
         text,
       })) return true;
