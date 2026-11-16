@@ -45,3 +45,8 @@ This is a source-level audit of the local checkout, not a production-readiness c
 - A production build and live integration tests were not run.
 
 This audit records verified source behavior and outstanding evidence gaps. It does not certify external services or the deployed product.
+
+
+## Video provider update (2026-11-16)
+
+The prior audit's video-provider note is superseded. The active generation route now targets Google Veo through the server-side Google Gen AI SDK and Vertex AI configuration. Live provider connectivity remains unverified until the deployment environment is configured and a staging generation is completed.
