@@ -39,6 +39,8 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [importing, setImporting] = useState(false);
+  const [importSource, setImportSource] = useState<'zip' | 'github'>('zip');
+  const [githubRepositoryUrl, setGithubRepositoryUrl] = useState('');
   const [rightPanel, setRightPanel] = useState<'leo' | 'terminal'>('leo');
   const importInputRef = useRef<HTMLInputElement>(null);
   const filePaths = useMemo(() => flattenFiles(files), [files]);
@@ -77,6 +79,32 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
     } finally {
       setImporting(false);
       if (importInputRef.current) importInputRef.current.value = '';
+    }
+  }
+
+  async function importGitHubRepository() {
+    const repositoryUrl = githubRepositoryUrl.trim();
+    if (!repositoryUrl) {
+      setError('Enter a public GitHub repository URL.');
+      return;
+    }
+    setImporting(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/github-import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repository_url: repositoryUrl }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'GitHub repository could not be imported.');
+      await loadWorkspace();
+      setTerminal(lines => [...lines, { kind: 'output', text: `Imported GitHub repository ${result.repository || repositoryUrl}.` }]);
+      setGithubRepositoryUrl('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'GitHub repository could not be imported.');
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -263,7 +291,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
   return <main className="min-h-[calc(100vh-140px)] bg-[#090a0c] px-3 py-5 text-white sm:px-6">
     <header className="mx-auto mb-4 flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
       <div><div className="flex items-center gap-2 text-xs text-white/45"><Link href="/dashboard" className="hover:text-white">Dashboard</Link><ChevronRight size={13}/><span>Web IDE</span></div><h1 className="mt-1 text-xl font-semibold">{workspace?.project_name || 'Workspace'}</h1></div>
-      <div className="flex flex-wrap items-center gap-2"><span className="rounded border border-white/10 px-2 py-1 text-xs text-white/55">{workspace?.status || 'Workspace'}</span><button type="button" onClick={generatePaystackIntegration} className="inline-flex items-center gap-2 rounded-md border border-emerald-400/30 px-3 py-2 text-sm text-emerald-200 hover:bg-emerald-400/10">Generate Paystack integration</button><input ref={importInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="sr-only" aria-label="Choose a ZIP archive to import" onChange={event => { const file = event.target.files?.[0]; if (file) void importWorkspaceArchive(file); }} /><button type="button" onClick={() => importInputRef.current?.click()} disabled={importing} className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 disabled:opacity-50"><Upload size={15}/>{importing ? 'Importing…' : 'Import ZIP'}</button><span className={`text-xs ${isDirty ? 'text-amber-300' : 'text-emerald-300'}`}>{isDirty ? 'Unsaved changes' : 'All changes saved'}</span><a href={exportUrl()} onClick={blockUnsavedExport} aria-disabled={isDirty} className={`inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 ${isDirty ? 'cursor-not-allowed opacity-45' : ''}`}><Download size={15}/>Download project ZIP</a><button onClick={() => void saveFiles()} disabled={saving || !isDirty} className="inline-flex items-center gap-2 rounded-md bg-[#d7aa70] px-3 py-2 text-sm font-medium text-black disabled:opacity-60"><Save size={15}/>{saving ? 'Saving…' : 'Save files'}</button></div>
+      <div className="flex flex-wrap items-center gap-2"><span className="rounded border border-white/10 px-2 py-1 text-xs text-white/55">{workspace?.status || 'Workspace'}</span><button type="button" onClick={generatePaystackIntegration} className="inline-flex items-center gap-2 rounded-md border border-emerald-400/30 px-3 py-2 text-sm text-emerald-200 hover:bg-emerald-400/10">Generate Paystack integration</button><select aria-label="Import source" value={importSource} onChange={event => setImportSource(event.target.value as 'zip' | 'github')} className="rounded-md border border-white/15 bg-[#101114] px-2 py-2 text-xs text-white"><option value="zip">ZIP archive</option><option value="github">GitHub repository</option></select>{importSource === 'zip' ? <><input ref={importInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="sr-only" aria-label="Choose a ZIP archive to import" onChange={event => { const file = event.target.files?.[0]; if (file) void importWorkspaceArchive(file); }} /><button type="button" onClick={() => importInputRef.current?.click()} disabled={importing} className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 disabled:opacity-50"><Upload size={15}/>{importing ? 'Importing…' : 'Import ZIP'}</button></> : <><input aria-label="Public GitHub repository URL" value={githubRepositoryUrl} onChange={event => setGithubRepositoryUrl(event.target.value)} placeholder="https://github.com/owner/repo" className="w-44 rounded-md border border-white/15 bg-black/20 px-2 py-2 text-xs text-white outline-none focus:border-[#d7aa70]/60" /><button type="button" onClick={() => void importGitHubRepository()} disabled={importing || !githubRepositoryUrl.trim()} className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 disabled:opacity-50">{importing ? 'Importing…' : 'Import repo'}</button></>}<span className={`text-xs ${isDirty ? 'text-amber-300' : 'text-emerald-300'}`}>{isDirty ? 'Unsaved changes' : 'All changes saved'}</span><a href={exportUrl()} onClick={blockUnsavedExport} aria-disabled={isDirty} className={`inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 ${isDirty ? 'cursor-not-allowed opacity-45' : ''}`}><Download size={15}/>Download project ZIP</a><button onClick={() => void saveFiles()} disabled={saving || !isDirty} className="inline-flex items-center gap-2 rounded-md bg-[#d7aa70] px-3 py-2 text-sm font-medium text-black disabled:opacity-60"><Save size={15}/>{saving ? 'Saving…' : 'Save files'}</button></div>
     </header>
     <CloudBuildPanel projectId={workspaceId} projectType={workspace?.type || null} />
     <PaystackIntegrationGenerator onGenerate={(generated) => {
