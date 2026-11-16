@@ -58,6 +58,91 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
     setError('Save your workspace changes before downloading the saved project files.');
   }
 
+  function generatePaystackIntegration() {
+    const generated: Record<string, string> = {
+      'app/api/payments/paystack/initialize/route.ts': [
+        'import { randomUUID } from "node:crypto";',
+        'import { NextRequest, NextResponse } from "next/server";',
+        'export const runtime = "nodejs";',
+        'export async function POST(request: NextRequest) {',
+        '  const secret = process.env.PAYSTACK_SECRET_KEY;',
+        '  const amount = Number(process.env.PAYSTACK_AMOUNT_KOBO);',
+        '  if (!secret) return NextResponse.json({ error: "Paystack is not configured." }, { status: 503 });',
+        '  if (!Number.isSafeInteger(amount) || amount < 100) return NextResponse.json({ error: "Set PAYSTACK_AMOUNT_KOBO on the server." }, { status: 503 });',
+        '  const body = await request.json().catch(() => null);',
+        '  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";',
+        '  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });',
+        '  const origin = process.env.NEXT_PUBLIC_SITE_URL;',
+        '  if (!origin || new URL(origin).protocol !== "https:") return NextResponse.json({ error: "Set an HTTPS NEXT_PUBLIC_SITE_URL." }, { status: 503 });',
+        '  const reference = "pay_" + randomUUID().replaceAll("-", "");',
+        '  const response = await fetch("https://api.paystack.co/transaction/initialize", { method: "POST", headers: { Authorization: "Bearer " + secret, "Content-Type": "application/json" }, body: JSON.stringify({ email, amount, reference, callback_url: new URL("/payment/return", origin).toString() }), cache: "no-store", signal: AbortSignal.timeout(10000) });',
+        '  const result = await response.json().catch(() => null);',
+        '  if (!response.ok || !result?.status || typeof result?.data?.authorization_url !== "string") return NextResponse.json({ error: "Paystack could not initialize checkout." }, { status: 502 });',
+        '  // Persist the pending order, owner, reference and expected amount before enabling fulfillment.',
+        '  return NextResponse.json({ authorization_url: result.data.authorization_url, reference }, { headers: { "Cache-Control": "no-store" } });',
+        '}'
+      ].join("\\n"),
+      'app/api/payments/paystack/verify/route.ts': [
+        'import { NextRequest, NextResponse } from "next/server";',
+        'export const runtime = "nodejs";',
+        'export async function GET(request: NextRequest) {',
+        '  const secret = process.env.PAYSTACK_SECRET_KEY;',
+        '  const reference = request.nextUrl.searchParams.get("reference") || "";',
+        '  const amount = Number(process.env.PAYSTACK_AMOUNT_KOBO);',
+        '  if (!secret) return NextResponse.json({ error: "Paystack is not configured." }, { status: 503 });',
+        '  if (!/^[A-Za-z0-9_-]{1,200}$/.test(reference)) return NextResponse.json({ error: "Invalid reference." }, { status: 400 });',
+        '  const response = await fetch("https://api.paystack.co/transaction/verify/" + encodeURIComponent(reference), { headers: { Authorization: "Bearer " + secret }, cache: "no-store", signal: AbortSignal.timeout(10000) });',
+        '  const result = await response.json().catch(() => null); const tx = result?.data;',
+        '  if (!response.ok || !result?.status || tx?.status !== "success" || tx?.reference !== reference || tx?.amount !== amount || String(tx?.currency || "").toUpperCase() !== (process.env.PAYSTACK_CURRENCY || "NGN").toUpperCase()) return NextResponse.json({ verified: false }, { status: 409 });',
+        '  // Match this reference to a pending database order and atomically fulfill it exactly once.',
+        '  return NextResponse.json({ verified: true, reference, amount: tx.amount, currency: tx.currency }, { headers: { "Cache-Control": "no-store" } });
+        '}'
+      ].join("\\n"),
+      'app/api/payments/paystack/webhook/route.ts': [
+        'import { createHmac, timingSafeEqual } from "node:crypto";',
+        'import { NextRequest, NextResponse } from "next/server";',
+        'export const runtime = "nodejs";',
+        'export async function POST(request: NextRequest) {',
+        '  const secret = process.env.PAYSTACK_SECRET_KEY; if (!secret) return NextResponse.json({ error: "Webhook is not configured." }, { status: 503 });',
+        '  const raw = await request.text(); if (raw.length > 1000000) return NextResponse.json({ error: "Payload too large." }, { status: 413 });',
+        '  const signature = request.headers.get("x-paystack-signature") || "";',
+        '  if (!/^[a-f0-9]{128}$/i.test(signature)) return NextResponse.json({ error: "Invalid signature." }, { status: 401 });',
+        '  const expected = createHmac("sha512", secret).update(raw).digest(); const supplied = Buffer.from(signature, "hex");',
+        '  if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return NextResponse.json({ error: "Invalid signature." }, { status: 401 });',
+        '  const event = JSON.parse(raw);',
+        '  if (event?.event === "charge.success" && typeof event?.data?.reference === "string") { /* Verify with Paystack, reconcile to a pending order, then apply fulfillment idempotently. */ }',
+        '  return NextResponse.json({ received: true });',
+        '}'
+      ].join("\\n"),
+      'components/PaystackCheckout.tsx': [
+        '"use client";',
+        'import { useState } from "react";',
+        'export function PaystackCheckout() {',
+        '  const [email, setEmail] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState("");',
+        '  async function checkout() { setBusy(true); setError(""); try { const response = await fetch("/api/payments/paystack/initialize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }); const result = await response.json(); if (!response.ok || typeof result.authorization_url !== "string") throw new Error(result.error || "Checkout failed."); window.location.assign(result.authorization_url); } catch (cause) { setError(cause instanceof Error ? cause.message : "Checkout failed."); setBusy(false); } }',
+        '  return <section className="grid max-w-md gap-3 rounded-xl border p-5"><label className="grid gap-1 text-sm">Email<input type="email" required value={email} onChange={event => setEmail(event.target.value)} className="rounded border px-3 py-2" /></label><button type="button" disabled={busy || !email.trim()} onClick={() => void checkout()} className="rounded-lg bg-black px-4 py-3 font-semibold text-white disabled:opacity-50">{busy ? "Opening checkout…" : "Pay with Paystack"}</button>{error && <p role="alert" className="text-sm text-red-600">{error}</p>}</section>;',
+        '}'
+      ].join("\\n"),
+      '.env.example': [
+        '# Server-only secret; never use a NEXT_PUBLIC_ prefix.',
+        'PAYSTACK_SECRET_KEY=sk_test_replace_me',
+        'PAYSTACK_AMOUNT_KOBO=500000',
+        'PAYSTACK_CURRENCY=NGN',
+        'NEXT_PUBLIC_SITE_URL=https://your-domain.example'
+      ].join("\\n"),
+      'PAYSTACK-INTEGRATION-README.md': [
+        '# Paystack integration starter',
+        'Configure PAYSTACK_SECRET_KEY, PAYSTACK_AMOUNT_KOBO, PAYSTACK_CURRENCY and NEXT_PUBLIC_SITE_URL in server environment variables.',
+        'Register /api/payments/paystack/webhook in the Paystack dashboard.',
+        'Before production, persist pending orders and bind each unique reference to the authenticated user and expected amount. Verify reference, amount, currency and owner server-side. Fulfill only through an atomic, idempotent database transition after provider verification. A browser redirect or webhook signature alone is not proof of payment.'
+      ].join("\\n")
+    };
+    setFiles(previous => ({ ...previous, ...generated }));
+    setSavedFiles(previous => { const next = { ...previous }; for (const path of Object.keys(generated)) delete next[path]; return next; });
+    setSelected('PAYSTACK-INTEGRATION-README.md');
+    setTerminal(lines => [...lines, { kind: 'output', text: 'Generated Paystack starter files. Review the README, configure server-only secrets, then save the workspace.' }]);
+    setError('');
+  }
   async function importWorkspaceArchive(file: File) {
     setImporting(true);
     setError('');
@@ -260,7 +345,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
   return <main className="min-h-[calc(100vh-140px)] bg-[#090a0c] px-3 py-5 text-white sm:px-6">
     <header className="mx-auto mb-4 flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
       <div><div className="flex items-center gap-2 text-xs text-white/45"><Link href="/dashboard" className="hover:text-white">Dashboard</Link><ChevronRight size={13}/><span>Web IDE</span></div><h1 className="mt-1 text-xl font-semibold">{workspace?.project_name || 'Workspace'}</h1></div>
-      <div className="flex flex-wrap items-center gap-2"><span className="rounded border border-white/10 px-2 py-1 text-xs text-white/55">{workspace?.status || 'Workspace'}</span><input ref={importInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="sr-only" aria-label="Choose a ZIP archive to import" onChange={event => { const file = event.target.files?.[0]; if (file) void importWorkspaceArchive(file); }} /><button type="button" onClick={() => importInputRef.current?.click()} disabled={importing} className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 disabled:opacity-50"><Upload size={15}/>{importing ? 'Importing…' : 'Import ZIP'}</button><span className={`text-xs ${isDirty ? 'text-amber-300' : 'text-emerald-300'}`}>{isDirty ? 'Unsaved changes' : 'All changes saved'}</span><a href={exportUrl()} onClick={blockUnsavedExport} aria-disabled={isDirty} className={`inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 ${isDirty ? 'cursor-not-allowed opacity-45' : ''}`}><Download size={15}/>Download project ZIP</a><button onClick={() => void saveFiles()} disabled={saving || !isDirty} className="inline-flex items-center gap-2 rounded-md bg-[#d7aa70] px-3 py-2 text-sm font-medium text-black disabled:opacity-60"><Save size={15}/>{saving ? 'Saving…' : 'Save files'}</button></div>
+      <div className="flex flex-wrap items-center gap-2"><span className="rounded border border-white/10 px-2 py-1 text-xs text-white/55">{workspace?.status || 'Workspace'}</span><button type="button" onClick={generatePaystackIntegration} className="inline-flex items-center gap-2 rounded-md border border-emerald-400/30 px-3 py-2 text-sm text-emerald-200 hover:bg-emerald-400/10">Generate Paystack integration</button><input ref={importInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="sr-only" aria-label="Choose a ZIP archive to import" onChange={event => { const file = event.target.files?.[0]; if (file) void importWorkspaceArchive(file); }} /><button type="button" onClick={() => importInputRef.current?.click()} disabled={importing} className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 disabled:opacity-50"><Upload size={15}/>{importing ? 'Importing…' : 'Import ZIP'}</button><span className={`text-xs ${isDirty ? 'text-amber-300' : 'text-emerald-300'}`}>{isDirty ? 'Unsaved changes' : 'All changes saved'}</span><a href={exportUrl()} onClick={blockUnsavedExport} aria-disabled={isDirty} className={`inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 ${isDirty ? 'cursor-not-allowed opacity-45' : ''}`}><Download size={15}/>Download project ZIP</a><button onClick={() => void saveFiles()} disabled={saving || !isDirty} className="inline-flex items-center gap-2 rounded-md bg-[#d7aa70] px-3 py-2 text-sm font-medium text-black disabled:opacity-60"><Save size={15}/>{saving ? 'Saving…' : 'Save files'}</button></div>
     </header>
     <PaystackIntegrationGenerator workspaceId={workspaceId} />
     <CloudBuildPanel projectId={workspaceId} projectType={workspace?.type || null} />
