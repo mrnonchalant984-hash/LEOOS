@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'A valid profile update is required.' }, { status: 400 });
   }
 
-  const fullName = typeof body.full_name === 'string' ? body.full_name.trim().replace(/\\s+/g, ' ') : '';
+  const fullName = typeof body.full_name === 'string' ? body.full_name.trim().replace(/\s+/g, ' ') : '';
   if (fullName.length < 2 || fullName.length > 80) {
     return NextResponse.json({ error: 'Enter a name between 2 and 80 characters.' }, { status: 400 });
   }
