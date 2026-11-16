@@ -31,7 +31,8 @@ test('realtime meetings and generated avatar clips require platform-owner authen
   assert.match(read('app/api/meetings/[id]/realtime-session/route.ts'), /GEMINI_AUDIO_WORKFLOW_NOT_VERIFIED/);
   assert.doesNotMatch(read('app/api/meetings/[id]/realtime-session/route.ts'), /realtime\.clientSecrets\.create|api\.openai\.com/);
   assert.match(read('app/api/workforce/avatars/route.ts'), /requireOwner/);
-  assert.match(read('app/api/workforce/avatars/route.ts'), /createRunwayVideo/);
+  assert.match(read('app/api/workforce/avatars/route.ts'), /not enabled/i);
+  assert.doesNotMatch(read('app/api/workforce/avatars/route.ts'), /Runway|createRunwayVideo/);
 });
 test('role execution planner supports 160 catalog roles with bounded concurrency and dependency-cycle rejection', () => {
   const planner = read('lib/agents/role-runtime.ts');
