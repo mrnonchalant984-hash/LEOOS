@@ -56,8 +56,8 @@ export async function sendSmtpMail(mail: Mail): Promise<boolean> {
   const host = process.env.SMTP_HOST?.trim();
   const port = Number(process.env.SMTP_PORT || 587);
   const username = process.env.SMTP_USER || '';
-  const password = process.env.SMTP_PASS || '';
-  const from = mail.from || process.env.SMTP_FROM || process.env.CONTACT_FROM_EMAIL || '';
+  const password = process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '';
+  const from = mail.from || process.env.SMTP_FROM || process.env.SMTP_FORM || process.env.CONTACT_FROM_EMAIL || '';
   const to = address(mail.to);
   const fromAddress = address(from);
   if (!host || !username || !password || !from || ![465, 587].includes(port)) return false;
