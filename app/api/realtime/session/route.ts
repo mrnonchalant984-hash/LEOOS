@@ -15,21 +15,29 @@ const VOICES = new Set(['Kore', 'Puck', 'Charon', 'Fenrir', 'Aoede']);
  * dormant Vercel WebSocket route.
  */
 export async function POST(req: NextRequest) {
-  const auth = await getProfile(req);
-  if (!auth) return NextResponse.json({ error: 'Please sign in to use voice chat.' }, { status: 401 });
-  const limited = await enforceUserRateLimit(auth.user.id, 'leo-realtime-session', 5, 3600);
-  if (limited) return limited;
-  const body = await req.json().catch(() => null);
-  const requestedVoice = body && typeof body === 'object' && !Array.isArray(body)
-    ? (body as Record<string, unknown>).voice
-    : undefined;
-  const voice = typeof requestedVoice === 'string' && VOICES.has(requestedVoice) ? requestedVoice : 'Kore';
-  return NextResponse.json({
-    mode: 'gemini_turn_based',
-    status: 'ready',
-    provider: 'google',
-    voice,
-    realtime: false,
-    orchestration: 'shared-leo-chat',
-  }, { headers: { 'Cache-Control': 'private, no-store' } });
+  try {
+    const auth = await getProfile(req);
+    if (!auth) return NextResponse.json({ error: 'Please sign in to use voice chat.' }, { status: 401 });
+    const limited = await enforceUserRateLimit(auth.user.id, 'leo-realtime-session', 5, 3600);
+    if (limited) return limited;
+    const body = await req.json().catch(() => null);
+    const requestedVoice = body && typeof body === 'object' && !Array.isArray(body)
+      ? (body as Record<string, unknown>).voice
+      : undefined;
+    const voice = typeof requestedVoice === 'string' && VOICES.has(requestedVoice) ? requestedVoice : 'Kore';
+    return NextResponse.json({
+      mode: 'gemini_turn_based',
+      status: 'ready',
+      provider: 'google',
+      voice,
+      realtime: false,
+      orchestration: 'shared-leo-chat',
+    }, { headers: { 'Cache-Control': 'private, no-store' } });
+  } catch (error) {
+    console.error('Leo voice session setup failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json(
+      { error: 'Leo voice could not initialize. Check the server authentication, Supabase service-role, and rate-limit configuration.' },
+      { status: 503, headers: { 'Retry-After': '5', 'Cache-Control': 'no-store' } },
+    );
+  }
 }

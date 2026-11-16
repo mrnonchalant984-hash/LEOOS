@@ -4,6 +4,10 @@ import {
   CONTACT_SERVICES,
   validateContactSubmission,
 } from "../lib/contact-form.ts";
+import { readFileSync } from "node:fs";
+
+const contactRoute = readFileSync(new URL("../app/api/contact/route.ts", import.meta.url), "utf8");
+const contactPage = readFileSync(new URL("../app/contact/page.tsx", import.meta.url), "utf8");
 
 const validSubmission = {
   name: "Alex Builder",
@@ -25,4 +29,19 @@ test("contact form rejects invalid names, emails, service values, and short mess
   assert.equal(validateContactSubmission({ ...validSubmission, service: "Unsupported service" }).ok, false);
   assert.equal(validateContactSubmission({ ...validSubmission, message: "Too short" }).ok, false);
   assert.equal(validateContactSubmission(null).ok, false);
+});
+
+
+test("Web3Forms is submitted from the browser, not proxied through the server route", () => {
+  assert.doesNotMatch(contactRoute, /api\.web3forms\.com\/submit/);
+  assert.doesNotMatch(contactRoute, /notifyWeb3Forms/);
+  assert.match(contactPage, /fetch\('https:\/\/api\.web3forms\.com\/submit'/);
+  assert.match(contactPage, /NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY/);
+  assert.match(contactPage, /web3Result\.success === true/);
+});
+
+test("contact page only sends a Web3Forms notification when server email delivery did not succeed", () => {
+  assert.match(contactPage, /if \(!result\.emailSent\)/);
+  assert.match(contactPage, /result\.emailSent === true \|\| web3FormsSent/);
+  assert.match(contactPage, /notification delivery is not confirmed/);
 });

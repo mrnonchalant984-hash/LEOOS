@@ -33,3 +33,20 @@ test('voice UI no longer displays the obsolete Gemini quota and five-minute disc
   assert.doesNotMatch(widget, /Free-tier quotas may apply/);
   assert.doesNotMatch(widget, /Calls stop after five minutes/);
 });
+
+
+test('Leo voice uses the Gemini TTS model compatible with the configured generateContent audio response shape', () => {
+  assert.match(voice, /LEO_GEMINI_TTS_MODEL\?\.trim\(\) \|\| 'gemini-2\.5-flash-preview-tts'/);
+  assert.match(voice, /responseModalities: \['AUDIO'\]/);
+  assert.match(voice, /speechConfig:/);
+});
+
+test('realtime session setup reports infrastructure failures as an actionable 503 and logs the cause', () => {
+  assert.match(session, /try \{/);
+  assert.match(session, /Leo voice session setup failed/);
+  assert.match(session, /status: 503/);
+  const rateLimit = readFileSync(new URL('../lib/rate-limit.ts', import.meta.url), 'utf8');
+  assert.match(rateLimit, /consume_user_rate_limit failed/);
+  assert.match(rateLimit, /consume_rate_limit_bucket/);
+  assert.match(rateLimit, /primary\.error\.code === 'PGRST202' \|\| primary\.error\.code === '42883'/);
+});

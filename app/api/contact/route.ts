@@ -50,17 +50,14 @@ async function notifyContact(data: {
     data.message,
   ].join('\n');
 
-  const smtpConfigured = Boolean(
-    process.env.SMTP_HOST &&
-    process.env.SMTP_USER &&
-    process.env.SMTP_PASS &&
-    process.env.SMTP_FROM,
-  );
+  const smtpPassword = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
+  const smtpFrom = process.env.SMTP_FROM || process.env.SMTP_FORM || process.env.CONTACT_FROM_EMAIL;
+  const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && smtpPassword && smtpFrom);
   if (smtpConfigured) {
     try {
       if (await sendSmtpMail({
         to: destination,
-        from: process.env.SMTP_FROM,
+        from: smtpFrom,
         subject: `New LeonardX contact: ${data.name}`,
         text,
       })) return true;
@@ -96,32 +93,6 @@ async function notifyContact(data: {
   } catch {
     console.error('Contact email Resend delivery failed.');
     return false;
-  }
-}
-
-async function notifyWeb3Forms(data: { name: string; email: string; service: string; message: string }) {
-  const accessKey = process.env.WEB3FORMS_ACCESS_KEY || process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY;
-  if (!accessKey) return { configured: false, sent: false, error: 'Web3Forms is not configured for this deployment.' };
-  try {
-    const response = await fetch('https://api.web3forms.com/submit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({
-        access_key: accessKey,
-        name: data.name,
-        email: data.email,
-        replyto: data.email,
-        subject: `New LeonardX contact: ${data.service}`,
-        from_name: 'LeonardX Contact Form',
-        message: `Service requested: ${data.service}\n\n${data.message}`,
-      }),
-      signal: AbortSignal.timeout(8_000),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (response.ok && result.success === true) return { configured: true, sent: true, error: null };
-    return { configured: true, sent: false, error: response.status === 429 ? 'Web3Forms rate-limited this message.' : (typeof result.message === 'string' ? result.message : `Web3Forms rejected the message (HTTP ${response.status}).`) };
-  } catch {
-    return { configured: true, sent: false, error: 'Web3Forms could not be reached.' };
   }
 }
 
@@ -168,18 +139,13 @@ export async function POST(request: NextRequest) {
       }, { status: 503 });
     }
 
-    const [emailSent, web3] = await Promise.all([
-      notifyContact({ name, email, service, message }),
-      notifyWeb3Forms({ name, email, service, message }),
-    ]);
+    const emailSent = await notifyContact({ name, email, service, message });
     return NextResponse.json({
       ok: true,
       saved: true,
       emailSent,
-      web3FormsSent: web3.sent,
-      web3FormsConfigured: web3.configured,
-      web3FormsError: web3.error,
-      notification: emailSent || web3.sent ? 'sent' : 'not_configured_or_failed',
+      web3FormsClientRequired: !emailSent,
+      notification: emailSent ? 'sent' : 'client_web3forms_or_manual_followup_required',
     }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
   } catch {
     return NextResponse.json({
