@@ -9,31 +9,49 @@ export async function enforceUserRateLimit(
   windowSeconds: number,
 ): Promise<NextResponse | null> {
   try {
-    const { data, error } = await adminSupabase().rpc('consume_user_rate_limit', {
+    const db = adminSupabase();
+    const primary = await db.rpc('consume_user_rate_limit', {
       p_user_id: userId,
       p_bucket: bucket,
       p_limit: limit,
       p_window_seconds: windowSeconds,
     });
 
-    if (error) {
-      console.error('[rate-limit] consume_user_rate_limit failed', { code: error.code, message: error.message });
-      return NextResponse.json(
-        { error: 'Rate limiting is temporarily unavailable. Try again shortly.' },
-        { status: 503, headers: { 'Retry-After': '5', 'Cache-Control': 'no-store' } },
-      );
-    }
-
-    if (data !== true) {
+    if (!primary.error) {
+      if (primary.data === true) return null;
       return NextResponse.json(
         { error: 'Too many requests. Try again later.' },
         { status: 429, headers: { 'Retry-After': String(windowSeconds), 'Cache-Control': 'no-store' } },
       );
     }
 
-    return null;
+    // Older production databases may have the shared subject-key limiter
+    // without the later user-specific wrapper. Fall back only for a missing
+    // RPC function; never bypass rate limiting on arbitrary database errors.
+    console.error('[rate-limit] consume_user_rate_limit failed', { code: primary.error.code, message: primary.error.message });
+    if (primary.error.code === 'PGRST202' || primary.error.code === '42883') {
+      const fallback = await db.rpc('consume_rate_limit_bucket', {
+        p_subject_key: `user:${userId}`,
+        p_bucket: bucket,
+        p_limit: limit,
+        p_window_seconds: windowSeconds,
+      });
+      if (!fallback.error) {
+        if (fallback.data === true) return null;
+        return NextResponse.json(
+          { error: 'Too many requests. Try again later.' },
+          { status: 429, headers: { 'Retry-After': String(windowSeconds), 'Cache-Control': 'no-store' } },
+        );
+      }
+      console.error('[rate-limit] consume_rate_limit_bucket fallback failed', { code: fallback.error.code, message: fallback.error.message });
+    }
+
+    return NextResponse.json(
+      { error: 'Rate limiting is temporarily unavailable. Try again shortly.' },
+      { status: 503, headers: { 'Retry-After': '5', 'Cache-Control': 'no-store' } },
+    );
   } catch (error) {
-    console.error('[rate-limit] consume_user_rate_limit threw', error instanceof Error ? error.message : 'unknown error');
+    console.error('[rate-limit] user rate limiter threw', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json(
       { error: 'Rate limiting is temporarily unavailable. Try again shortly.' },
       { status: 503, headers: { 'Retry-After': '5', 'Cache-Control': 'no-store' } },
