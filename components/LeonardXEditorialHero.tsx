@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight, Play } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import DesignWorldScene from "@/components/DesignWorldScene";
 
 const ABOUT_VIDEO = "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260823_063501_2e2c8971-de1e-473a-8611-a0c9ae7ee186.mp4";
@@ -38,6 +38,12 @@ function ResilientVideo({ src, className, preload = "metadata" }: { src: string;
 }
 
 export default function LeonardXEditorialHero() {
+  const [prompt, setPrompt] = useState("");
+  function startBuilding(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const value = prompt.trim();
+    window.location.assign(value ? `/app?prompt=${encodeURIComponent(value)}` : "/app");
+  }
   return (
     <>
       <section className="lx-editorial-hero" aria-labelledby="lx-hero-title">
