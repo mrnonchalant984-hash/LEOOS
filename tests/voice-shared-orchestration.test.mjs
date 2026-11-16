@@ -45,5 +45,8 @@ test('realtime session setup reports infrastructure failures as an actionable 50
   assert.match(session, /try \{/);
   assert.match(session, /Leo voice session setup failed/);
   assert.match(session, /status: 503/);
-  assert.match(readFileSync(new URL('../lib/rate-limit.ts', import.meta.url), 'utf8'), /consume_user_rate_limit failed/);
+  const rateLimit = readFileSync(new URL('../lib/rate-limit.ts', import.meta.url), 'utf8');
+  assert.match(rateLimit, /consume_user_rate_limit failed/);
+  assert.match(rateLimit, /consume_rate_limit_bucket/);
+  assert.match(rateLimit, /primary\.error\.code === 'PGRST202' \|\| primary\.error\.code === '42883'/);
 });
