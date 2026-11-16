@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronRight, Download, FileCode2, FolderDown, Play, Save, TerminalSquare, Upload } from 'lucide-react';
 import CloudBuildPanel from '@/components/ide/CloudBuildPanel';
 import { LivePreviewFrame } from '@/components/engineering/LivePreviewFrame';
+import { PaystackIntegrationGenerator } from '@/components/ide/PaystackIntegrationGenerator';
 
 type Workspace = { id: string; project_name: string; type: string | null; status: string | null; files: Record<string, string> };
 type TerminalLine = { kind: 'input' | 'output' | 'error'; text: string };
@@ -349,6 +350,17 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
     </header>
     <PaystackIntegrationGenerator workspaceId={workspaceId} />
     <CloudBuildPanel projectId={workspaceId} projectType={workspace?.type || null} />
+    <PaystackIntegrationGenerator onGenerate={(generated) => {
+      const conflicts = Object.keys(generated).filter(path => path in files);
+      if (conflicts.length) {
+        setError(`Paystack generator did not overwrite existing files: ${conflicts.join(', ')}`);
+        return;
+      }
+      setFiles(previous => ({ ...previous, ...generated }));
+      setSelected(Object.keys(generated)[0] || '');
+      setError('');
+      setTerminal(lines => [...lines, { kind: 'output', text: `Added ${Object.keys(generated).length} Paystack integration files. Review and save the changes.` }]);
+    }} />
     {error && <div role="alert" className="mx-auto mb-3 max-w-[1600px] rounded-md border border-red-400/30 bg-red-950/30 px-4 py-2 text-sm text-red-200">{error}</div>}
     <section aria-label="Cloudflare static preview" className="mx-auto mb-4 max-w-[1600px] rounded-xl border border-white/10 bg-[#101114] p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
