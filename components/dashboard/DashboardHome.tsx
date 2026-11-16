@@ -86,14 +86,14 @@ export function DashboardHome({ data }: { data: DashboardData }) {
       const headers = { "Content-Type": "application/json", Authorization: `Bearer ${auth.session.access_token}`, "Idempotency-Key": crypto.randomUUID() };
       const sessionId = crypto.randomUUID();
       if (mode === "Build") {
-        const projectName = message.replace(/^(build|create|make)\\s+(me\\s+)?/i, "").split(/[.!?\\n]/)[0].trim().slice(0, 80) || "New Leo project";
+        const projectName = message.replace(/^(build|create|make)\s+(me\s+)?/i, "").split(/[.!?\n]/)[0].trim().slice(0, 80) || "New Leo project";
         const created = await fetch("/api/workspaces", { method: "POST", headers, body: JSON.stringify({ name: projectName }) });
         const projectResult = await created.json().catch(() => ({}));
         if (!created.ok || !projectResult.data?.id) throw new Error(projectResult.error || "LeonardX could not create your project workspace.");
         const projectId = projectResult.data.id as string;
         const response = await fetch("/api/chat", {
           method: "POST", headers,
-          body: JSON.stringify({ session_id: sessionId, project_id: projectId, message: `Build a complete Next.js web app from this brief. Inspect the existing project files first, preserve working features, create and save the implementation, and verify it.\\n\\nProject brief: ${message}`, work_mode: true, mode: "tools", request_type: "build", request_id: crypto.randomUUID() }),
+          body: JSON.stringify({ session_id: sessionId, project_id: projectId, message: `Build a complete Next.js web app from this brief. Inspect the existing project files first, preserve working features, create and save the implementation, and verify it.\n\nProject brief: ${message}`, work_mode: true, mode: "tools", request_type: "build", request_id: crypto.randomUUID() }),
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || "The project was created, but Leo could not start the build.");

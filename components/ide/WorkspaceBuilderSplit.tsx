@@ -5,8 +5,8 @@ import { createBrowserClient } from '@supabase/ssr';
 import { ArrowUp, Code2, ExternalLink, LoaderCircle, Monitor, Smartphone, Wrench } from 'lucide-react';
 
 type ChatLine = { role: 'user' | 'assistant'; content: string };
-export function WorkspaceBuilderSplit({ projectId, projectName, previewUrl, previewError, onOpenCode, onCreatePreview }: {
-  projectId: string; projectName: string; previewUrl: string | null; previewError: string; onOpenCode: () => void; onCreatePreview: () => void;
+export function WorkspaceBuilderSplit({ projectId, projectName, previewUrl, previewError, initialSessionId = '', onOpenCode, onCreatePreview }: {
+  projectId: string; projectName: string; previewUrl: string | null; previewError: string; initialSessionId?: string; onOpenCode: () => void; onCreatePreview: () => void;
 }) {
   const [messages, setMessages] = useState<ChatLine[]>([]);
   const [prompt, setPrompt] = useState('');
@@ -14,10 +14,11 @@ export function WorkspaceBuilderSplit({ projectId, projectName, previewUrl, prev
   const [busy, setBusy] = useState(false);
   const [viewport, setViewport] = useState<'desktop'|'mobile'>('desktop');
   const [error, setError] = useState('');
+  const [frameError, setFrameError] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const id = crypto.randomUUID();
+    const id = initialSessionId || crypto.randomUUID();
     setSessionId(id);
     const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
     void supabase.auth.getSession().then(({data}) => {
@@ -25,7 +26,7 @@ export function WorkspaceBuilderSplit({ projectId, projectName, previewUrl, prev
       void fetch('/api/chat?session_id=' + encodeURIComponent(id), {headers:{Authorization:'Bearer '+data.session.access_token},cache:'no-store'})
         .then(response=>response.json()).then(body=>setMessages(Array.isArray(body.messages)?body.messages.filter((m:unknown):m is ChatLine=>Boolean(m&&typeof m==='object'&&'role'in m&&'content'in m)).map((m:ChatLine)=>({role:m.role,content:m.content})):[])).catch(()=>{});
     });
-  }, []);
+  }, [initialSessionId]);
 
   useEffect(()=>{endRef.current?.scrollIntoView({behavior:'smooth',block:'end'});},[messages,busy]);
 
@@ -52,7 +53,8 @@ export function WorkspaceBuilderSplit({ projectId, projectName, previewUrl, prev
   },[busy,projectId,sessionId]);
 
   function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();void send(prompt);}
-  const repairText=previewError||'The project preview is not loading as expected. Inspect the workspace source, identify the runtime or rendering issue, make the smallest safe correction, and explain what changed.';
+  const effectivePreviewError=previewError||frameError;
+  const repairText=effectivePreviewError||'The project preview is not loading as expected. Inspect the workspace source, identify the runtime or rendering issue, make the smallest safe correction, and explain what changed.';
   return <section className="mx-auto mb-5 grid min-h-[640px] max-w-[1600px] overflow-hidden rounded-2xl border border-white/10 bg-[#111319] text-white shadow-2xl lg:grid-cols-[minmax(300px,35fr)_minmax(0,65fr)]">
     <aside className="flex min-h-[540px] flex-col border-b border-white/10 lg:border-b-0 lg:border-r">
       <header className="flex items-center justify-between border-b border-white/10 px-4 py-3"><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-indigo-300">Leo builder</p><h2 className="truncate text-sm font-semibold">{projectName}</h2></div><span className="rounded-full bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-300">Project linked</span></header>
@@ -70,9 +72,9 @@ export function WorkspaceBuilderSplit({ projectId, projectName, previewUrl, prev
     </aside>
     <section className="flex min-h-[540px] min-w-0 flex-col bg-[#f1f3f7] text-slate-900">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3"><div className="flex items-center gap-2"><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold">Preview</span><button onClick={onOpenCode} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100"><Code2 size={13}/> Code</button></div><div className="flex items-center gap-1"><button onClick={()=>setViewport('desktop')} aria-pressed={viewport==='desktop'} className={'rounded-lg p-2 '+(viewport==='desktop'?'bg-slate-100':'text-slate-400')}><Monitor size={15}/></button><button onClick={()=>setViewport('mobile')} aria-pressed={viewport==='mobile'} className={'rounded-lg p-2 '+(viewport==='mobile'?'bg-slate-100':'text-slate-400')}><Smartphone size={15}/></button>{previewUrl&&<a href={previewUrl} target="_blank" rel="noreferrer" aria-label="Open preview in a new tab" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ExternalLink size={15}/></a>}</div></header>
-      {previewError&&<div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-amber-950"><div><p className="text-xs font-semibold">Preview needs attention</p><p className="mt-1 text-xs">{previewError}</p></div><button onClick={()=>void send(repairText,'repair')} disabled={busy} className="inline-flex items-center gap-2 rounded-full bg-amber-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"><Wrench size={13}/> Fix error · 0 credits</button></div>}
+      {effectivePreviewError&&<div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-amber-950"><div><p className="text-xs font-semibold">Preview needs attention</p><p className="mt-1 text-xs">{effectivePreviewError}</p></div><button onClick={()=>void send(repairText,'repair')} disabled={busy} className="inline-flex items-center gap-2 rounded-full bg-amber-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"><Wrench size={13}/> Fix error · 0 credits</button></div>}
       <div className="flex flex-1 items-center justify-center overflow-auto p-3 sm:p-5">
-        {previewUrl?<div className={'h-full min-h-[460px] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-lg '+(viewport==='mobile'?'w-[390px] max-w-full':'w-full')}><iframe title={projectName+' live preview'} src={previewUrl} sandbox="allow-scripts allow-forms" className="h-full min-h-[460px] w-full bg-white"/></div>:<div className="max-w-md text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-indigo-100 text-indigo-600"><Monitor size={24}/></div><h3 className="mt-4 text-base font-semibold">Your preview will appear here</h3><p className="mt-2 text-sm leading-6 text-slate-500">Save project files and create a preview to see the running website. This workspace currently has no live preview URL.</p><button onClick={onCreatePreview} className="mt-4 rounded-full bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white">Create preview</button></div>}
+        {previewUrl?<div className={'h-full min-h-[460px] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-lg '+(viewport==='mobile'?'w-[390px] max-w-full':'w-full')}><iframe title={projectName+' live preview'} src={previewUrl} sandbox="allow-scripts allow-forms" className="h-full min-h-[460px] w-full bg-white" onError={()=>setFrameError('The preview frame could not load. Check the preview URL and build status.')}/></div>:<div className="max-w-md text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-indigo-100 text-indigo-600"><Monitor size={24}/></div><h3 className="mt-4 text-base font-semibold">Your preview will appear here</h3><p className="mt-2 text-sm leading-6 text-slate-500">Save project files and create a preview to see the running website. This workspace currently has no live preview URL.</p><button onClick={onCreatePreview} className="mt-4 rounded-full bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white">Create preview</button></div>}
       </div>
     </section>
   </section>;

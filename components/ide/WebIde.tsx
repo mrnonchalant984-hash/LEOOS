@@ -23,7 +23,7 @@ function flattenFiles(files: Record<string, string>) {
   return Object.keys(files).sort((a, b) => a.localeCompare(b));
 }
 
-export default function WebIde({ workspaceId }: { workspaceId: string }) {
+export default function WebIde({ workspaceId, initialSessionId = '' }: { workspaceId: string; initialSessionId?: string }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [files, setFiles] = useState<Record<string, string>>({});
   const [savedFiles, setSavedFiles] = useState<Record<string, string>>({});
@@ -248,6 +248,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
       projectName={workspace?.project_name || 'Workspace'}
       previewUrl={preview?.status === 'deployed' ? preview.deployment_url : null}
       previewError={previewError || (preview?.status === 'failed' ? 'The latest preview build failed. Review the build status and ask Leo to repair the project.' : '')}
+      initialSessionId={initialSessionId}
       onOpenCode={() => document.getElementById('workspace-code-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
       onCreatePreview={() => void createCloudflarePreview()}
     />
