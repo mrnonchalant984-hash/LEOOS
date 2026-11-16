@@ -31,11 +31,6 @@ export async function POST(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: 'Sign in to generate video.' }, { status: 401 });
   const body = await req.json().catch(() => null);
   const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
-  const sourceAssetId = '';
-  if (body?.image_asset_id !== undefined) return NextResponse.json({ error: 'Image-to-video is not enabled for the current Google provider configuration.' }, { status: 501 });
-  if (body?.image_asset_id !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceAssetId)) {
-    return NextResponse.json({ error: 'Choose a valid source image from your private library.' }, { status: 400 });
-  }
   const duration = body?.duration === undefined ? 8 : Number(body.duration);
   const aspectRatio = body?.aspect_ratio === 'portrait' ? 'portrait' : body?.aspect_ratio === 'landscape' || body?.aspect_ratio === undefined ? 'landscape' : null;
   if (prompt.length < 3 || prompt.length > 2000) return NextResponse.json({ error: 'Enter a video prompt between 3 and 2,000 characters.' }, { status: 400 });
@@ -64,24 +59,6 @@ export async function POST(req: NextRequest) {
   if (!capabilities.available) return NextResponse.json({ error: capabilities.error }, { status: 503 });
 
   const db = adminSupabase();
-  let imageUrl: string | undefined;
-  if (sourceAssetId) {
-    const { data: sourceAsset, error: sourceError } = await db.from('media_assets')
-      .select('id,bucket,storage_path,mime_type,kind')
-      .eq('id', sourceAssetId)
-      .eq('user_id', ctx.user.id)
-      .maybeSingle();
-    if (sourceError) return NextResponse.json({ error: 'The selected source image could not be checked.' }, { status: 503 });
-    if (!sourceAsset || sourceAsset.kind !== 'image' || sourceAsset.bucket !== 'leo-files' || !sourceAsset.mime_type?.startsWith('image/')) {
-      return NextResponse.json({ error: 'Source image not found in your private library.' }, { status: 404 });
-    }
-    const { data: signedSource, error: signError } = await db.storage.from('leo-files')
-      .createSignedUrl(sourceAsset.storage_path, 60 * 10);
-    if (signError || !signedSource?.signedUrl) {
-      return NextResponse.json({ error: 'A temporary source image URL could not be created.' }, { status: 503 });
-    }
-    imageUrl = signedSource.signedUrl;
-  }
   const { data: job, error: insertError } = await db.from('generation_jobs').insert({
     user_id: ctx.user.id, request_key: requestKey, job_type: 'video', provider: 'google', model,
     status: 'queued', prompt, platform_credits_reserved: platformCost,
