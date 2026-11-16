@@ -58,7 +58,7 @@ export default function ContactPage() {
                 replyto: submission.email,
                 subject: `New LeonardX contact: ${submission.service}`,
                 from_name: 'LeonardX Contact Form',
-                message: `Service requested: ${submission.service}\\n\\n${submission.message}`,
+                message: `Service requested: ${submission.service}\n\n${submission.message}`,
                 botcheck: '',
               }),
             });
@@ -79,7 +79,7 @@ export default function ContactPage() {
 
       const delivered = result.emailSent === true || web3FormsSent;
       setStatus({
-        type: 'success',
+        type: delivered ? 'success' : 'error',
         message: delivered
           ? 'Your message has been received and LeonardX has been notified.'
           : `Your message was saved, but notification delivery is not confirmed. ${deliveryError || 'Configure Web3Forms or SMTP/Resend.'}`,
