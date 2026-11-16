@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   const aspectRatio = body?.aspect_ratio === 'portrait' ? 'portrait' : body?.aspect_ratio === 'landscape' || body?.aspect_ratio === undefined ? 'landscape' : null;
   if (prompt.length < 3 || prompt.length > 2000) return NextResponse.json({ error: 'Enter a video prompt between 3 and 2,000 characters.' }, { status: 400 });
   if (![4, 6, 8].includes(duration)) return NextResponse.json({ error: 'Google Veo duration must be 4, 6, or 8 seconds.' }, { status: 400 });
-  if (body?.image_asset_id !== undefined) return NextResponse.json({ error: 'Image-to-video is not enabled for this Google provider configuration yet.' }, { status: 501 });
+  if (body?.image_asset_id !== undefined) return NextResponse.json({ error: 'Image-to-video is not enabled for the current Google provider configuration.' }, { status: 501 });
   if (!aspectRatio) return NextResponse.json({ error: 'Choose a supported aspect ratio: landscape or portrait.' }, { status: 400 });
 
   const owner = isPlatformOwner(ctx.profile);
