@@ -93,16 +93,19 @@ A complete production `npm run build` was not run in this environment because th
 ## Provider setup
 Gemini, GitHub, Vercel, Supabase, Paystack, Resend and optional provider credentials are represented by server-side environment variables. The app never puts provider secrets in NEXT_PUBLIC variables. A provider must have a real credential/endpoint configured before its corresponding owner-only agent can execute external actions.
 
-## Owner Video Agent
+## Google Video Generation
 
-LEO OS includes an owner-only Video Agent powered by Runway. Gemini provides the platform's text and orchestration capabilities; Runway performs the actual video generation. The agent requires explicit owner approval because generation consumes provider credits. Generated videos are copied into the existing private `leo-files` Supabase Storage bucket when possible because Runway result URLs are temporary.
+LeonardX uses a server-side Google Veo adapter for asynchronous text-to-video generation. Jobs reuse the existing authenticated generation-job, platform-credit, and private Supabase media-storage systems. Google Flow does not expose a verified public generation API in this integration; any future Flow browser/MCP connection must be clearly identified as unofficial automation and separately authorized. Image-to-video, multi-scene project assembly, and avatar clips are not enabled in the current adapter.
 
 Required server environment variables:
 
 ```env
-RUNWAYML_API_SECRET=
-RUNWAY_VIDEO_MODEL=gen4.5
-RUNWAY_VIDEO_TIMEOUT_MS=540000
+GOOGLE_CLOUD_PROJECT=
+GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_SERVICE_ACCOUNT_JSON=
+GOOGLE_VIDEO_OUTPUT_GCS_URI=gs://your-video-output-bucket/leonardx/
+LEO_GOOGLE_VIDEO_MODEL=veo-3.1-generate-001
+GOOGLE_VEO_PLATFORM_CREDITS_PER_SECOND=
 ```
 
 The Video Agent is not available to normal users.
