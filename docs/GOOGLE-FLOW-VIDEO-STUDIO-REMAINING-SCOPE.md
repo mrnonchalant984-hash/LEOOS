@@ -1,6 +1,16 @@
 # Google Flow Video Studio — Remaining Implementation Scope
 
-This document tracks the work required to turn the initial Google Veo provider cutover into a complete, testable video-production workflow. The items below are **planned, not implemented** by the current provider cutover.
+This document tracks the work required to turn the initial Google Veo provider cutover into a complete, testable video-production workflow. The items below remain planned unless explicitly marked complete.
+
+## Completed follow-up hardening (2026-11-16)
+
+- Google video operation IDs are now restricted to supported provider operation resource-name formats; arbitrary URLs and malformed identifiers are rejected before polling.
+- Completed video output is downloaded only from the configured GCS bucket and object prefix.
+- Downloaded media must be a bounded MP4 file with a supported media type and an MP4 `ftyp` container signature before it is copied into private Supabase storage.
+- Deterministic tests cover operation-name validation, GCS path isolation, MIME checks, file-size bounds, and MP4 container validation.
+- Pull-request CI now runs the repository TypeScript typecheck in addition to lint, tests, and production build.
+
+These changes harden the existing single-video Veo path. They do not implement Google Flow, multi-scene generation, narration synchronization, or a live provider test.
 
 ## 1. Google Flow connector
 
