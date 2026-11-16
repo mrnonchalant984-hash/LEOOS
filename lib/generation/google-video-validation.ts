@@ -7,18 +7,19 @@ export function isValidGoogleVideoOperationName(value: string): boolean {
   return value.length <= 512 && GOOGLE_OPERATION_PATTERNS.some(pattern => pattern.test(value));
 }
 
-function parseGcsUri(value: string) {
-  const match = /^gs:\/\/([a-z0-9][a-z0-9._-]{1,220}[a-z0-9])\/(.+)$/i.exec(value);
-  if (!match || /[?#\\\\\r\n]/.test(match[2]) || match[2].split('/').some(part => part === '.' || part === '..')) {
+function parseGcsUri(value: string, allowBucketRoot = false) {
+  const match = /^gs:\/\/([a-z0-9][a-z0-9._-]{1,220}[a-z0-9])(?:\/(.+))?$/i.exec(value);
+  const object = match?.[2] || '';
+  if (!match || (!allowBucketRoot && !object) || /[?#\\\r\n]/.test(object) || object.split('/').some(part => part === '.' || part === '..')) {
     throw new Error('Google returned an unsupported video output URI.');
   }
-  return { bucket: match[1], object: match[2] };
+  return { bucket: match[1], object };
 }
 
 export function validateGoogleVideoOutputUri(uri: string, configuredOutputUri: string) {
   const actual = parseGcsUri(uri);
-  const configured = parseGcsUri(configuredOutputUri.endsWith('/') ? configuredOutputUri.slice(0, -1) : configuredOutputUri);
-  const prefix = configured.object.replace(/\/+$/, '');
+  const configured = parseGcsUri(configuredOutputUri.replace(/\/+$/, ''), true);
+  const prefix = configured.object;
   if (actual.bucket !== configured.bucket || (prefix && actual.object !== prefix && !actual.object.startsWith(`${prefix}/`))) {
     throw new Error('Google video output is outside the configured storage location.');
   }
