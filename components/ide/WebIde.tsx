@@ -81,7 +81,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
         '  // Persist the pending order, owner, reference and expected amount before enabling fulfillment.',
         '  return NextResponse.json({ authorization_url: result.data.authorization_url, reference }, { headers: { "Cache-Control": "no-store" } });',
         '}'
-      ].join("\\n"),
+      ].join("\n"),
       'app/api/payments/paystack/verify/route.ts': [
         'import { NextRequest, NextResponse } from "next/server";',
         'export const runtime = "nodejs";',
@@ -95,9 +95,9 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
         '  const result = await response.json().catch(() => null); const tx = result?.data;',
         '  if (!response.ok || !result?.status || tx?.status !== "success" || tx?.reference !== reference || tx?.amount !== amount || String(tx?.currency || "").toUpperCase() !== (process.env.PAYSTACK_CURRENCY || "NGN").toUpperCase()) return NextResponse.json({ verified: false }, { status: 409 });',
         '  // Match this reference to a pending database order and atomically fulfill it exactly once.',
-        '  return NextResponse.json({ verified: true, reference, amount: tx.amount, currency: tx.currency }, { headers: { "Cache-Control": "no-store" } });
+        '  return NextResponse.json({ verified: true, reference, amount: tx.amount, currency: tx.currency }, { headers: { "Cache-Control": "no-store" } });',
         '}'
-      ].join("\\n"),
+      ].join("\n"),
       'app/api/payments/paystack/webhook/route.ts': [
         'import { createHmac, timingSafeEqual } from "node:crypto";',
         'import { NextRequest, NextResponse } from "next/server";',
@@ -113,7 +113,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
         '  if (event?.event === "charge.success" && typeof event?.data?.reference === "string") { /* Verify with Paystack, reconcile to a pending order, then apply fulfillment idempotently. */ }',
         '  return NextResponse.json({ received: true });',
         '}'
-      ].join("\\n"),
+      ].join("\n"),
       'components/PaystackCheckout.tsx': [
         '"use client";',
         'import { useState } from "react";',
@@ -122,20 +122,20 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
         '  async function checkout() { setBusy(true); setError(""); try { const response = await fetch("/api/payments/paystack/initialize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }); const result = await response.json(); if (!response.ok || typeof result.authorization_url !== "string") throw new Error(result.error || "Checkout failed."); window.location.assign(result.authorization_url); } catch (cause) { setError(cause instanceof Error ? cause.message : "Checkout failed."); setBusy(false); } }',
         '  return <section className="grid max-w-md gap-3 rounded-xl border p-5"><label className="grid gap-1 text-sm">Email<input type="email" required value={email} onChange={event => setEmail(event.target.value)} className="rounded border px-3 py-2" /></label><button type="button" disabled={busy || !email.trim()} onClick={() => void checkout()} className="rounded-lg bg-black px-4 py-3 font-semibold text-white disabled:opacity-50">{busy ? "Opening checkout…" : "Pay with Paystack"}</button>{error && <p role="alert" className="text-sm text-red-600">{error}</p>}</section>;',
         '}'
-      ].join("\\n"),
+      ].join("\n"),
       '.env.example': [
         '# Server-only secret; never use a NEXT_PUBLIC_ prefix.',
         'PAYSTACK_SECRET_KEY=sk_test_replace_me',
         'PAYSTACK_AMOUNT_KOBO=500000',
         'PAYSTACK_CURRENCY=NGN',
         'NEXT_PUBLIC_SITE_URL=https://your-domain.example'
-      ].join("\\n"),
+      ].join("\n"),
       'PAYSTACK-INTEGRATION-README.md': [
         '# Paystack integration starter',
         'Configure PAYSTACK_SECRET_KEY, PAYSTACK_AMOUNT_KOBO, PAYSTACK_CURRENCY and NEXT_PUBLIC_SITE_URL in server environment variables.',
         'Register /api/payments/paystack/webhook in the Paystack dashboard.',
         'Before production, persist pending orders and bind each unique reference to the authenticated user and expected amount. Verify reference, amount, currency and owner server-side. Fulfill only through an atomic, idempotent database transition after provider verification. A browser redirect or webhook signature alone is not proof of payment.'
-      ].join("\\n")
+      ].join("\n")
     };
     setFiles(previous => ({ ...previous, ...generated }));
     setSavedFiles(previous => { const next = { ...previous }; for (const path of Object.keys(generated)) delete next[path]; return next; });
