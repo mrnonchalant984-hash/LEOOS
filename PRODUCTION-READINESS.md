@@ -90,7 +90,7 @@ The contact page uses Web3Forms. Lead capture stores records in Supabase and tre
 - [ ] Configure `LEO_LOCAL_MODEL_URL` on a local app deployment and test `LEO_OFFLINE_MODE=true`; do not assume a Vercel app can reach laptop localhost.
 - [ ] Apply offline outbox and worker-heartbeat migrations in staging.
 - [ ] Configure and test SMTP over port 465 or 587 STARTTLS.
-- [ ] Test full-duplex realtime meeting sessions and Runway avatar clips with provider credentials.
+- [ ] Test full-duplex realtime meeting sessions and Google video provider connectivity with authorized staging credentials. Avatar clips remain disabled until image-to-video is implemented.
 - [ ] Run `npm ci`, `npm run verify`, `npm run test:staging`, and bounded staging worker load tests in a network-enabled environment.
 - [ ] Review the role execution planner's output and keep tool access deny-by-default; do not describe it as 160 independent agents.
 
