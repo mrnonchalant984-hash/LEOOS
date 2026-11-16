@@ -282,7 +282,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   const [remoteCursor, setRemoteCursor] = useState(0);
   const [remoteMessage, setRemoteMessage] = useState("");
   const [videoConfirmPrompt, setVideoConfirmPrompt] = useState("");
-  const [videoDuration, setVideoDuration] = useState(5);
+  const [videoDuration, setVideoDuration] = useState(8);
   const [videoAspectRatio, setVideoAspectRatio] = useState<"landscape" | "portrait">("landscape");
   const [videoCreditsPerSecond, setVideoCreditsPerSecond] = useState<number | null>(null);
   const [videoCreditsAvailable, setVideoCreditsAvailable] = useState<number | null>(null);
@@ -1525,7 +1525,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       const d = await r.json().catch(() => ({}));
       if (!r.ok || d.available !== true) throw new Error(d.error || "Video generation is unavailable.");
       setVideoConfirmPrompt(prompt);
-      setVideoDuration(5);
+      setVideoDuration(8);
       setVideoAspectRatio("landscape");
       setVideoCreditsPerSecond(Number.isSafeInteger(d.platform_credits_per_second) ? d.platform_credits_per_second : 0);
       setVideoCreditsAvailable(Number.isSafeInteger(d.platform_credits_available) ? d.platform_credits_available : 0);
@@ -1538,7 +1538,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     if (!videoConfirmPrompt || loading) return;
     setLoading(true);
     setError("");
-    setVideoStatus("Starting the Runway video task…");
+    setVideoStatus("Starting the Google video task…");
     try {
       const t = await token();
       const requestId = crypto.randomUUID();
@@ -1550,7 +1550,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.job_id) throw new Error(d.error || "Video generation could not be started.");
       setActiveVideoJobId(d.job_id);
-      setVideoStatus(`Runway task ${d.status === "processing" ? "is processing" : "is queued"}. Checking the actual provider status…`);
+      setVideoStatus(`Google task ${d.status === "processing" ? "is processing" : "is queued"}. Checking the actual provider status…`);
       setInput("");
       setVideoConfirmPrompt("");
       for (let attempt = 0; attempt < 180; attempt += 1) {
@@ -1566,7 +1566,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
           return;
         }
         if (statusData.status === "failed" || statusData.status === "cancelled") throw new Error(statusData.error || "Video generation did not complete.");
-        setVideoStatus("Runway is still processing the job. This status comes from the provider; no progress percentage is estimated.");
+        setVideoStatus("Google is still processing the job. This status comes from the provider; no progress percentage is estimated.");
       }
       setVideoStatus(`Automatic polling stopped after nine minutes. Job ${d.job_id} remains tracked by the server; use Check status to query the provider again. No cancel action is exposed because cancellation is not verified for this provider adapter.`);
     } catch (e) {
@@ -1605,7 +1605,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       <div className="mt-3 grid grid-cols-2 gap-2">
         <label className="text-zinc-400">Duration
           <select value={videoDuration} onChange={(e) => setVideoDuration(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-white/10 bg-black p-2 text-white">
-            {[2,3,4,5,6,7,8,9,10].map((seconds) => <option key={seconds} value={seconds}>{seconds} seconds</option>)}
+            {[4,6,8].map((seconds) => <option key={seconds} value={seconds}>{seconds} seconds</option>)}
           </select>
         </label>
         <label className="text-zinc-400">Aspect ratio
