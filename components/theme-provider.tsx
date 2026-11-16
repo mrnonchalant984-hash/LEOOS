@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore } from 'react';
 
 type Theme = 'light' | 'dark';
 type ThemeContextValue = { theme: Theme; toggleTheme: () => void; setTheme: (theme: Theme) => void };
@@ -57,6 +57,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
   }, []);
   const toggleTheme = useCallback(() => setTheme(theme === 'light' ? 'dark' : 'light'), [setTheme, theme]);
+  useEffect(() => {
+    let active = true;
+    void fetch('/api/auth/profile', { cache: 'no-store' })
+      .then(async response => response.ok ? response.json() : null)
+      .then(result => {
+        const preference = result?.user?.theme_preference;
+        if (active && (preference === 'light' || preference === 'dark')) setTheme(preference);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [setTheme]);
   const value = useMemo(() => ({ theme, toggleTheme, setTheme }), [theme, toggleTheme, setTheme]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
