@@ -34,7 +34,12 @@ export async function GET(request: NextRequest) {
   }
 
   const next = safeNext(request.nextUrl.searchParams.get('next'));
-  const destination = onboardingCompleted ? next : '/getting-started';
+  const destinationAfterOnboarding = onboardingCompleted ? next : '/getting-started?next=' + encodeURIComponent(next);
+  const assuranceClient = supabase;
+  const { data: assurance } = await assuranceClient.auth.mfa.getAuthenticatorAssuranceLevel();
+  const destination = assurance?.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2'
+    ? '/auth/mfa?next=' + encodeURIComponent(destinationAfterOnboarding)
+    : destinationAfterOnboarding;
   const response = NextResponse.redirect(new URL(destination, request.url));
   response.cookies.set('leo_access_token', data.session.access_token, AUTH_COOKIE);
   response.cookies.set('leo_refresh_token', data.session.refresh_token, AUTH_COOKIE);
