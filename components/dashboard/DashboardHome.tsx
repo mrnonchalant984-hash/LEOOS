@@ -1,13 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import {
-  Activity, ArrowDownToLine, ArrowRight, AudioLines, ChevronDown, CirclePlus, Command,
-  Compass, Folder, FolderKanban, Github, Grid2X2, ImagePlus, Layers3, Link2,
-  MessageSquare, MonitorPlay, Search, Settings2, Sparkles, WandSparkles, Workflow,
+  ArrowRight, AudioLines, ChevronDown, CirclePlus, Folder, FolderKanban, Grid2X2,
+  ImagePlus, Layers3, Link2, MonitorPlay, Search, Settings2, WandSparkles, Workflow,
 } from "lucide-react";
 import type { DashboardData } from "@/components/dashboard/types";
 
@@ -62,7 +61,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth.session.access_token}`, "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ session_id: sessionId, message, work_mode: true, mode: "normal", request_id: crypto.randomUUID() }),
+        body: JSON.stringify({ session_id: sessionId, message: mode === "Plan" ? `Create a detailed implementation plan first. Do not start coding yet.\\n\\n${message}` : message, work_mode: mode === "Build", mode: "normal", request_id: crypto.randomUUID() }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Leo could not start this request.");

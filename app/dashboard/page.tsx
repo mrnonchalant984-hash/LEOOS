@@ -6,7 +6,16 @@ import { createBrowserClient } from "@supabase/ssr";
 import { OnboardingWelcome } from "@/components/OnboardingWelcome";
 import { DashboardHome } from "@/components/dashboard/DashboardHome";
 
-import type { DashboardData } from "@/components/dashboard/types";
+export type DashboardData = {
+  user: { name: string; email: string };
+  owner: boolean;
+  plan: string;
+  status: string;
+  credits: number | string;
+  counts: { conversations: number; memories: number; projects: number; websites: number; unreadNotifications: number };
+  projects: { id: string; project_name: string; type: string | null; status: string | null; progress: number | null; created_at: string }[];
+  websites: { id: string; business_name: string | null; website_type: string; status: string; live_url: string | null; updated_at: string }[];
+};
 
 export default function Dashboard() {
   const router = useRouter();
