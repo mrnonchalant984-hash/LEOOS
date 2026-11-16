@@ -21,7 +21,7 @@ const navItems = [
 ];
 
 function firstName(name: string) {
-  return name.trim().split(/\\s+/)[0] || "there";
+  return name.trim().split(/\s+/)[0] || "there";
 }
 function relativeTime(value: string) {
   const elapsed = Math.max(0, Date.now() - new Date(value).getTime());
@@ -45,9 +45,12 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const [error, setError] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
-  useEffect(() => { try { const saved = localStorage.getItem("leonardx-theme"); const preferred = saved === "dark" || saved === "light" ? saved : document.documentElement.dataset.theme === "dark" ? "dark" : "light"; setTheme(preferred); } catch { setTheme("light"); } }, []);
+  const [recentIds, setRecentIds] = useState<string[]>([]);
+  useEffect(() => { try { const recent = JSON.parse(localStorage.getItem("leonardx_recent_projects") || "[]"); if (Array.isArray(recent)) setRecentIds(recent.filter((id): id is string => typeof id === "string").slice(0, 20)); const saved = localStorage.getItem("leonardx-theme"); const preferred = saved === "dark" || saved === "light" ? saved : document.documentElement.dataset.theme === "dark" ? "dark" : "light"; setTheme(preferred); } catch { setTheme("light"); } }, []);
   const name = firstName(data.user.name);
   const projects = useMemo(() => data.projects.filter(project => project.project_name.toLowerCase().includes(query.toLowerCase())), [data.projects, query]);
+  const visibleProjects = useMemo(() => filter === "Recently viewed" ? recentIds.map(id => projects.find(project => project.id === id)).filter((project): project is DashboardData["projects"][number] => Boolean(project)) : projects, [filter, projects, recentIds]);
+  function rememberProject(id: string) { const next = [id, ...recentIds.filter(value => value !== id)].slice(0, 20); setRecentIds(next); try { localStorage.setItem("leonardx_recent_projects", JSON.stringify(next)); } catch {} }
 
   async function submit(nextPrompt = prompt) {
     const message = nextPrompt.trim();
@@ -61,7 +64,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth.session.access_token}`, "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ session_id: sessionId, message: mode === "Plan" ? `Create a detailed implementation plan first. Do not start coding yet.\\n\\n${message}` : message, work_mode: mode === "Build", mode: "normal", request_id: crypto.randomUUID() }),
+        body: JSON.stringify({ session_id: sessionId, message: mode === "Plan" ? `Create a detailed implementation plan first. Do not start coding yet.\n\n${message}` : message, work_mode: mode === "Build", mode: "normal", request_id: crypto.randomUUID() }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Leo could not start this request.");
@@ -148,11 +151,11 @@ export function DashboardHome({ data }: { data: DashboardData }) {
             </div>
           ) : (
             <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {projects.slice(0,6).map((project,index)=><Link key={project.id} href={`/ide/${encodeURIComponent(project.id)}`} className="group overflow-hidden rounded-2xl border border-zinc-200 bg-white transition hover:-translate-y-0.5 hover:shadow-lg dark:border-white/10 dark:bg-white/[.025]">
+              {visibleProjects.slice(0,6).map((project,index)=><Link onClick={() => rememberProject(project.id)} key={project.id} href={`/ide/${encodeURIComponent(project.id)}`} className="group overflow-hidden rounded-2xl border border-zinc-200 bg-white transition hover:-translate-y-0.5 hover:shadow-lg dark:border-white/10 dark:bg-white/[.025]">
                 <div className={`relative grid h-36 place-items-center overflow-hidden ${["bg-gradient-to-br from-sky-100 to-blue-200","bg-gradient-to-br from-violet-100 to-fuchsia-100","bg-gradient-to-br from-orange-100 to-rose-100"][index%3]}`}><div className="absolute inset-4 rounded-xl border border-white/60 bg-white/25 shadow-inner"/><div className="relative grid h-12 w-12 place-items-center rounded-2xl bg-white/80 text-zinc-700 shadow-sm"><Grid2X2 size={21}/></div></div>
                 <div className="p-4"><div className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full bg-[#242638] text-[10px] font-bold text-white">{name.slice(0,1).toUpperCase()}</span><span className="truncate text-xs font-semibold">{data.user.name}</span></div><b className="mt-3 block truncate text-sm">{project.project_name}</b><p className="mt-1 text-[11px] text-zinc-500">{relativeTime(project.created_at)}</p></div>
               </Link>)}
-              {!projects.length && <div className="col-span-full rounded-2xl border border-dashed border-zinc-200 py-14 text-center dark:border-white/10"><p className="text-sm font-semibold">Your next project starts here.</p><p className="mt-2 text-xs text-zinc-500">Describe an idea above or import an existing project.</p></div>}
+              {!visibleProjects.length && <div className="col-span-full rounded-2xl border border-dashed border-zinc-200 py-14 text-center dark:border-white/10"><p className="text-sm font-semibold">Your next project starts here.</p><p className="mt-2 text-xs text-zinc-500">Describe an idea above or import an existing project.</p></div>}
             </div>
           )}
         </section>
