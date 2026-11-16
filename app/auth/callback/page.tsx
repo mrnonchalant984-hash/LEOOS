@@ -42,7 +42,7 @@ export default function AuthCallbackPage() {
         const profileResponse = await fetch('/api/auth/profile', { headers: { Authorization: `Bearer ${result.session.access_token}` }, cache: 'no-store' });
         const profileResult = profileResponse.ok ? await profileResponse.json().catch(() => null) : null;
         const destinationAfterProfile = profileResult?.user && profileResult.user.onboarding_completed !== true
-          ? `/onboarding?next=${encodeURIComponent(next)}`
+          ? `/getting-started?next=${encodeURIComponent(next)}`
           : next;
         const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (assuranceError) throw assuranceError;
