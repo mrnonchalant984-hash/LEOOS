@@ -17,7 +17,7 @@ const navItems = [
   { label: "Search", href: "/projects", icon: Search },
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "Integrations", href: "/integrations", icon: Link2 },
-  { label: "Automations / Skills", href: "/skills", icon: Workflow },
+  { label: "Automations / Skills", href: "/agents", icon: Workflow },
 ];
 
 function firstName(name: string) {
@@ -44,6 +44,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [recentIds, setRecentIds] = useState<string[]>([]);
   useEffect(() => { try { const recent = JSON.parse(localStorage.getItem("leonardx_recent_projects") || "[]"); if (Array.isArray(recent)) setRecentIds(recent.filter((id): id is string => typeof id === "string").slice(0, 20)); const saved = localStorage.getItem("leonardx-theme"); const preferred = saved === "dark" || saved === "light" ? saved : document.documentElement.dataset.theme === "dark" ? "dark" : "light"; setTheme(preferred); } catch { setTheme("light"); } }, []);
