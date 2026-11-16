@@ -1,4 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { google } from 'googleapis';
 import { adminSupabase } from '@/lib/auth';
 
@@ -28,12 +31,15 @@ function config() {
 
 function clients() {
   const c = config();
-  const ai = new GoogleGenAI({
-    enterprise: true,
-    project: c.project,
-    location: c.location,
-    googleAuthOptions: { credentials: c.credentials, projectId: c.project },
-  } as ConstructorParameters<typeof GoogleGenAI>[0]);
+  // Vercel environment variables are strings, while the Google SDK's Enterprise
+  // backend uses Application Default Credentials. Materialize the secret only in
+  // the function's ephemeral /tmp directory with owner-only permissions.
+  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    const credentialPath = join(tmpdir(), 'leonardx-google-video-service-account.json');
+    writeFileSync(credentialPath, JSON.stringify(c.credentials), { mode: 0o600 });
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialPath;
+  }
+  const ai = new GoogleGenAI({ enterprise: true, project: c.project, location: c.location });
   const auth = new google.auth.GoogleAuth({ credentials: c.credentials, projectId: c.project, scopes: ['https://www.googleapis.com/auth/devstorage.read_only'] });
   return { ai, auth, c };
 }
