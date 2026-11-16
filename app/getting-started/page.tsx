@@ -23,7 +23,7 @@ const companySizes = [
 
 function getPostOnboardingDestination() {
   const requested = new URLSearchParams(window.location.search).get('next');
-  const safe = requested?.startsWith('/') && !requested.startsWith('//') && !requested.includes('\\\\')
+  const safe = requested?.startsWith('/') && !requested.startsWith('//') && !requested.includes('\\')
     ? requested
     : '/dashboard?welcome=true';
   return safe === '/getting-started' ? '/dashboard?welcome=true' : safe;
