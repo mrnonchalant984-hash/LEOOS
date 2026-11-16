@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
@@ -11,6 +11,22 @@ import {
 import type { DashboardData } from "@/components/dashboard/types";
 
 type Filter = "My projects" | "Recently viewed" | "LeonardX templates";
+
+function subscribeDashboardPreferences(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener("leonardx-preferences-changed", onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener("leonardx-preferences-changed", onChange);
+  };
+}
+function getThemeSnapshot(): "light" | "dark" {
+  return localStorage.getItem("leonardx-theme") === "dark" ? "dark" : "light";
+}
+function getRecentProjectsSnapshot() {
+  return localStorage.getItem("leonardx_recent_projects") || "[]";
+}
+
 const filters: Filter[] = ["My projects", "Recently viewed", "LeonardX templates"];
 const navItems = [
   { label: "New", href: "/dashboard", icon: CirclePlus, active: true },
@@ -51,7 +67,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const name = firstName(data.user.name);
   const projects = useMemo(() => data.projects.filter(project => project.project_name.toLowerCase().includes(query.toLowerCase())), [data.projects, query]);
   const visibleProjects = useMemo(() => filter === "Recently viewed" ? recentIds.map(id => projects.find(project => project.id === id)).filter((project): project is DashboardData["projects"][number] => Boolean(project)) : projects, [filter, projects, recentIds]);
-  function rememberProject(id: string) { const next = [id, ...recentIds.filter(value => value !== id)].slice(0, 20); setRecentIds(next); try { localStorage.setItem("leonardx_recent_projects", JSON.stringify(next)); } catch {} }
+  function rememberProject(id: string) { const next = [id, ...recentIds.filter(value => value !== id)].slice(0, 20); try { localStorage.setItem("leonardx_recent_projects", JSON.stringify(next)); window.dispatchEvent(new Event("leonardx-preferences-changed")); } catch {} }
 
   async function submit(nextPrompt = prompt) {
     const message = nextPrompt.trim();
@@ -87,7 +103,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
       <aside className="hidden w-[244px] shrink-0 flex-col rounded-[26px] border border-black/[.06] bg-white p-4 shadow-sm dark:border-white/[.07] dark:bg-[#191a21] lg:flex">
         <button onClick={() => setMenuOpen(v => !v)} aria-expanded={menuOpen} className="flex w-full items-center gap-3 rounded-2xl p-2 text-left hover:bg-zinc-50 dark:hover:bg-white/5">
           <span className="grid h-10 w-10 place-items-center rounded-[14px] bg-[#171923] text-sm font-black text-white">LX</span>
-          <span className="min-w-0 flex-1"><b className="block truncate text-sm">{name}'s LeonardX</b><small className="text-xs text-zinc-500">Personal workspace</small></span>
+          <span className="min-w-0 flex-1"><b className="block truncate text-sm">{name}&apos;s LeonardX</b><small className="text-xs text-zinc-500">Personal workspace</small></span>
           <ChevronDown size={16} className="text-zinc-400"/>
         </button>
         {menuOpen && <div className="mt-2 rounded-xl border border-zinc-200 p-2 text-xs text-zinc-600 dark:border-white/10 dark:text-zinc-300"><p className="px-2 py-1">{data.user.email}</p><Link className="block rounded-lg px-2 py-2 hover:bg-zinc-100 dark:hover:bg-white/5" href="/account">Workspace settings</Link></div>}
