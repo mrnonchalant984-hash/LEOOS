@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CreditCard, Plus, X } from "lucide-react";
 import { generatePaystackIntegrationFiles } from "@/lib/paystack-integration-generator";
 
-export function PaystackIntegrationGenerator({ onGenerate, existingFiles }: { onGenerate: (files: Record<string, string>) => boolean; existingFiles: Record<string, string> }) {
+export function PaystackIntegrationGenerator({ onGenerate, existingFiles, useSrcDirectory = false }: { onGenerate: (files: Record<string, string>) => boolean; existingFiles: Record<string, string>; useSrcDirectory?: boolean }) {
   const [open, setOpen] = useState(false);
   const [added, setAdded] = useState(false);
   return <div className="relative">
