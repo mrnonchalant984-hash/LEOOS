@@ -97,11 +97,16 @@ export function AuthForm() {
         const next = mode === 'signup' && storeSignup
           ? storeDestination(storeAccountType)
           : requestedNext ?? (accountType === 'buyer' || accountType === 'seller' ? storeDestination(accountType) : '/dashboard');
+        const profileResponse = await fetch('/api/auth/profile', { headers: { Authorization: `Bearer ${result.session.access_token}` }, cache: 'no-store' });
+        const profileResult = profileResponse.ok ? await profileResponse.json().catch(() => null) : null;
+        const destinationAfterProfile = profileResult?.user && !profileResult.user.onboarding_complete
+          ? `/onboarding?next=${encodeURIComponent(next)}`
+          : next;
         const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (assuranceError) throw assuranceError;
         const destination = assurance.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2'
-          ? `/auth/mfa?next=${encodeURIComponent(next)}`
-          : next;
+          ? `/auth/mfa?next=${encodeURIComponent(destinationAfterProfile)}`
+          : destinationAfterProfile;
         setStatus(mode === 'login' ? 'Signed in successfully. Redirecting to your workspace…' : 'Account created. Redirecting to your workspace…');
         window.location.assign(destination);
       } else {
