@@ -216,7 +216,15 @@ html[data-theme='dark'] body:has(.lx-route-scope[data-lx-theme-scope='public'] .
 .lx-route-scope[data-lx-theme-scope='public'] .lx-auth-mfa-submit:disabled { opacity: .55; cursor: not-allowed; }
 .lx-route-scope[data-lx-theme-scope='public'] .lx-auth-mfa-signout { padding: 8px; color: var(--lx-text-secondary); font-size: 12px; text-decoration: underline; }
 .lx-route-scope[data-lx-theme-scope='public'] .lx-auth-mfa-error { padding: 12px; border: 1px solid var(--lx-danger-border); border-radius: 10px; background: var(--lx-danger-soft); color: var(--lx-danger); font-size: 12px; line-height: 1.6; }
-.lx-route-scope[data-lx-theme-scope='public'] :is(button,a)[class*='bg-'] { color: #fff !important; }
+/* Do not force white lettering onto every coloured-background control:
+   light buttons (especially bg-white CTAs) need dark text to remain readable. */
+.lx-route-scope[data-lx-theme-scope='public'] :is(button,a)[class~='bg-white'],
+.lx-route-scope[data-lx-theme-scope='public'] :is(button,a)[class~='bg-zinc-50'],
+.lx-route-scope[data-lx-theme-scope='public'] :is(button,a)[class~='bg-neutral-50'],
+.lx-route-scope[data-lx-theme-scope='public'] :is(button,a)[class~='bg-gray-50'],
+.lx-route-scope[data-lx-theme-scope='public'] :is(button,a)[class~='bg-slate-50'] {
+  color: var(--lx-text) !important;
+}
 
 /* The homepage's 3D editorial hero now follows the public theme while retaining
    its existing interactive canvas as a subdued decorative asset. */
