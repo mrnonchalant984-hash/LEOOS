@@ -17,6 +17,7 @@ export async function enforceUserRateLimit(
     });
 
     if (error) {
+      console.error('[rate-limit] consume_user_rate_limit failed', { code: error.code, message: error.message });
       return NextResponse.json(
         { error: 'Rate limiting is temporarily unavailable. Try again shortly.' },
         { status: 503, headers: { 'Retry-After': '5', 'Cache-Control': 'no-store' } },
@@ -31,7 +32,8 @@ export async function enforceUserRateLimit(
     }
 
     return null;
-  } catch {
+  } catch (error) {
+    console.error('[rate-limit] consume_user_rate_limit threw', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json(
       { error: 'Rate limiting is temporarily unavailable. Try again shortly.' },
       { status: 503, headers: { 'Retry-After': '5', 'Cache-Control': 'no-store' } },
