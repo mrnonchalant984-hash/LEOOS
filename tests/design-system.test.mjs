@@ -117,3 +117,14 @@ test('remaining page-level hex colours are limited to explicitly preserved Store
     assert.ok(preserved.some(prefix => route === prefix || route.startsWith(`${prefix}/`)), `page-level colour literal in public route ${route} should use a design token`);
   }
 });
+
+test('light public theme never forces white text onto every background button', async () => {
+  const css = await read('app/design-system.css');
+  assert.doesNotMatch(
+    css,
+    /:is\(button,a\)\[class\*='bg-'\]\s*\{\s*color:\s*#fff\s*!important/i,
+    'generic background buttons must not all receive white text',
+  );
+  assert.match(css, /:is\(button,a\)\[class~='bg-white'\][\s\S]*?color:\s*var\(--lx-text\)\s*!important/);
+  assert.match(css, /\.get-started[\s\S]*?color: #fff !important/);
+});
