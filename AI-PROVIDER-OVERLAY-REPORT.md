@@ -26,3 +26,8 @@ The UI intentionally reports credential presence, not a successful live provider
 - This overlay does not silently modify secrets or provider settings.
 - It does not claim live chat/image/video/voice requests now work.
 - The full app test/build suite has not been run in this environment for this overlay. Apply it to a clean copy of the supplied repository, then run `npx tsc --noEmit`, `npm run lint`, `npm test`, and `npm run build`. Follow with live smoke tests on the deployed version and inspect redacted server logs for the actual HTTP status/correlation ID.
+
+
+## Historical provider note (2026-11-16)
+
+This report predates the Google-first video provider migration. Its legacy video-provider references are historical only; the active integration is now the Google Veo adapter documented in `docs/AI-STUDIO-ARCHITECTURE.md`. No legacy provider credentials should be configured.
