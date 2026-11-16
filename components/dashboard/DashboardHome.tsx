@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
@@ -64,6 +64,12 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [recentIds, setRecentIds] = useState<string[]>([]);
   useEffect(() => { try { const recent = JSON.parse(localStorage.getItem("leonardx_recent_projects") || "[]"); if (Array.isArray(recent)) setRecentIds(recent.filter((id): id is string => typeof id === "string").slice(0, 20)); const saved = localStorage.getItem("leonardx-theme"); const preferred = saved === "dark" || saved === "light" ? saved : document.documentElement.dataset.theme === "dark" ? "dark" : "light"; setTheme(preferred); } catch { setTheme("light"); } }, []);
+  useEffect(() => {
+    try {
+      const initialPrompt = localStorage.getItem("leonardx_initial_prompt");
+      if (initialPrompt) setPrompt(initialPrompt);
+    } catch {}
+  }, []);
   const name = firstName(data.user.name);
   const projects = useMemo(() => data.projects.filter(project => project.project_name.toLowerCase().includes(query.toLowerCase())), [data.projects, query]);
   const visibleProjects = useMemo(() => filter === "Recently viewed" ? recentIds.map(id => projects.find(project => project.id === id)).filter((project): project is DashboardData["projects"][number] => Boolean(project)) : projects, [filter, projects, recentIds]);
@@ -77,15 +83,31 @@ export function DashboardHome({ data }: { data: DashboardData }) {
       const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
       const { data: auth, error: authError } = await supabase.auth.getSession();
       if (authError || !auth.session) throw new Error("Your session expired. Sign in again to start a build.");
+      const headers = { "Content-Type": "application/json", Authorization: `Bearer ${auth.session.access_token}`, "Idempotency-Key": crypto.randomUUID() };
       const sessionId = crypto.randomUUID();
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth.session.access_token}`, "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ session_id: sessionId, message: mode === "Plan" ? `Create a detailed implementation plan first. Do not start coding yet.\n\n${message}` : message, work_mode: mode === "Build", mode: "normal", request_id: crypto.randomUUID() }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Leo could not start this request.");
-      router.push(`/app?session_id=${encodeURIComponent(sessionId)}`);
+      if (mode === "Build") {
+        const projectName = message.replace(/^(build|create|make)\\s+(me\\s+)?/i, "").split(/[.!?\\n]/)[0].trim().slice(0, 80) || "New Leo project";
+        const created = await fetch("/api/workspaces", { method: "POST", headers, body: JSON.stringify({ name: projectName }) });
+        const projectResult = await created.json().catch(() => ({}));
+        if (!created.ok || !projectResult.data?.id) throw new Error(projectResult.error || "LeonardX could not create your project workspace.");
+        const projectId = projectResult.data.id as string;
+        const response = await fetch("/api/chat", {
+          method: "POST", headers,
+          body: JSON.stringify({ session_id: sessionId, project_id: projectId, message: `Build a complete Next.js web app from this brief. Inspect the existing project files first, preserve working features, create and save the implementation, and verify it.\\n\\nProject brief: ${message}`, work_mode: true, mode: "tools", request_type: "build", request_id: crypto.randomUUID() }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "The project was created, but Leo could not start the build.");
+        try { localStorage.removeItem("leonardx_initial_prompt"); } catch {}
+        router.push(`/ide/${encodeURIComponent(projectId)}?session_id=${encodeURIComponent(sessionId)}`);
+      } else {
+        const response = await fetch("/api/chat", {
+          method: "POST", headers,
+          body: JSON.stringify({ session_id: sessionId, message, mode: "normal", request_id: crypto.randomUUID() }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Leo could not start this request.");
+        router.push(`/app?session_id=${encodeURIComponent(sessionId)}`);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Leo could not start this request.");
       setBusy(false);
