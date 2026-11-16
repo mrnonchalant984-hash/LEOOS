@@ -18,7 +18,7 @@ function config() {
   const location = process.env.GOOGLE_CLOUD_LOCATION?.trim() || 'us-central1';
   const outputUri = process.env.GOOGLE_VIDEO_OUTPUT_GCS_URI?.trim();
   const rawCredentials = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!project || !outputUri?.startsWith('gs://') || !rawCredentials) {
+  if (!project || !outputUri || !/^gs:\/\/[a-z0-9._-]+(?:\/.+)?$/i.test(outputUri) || !rawCredentials) {
     throw new Error('Google Veo is not configured. Set GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION, GOOGLE_VIDEO_OUTPUT_GCS_URI and GOOGLE_SERVICE_ACCOUNT_JSON on the server.');
   }
   let credentials: Record<string, unknown>;
@@ -34,20 +34,18 @@ function clients() {
   // Vercel environment variables are strings, while the Google SDK's Enterprise
   // backend uses Application Default Credentials. Materialize the secret only in
   // the function's ephemeral /tmp directory with owner-only permissions.
-  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    const credentialPath = join(tmpdir(), 'leonardx-google-video-service-account.json');
-    writeFileSync(credentialPath, JSON.stringify(c.credentials), { mode: 0o600 });
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialPath;
-  }
+  const credentialPath = join(tmpdir(), `leonardx-google-video-${c.project}.json`);
+  writeFileSync(credentialPath, JSON.stringify(c.credentials), { mode: 0o600 });
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialPath;
   const ai = new GoogleGenAI({ enterprise: true, project: c.project, location: c.location });
-  const auth = new google.auth.GoogleAuth({ credentials: c.credentials, projectId: c.project, scopes: ['https://www.googleapis.com/auth/devstorage.read_only'] });
+  const auth = new google.auth.GoogleAuth({ credentials: c.credentials as any, projectId: c.project, scopes: ['https://www.googleapis.com/auth/devstorage.read_only'] });
   return { ai, auth, c };
 }
 
 export function googleVideoCapabilities() {
   try {
     const c = config();
-    return { available: true, provider: 'google', model: process.env.LEO_GOOGLE_VIDEO_MODEL || 'veo-3.1-generate-001', durations: [4, 6, 8], aspect_ratios: ['16:9', '9:16'], resolutions: ['720p', '1080p'], image_to_video: false, audio_generation: true, location: c.location };
+    return { available: true, configured: true, connectivity_verified: false, provider: 'google', model: process.env.LEO_GOOGLE_VIDEO_MODEL || 'veo-3.1-generate-001', durations: [4, 6, 8], aspect_ratios: ['16:9', '9:16'], resolutions: ['720p', '1080p'], image_to_video: false, audio_generation: true, location: c.location };
   } catch (error) {
     return { available: false, provider: 'google', error: error instanceof Error ? error.message : 'Google video provider is not configured.' };
   }
