@@ -39,11 +39,16 @@ export default function AuthCallbackPage() {
         const { error: syncError } = await supabase.auth.setSession(result.session);
         if (syncError) throw syncError;
         const next = safeNextPath();
+        const profileResponse = await fetch('/api/auth/profile', { headers: { Authorization: `Bearer ${result.session.access_token}` }, cache: 'no-store' });
+        const profileResult = profileResponse.ok ? await profileResponse.json().catch(() => null) : null;
+        const destinationAfterProfile = profileResult?.user && !profileResult.user.onboarding_complete
+          ? `/onboarding?next=${encodeURIComponent(next)}`
+          : next;
         const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (assuranceError) throw assuranceError;
         window.location.replace(assurance.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2'
-          ? `/auth/mfa?next=${encodeURIComponent(next)}`
-          : next);
+          ? `/auth/mfa?next=${encodeURIComponent(destinationAfterProfile)}`
+          : destinationAfterProfile);
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : 'Google sign-in could not be completed.');
       }
