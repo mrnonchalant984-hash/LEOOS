@@ -21,5 +21,8 @@ packages/sdk/dist/
 supabase/.temp/
 supabase/.branches/
 
+# Maintained in the separate private LEOOS-RUNTIME repository.
+LEOOS-RUNTIME/
+
 # Temporary local patch overlays must not enter production TypeScript builds
 tmp/
