@@ -16,7 +16,7 @@ test('profile onboarding is persisted as profile data and keeps authorization ro
   assert.match(migration, /email_opt_out boolean/i);
   assert.match(route, /updates\.onboarding_completed = true/);
   assert.match(route, /onboarding_role/);
-  assert.match(auth, /result\.user\.onboarding_completed !== true[\s\S]*'\/getting-started'/);
+  assert.match(auth, /profileResult\.user\.onboarding_completed !== true[\s\S]*getting-started/);
   assert.match(callback, /onboarding_completed === true[\s\S]*'\/getting-started'/);
 });
 
