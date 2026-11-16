@@ -4,6 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { google } from 'googleapis';
 import { adminSupabase } from '@/lib/auth';
+import {
+  isValidGoogleVideoOperationName,
+  validateGoogleVideoBytes,
+  validateGoogleVideoOutputUri,
+} from '@/lib/generation/google-video-validation';
 
 type GoogleVideoOptions = {
   prompt: string;
@@ -67,35 +72,33 @@ export async function createGoogleVideo(opts: GoogleVideoOptions) {
       personGeneration: 'allow_adult',
     },
   });
-  if (!operation.name) throw new Error('Google accepted no trackable video operation. No completed video is available.');
+  if (!operation.name || !isValidGoogleVideoOperationName(operation.name)) {
+    throw new Error('Google did not return a valid trackable video operation. No completed video is available.');
+  }
   return { provider: 'google', model, task_id: operation.name, status: operation.done ? 'completed' : 'processing' };
 }
 
-async function downloadGcsVideo(uri: string, auth: InstanceType<typeof google.auth.GoogleAuth>) {
-  const match = /^gs:\/\/([^/]+)\/(.+)$/.exec(uri);
-  if (!match) throw new Error('Google returned an unsupported video output URI.');
+async function downloadGcsVideo(uri: string, outputUri: string, auth: InstanceType<typeof google.auth.GoogleAuth>, mimeType?: string) {
+  const match = validateGoogleVideoOutputUri(uri, outputUri);
   const storage = google.storage({ version: 'v1', auth });
-  const response = await storage.objects.get({ bucket: match[1], object: match[2], alt: 'media' }, { responseType: 'arraybuffer' });
+  const response = await storage.objects.get({ bucket: match.bucket, object: match.object, alt: 'media' }, { responseType: 'arraybuffer' });
   const bytes = Buffer.from(response.data as ArrayBuffer);
-  if (!bytes.length || bytes.length > 500 * 1024 * 1024) throw new Error('Google returned an invalid video file size.');
+  validateGoogleVideoBytes(bytes, mimeType);
   return bytes;
 }
 
 export async function getGoogleVideo(taskId: string, userId: string) {
-  if (!/^projects\/[a-z0-9-]+\/locations\/[a-z0-9-]+\/publishers\/google\/models\/[^/]+\/operations\/[a-zA-Z0-9_-]+$/.test(taskId) && !/^operations\/[a-zA-Z0-9_-]+$/.test(taskId)) {
-    // The SDK operation resource may use a provider-specific opaque name. Reject URL-like or oversized values.
-    if (!taskId || taskId.length > 512 || /[\r\n]/.test(taskId)) throw new Error('Invalid Google video operation ID.');
-  }
-  const { ai, auth } = clients();
+  if (!isValidGoogleVideoOperationName(taskId)) throw new Error('Invalid Google video operation ID.');
+  const { ai, auth, c } = clients();
   const operation = await ai.operations.getVideosOperation({ operation: { name: taskId } as never }) as GoogleOperation;
   if (operation.error) return { status: 'failed' as const, error: operation.error.message || 'Google video generation failed.' };
   if (!operation.done) return { status: 'processing' as const, task_id: taskId };
   const video = operation.response?.generatedVideos?.[0]?.video;
   if (!video?.uri) throw new Error('Google marked the operation complete but returned no video output URI.');
-  const bytes = await downloadGcsVideo(video.uri, auth);
+  const bytes = await downloadGcsVideo(video.uri, c.outputUri, auth, video.mimeType);
   const db = adminSupabase();
   const storagePath = `agent-videos/${userId}/google-${Buffer.from(taskId).toString('base64url').slice(0, 48)}.mp4`;
-  const uploaded = await db.storage.from('leo-files').upload(storagePath, bytes, { contentType: video.mimeType || 'video/mp4', upsert: true });
+  const uploaded = await db.storage.from('leo-files').upload(storagePath, bytes, { contentType: 'video/mp4', upsert: true });
   if (uploaded.error) throw new Error('Google generated the video, but private media storage failed.');
   const signed = await db.storage.from('leo-files').createSignedUrl(storagePath, 3600);
   if (signed.error || !signed.data?.signedUrl) throw new Error('Google generated the video, but a secure preview URL could not be issued.');
