@@ -1,10 +1,10 @@
 # LeonardX AI Studio Architecture
 
-Updated: 2026-10-29
+Updated: 2026-11-16
 
 ## Existing architecture
 
-LeonardX is a Next.js App Router application using React, TypeScript, Supabase Auth/Postgres/Storage, Google Gemini for platform text/image workflows, and the existing Runway video integration. The Studio reuses the existing `generation_jobs`, `media_assets`, private `leo-files` storage, platform credits, and image-generation entitlement; it does not create a second billing system or public storage bucket.
+LeonardX is a Next.js App Router application using React, TypeScript, Supabase Auth/Postgres/Storage, Google Gemini for platform text/image workflows, and the Google Veo video integration. The Studio reuses the existing `generation_jobs`, `media_assets`, private `leo-files` storage, platform credits, and image-generation entitlement; it does not create a second billing system or public storage bucket.
 
 ## Current workflow map
 
@@ -15,16 +15,16 @@ LeonardX is a Next.js App Router application using React, TypeScript, Supabase A
 5. Source and result images are stored as user-owned rows in `media_assets` under private paths in the existing `leo-files` bucket. Jobs and assets are associated with the authenticated user; signed URLs are created only after checking ownership.
 6. `/api/studio/history` returns a bounded page of the current user's generation jobs and signed URLs for that user's stored assets.
 7. Credit reservation and refund use existing server-side accounting functions. Provider failures check the idempotent refund result and job-state updates; uncertain recovery is returned as an explicit support-required error rather than a success-shaped refund claim.
-8. Text-to-video delegates to the existing `/api/generate-video` Runway workflow and polls its persisted job status.
+8. Text-to-video delegates to the authenticated `/api/generate-video` Google Veo workflow and polls its persisted job status.
 
-## Capability matrix
+## Capability matrix\n\nGoogle Flow is not called through a fabricated public API. Any future Flow MCP/browser connector must be separately authenticated, user-authorized, and treated as unofficial browser automation.
 
 | Capability | Provider | Status and limits |
 | --- | --- | --- |
 | Text-to-image | Gemini image model | Implemented in source; live provider, storage, credit, and RLS tests still required. |
 | Image edit | Gemini image model | Synchronous for one PNG, JPEG, or WebP source up to 4 MB; live provider, storage, credit, and RLS tests still required. |
-| Text-to-video | Runway | Existing asynchronous workflow; requires provider configuration and applicable plan/credit access. |
-| Image-to-video | Not verified | Do not advertise as available until a supported provider workflow is confirmed. |
+| Text-to-video | Google Veo on Vertex AI | Asynchronous operation polling; requires Google Cloud project, service-account credentials, output GCS bucket, model access, and applicable plan/credit access. |
+| Image-to-video | Google | Disabled in the current adapter; do not advertise until implemented and tested. |
 | Live audio/realtime | Gemini audio | Currently unavailable; no end-to-end workflow is certified. |
 | Hosted browser/computer use | Not available | Disabled; the owner console shows this state rather than claiming execution. |
 | Project media save/reuse | Not exposed in Studio | No fake save action is presented. |
