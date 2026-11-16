@@ -21,6 +21,14 @@ const companySizes = [
   ['201_plus', '201+ people'],
 ] as const;
 
+function getPostOnboardingDestination() {
+  const requested = new URLSearchParams(window.location.search).get('next');
+  const safe = requested?.startsWith('/') && !requested.startsWith('//') && !requested.includes('\\\\')
+    ? requested
+    : '/dashboard?welcome=true';
+  return safe === '/getting-started' ? '/dashboard?welcome=true' : safe;
+}
+
 export default function GettingStartedPage() {
   const { setTheme } = useThemePreference();
   const [step, setStep] = useState(0);
@@ -51,7 +59,7 @@ export default function GettingStartedPage() {
         setCompanySize(companySizes.some(([value]) => value === user.company_size) ? user.company_size : 'just_me');
         setThemeChoice(user.theme_preference === 'dark' ? 'dark' : 'light');
         setEmailOptOut(user.email_opt_out === true);
-        if (user.onboarding_completed === true) window.location.replace('/dashboard?welcome=true');
+        if (user.onboarding_completed === true) window.location.replace(getPostOnboardingDestination());
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : 'Your profile could not be loaded.');
       } finally { if (active) setLoading(false); }
