@@ -9,7 +9,7 @@ import {
   Compass, Folder, FolderKanban, Github, Grid2X2, ImagePlus, Layers3, Link2,
   MessageSquare, MonitorPlay, Search, Settings2, Sparkles, WandSparkles, Workflow,
 } from "lucide-react";
-import type { DashboardData } from "@/app/dashboard/page";
+import type { DashboardData } from "@/components/dashboard/types";
 
 type Filter = "My projects" | "Recently viewed" | "LeonardX templates";
 const filters: Filter[] = ["My projects", "Recently viewed", "LeonardX templates"];
@@ -27,12 +27,12 @@ function firstName(name: string) {
 function relativeTime(value: string) {
   const elapsed = Math.max(0, Date.now() - new Date(value).getTime());
   const minutes = Math.floor(elapsed / 60000);
-  if (minutes < 1) return "Edited just now";
-  if (minutes < 60) return `Edited ${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  if (minutes < 1) return "Created just now";
+  if (minutes < 60) return `Created ${minutes} minute${minutes === 1 ? "" : "s"} ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Edited ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  if (hours < 24) return `Created ${hours} hour${hours === 1 ? "" : "s"} ago`;
   const days = Math.floor(hours / 24);
-  return `Edited ${days} day${days === 1 ? "" : "s"} ago`;
+  return `Created ${days} day${days === 1 ? "" : "s"} ago`;
 }
 
 export function DashboardHome({ data }: { data: DashboardData }) {
@@ -45,6 +45,8 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  useEffect(() => { try { const saved = localStorage.getItem("leonardx-theme"); const preferred = saved === "dark" || saved === "light" ? saved : document.documentElement.dataset.theme === "dark" ? "dark" : "light"; setTheme(preferred); } catch { setTheme("light"); } }, []);
   const name = firstName(data.user.name);
   const projects = useMemo(() => data.projects.filter(project => project.project_name.toLowerCase().includes(query.toLowerCase())), [data.projects, query]);
 
@@ -78,7 +80,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   ];
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-[1720px] gap-4 p-3 sm:p-5">
+    <div className={`mx-auto flex min-h-screen max-w-[1720px] gap-4 p-3 sm:p-5 ${theme === "dark" ? "dark" : ""}`}>
       <aside className="hidden w-[244px] shrink-0 flex-col rounded-[26px] border border-black/[.06] bg-white p-4 shadow-sm dark:border-white/[.07] dark:bg-[#191a21] lg:flex">
         <button onClick={() => setMenuOpen(v => !v)} aria-expanded={menuOpen} className="flex w-full items-center gap-3 rounded-2xl p-2 text-left hover:bg-zinc-50 dark:hover:bg-white/5">
           <span className="grid h-10 w-10 place-items-center rounded-[14px] bg-[#171923] text-sm font-black text-white">LX</span>
@@ -126,7 +128,7 @@ export function DashboardHome({ data }: { data: DashboardData }) {
               </div>
             </form>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
-              {quickActions.map(action => { const Icon = action.icon; return <button key={action.label} type="button" onClick={() => { setPrompt(action.prompt); if(action.label!=="Create an app") void submit(action.prompt); }} className="inline-flex items-center gap-2 rounded-full border border-white/55 bg-white/35 px-4 py-2.5 text-[11px] font-semibold text-[#292943] backdrop-blur-lg transition hover:bg-white/70"><Icon size={14}/>{action.label}</button>; })}
+              {quickActions.map(action => { const Icon = action.icon; return <button key={action.label} type="button" onClick={() => { setPrompt(action.prompt); void submit(action.prompt); }} className="inline-flex items-center gap-2 rounded-full border border-white/55 bg-white/35 px-4 py-2.5 text-[11px] font-semibold text-[#292943] backdrop-blur-lg transition hover:bg-white/70"><Icon size={14}/>{action.label}</button>; })}
             </div>
             {error && <p role="alert" className="mt-4 rounded-xl bg-white/85 px-4 py-3 text-left text-xs text-red-700">{error}</p>}
           </div>
