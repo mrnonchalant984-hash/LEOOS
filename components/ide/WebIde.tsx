@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Download, FileCode2, FolderDown, Play, Save, TerminalSquare } from 'lucide-react';
+import { ChevronRight, Download, FileCode2, FolderDown, Play, Save, TerminalSquare, Upload } from 'lucide-react';
 import CloudBuildPanel from '@/components/ide/CloudBuildPanel';
 import { LivePreviewFrame } from '@/components/engineering/LivePreviewFrame';
 
@@ -36,6 +36,8 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
   const [preview, setPreview] = useState<PreviewJob | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const filePaths = useMemo(() => flattenFiles(files), [files]);
   const folderPaths = useMemo(() => [...new Set(filePaths.flatMap(filePath => {
     const parts = filePath.split('/');
@@ -54,6 +56,25 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
     if (!isDirty) return;
     event.preventDefault();
     setError('Save your workspace changes before downloading the saved project files.');
+  }
+
+  async function importWorkspaceArchive(file: File) {
+    setImporting(true);
+    setError('');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/source`, { method: 'POST', body: form });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Project archive could not be imported.');
+      await loadWorkspace();
+      setTerminal(lines => [...lines, { kind: 'output', text: `Imported ${result.data?.file_count ?? 'project'} files from ${file.name}.` }]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Project archive could not be imported.');
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
   }
 
   const refreshPreview = useCallback(async () => {
@@ -239,7 +260,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
   return <main className="min-h-[calc(100vh-140px)] bg-[#090a0c] px-3 py-5 text-white sm:px-6">
     <header className="mx-auto mb-4 flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
       <div><div className="flex items-center gap-2 text-xs text-white/45"><Link href="/dashboard" className="hover:text-white">Dashboard</Link><ChevronRight size={13}/><span>Web IDE</span></div><h1 className="mt-1 text-xl font-semibold">{workspace?.project_name || 'Workspace'}</h1></div>
-      <div className="flex flex-wrap items-center gap-2"><span className="rounded border border-white/10 px-2 py-1 text-xs text-white/55">{workspace?.status || 'Workspace'}</span><span className={`text-xs ${isDirty ? 'text-amber-300' : 'text-emerald-300'}`}>{isDirty ? 'Unsaved changes' : 'All changes saved'}</span><a href={exportUrl()} onClick={blockUnsavedExport} aria-disabled={isDirty} className={`inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 ${isDirty ? 'cursor-not-allowed opacity-45' : ''}`}><Download size={15}/>Download project ZIP</a><button onClick={() => void saveFiles()} disabled={saving || !isDirty} className="inline-flex items-center gap-2 rounded-md bg-[#d7aa70] px-3 py-2 text-sm font-medium text-black disabled:opacity-60"><Save size={15}/>{saving ? 'Saving…' : 'Save files'}</button></div>
+      <div className="flex flex-wrap items-center gap-2"><span className="rounded border border-white/10 px-2 py-1 text-xs text-white/55">{workspace?.status || 'Workspace'}</span><input ref={importInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="sr-only" aria-label="Choose a ZIP archive to import" onChange={event => { const file = event.target.files?.[0]; if (file) void importWorkspaceArchive(file); }} /><button type="button" onClick={() => importInputRef.current?.click()} disabled={importing} className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 disabled:opacity-50"><Upload size={15}/>{importing ? 'Importing…' : 'Import ZIP'}</button><span className={`text-xs ${isDirty ? 'text-amber-300' : 'text-emerald-300'}`}>{isDirty ? 'Unsaved changes' : 'All changes saved'}</span><a href={exportUrl()} onClick={blockUnsavedExport} aria-disabled={isDirty} className={`inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 ${isDirty ? 'cursor-not-allowed opacity-45' : ''}`}><Download size={15}/>Download project ZIP</a><button onClick={() => void saveFiles()} disabled={saving || !isDirty} className="inline-flex items-center gap-2 rounded-md bg-[#d7aa70] px-3 py-2 text-sm font-medium text-black disabled:opacity-60"><Save size={15}/>{saving ? 'Saving…' : 'Save files'}</button></div>
     </header>
     <CloudBuildPanel projectId={workspaceId} projectType={workspace?.type || null} />
     {error && <div role="alert" className="mx-auto mb-3 max-w-[1600px] rounded-md border border-red-400/30 bg-red-950/30 px-4 py-2 text-sm text-red-200">{error}</div>}
@@ -274,7 +295,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
         </div>
       )}
     </section>
-    <section aria-label="Workspace editor" className="mx-auto grid min-h-[68vh] max-w-[1600px] overflow-hidden rounded-xl border border-white/10 bg-[#101114] lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.75fr)]">
+    <section aria-label="Workspace editor" className="mx-auto grid min-h-[68vh] max-w-[1600px] overflow-hidden rounded-xl border border-white/10 bg-[#101114] lg:grid-cols-[minmax(0,1.85fr)_minmax(320px,1fr)]">
       <div className="flex min-h-[58vh] flex-col border-b border-white/10 lg:border-b-0 lg:border-r">
         <div className="flex h-11 items-center gap-2 border-b border-white/10 px-4 text-xs text-white/55"><FileCode2 size={15}/> Files <input aria-label="Search files" value={fileSearch} onChange={event => setFileSearch(event.target.value)} placeholder="Search files…" className="ml-auto min-w-0 w-32 rounded border border-white/10 bg-black/20 px-2 py-1 text-xs text-white outline-none focus:border-[#d7aa70]/60"/><button onClick={createFile} className="ml-auto rounded px-2 py-1 text-white/70 hover:bg-white/10 hover:text-white">New file</button><span>{filePaths.length} items</span></div>
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(150px,0.28fr)_minmax(0,1fr)]">
