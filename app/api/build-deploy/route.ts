@@ -227,7 +227,10 @@ export async function POST(req: NextRequest) {
       .eq('id', customerProjectId)
       .eq('owner_user_id', ctx.user.id)
       .maybeSingle();
-    if (projectError) return NextResponse.json({ error: 'Project ownership could not be verified.' }, { status: 500 });
+    if (projectError) {
+      console.error(JSON.stringify({ level: 'error', event: 'leo.build.project_lookup_failed', request_id: requestId, database_code: projectError.code || undefined }));
+      return NextResponse.json({ error: 'Project ownership could not be verified because the database is temporarily unavailable.', code: 'PROJECT_LOOKUP_UNAVAILABLE', retryable: true, requestId }, { status: 503, headers: { 'Cache-Control': 'no-store', 'X-Request-ID': requestId } });
+    }
     if (!ownedProject) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
     const requestedCustomDomain = body.custom_domain || ownedProject.custom_domain;
     const customDomain = requestedCustomDomain ? normalizeVercelDomain(requestedCustomDomain) : null;
@@ -288,17 +291,22 @@ export async function POST(req: NextRequest) {
     if (startError) {
       const limited = startError.message?.includes('Monthly build limit reached');
       const idempotencyConflict = startError.message?.includes('Idempotency key is already associated');
+      console.error(JSON.stringify({
+        level: 'error', event: 'leo.build.admission_failed', request_id: requestId,
+        database_code: typeof startError.code === 'string' ? startError.code : undefined,
+        database_message: typeof startError.message === 'string' ? startError.message.slice(0, 240) : 'unknown',
+      }));
       return NextResponse.json({
         error: limited
           ? 'The monthly build allowance for this plan has been reached.'
           : idempotencyConflict
             ? 'This idempotency key was already used for a different deployment request.'
-            : 'Build could not be started.',
-        code: limited ? 'MONTHLY_BUILD_LIMIT_REACHED' : idempotencyConflict ? 'IDEMPOTENCY_KEY_REUSED' : 'BUILD_START_FAILED',
-        retryable: false,
+            : 'Build admission is temporarily unavailable. Check the database migration and RPC permissions, then retry.',
+        code: limited ? 'MONTHLY_BUILD_LIMIT_REACHED' : idempotencyConflict ? 'IDEMPOTENCY_KEY_REUSED' : 'BUILD_ADMISSION_UNAVAILABLE',
+        retryable: !limited && !idempotencyConflict,
         requestId,
         ...(limited ? { upgrade_url: '/pricing' } : {}),
-      }, { status: limited ? 429 : idempotencyConflict ? 409 : 500, headers: { 'Cache-Control': 'no-store' } });
+      }, { status: limited ? 429 : idempotencyConflict ? 409 : 503, headers: { 'Cache-Control': 'no-store', 'X-Request-ID': requestId } });
     }
     const admission = Array.isArray(startedResult) ? startedResult[0] : startedResult;
     if (!admission?.disposition) {
@@ -668,13 +676,25 @@ export async function POST(req: NextRequest) {
         ...(buildContext ? { jobId: buildContext.id } : {}),
       }, { status: responseStatus, headers });
     }
+    const failureCode = mainDomainFailure ? 'DEPLOYMENT_DOMAIN_UNAVAILABLE' : 'BUILD_DEPLOY_FAILED';
+    const infrastructureFailure = !mainDomainFailure && (
+      e instanceof TypeError || (e instanceof Error && /supabase|database|fetch failed|timeout|timed out|network/i.test(e.message))
+    );
+    console.error(JSON.stringify({
+      level: 'error', event: 'leo.build.unhandled_failure', request_id: requestId,
+      job_id: buildContext?.id, stage: buildContext?.stage || 'admission',
+      error_name: e instanceof Error ? e.name : 'unknown',
+      failure_code: failureCode,
+    }));
     return NextResponse.json({
-      error: mainDomainFailure || 'Build or deployment could not be completed. Review the project operation status and retry.',
-      code: mainDomainFailure ? 'DEPLOYMENT_DOMAIN_UNAVAILABLE' : 'BUILD_DEPLOY_FAILED',
-      retryable: false,
+      error: mainDomainFailure || (infrastructureFailure
+        ? 'A required build service is temporarily unavailable. Check the operation log and service health before retrying.'
+        : 'Build or deployment could not be completed. Review the project operation status and retry.'),
+      code: infrastructureFailure ? 'BUILD_INFRASTRUCTURE_UNAVAILABLE' : failureCode,
+      retryable: infrastructureFailure,
       requestId,
       ...(buildContext ? { jobId: buildContext.id } : {}),
-    }, { status: mainDomainFailure ? 502 : 500, headers: { 'Cache-Control': 'no-store', 'X-Request-ID': requestId } });
+    }, { status: mainDomainFailure ? 502 : infrastructureFailure ? 503 : 502, headers: { 'Cache-Control': 'no-store', 'X-Request-ID': requestId } });
   }
   });
 }

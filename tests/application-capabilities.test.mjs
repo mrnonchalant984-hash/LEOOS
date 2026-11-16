@@ -28,11 +28,11 @@ test('capability configuration is boolean and never contains configured secret v
     GODOT_BUILD_SERVICE_TOKEN: 'private-godot-token-value',
     GITHUB_TOKEN: 'private-github-token-value',
     VERCEL_TOKEN: 'private-vercel-token-value',
-    REPOSITORY_RUNNER_URL: 'https://runner.example.test',
-    RUNNER_HMAC_SECRET: 'private-runner-secret-value-long-enough',
+    LEO_WORKSPACE_GITHUB_OWNER: 'example-owner',
+    LEO_WORKSPACE_GITHUB_REPOSITORY: 'LEOOS-RUNTIME',
   });
   const serialized = JSON.stringify(catalog);
-  for (const secret of ['private-expo-token-value', 'private-godot-token-value', 'private-github-token-value', 'private-vercel-token-value', 'private-runner-secret-value-long-enough']) {
+  for (const secret of ['private-expo-token-value', 'private-godot-token-value', 'private-github-token-value', 'private-vercel-token-value']) {
     assert.equal(serialized.includes(secret), false);
   }
   assert.equal(catalog.find((item) => item.id === 'mobile-expo-eas').configured, true);

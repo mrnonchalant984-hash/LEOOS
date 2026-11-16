@@ -7,10 +7,10 @@ const source = await readFile(new URL('../components/LEOWidget.tsx', import.meta
 test('Leo empty state shows welcome, starter prompts, and an available composer', () => {
   assert.match(source, /min-h-\[52vh\].*max-w-2xl/s);
   assert.match(source, /\{composer\}/);
-  assert.match(source, /Welcome, \{welcomeName\}/);
-  assert.match(source, /actions\.map/);
-  assert.match(source, /aria-label="Quick starts"/);
-  assert.match(source, /messages\.length === 0 && <div/);
+  assert.match(source, /\$\{timeGreeting\}, \$\{welcomeName\}/);
+  assert.match(source, /Suggested ways to work/);
+  assert.match(source, /Review project files/);
+  assert.match(source, /messages\.length === 0 \?/);
 });
 
 test('Leo chat model choices are sent to the server and validated by server-side routing', () => {
@@ -21,6 +21,6 @@ test('Leo chat model choices are sent to the server and validated by server-side
 });
 
 test('conversation composer remains available unless the memory editor is open', () => {
-  assert.match(source, /\!memoryOpen && <div className="border-t/);
-  assert.match(source, /messages\.length === 0 && <div.*aria-label="Quick starts"/s);
+  assert.match(source, /\!memoryOpen && <div className="leo-chat-composer-dock/);
+  assert.match(source, /messages\.length === 0 \?.*<div/s);
 });

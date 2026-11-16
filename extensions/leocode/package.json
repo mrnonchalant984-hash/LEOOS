@@ -100,6 +100,11 @@
           "type": "string",
           "default": "https://leoos-omega.vercel.app",
           "description": "LeonardX server origin. Use HTTPS except for local development."
+        },
+        "leocode.projectId": {
+          "type": "string",
+          "default": "",
+          "description": "LeonardX project UUID whose saved private workspace LeoCode should execute on a temporary GitHub-hosted runner."
         }
       }
     },
@@ -209,6 +214,10 @@
       {
         "command": "leocode.inspectGit",
         "title": "LeoCode: Inspect Git Status"
+      },
+      {
+        "command": "leocode.runHostedWorkspace",
+        "title": "LeoCode: Run on Private GitHub Runtime"
       }
     ]
   },

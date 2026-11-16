@@ -70,6 +70,7 @@ type ChatDocument = {
   downloadUrl: string;
 };
 type ChatCitation = { title?: string; url: string };
+type ChatImage = { assetId: string; fileName: string; mimeType: string; previewUrl: string };
 type Msg = {
   role: "user" | "assistant";
   content: string;
@@ -79,6 +80,7 @@ type Msg = {
   assetId?: string;
   projectBuilder?: ProjectBuilderAction;
   documents?: ChatDocument[];
+  images?: ChatImage[];
   citations?: ChatCitation[];
 };
 type ChatHistoryItem = { id: string; title: string; updatedAt: number };
@@ -148,21 +150,6 @@ function decodePcm16(data: string) {
   for (let index = 0; index < samples.length; index += 1) samples[index] = view.getInt16(index * 2, true) / 0x8000;
   return samples;
 }
-const actions = [
-  {
-    label: "Let’s brainstorm",
-    prompt: "Let's brainstorm ideas with me",
-    icon: Lightbulb,
-  },
-  {
-    label: "Let’s create",
-    prompt: "Let's create something together",
-    icon: Sparkles,
-  },
-  { label: "Let’s deploy", prompt: "Let's deploy a website", icon: Rocket },
-  { label: "Let’s fix", prompt: "Let's fix my code", icon: Wrench },
-  { label: "Let’s code", prompt: "Let's code something", icon: Code2 },
-];
 function getBrowserSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -181,10 +168,20 @@ function getRemoteDeviceId() {
 
 export function LEOWidget({ full = false, initialSessionId = "" }: { full?: boolean; initialSessionId?: string }) {
   const [open, setOpen] = useState(full),
+    [workspaceMode, setWorkspaceMode] = useState<"chat" | "work">("chat"),
+    [workProject, setWorkProject] = useState<{ id: string; name: string } | null>(null),
+    [workManifest, setWorkManifest] = useState<{ revision: number; files: Array<{ path: string; size: number; kind: string }>; totalBytes: number } | null>(null),
+    [workUploading, setWorkUploading] = useState(false),
+    [editingWorkspaceFile, setEditingWorkspaceFile] = useState(""),
+    [workspaceFileContent, setWorkspaceFileContent] = useState(""),
+    [workspaceFileBusy, setWorkspaceFileBusy] = useState(false),
+    [workspaceRuntimeBusy, setWorkspaceRuntimeBusy] = useState(""),
+    [workspaceRuntimeResult, setWorkspaceRuntimeResult] = useState<{ operation: string; ok?: boolean; exit_code?: number; stdout?: string; stderr?: string; status?: string; provider?: string; job_id?: string; message?: string } | null>(null),
     [messages, setMessages] = useState<Msg[]>([]),
     [input, setInput] = useState(""),
     [loading, setLoading] = useState(false),
     [pendingDocuments, setPendingDocuments] = useState<ChatDocument[]>([]),
+    [pendingImages, setPendingImages] = useState<ChatImage[]>([]),
     [uploadingDocument, setUploadingDocument] = useState(false),
     [documentBusy, setDocumentBusy] = useState(""),
     [recording, setRecording] = useState(false),
@@ -235,6 +232,8 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   const [remotePairings, setRemotePairings] = useState<RemotePairing[]>([]);
   const [remoteSessionId, setRemoteSessionId] = useState("");
   const [remoteEvents, setRemoteEvents] = useState<RemoteEvent[]>([]);
+  const hour = new Date().getHours();
+  const timeGreeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   useEffect(() => {
     const updateNetworkState = () => setNetworkOnline(navigator.onLine);
     updateNetworkState();
@@ -313,6 +312,21 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   const photoRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const chatPinnedToBottom = useRef(true);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [replacingImageId, setReplacingImageId] = useState<string | null>(null);
+  useEffect(() => {
+    chatPinnedToBottom.current = true;
+  }, [activeChatId]);
+  useEffect(() => {
+    if (!chatPinnedToBottom.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      const element = chatScrollRef.current;
+      if (element) element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages, loading, memoryOpen]);
   useEffect(() => {
     const sid = initialSessionId || localStorage.getItem("leo_chat_id") || crypto.randomUUID();
     sidRef.current = sid;
@@ -336,11 +350,27 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             : {},
         });
         const d = await r.json();
-        setMessages(d.messages || []);
+        if (!r.ok) throw new Error(d.error || "Your conversation could not be loaded.");
+        const serverMessages = Array.isArray(d.messages) ? d.messages : [];
+        if (serverMessages.length) setMessages(serverMessages);
+        else {
+          try {
+            const local = localStorage.getItem(`leo_chat_${sid}`);
+            const parsed = local ? JSON.parse(local) : null;
+            setMessages(Array.isArray(parsed) ? parsed : []);
+          } catch { setMessages([]); }
+        }
         setPlan(d.plan || null);
         if (d.profile?.full_name)
           setWelcomeName(d.profile.full_name.split(/\s+/)[0]);
-      } catch {}
+      } catch {
+        try {
+          const local = localStorage.getItem(`leo_chat_${sid}`);
+          const parsed = local ? JSON.parse(local) : null;
+          if (Array.isArray(parsed)) setMessages(parsed);
+          else setError("Your account conversation could not be reached and no local copy is available.");
+        } catch { setError("Your conversation could not be restored."); }
+      }
     })();
     (async () => {
       try {
@@ -373,11 +403,20 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   }, [messages, full]);
 
   async function startNewChat() {
+    for (const image of pendingImages) void deleteChatImageAsset(image.assetId).catch(() => {});
     const sid = crypto.randomUUID();
     sidRef.current = sid;
     setActiveChatId(sid);
     localStorage.setItem("leo_chat_id", sid);
     setMessages([]);
+    setInput("");
+    setPendingImages([]);
+    setPendingDocuments([]);
+    setReplacingImageId(null);
+    setSelectedTool(null);
+    setSelectedAgent(null);
+    chatPinnedToBottom.current = true;
+    setShowJumpToLatest(false);
     setError("");
     setMemoryOpen(false);
   }
@@ -392,20 +431,42 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   async function openSavedChat(chat: ChatHistoryItem) {
     sidRef.current = chat.id;
     setActiveChatId(chat.id);
+    chatPinnedToBottom.current = true;
+    setShowJumpToLatest(false);
     localStorage.setItem("leo_chat_id", chat.id);
     setError("");
+    setMemoryOpen(false);
     try {
+      const t = await token();
+      if (t) {
+        const response = await fetch(`/api/chat?session_id=${encodeURIComponent(chat.id)}`, {
+          headers: { Authorization: `Bearer ${t}` }, cache: "no-store",
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "This conversation could not be restored from your account.");
+        if (Array.isArray(data.messages) && data.messages.length) {
+          setMessages(data.messages);
+          try { localStorage.setItem(`leo_chat_${chat.id}`, JSON.stringify(data.messages)); } catch {}
+          return;
+        }
+      }
       const local = localStorage.getItem(`leo_chat_${chat.id}`);
       if (local) {
         const parsed = JSON.parse(local);
-        if (Array.isArray(parsed)) { setMessages(parsed); setMemoryOpen(false); return; }
+        if (Array.isArray(parsed)) { setMessages(parsed); return; }
       }
-      const t = await token();
-      const response = await fetch(`/api/chat?session_id=${encodeURIComponent(chat.id)}`, { headers: t ? { Authorization: `Bearer ${t}` } : {}, cache: "no-store" });
-      const data = await response.json();
-      setMessages(Array.isArray(data.messages) ? data.messages : []);
-    } catch { setMessages([]); setError("This chat could not be loaded on this device."); }
-    setMemoryOpen(false);
+      setMessages([]);
+    } catch (cause) {
+      const local = localStorage.getItem(`leo_chat_${chat.id}`);
+      if (local) {
+        try {
+          const parsed = JSON.parse(local);
+          if (Array.isArray(parsed)) { setMessages(parsed); setError("Showing this device's saved copy. Account sync could not be refreshed."); return; }
+        } catch { /* fall through to the restore error */ }
+      }
+      setMessages([]);
+      setError(cause instanceof Error ? cause.message : "This chat could not be restored.");
+    }
   }
 
   async function loadMemories() {
@@ -565,9 +626,10 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   }, [remoteOpen, remoteSessionId, remoteCursor]);
 
   async function send(text = input, mode: "normal" | "deep" | "tools" = "normal", attachedTool = selectedTool, attachedAgent = selectedAgent, forceWebSearch = false) {
-    if (!text.trim() || loading) return;
-    const next = text.trim();
+    if ((!text.trim() && !pendingImages.length && !pendingDocuments.length) || loading) return;
+    const next = text.trim() || (pendingImages.length ? 'Please analyse the attached image(s) and describe what you can see.' : 'Please inspect the attached project files and tell me what you can help with.');
     const attachedDocuments = pendingDocuments;
+    const attachedImages = pendingImages;
     const requestedMode = effort === "deep" && mode === "normal" ? "deep" : mode;
     const effectiveMode = attachedTool || attachedAgent?.allowed_tools.length ? "tools" : requestedMode;
     if (!navigator.onLine) {
@@ -585,7 +647,9 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     }
     setInput("");
     setMenu(false);
-    setMessages((m) => [...m, { role: "user", content: next, ...(attachedDocuments.length ? { documents: attachedDocuments } : {}), ...((attachedTool || attachedAgent) ? { selectedToolLabel: attachedTool?.name || attachedAgent?.name } : {}) }]);
+    chatPinnedToBottom.current = true;
+    setShowJumpToLatest(false);
+    setMessages((m) => [...m, { role: "user", content: next, ...(attachedDocuments.length ? { documents: attachedDocuments } : {}), ...(attachedImages.length ? { images: attachedImages } : {}), ...((attachedTool || attachedAgent) ? { selectedToolLabel: attachedTool?.name || attachedAgent?.name } : {}) }]);
     setSelectedTool(null);
     setSelectedAgent(null);
     const negatesBuild = /\b(?:do not|don't|never|not)\b.{0,32}\b(?:build|create|make|deploy|publish|launch)\b/i.test(next);
@@ -599,7 +663,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       const t = await token();
       const imageIntent = /\b(generate|create|make|draw)\b.{0,40}\b(image|picture|illustration|visual)\b/i.test(next);
       const repositoryIntent = /\b(github|git\s?hub|repository|repo)\b/i.test(next);
-      const shouldStream = effectiveMode === "normal" && !attachedTool && !attachedAgent && !buildIntent && !imageIntent && !repositoryIntent && !forceWebSearch && !attachedDocuments.length && !isCurrentResearchRequest(next);
+      const shouldStream = workspaceMode !== "work" && effectiveMode === "normal" && !attachedTool && !attachedAgent && !buildIntent && !imageIntent && !repositoryIntent && !forceWebSearch && !attachedDocuments.length && !attachedImages.length && !isCurrentResearchRequest(next);
       if (shouldStream) {
         const aborter = new AbortController();
         chatAbortController.current = aborter;
@@ -643,7 +707,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         const r = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
-          body: JSON.stringify({ session_id: sidRef.current, message: next, mode: effectiveMode, request_id: crypto.randomUUID(), ...(attachedTool ? { tool_name: attachedTool.name } : {}), ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}), ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}), ...(forceWebSearch ? { web_search: true } : {}), ...(attachedDocuments.length ? { document_asset_ids: attachedDocuments.map(document => document.assetId) } : {}) }),
+          body: JSON.stringify({ session_id: sidRef.current, message: next, work_mode: workspaceMode === "work", ...(workspaceMode === "work" && workProject ? { project_id: workProject.id } : {}), mode: effectiveMode, request_id: crypto.randomUUID(), ...(attachedTool ? { tool_name: attachedTool.name } : {}), ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}), ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}), ...(forceWebSearch ? { web_search: true } : {}), ...(attachedDocuments.length ? { document_asset_ids: attachedDocuments.map(document => document.assetId) } : {}), ...(attachedImages.length ? { image_asset_ids: attachedImages.map(image => image.assetId) } : {}) }),
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || "Leo is unavailable");
@@ -662,6 +726,10 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       if (attachedDocuments.length) {
         const sentIds = new Set(attachedDocuments.map(document => document.assetId));
         setPendingDocuments(current => current.filter(document => !sentIds.has(document.assetId)));
+      }
+      if (attachedImages.length) {
+        const sentImageIds = new Set(attachedImages.map(image => image.assetId));
+        setPendingImages(current => current.filter(image => !sentImageIds.has(image.assetId)));
       }
       if (offlineDraft?.text === next && offlineDraft.mode === effectiveMode) {
         setOfflineDraft(null);
@@ -758,6 +826,52 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       setLoading(false);
     }
   }
+  async function deleteChatImageAsset(assetId: string) {
+    const t = await token();
+    const response = await fetch(`/api/media/${encodeURIComponent(assetId)}`, {
+      method: 'DELETE',
+      headers: t ? { Authorization: `Bearer ${t}` } : {},
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'The uploaded image could not be removed.');
+  }
+  async function removePendingChatImage(assetId: string) {
+    setError('');
+    try {
+      await deleteChatImageAsset(assetId);
+      setPendingImages(current => current.filter(item => item.assetId !== assetId));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The uploaded image could not be removed.');
+    }
+  }
+  async function uploadChatImage(file: File, replaceAssetId?: string) {
+    if (!replaceAssetId && pendingImages.length >= 3) { setError('Attach up to three images to one message.'); return; }
+    if (file.size < 1 || file.size > 4 * 1024 * 1024) { setReplacingImageId(null); setError('Choose an image no larger than 4 MB.'); return; }
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { setReplacingImageId(null); setError('Use a PNG, JPEG, or WebP image.'); return; }
+    setUploadingDocument(true);
+    setError('');
+    try {
+      const t = await token();
+      const form = new FormData();
+      form.append('file', file);
+      const response = await fetch('/api/chat/images', { method: 'POST', headers: t ? { Authorization: `Bearer ${t}` } : {}, body: form });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Image upload failed.');
+      const image = data.image as ChatImage;
+      setPendingImages(current => replaceAssetId
+        ? current.map(item => item.assetId === replaceAssetId ? image : item)
+        : current.length < 3 ? [...current, image] : current);
+      setReplacingImageId(null);
+      setMenu(false);
+      if (replaceAssetId) {
+        try { await deleteChatImageAsset(replaceAssetId); }
+        catch { setError('The replacement image is attached, but the previous private upload could not be cleaned up.'); }
+      }
+    } catch (cause) {
+      setReplacingImageId(null);
+      setError(cause instanceof Error ? cause.message : 'The image could not be uploaded.');
+    } finally { setUploadingDocument(false); }
+  }
   async function uploadChatDocument(file: File) {
     if (pendingDocuments.length >= 3) {
       setError("Attach up to three documents to one message.");
@@ -785,7 +899,104 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       setUploadingDocument(false);
     }
   }
+  async function openWorkspaceFile(path: string) {
+    if (!workProject) return;
+    setWorkspaceFileBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workProject.id)}/source?path=${encodeURIComponent(path)}`, { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "This file could not be opened.");
+      setEditingWorkspaceFile(path);
+      setWorkspaceFileContent(result.data.content || "");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "File could not be opened."); }
+    finally { setWorkspaceFileBusy(false); }
+  }
+  async function saveWorkspaceFile() {
+    if (!workProject || !workManifest || !editingWorkspaceFile) return;
+    setWorkspaceFileBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workProject.id)}/source`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: editingWorkspaceFile, content: workspaceFileContent, revision: workManifest.revision }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "File could not be saved.");
+      const manifestResponse = await fetch(`/api/workspaces/${encodeURIComponent(workProject.id)}/source`, { cache: "no-store" });
+      const manifestData = await manifestResponse.json();
+      if (!manifestResponse.ok) throw new Error(manifestData.error || "File saved, but workspace metadata could not refresh.");
+      setWorkManifest(manifestData.data);
+      setEditingWorkspaceFile("");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "File could not be saved."); }
+    finally { setWorkspaceFileBusy(false); }
+  }
+
+  async function runWorkspaceOperation(operation: "inspect" | "install" | "test" | "typecheck" | "lint" | "build" | "git_status" | "git_diff") {
+    if (!workProject || workspaceRuntimeBusy) return;
+    setWorkspaceRuntimeBusy(operation);
+    setWorkspaceRuntimeResult(null);
+    setError("");
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workProject.id)}/runtime`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "The GitHub-hosted workspace job could not be queued.");
+      const queued = result;
+      setWorkspaceRuntimeResult({ operation, status: queued.status || "queued", provider: queued.provider, job_id: queued.job_id, message: "Queued on a fresh GitHub-hosted runner. Waiting for execution results…" });
+      if (queued.job_id) {
+        for (let attempt = 0; attempt < 45; attempt += 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          const statusResponse = await fetch(`/api/runtime/jobs/${encodeURIComponent(queued.job_id)}`, { cache: "no-store" });
+          const statusData = await statusResponse.json();
+          if (!statusResponse.ok) throw new Error(statusData.error || "Runtime job status could not be retrieved.");
+          const job = statusData.job;
+          if (job.status === "completed" || job.status === "failed") {
+            setWorkspaceRuntimeResult({ operation, status: job.status, ok: job.status === "completed" && job.result?.exit_code === 0, exit_code: job.result?.exit_code ?? null, stdout: job.result?.stdout || "", stderr: job.result?.stderr || job.error || "", provider: "github_actions", job_id: queued.job_id, message: job.status === "completed" ? "Execution finished." : (job.error || "Execution failed.") });
+            return;
+          }
+          setWorkspaceRuntimeResult({ operation, status: job.status, provider: "github_actions", job_id: queued.job_id, message: "Runner is processing the job…" });
+        }
+        setWorkspaceRuntimeResult({ operation, status: "running", provider: "github_actions", job_id: queued.job_id, message: "The job is still running. You can check its status again using the job ID." });
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Workspace runtime operation failed.");
+    } finally { setWorkspaceRuntimeBusy(""); }
+  }
+
+  async function uploadWorkFiles(files: File[]) {
+    if (!files.length) return;
+    setWorkUploading(true);
+    setError("");
+    try {
+      let project = workProject;
+      if (!project) {
+        const first = files[0].name.replace(/\.(zip)$/i, "").replace(/[-_]+/g, " ").slice(0, 100) || "My project workspace";
+        const created = await fetch("/api/workspaces", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: first }) });
+        const createdData = await created.json();
+        if (!created.ok || !createdData.data?.id) throw new Error(createdData.error || "A project workspace could not be created.");
+        project = { id: createdData.data.id, name: createdData.data.project_name || first };
+        setWorkProject(project);
+      }
+      for (const file of files) {
+        const form = new FormData();
+        form.append("file", file);
+        const response = await fetch(`/api/workspaces/${encodeURIComponent(project.id)}/source`, { method: "POST", body: form });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `Could not add ${file.name} to the workspace.`);
+      }
+      const manifestResponse = await fetch(`/api/workspaces/${encodeURIComponent(project.id)}/source`, { cache: "no-store" });
+      const manifestData = await manifestResponse.json();
+      if (!manifestResponse.ok) throw new Error(manifestData.error || "Workspace files were saved but could not be listed.");
+      setWorkManifest(manifestData.data);
+      setInput(current => current || "Inspect this project workspace. Map its architecture, identify the important files, and tell me what you recommend we work on first.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Project files could not be saved.");
+    } finally {
+      setWorkUploading(false);
+    }
+  }
+
   async function reviewFile(file: File) {
+    if (file.type.startsWith('image/')) { await uploadChatImage(file); return; }
     if (CHAT_DOCUMENT_EXTENSIONS.test(file.name)) {
       await uploadChatDocument(file);
       return;
@@ -1099,7 +1310,8 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) reviewFile(f);
+          if (f) replacingImageId ? void uploadChatImage(f, replacingImageId) : void reviewFile(f);
+          else setReplacingImageId(null);
           e.currentTarget.value = "";
         }}
       />
@@ -1111,18 +1323,24 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) reviewFile(f);
+          if (f) replacingImageId ? void uploadChatImage(f, replacingImageId) : void reviewFile(f);
+          else setReplacingImageId(null);
           e.currentTarget.value = "";
         }}
       />
       <input
         ref={fileRef}
         type="file"
-        accept="image/*,.pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.json,.zip"
+        accept="image/*,.pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.json,.zip,.ts,.tsx,.js,.jsx,.mjs,.cjs,.css,.scss,.html,.htm,.py,.sql,.yml,.yaml,.toml,.xml,.sh"
         className="hidden"
+        multiple
         onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) reviewFile(f);
+          const files = Array.from(e.target.files || []);
+          if (files.length) {
+            if (replacingImageId && files[0]) void uploadChatImage(files[0], replacingImageId);
+            else if (workspaceMode === "work") void uploadWorkFiles(files.slice(0, 20));
+            else if (files[0]) void reviewFile(files[0]);
+          } else setReplacingImageId(null);
           e.currentTarget.value = "";
         }}
       />
@@ -1159,6 +1377,15 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
   ];
   const composer = (
     <div ref={menuRef} className="relative">
+      {pendingImages.length > 0 && <div className="mb-2 flex flex-wrap gap-2" aria-label="Image attachments">
+        {pendingImages.map(image => <div key={image.assetId} className="relative h-20 w-20 overflow-hidden rounded-xl border border-white/10 bg-black/30">
+          <Image src={image.previewUrl} alt={image.fileName || 'Image attachment'} fill unoptimized className="object-cover" sizes="80px" />
+          <div className="absolute inset-x-1 bottom-1 flex justify-center gap-1">
+            <button type="button" onClick={() => { setReplacingImageId(image.assetId); photoRef.current?.click(); }} aria-label={`Replace ${image.fileName}`} className="rounded-md bg-black/85 px-1.5 py-1 text-[9px] font-semibold text-white">Replace</button>
+            <button type="button" onClick={() => void removePendingChatImage(image.assetId)} aria-label={`Remove ${image.fileName}`} className="rounded-md bg-black/85 p-1 text-white"><X size={11}/></button>
+          </div>
+        </div>)}
+      </div>}
       {pendingDocuments.length > 0 && <div className="mb-2 flex flex-wrap gap-2">
         {pendingDocuments.map(document => <div key={document.assetId} className="inline-flex max-w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[.04] px-3 py-2 text-xs text-zinc-300">
           <Paperclip size={13} className="shrink-0 text-[var(--gold)]"/>
@@ -1166,7 +1393,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
           <button type="button" onClick={() => setPendingDocuments(current => current.filter(item => item.assetId !== document.assetId))} aria-label={`Remove ${document.fileName}`} className="text-zinc-500 hover:text-white"><X size={13}/></button>
         </div>)}
       </div>}
-      {uploadingDocument && <p className="mb-2 text-xs text-zinc-500" role="status">Uploading and reading document…</p>}
+      {uploadingDocument && <p className="mb-2 text-xs text-zinc-500" role="status">Uploading attachment…</p>}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/[.13] bg-[#151515] p-2 shadow-[0_12px_35px_rgba(0,0,0,.22)]">
         <button
           type="button"
@@ -1187,6 +1414,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
           <span className="sr-only">Reasoning effort</span>
           <select value={effort} onChange={(event) => setEffort(event.target.value as "standard" | "deep")} className="max-w-[64px] bg-transparent outline-none"><option value="standard">Fast</option><option value="deep">Deep</option></select>
         </label>
+        {workspaceMode === "work" && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-blue-300"><Wrench size={11}/> Work</span>}
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -1194,7 +1422,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             if (e.key === "Enter") send();
           }}
           className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm outline-none placeholder:text-zinc-600"
-          placeholder="Message Leo..."
+          placeholder={workspaceMode === "work" ? "Describe what you want Leo to do with your files…" : "Message Leo..."}
         />
         <div className="relative">
         <button
@@ -1222,7 +1450,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         </button>
         <button
           type="button"
-          disabled={!input.trim() || loading}
+          disabled={(!input.trim() && !pendingImages.length && !pendingDocuments.length) || loading}
           onClick={() => send()}
           aria-label="Send message"
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--gold)] text-black disabled:opacity-30"
@@ -1470,6 +1698,9 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
           <div className="whitespace-pre-wrap text-sm leading-6">
             {m.content}
           </div>
+          {m.images?.map(image => <a key={image.assetId} href={image.previewUrl} target="_blank" rel="noreferrer" className="mt-3 block">
+            <Image src={image.previewUrl} alt={image.fileName || 'Uploaded image'} width={960} height={720} unoptimized className="max-h-72 max-w-full rounded-xl border border-white/10 object-contain" />
+          </a>)}
           {m.documents?.map(document => (
             <section key={document.assetId} className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-black/25">
               <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
@@ -1485,7 +1716,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Web sources</p>
             <ul className="space-y-1.5">{m.citations.map((citation, citationIndex) => <li key={`${citation.url}-${citationIndex}`}><a href={citation.url} target="_blank" rel="noopener noreferrer" className="break-all text-xs text-sky-300 underline decoration-sky-300/30 underline-offset-2 hover:text-sky-200">{citation.title || citation.url}</a></li>)}</ul>
           </div> : null}
-          {m.role === "assistant" && m.content.trim() && <div className="mt-3 flex flex-wrap gap-2">
+          {m.role === "assistant" && m.content.trim() && /\b(?:create|make|generate|export|download|save|provide|give me)\b.{0,60}\b(?:pdf|docx|word document|document file)\b|\b(?:pdf|docx)\b.{0,40}\b(?:file|download|export)\b/i.test(messages.slice(0, i).reverse().find(item => item.role === "user")?.content || "") && <div className="mt-3 flex flex-wrap gap-2" aria-label="Requested document exports">
             {(["pdf", "docx", "txt"] as const).map(format => {
               const operation = `${i}-${format}`;
               return <button key={format} type="button" onClick={() => void createDownloadableDocument(i, m, format)} disabled={Boolean(documentBusy)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-400 hover:bg-white/5 hover:text-white disabled:opacity-40">
@@ -1574,7 +1805,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     return (
       <>
         <>{inputs}</>
-        <div className="flex h-[calc(100vh-73px)] min-h-[520px] overflow-hidden bg-[#0b0b0b]">
+        <div className="leo-chat-workspace flex h-[100dvh] min-h-[480px] overflow-hidden bg-[#0b0b0b]">
           <aside className={`${sidebarOpen ? "w-[240px]" : "w-[60px]"} hidden shrink-0 flex-col border-r border-[#252525] bg-[#101010] transition-[width] duration-200 md:flex`}>
             <div className="flex h-14 items-center justify-between gap-2 border-b border-white/10 px-3">
               {sidebarOpen && <div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--gold)] text-black"><Bot size={17}/></div><div><b className="text-sm">Leo AI</b><p className="text-[10px] text-zinc-500">Your workspace</p></div></div>}
@@ -1590,6 +1821,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             </div>
             <div className="space-y-1 border-t border-white/10 p-2">
               <Link href="/app/projects" title="Projects" className="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/5"><Library size={16}/>{sidebarOpen && "Projects"}</Link>
+              <Link href="/engineering" title="Engineering workflow" className="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/5"><Wrench size={16}/>{sidebarOpen && "Engineering workflow"}</Link>
               <Link href="/app/artifacts" title="Artifacts" className="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/5"><Compass size={16}/>{sidebarOpen && "Artifacts"}</Link>
               <Link href="/app/customize" title="Customize workspace" className="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/5"><Settings2 size={16}/>{sidebarOpen && "Customize"}</Link>
               <div className="relative"><button type="button" onClick={() => setAccountMenuOpen((open) => !open)} title="Account menu" aria-expanded={accountMenuOpen} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-zinc-300 hover:bg-white/5"><UserCircle size={17}/>{sidebarOpen && <span className="min-w-0 flex-1 truncate">{welcomeName} <span className="text-[10px] text-zinc-600">· {plan || "Free"}</span></span>}</button>{accountMenuOpen && sidebarOpen && <div className="absolute bottom-full left-0 z-50 mb-2 w-56 rounded-xl border border-white/15 bg-[#191919] p-1.5 shadow-2xl"><p className="truncate px-2.5 py-1.5 text-[10px] text-zinc-600">{welcomeName} · {plan || "Free"}</p><Link href="/settings" className="block rounded-lg px-2.5 py-2 text-xs text-zinc-300 hover:bg-white/5">Settings</Link><Link href="/pricing" className="block rounded-lg px-2.5 py-2 text-xs text-zinc-300 hover:bg-white/5">Upgrade plan</Link><Link href="/plugins" className="block rounded-lg px-2.5 py-2 text-xs text-zinc-300 hover:bg-white/5">Apps and extensions</Link><Link href="/developers" className="block rounded-lg px-2.5 py-2 text-xs text-zinc-300 hover:bg-white/5">Learn more</Link><Link href="/api-keys" className="block rounded-lg px-2.5 py-2 text-xs text-zinc-300 hover:bg-white/5">Get API keys</Link><Link href="/support" className="block rounded-lg px-2.5 py-2 text-xs text-zinc-300 hover:bg-white/5">Get help</Link><div className="my-1 border-t border-white/10"/><button type="button" onClick={async () => { const client = getBrowserSupabase(); if (client) await client.auth.signOut(); window.location.href = "/auth"; }} className="block w-full rounded-lg px-2.5 py-2 text-left text-xs text-red-300 hover:bg-red-500/10">Log out</button></div>}</div>
@@ -1625,7 +1857,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
               </aside>
             </div>
           )}
-          <div className="relative mx-auto flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[#0b0b0b]">
+          <div className="leo-chat-main relative mx-auto flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#0b0b0b]">
             {remoteOpen && <div className="absolute inset-0 z-40 overflow-y-auto bg-[#080809]/95 p-4 backdrop-blur-xl md:p-7"><section className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-[#111113] p-5 shadow-2xl md:p-7"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-[var(--gold)]"><Laptop size={20}/><span className="text-xs font-bold uppercase tracking-[.18em]">Leo Remote</span></div><h2 className="mt-3 text-2xl font-black">Connect your devices</h2><p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">Sign in to the same Leo account on both devices. Create a one-time code on one device, then enter it on the other. Codes expire in five minutes.</p></div><button type="button" onClick={() => setRemoteOpen(false)} aria-label="Close remote devices" className="rounded-xl border border-white/10 p-2 text-zinc-400 hover:text-white"><X size={18}/></button></div>
               <div className="mt-6 grid gap-4 md:grid-cols-2"><div className="rounded-2xl border border-white/10 bg-black/20 p-4"><h3 className="font-bold">Pair this device</h3><p className="mt-1 text-xs leading-5 text-zinc-500">Generate a short-lived code to enter on your other signed-in device.</p><button type="button" disabled={remoteBusy} onClick={() => void createRemotePairing()} className="mt-4 w-full rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">{remoteBusy ? "Please wait…" : "Generate pairing code"}</button>{remoteCode && <div className="mt-4 rounded-xl border border-[var(--gold)]/30 bg-[var(--gold)]/5 p-4 text-center"><p className="text-[10px] uppercase tracking-widest text-zinc-400">One-time pairing code</p><p className="my-2 font-mono text-2xl font-black tracking-[.22em] text-[var(--gold)]">{remoteCode}</p><button type="button" onClick={() => { void navigator.clipboard?.writeText(remoteCode); setRemoteStatus("Pairing code copied."); }} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-200">Copy code</button></div>}</div>
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4"><h3 className="font-bold">Join a device</h3><p className="mt-1 text-xs leading-5 text-zinc-500">Enter the code displayed on the other device. Both devices must belong to the same account.</p><form onSubmit={(event) => void claimRemotePairing(event)} className="mt-4 space-y-3"><input value={remoteClaimCode} onChange={(event) => setRemoteClaimCode(event.target.value.toUpperCase().replace(/[^A-F0-9]/g, "").slice(0, 10))} inputMode="text" autoComplete="one-time-code" maxLength={10} placeholder="10-character code" className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 font-mono text-sm uppercase tracking-widest outline-none focus:border-[var(--gold)]"/><button type="submit" disabled={remoteBusy || remoteClaimCode.length !== 10} className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-white disabled:opacity-40">Pair this device</button></form></div></div>
@@ -1644,11 +1876,12 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
                   <b className="text-sm">{messages.length ? (chatHistory.find((chat) => chat.id === activeChatId)?.title || "Leo chat") : "Leo AI"}</b>
                 </div>
               </div>
-              <button
-                onClick={() => setMessages([])}
-                className="flex items-center gap-2 text-sm text-zinc-500 hover:text-white"
-              >
-                <Trash2 size={16} /> Clear chat
+              <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[.06] p-1" role="group" aria-label="Workspace mode">
+                <button type="button" onClick={() => setWorkspaceMode("chat")} aria-pressed={workspaceMode === "chat"} className={`min-w-16 rounded-full px-4 py-2 text-xs font-semibold transition ${workspaceMode === "chat" ? "bg-white text-[#111] shadow" : "text-zinc-400 hover:text-white"}`}>Chat</button>
+                <button type="button" onClick={() => { setWorkspaceMode("work"); setMemoryOpen(false); if (!workProject) void (async () => { try { const response = await fetch("/api/workspaces", { cache: "no-store" }); const result = await response.json(); if (response.ok && result.data?.[0]) { const project = result.data[0]; setWorkProject({ id: project.id, name: project.project_name }); const manifestResponse = await fetch(`/api/workspaces/${encodeURIComponent(project.id)}/source`, { cache: "no-store" }); const manifest = await manifestResponse.json(); if (manifestResponse.ok) setWorkManifest(manifest.data); } } catch {} })(); }} aria-pressed={workspaceMode === "work"} className={`min-w-16 rounded-full px-4 py-2 text-xs font-semibold transition ${workspaceMode === "work" ? "bg-white text-[#111] shadow" : "text-zinc-400 hover:text-white"}`}>Work</button>
+              </div>
+              <button type="button" onClick={() => void startNewChat()} className="flex shrink-0 items-center gap-2 rounded-lg px-2 py-2 text-xs text-zinc-400 hover:bg-white/5 hover:text-white">
+                <PlusCircle size={15} /><span className="hidden sm:inline">New chat</span>
               </button>
             </header>
             <div className="flex gap-2 overflow-x-auto border-b border-white/10 px-3 py-2 md:hidden">
@@ -1658,40 +1891,39 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
               <a href="/account" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300"><UserCircle size={14}/> Account</a>
               <a href="/pricing" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300"><CreditCard size={14}/> Upgrade</a>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 md:p-8">
+            <div ref={chatScrollRef} onScroll={(event) => {
+              const element = event.currentTarget;
+              const atBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+              chatPinnedToBottom.current = atBottom;
+              setShowJumpToLatest(!atBottom && messages.length > 0);
+            }} className="leo-chat-scroll relative min-h-0 flex-1 overflow-y-auto p-4 md:p-8">
               {memoryOpen ? <div className="mx-auto max-w-2xl"><div className="mb-6 flex items-start gap-3"><div className="rounded-2xl bg-[var(--gold)]/10 p-3 text-[var(--gold)]"><Brain size={22}/></div><div><h1 className="text-2xl font-bold">Leo memory</h1><p className="mt-1 text-sm text-zinc-400">Saved notes help Leo retain useful context. Manage what is remembered.</p></div></div><form onSubmit={(event) => { event.preventDefault(); void addMemory(); }} className="mb-6 flex gap-2"><input value={memoryDraft} onChange={(event) => setMemoryDraft(event.target.value)} placeholder="Remember that I prefer…" maxLength={1000} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none focus:border-[var(--gold)]"/><button disabled={memoryBusy || !memoryDraft.trim()} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">Save</button></form>{memoryBusy ? <p className="text-sm text-zinc-500">Loading memories…</p> : memories.length ? <div className="space-y-2">{memories.map((memory) => <article key={memory.id} className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4"><div><p className="whitespace-pre-wrap text-sm text-zinc-200">{memory.memory}</p><p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-600">{memory.source || "saved"}</p></div><button type="button" onClick={() => void deleteMemory(memory.id)} className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-300" aria-label="Delete memory"><Trash size={15}/></button></article>)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center"><Bookmark className="mx-auto mb-3 text-zinc-500"/><p className="text-sm text-zinc-300">No saved memories yet</p><p className="mt-1 text-xs text-zinc-500">Add preferences, project context or instructions you want to keep.</p></div>}</div> : messages.length === 0 ? (
                 <div className="mx-auto flex min-h-[52vh] max-w-2xl flex-col justify-center py-10 text-center">
                   <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--gold)]/40 text-[var(--gold)]">
                     <Bot size={22} />
                   </div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-[.2em] text-[var(--gold)]">{workspaceMode === "work" ? "Leo workspace" : "Your workspace is ready"}</p>
                   <h1 className="text-2xl font-semibold tracking-tight text-zinc-100 md:text-4xl">
-                    Welcome, {welcomeName} 👋
+                    {workspaceMode === "work" ? "What should we work on?" : `${timeGreeting}, ${welcomeName}.`}
                   </h1>
-                  <p className="mt-3 text-zinc-400">
-                    What are we building today?
+                  <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-zinc-400">
+                    {workspaceMode === "work" ? "Upload a ZIP archive or source files to create a persistent project workspace. Edit and review the same project with Leo in this conversation." : "Tell Leo what you want to work on. Your projects, tools and conversation context stay connected as you go."}
                   </p>
-                  <div className="mt-7 flex flex-wrap justify-center gap-3">
-                    {actions.map(({ label, prompt, icon: Icon }) => (
-                      <button
-                        key={label}
-                        onClick={() => send(prompt)}
-                        className="flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-3 text-sm hover:border-[var(--gold)]/50"
-                      >
-                        <Icon size={16} />
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  {workspaceMode === "work" && <div className="mx-auto mt-8 w-full max-w-2xl text-left"><p className="mb-3 text-xs font-medium text-zinc-500">Suggested ways to work</p><div className="flex flex-wrap gap-2">{[{label:"Review project files",prompt:"Inspect the uploaded project files. Explain the architecture, current state, and the highest-priority improvements."},{label:"Debug an issue",prompt:"Help me investigate and fix the issue described here. Start by inspecting the available files and evidence."},{label:"Improve a document",prompt:"Review the uploaded document and help me improve it while preserving its purpose and structure."},{label:"Analyse a dataset",prompt:"Inspect the uploaded data, explain its structure, identify quality issues, and summarize useful findings."}].map(item => <button key={item.label} type="button" onClick={() => setInput(item.prompt)} className="rounded-xl border border-white/10 bg-white/[.035] px-3 py-2.5 text-xs text-zinc-300 transition hover:border-[var(--gold)]/40 hover:bg-white/[.07]">{item.label}</button>)}</div><div className="mt-5 rounded-2xl border border-white/10 bg-white/[.025] p-4"><div className="flex items-start gap-3"><Paperclip size={17} className="mt-0.5 text-[var(--gold)]"/><div><p className="text-sm font-medium text-zinc-200">Bring your project files</p><p className="mt-1 text-xs leading-5 text-zinc-500">Upload a ZIP project archive or source files to create a durable, private workspace. Files are saved to your project, can be listed and edited, and remain available when you return. Uploads exclude secrets and generated dependency folders.</p><button type="button" onClick={() => fileRef.current?.click()} className="mt-3 rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-200 hover:bg-white/5">Upload files</button>{workUploading && <p className="mt-2 text-xs text-[var(--gold)]">Saving project files…</p>}{workProject && <div className="mt-3 rounded-lg bg-white/[.04] p-3"><p className="text-xs font-semibold text-zinc-200">{workProject.name}</p><p className="mt-1 text-[11px] text-zinc-500">{workManifest ? `${workManifest.files.length} files · ${(workManifest.totalBytes / 1024 / 1024).toFixed(2)} MB · revision ${workManifest.revision}` : "Workspace created"}</p><a href={`/api/workspaces/${encodeURIComponent(workProject.id)}/source?download=1`} className="mt-2 inline-block text-[11px] font-semibold text-[var(--gold)] underline underline-offset-4">Download project ZIP</a><div className="mt-3 border-t border-white/10 pt-3"><p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">GitHub Actions runtime</p><div className="flex flex-wrap gap-2">{([ ["Inspect", "inspect"], ["Install", "install"], ["Test", "test"], ["Typecheck", "typecheck"], ["Lint", "lint"], ["Build", "build"], ["Git status", "git_status"], ["Git diff", "git_diff"] ] as const).map(([label, operation]) => <button key={operation} type="button" disabled={Boolean(workspaceRuntimeBusy) || !workManifest?.files.length} onClick={() => void runWorkspaceOperation(operation)} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:border-[var(--gold)]/40 disabled:opacity-40">{workspaceRuntimeBusy === operation ? "Running…" : label}</button>)}</div><p className="mt-2 text-[10px] leading-4 text-zinc-500">Runs bounded operations on a fresh GitHub-hosted runner. Jobs are queued; this is not an always-on terminal or live preview server.</p>{workspaceRuntimeResult && <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3"><p className={`text-xs font-semibold ${workspaceRuntimeResult.ok ? "text-emerald-400" : "text-amber-400"}`}>{workspaceRuntimeResult.operation} · {workspaceRuntimeResult.status === "queued" ? "Queued" : workspaceRuntimeResult.ok ? "Completed" : `Failed (${workspaceRuntimeResult.exit_code ?? "unknown"})`}</p>{workspaceRuntimeResult.message && <p className="mt-1 text-[11px] leading-4 text-zinc-400">{workspaceRuntimeResult.message}</p>}{workspaceRuntimeResult.job_id && <p className="mt-1 break-all text-[10px] text-zinc-500">Job ID: {workspaceRuntimeResult.job_id}</p>}{(workspaceRuntimeResult.stdout || workspaceRuntimeResult.stderr) && <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-4 text-zinc-400">{[workspaceRuntimeResult.stdout, workspaceRuntimeResult.stderr].filter(Boolean).join("\n")}</pre>}</div>}</div><div className="mt-2 max-h-36 overflow-auto text-[11px] text-zinc-400">{workManifest?.files.slice(0, 40).map(file => <button key={file.path} type="button" disabled={file.kind !== "text" || workspaceFileBusy} onClick={() => void openWorkspaceFile(file.path)} className="block w-full truncate rounded px-1 py-1 text-left hover:bg-white/[.06] disabled:opacity-50">{file.kind === "text" ? "▤ " : "◇ "}{file.path}</button>)}</div>{editingWorkspaceFile && <div className="mt-3 border-t border-white/10 pt-3"><div className="mb-2 flex items-center justify-between gap-2"><p className="truncate text-xs font-semibold text-zinc-200">{editingWorkspaceFile}</p><button type="button" onClick={() => setEditingWorkspaceFile("")} className="text-xs text-zinc-500">Close</button></div><textarea value={workspaceFileContent} onChange={event => setWorkspaceFileContent(event.target.value)} spellCheck={false} className="min-h-48 w-full resize-y rounded-lg border border-white/10 bg-black/30 p-3 font-mono text-[11px] leading-5 text-zinc-200 outline-none focus:border-[var(--gold)]"/><button type="button" disabled={workspaceFileBusy} onClick={() => void saveWorkspaceFile()} className="mt-2 rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-semibold text-black disabled:opacity-50">{workspaceFileBusy ? "Saving…" : "Save file"}</button></div>}</div>}</div></div></div><p className="mt-4 text-[11px] text-zinc-600"><Link href="/engineering" className="text-zinc-400 underline underline-offset-4 hover:text-white">Open Engineering workflow</Link> if you specifically want the dedicated engineering pipeline.</p></div>}
                 </div>
               ) : (
                 messagesView
               )}
+              {showJumpToLatest && !memoryOpen && <button type="button" onClick={() => {
+                chatPinnedToBottom.current = true;
+                setShowJumpToLatest(false);
+                chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" });
+              }} className="sticky bottom-2 left-1/2 z-10 mx-auto mt-4 block rounded-full border border-white/15 bg-[#242424] px-4 py-2 text-xs font-semibold text-white shadow-xl hover:bg-[#303030]">Jump to latest ↓</button>}
             </div>
-            {!memoryOpen && <div className="border-t border-[#252525] bg-[#0b0b0b] p-3 md:p-4"><div className="mx-auto max-w-3xl">
+            {!memoryOpen && <div className="leo-chat-composer-dock border-t border-[#252525] bg-[#0b0b0b] p-3 md:p-4"><div className="mx-auto max-w-3xl">
               {videoConfirmationPanel}
               {videoStatus && <div className="mb-2 text-xs text-zinc-400" role="status" aria-live="polite"><p>{videoStatus}</p>{activeVideoJobId && !loading && <button type="button" onClick={refreshVideoStatus} className="mt-2 rounded-lg border border-white/10 px-3 py-2 text-white">Check status</button>}</div>}
               {composer}
-              {messages.length === 0 && <div className="mx-auto mt-2 flex max-w-3xl flex-wrap gap-1.5 px-1" aria-label="Quick starts">{[{label: "Write", prompt: "Help me write"}, {label: "Learn", prompt: "Teach me"}, {label: "Code", prompt: "Help me code"}, {label: "Brainstorm", prompt: "Let's brainstorm"}, {label: "Create", prompt: "Let's create"}].map((chip) => <button key={chip.label} type="button" onClick={() => send(chip.prompt)} className="rounded-full border border-white/10 px-3 py-1.5 text-[11px] text-zinc-500 hover:border-white/25 hover:text-zinc-200">{chip.label}</button>)}</div>}
             </div></div>}
             {voiceOpen && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xl">

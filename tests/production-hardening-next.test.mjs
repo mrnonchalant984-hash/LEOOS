@@ -9,15 +9,14 @@ test('SMTP implementation requires authenticated TLS and bounded messages', () =
   assert.match(smtp, /\[465, 587\]/);
   assert.match(smtp, /smtp_invalid_message/);
 });
-test('isolated runner uses HMAC, no-network sandbox, and bounded resource controls', () => {
-  const runner = read('services/isolated-runner/server.py');
-  assert.match(runner, /compare_digest/);
-  assert.match(runner, /'--network', 'none'/);
-  assert.match(runner, /'--cap-drop', 'all'/);
-  assert.match(runner, /'--memory', '1536m'/);
-  assert.match(runner, /'install': \['sh', '-lc'/);
-  assert.match(runner, /RUNNER_ALLOWED_REPOSITORIES/);
-  assert.doesNotMatch(runner, /body\.get\(['"]command['"]\)/);
+test('legacy runner is retired and execution APIs queue private GitHub Actions jobs', () => {
+  const sandbox = read('app/api/leocode/sandbox/route.ts');
+  const repository = read('app/api/workforce/repository-runner/route.ts');
+  assert.match(sandbox, /queueGitHubRuntimeJob/);
+  assert.match(sandbox, /kind:'leocode'/);
+  assert.match(repository, /queueGitHubRuntimeJob/);
+  assert.match(repository, /kind:'repository'/);
+  assert.doesNotMatch(sandbox + repository, /LEO_SANDBOX_URL|REPOSITORY_RUNNER_URL|RUNNER_HMAC_SECRET/);
 });
 test('offline sync is owner-gated for workforce tasks and uses an idempotency key', () => {
   const route = read('app/api/offline/sync/route.ts');

@@ -12,6 +12,16 @@ import { enforceUserRateLimit } from '@/lib/rate-limit';
 export const runtime = 'nodejs';
 
 const googleKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+const MAX_VOICE_AUDIO_BYTES = 15 * 1024 * 1024;
+const SUPPORTED_AUDIO_TYPES = new Set(['audio/webm', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/flac']);
+
+function extractTranscript(response: { text?: string | null; candidates?: Array<{ content?: { parts?: Array<{ text?: string | null }> }; finishReason?: string | null }> }) {
+  const direct = response.text?.trim();
+  if (direct) return direct;
+  return (response.candidates || []).flatMap(candidate => candidate.content?.parts || [])
+    .map(part => typeof part.text === 'string' ? part.text.trim() : '')
+    .filter(Boolean).join('\n').trim();
+}
 function pcmToWav(pcm: Buffer, sampleRate = 24000) {
   const header = Buffer.alloc(44);
   header.write('RIFF', 0); header.writeUInt32LE(36 + pcm.length, 4); header.write('WAVE', 8);
@@ -23,17 +33,24 @@ function pcmToWav(pcm: Buffer, sampleRate = 24000) {
 async function geminiTranscribe(audio: File) {
   const key = googleKey();
   if (!key) throw new Error('Gemini is not configured.');
+  if (audio.size < 1 || audio.size > MAX_VOICE_AUDIO_BYTES) throw new Error('Choose an audio recording no larger than 15 MB.');
+  const mimeType = audio.type.split(';')[0]?.trim().toLowerCase() || 'audio/webm';
+  if (!SUPPORTED_AUDIO_TYPES.has(mimeType)) throw new Error('Use a supported audio format: WebM, OGG, WAV, MP3, MP4, AAC, or FLAC.');
   const bytes = Buffer.from(await audio.arrayBuffer());
   const client = new GoogleGenAI({ apiKey: key });
   const response = await client.models.generateContent({
-    model: normalizeGeminiModelId(process.env.LEO_GEMINI_AUDIO_MODEL?.trim() || 'gemini-3.5-transcribe'),
+    model: normalizeGeminiModelId(process.env.LEO_GEMINI_AUDIO_MODEL?.trim() || 'gemini-2.5-flash'),
     contents: [{ role: 'user', parts: [
-      { inlineData: { mimeType: audio.type || 'audio/webm', data: bytes.toString('base64') } },
+      { inlineData: { mimeType, data: bytes.toString('base64') } },
       { text: 'Transcribe the spoken words accurately. Return only the transcript, without commentary.' },
     ] }],
   });
-  const text = response.text?.trim();
-  if (!text) throw new Error('Gemini returned an empty transcript.');
+  const text = extractTranscript(response);
+  if (!text) {
+    const finishReason = response.candidates?.[0]?.finishReason;
+    throw new Error(`Gemini returned no transcript${finishReason ? ` (finish reason: ${finishReason})` : ''}. Check the configured audio model and supported recording format.`);
+  }
+  if (text.length > 12_000) throw new Error('The voice transcript is too long. Please send a shorter recording.');
   return text;
 }
 async function geminiSpeak(text: string) {
@@ -60,6 +77,10 @@ export async function POST(req: NextRequest) {
   const limited = await enforceUserRateLimit(ctx.user.id, 'leo-voice', 10, 60);
   if (limited) return limited;
   try {
+    const contentLength = Number(req.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > MAX_VOICE_AUDIO_BYTES + 64 * 1024) {
+      return NextResponse.json({ error: 'Choose an audio recording no larger than 15 MB.' }, { status: 413 });
+    }
     const fd = await req.formData();
     const audio = fd.get('audio');
     if (!(audio instanceof File)) return NextResponse.json({ error: 'Audio file required' }, { status: 400 });

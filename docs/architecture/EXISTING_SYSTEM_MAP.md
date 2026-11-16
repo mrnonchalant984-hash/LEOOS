@@ -14,7 +14,7 @@ Next.js App Router
   ├─ Durable build orchestration: leo_build_jobs + GitHub Actions worker
   ├─ Static preview queue: cloudflare_preview_jobs + GitHub Actions worker (disabled)
   ├─ Project file editor: Web IDE + owner-scoped workspace files API
-  ├─ Constrained execution component: services/isolated-runner
+  ├─ Workspace execution: private LEOOS-RUNTIME GitHub Actions jobs (ephemeral)
   └─ VS Code client: extensions/leocode
 ```
 

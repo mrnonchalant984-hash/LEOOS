@@ -51,7 +51,7 @@ def main() -> int:
             page = context.new_page(); page_errors=[]; console_errors=[]
             page.on("pageerror", lambda error: page_errors.append(str(error)[:400]))
             page.on("console", lambda msg: console_errors.append(msg.text[:400]) if msg.type == "error" else None)
-            status = None; final_url = ""; title = ""; load_error = ""; overflow = None
+            status = None; final_url = ""; title = ""; load_error = ""; overflow = None; overflow_by_viewport = {}
             try:
                 response = page.goto(base + route, wait_until="domcontentloaded", timeout=16000)
                 status = response.status if response else None
@@ -86,8 +86,9 @@ def main() -> int:
                 for viewport_name, viewport in VIEWPORTS.items():
                     try:
                         page.set_viewport_size(viewport); page.wait_for_timeout(90)
-                        if viewport_name == "desktop":
-                            overflow = page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1")
+                        overflow_state = page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1")
+                        overflow_by_viewport[viewport_name] = overflow_state
+                        if viewport_name == "desktop": overflow = overflow_state
                         shot_dir = out / theme / viewport_name; shot_dir.mkdir(parents=True, exist_ok=True)
                         page.screenshot(path=str(shot_dir / f"{slug(route)}.png"), full_page=False, animations="disabled", timeout=7000)
                     except Exception as exc:
@@ -100,7 +101,7 @@ def main() -> int:
                     "stored_theme": page.evaluate("() => localStorage.getItem('leonardx-theme')") if page.url.startswith(base) else "unavailable",
                     "status_code": status, "final_url": final_url,
                     "result": "auth-gated" if auth_gated else ("load-error" if load_error else ("http-error" if status and status >= 400 else "loaded")),
-                    "title": title, "desktop_horizontal_overflow": overflow,
+                    "title": title, "desktop_horizontal_overflow": overflow, "horizontal_overflow_by_viewport": json.dumps(overflow_by_viewport, sort_keys=True),
                     "page_errors": " | ".join(page_errors), "console_errors": " | ".join(console_errors[:8]), "error": load_error,
                 })
             context.close(); print(f"[{index}/{len(routes)}] {route}", flush=True)
@@ -117,6 +118,8 @@ def main() -> int:
         "page_error_runs": sum(bool(r["page_errors"]) for r in results),
         "console_error_runs": sum(bool(r["console_errors"]) for r in results),
         "desktop_horizontal_overflow_runs": sum(r["desktop_horizontal_overflow"] is True for r in results),
+        "mobile_horizontal_overflow_runs": sum(json.loads(r["horizontal_overflow_by_viewport"]).get("mobile") is True for r in results),
+        "tablet_horizontal_overflow_runs": sum(json.loads(r["horizontal_overflow_by_viewport"]).get("tablet") is True for r in results),
         "note": "Unauthenticated route run. Auth-gated pages are verified only through their sign-in redirect; private content needs an authorized test account. Screenshots are viewport captures, not full-page captures.",
     }
     (out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")

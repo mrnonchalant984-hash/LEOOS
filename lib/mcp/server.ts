@@ -573,7 +573,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     });
     server.registerTool('run_project_operation', {
       title: 'Install dependencies or run project validation',
-      description: 'Run one bounded operation in the authenticated project workspace using the isolated no-network runner: install, test, typecheck, lint, or build. Returns the real runner result and job ID; it never reports success when the runner is unavailable. Requires write scope and confirm=true.',
+      description: 'Queue one bounded operation in the authenticated project workspace on a fresh GitHub-hosted runner: install, test, typecheck, lint, or build. Returns the job ID and queued status; poll the runtime job endpoint for the actual result. Requires write scope and confirm=true.',
       inputSchema: {
         project_id: z.string().uuid(),
         operation: z.enum(PROJECT_RUNNER_OPERATIONS),

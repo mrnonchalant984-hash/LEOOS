@@ -14,6 +14,8 @@ export type TextGenerationRequest = {
   reasoning?: { effort: 'low' | 'medium' | 'high' };
   /** Enable Gemini's grounded Google Search tool for current or explicitly researched questions. */
   webSearch?: boolean;
+  /** Private, owner-verified image attachments for the current user turn. */
+  images?: Array<{ mimeType: 'image/png' | 'image/jpeg' | 'image/webp'; data: string }>;
 };
 export type TextGenerationResult = {
   text: string;
@@ -61,6 +63,18 @@ function asProviderMessages(messages: ModelMessage[]) {
   return messages.filter(isProviderMessage).map(message => ({ role: message.role, content: message.content }));
 }
 
+function providerContents(messages: ModelMessage[], images: TextGenerationRequest['images'] = []): Content[] {
+  const userMessages = asProviderMessages(messages);
+  const lastUserIndex = images.length ? userMessages.map(item => item.role).lastIndexOf('user') : -1;
+  return userMessages.map((message, index) => ({
+    role: message.role === 'assistant' ? 'model' : 'user',
+    parts: [
+      { text: message.content },
+      ...(index === lastUserIndex ? images.map(image => ({ inlineData: { mimeType: image.mimeType, data: image.data } })) : []),
+    ],
+  }));
+}
+
 function toolArguments(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   if (Buffer.byteLength(JSON.stringify(value)) > 16 * 1024) return null;
@@ -105,10 +119,7 @@ export async function generateTextWithTools(
 
   const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '', httpOptions: { timeout: 45_000 } });
   const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
-  const contents: Content[] = asProviderMessages(request.messages).map(message => ({
-    role: message.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: message.content }],
-  }));
+  const contents: Content[] = providerContents(request.messages, request.images);
   const definitions = request.tools.map(tool => ({
     name: tool.name,
     description: tool.description,
@@ -237,7 +248,7 @@ export async function generateTextStream(
   const temperature = Math.max(0, Math.min(2, request.temperature ?? 0.3));
   const stream = await withProviderError('google', resolved.model, () => client.models.generateContentStream({
     model: resolved.model,
-    contents: asProviderMessages(request.messages).map(message => ({ role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: message.content }] })),
+    contents: providerContents(request.messages, request.images),
     config: { maxOutputTokens, temperature, ...(request.signal ? { abortSignal: request.signal } : {}), ...(system ? { systemInstruction: system } : {}) },
   }), request.signal);
 
@@ -269,10 +280,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
   const temperature = Math.max(0, Math.min(2, request.temperature ?? 0.3));
   const response = await withProviderError('google', resolved.model, () => client.models.generateContent({
     model: resolved.model,
-    contents: asProviderMessages(request.messages).map(message => ({
-      role: message.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: message.content }],
-    })),
+    contents: providerContents(request.messages, request.images),
     config: {
       maxOutputTokens,
       temperature,

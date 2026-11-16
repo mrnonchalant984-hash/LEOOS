@@ -2,22 +2,18 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
-test('runner requests derive the tenant scope from the authenticated account', async () => {
+test('runtime jobs are queued from authenticated account-owned workspaces', async () => {
   const route = await readFile(new URL('../app/api/workforce/repository-runner/route.ts', import.meta.url), 'utf8');
   const projectRunner = await readFile(new URL('../lib/project-runner.ts', import.meta.url), 'utf8');
-  const runner = await readFile(new URL('../services/isolated-runner/server.py', import.meta.url), 'utf8');
   const sandboxRoute = await readFile(new URL('../app/api/leocode/sandbox/route.ts', import.meta.url), 'utf8');
 
-  assert.match(route, /tenant_id: ctx\.user\.id/);
-  assert.match(projectRunner, /tenant_id: input\.ownerId/);
-  assert.match(runner, /tenant_id = body\.get\('tenant_id'\)/);
-  assert.match(runner, /tenant_root = tenant_workspace_root\(tenant_id\)/);
-  assert.match(runner, /def delete_tenant_workspace/);
-  assert.match(runner, /def do_DELETE/);
+  assert.match(route, /requireOwner\(req\)/);
+  assert.match(route, /getWorkspaceManifest\(ctx\.user\.id,body\.project_id\)/);
+  assert.match(route, /userId:ctx\.user\.id/);
+  assert.match(projectRunner, /userId: input\.ownerId/);
+  assert.match(sandboxRoute, /getProfile\(req\)/);
+  assert.match(sandboxRoute, /userId:ctx\.user\.id/);
   assert.match(sandboxRoute, /export async function DELETE/);
-  assert.match(sandboxRoute, /tenant_id: context\.user\.id/);
-  assert.match(sandboxRoute, /LEO_SANDBOX_ACCESS_CLIENT_ID/);
-  assert.match(sandboxRoute, /LEO_SANDBOX_ACCESS_CLIENT_SECRET/);
-  assert.match(sandboxRoute, /CF-Access-Client-Id/);
-  assert.match(sandboxRoute, /CF-Access-Client-Secret/);
+  assert.match(sandboxRoute, /status:410/);
+  assert.doesNotMatch(route + sandboxRoute, /LEO_SANDBOX_URL|REPOSITORY_RUNNER_URL|RUNNER_HMAC_SECRET/);
 });

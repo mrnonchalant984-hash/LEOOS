@@ -18,18 +18,13 @@ test('skill file reads reject traversal and only allow references, assets, and s
   assert.match(source, /Only skill references, assets, and scripts can be read/);
 });
 
-test('skill loading stays instruction-only and script execution requires the external sandbox', () => {
+test('skill loading stays instruction-only and script execution requires consent on the private runtime', () => {
   assert.match(source, /export async function loadSkill/);
   assert.match(source, /export async function readSkillFile/);
   assert.doesNotMatch(source, /node:child_process|node:os|spawn\(/);
   assert.doesNotMatch(orchestrator, /run_skill_script|runSkillScript/);
-  assert.match(runRoute, /body\.confirm !== true/);
-  assert.match(runRoute, /LEO_SANDBOX_URL/);
-  assert.match(runRoute, /LEO_SANDBOX_HMAC_SECRET/);
-  assert.match(runRoute, /LEO_SANDBOX_ACCESS_CLIENT_ID/);
-  assert.match(runRoute, /CF-Access-Client-Id/);
-  assert.match(runRoute, /CF-Access-Client-Secret/);
-  assert.match(runRoute, /run_skill_script/);
-  assert.match(runRoute, /\.eq\('owner_id', ctx\.user\.id\)/);
-  assert.match(runRoute, /skill_executions/);
+  assert.match(runRoute, /body\.confirm\s*!==\s*true/);
+  assert.match(runRoute, /queueGitHubRuntimeJob/);
+  assert.match(runRoute, /kind:'skill'/);
+  assert.doesNotMatch(runRoute, /node:child_process|spawn\(/);
 });

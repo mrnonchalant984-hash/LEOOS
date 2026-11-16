@@ -168,6 +168,35 @@ export function activate(context: vscode.ExtensionContext) {
         void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'The proposed edit could not be applied.');
       }
     }),
+    vscode.commands.registerCommand('leocode.runHostedWorkspace', async () => {
+      const projectId = vscode.workspace.getConfiguration('leocode').get<string>('projectId', '').trim();
+      if (!/^[0-9a-f-]{36}$/i.test(projectId)) {
+        void vscode.window.showWarningMessage('Set leocode.projectId to a LeonardX project UUID with a saved private workspace first.');
+        return;
+      }
+      const operation = await vscode.window.showQuickPick(['inspect', 'test', 'typecheck', 'lint', 'build'], { placeHolder: 'Choose a bounded LeoCode runtime operation' });
+      if (!operation) return;
+      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `LeoCode: queueing ${operation} on GitHub Actions`, cancellable: false }, async () => {
+        try {
+          const queued = await api.request<{ job_id: string; status: string }>(`/api/leocode/sandbox`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: projectId, operation }) });
+          output.clear(); output.appendLine(`LeoCode hosted runtime · ${operation}`); output.appendLine(`Job: ${queued.job_id}`); output.appendLine(`Status: ${queued.status}`);
+          for (let attempt = 0; attempt < 45; attempt += 1) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            const status = await api.request<{ job: { status: string; result?: { stdout?: string; stderr?: string; exit_code?: number }; error?: string } }>(`/api/runtime/jobs/${encodeURIComponent(queued.job_id)}`);
+            if (status.job.status === 'completed' || status.job.status === 'failed') {
+              output.appendLine(`\n${status.job.status} · exit ${status.job.result?.exit_code ?? 'unknown'}`);
+              if (status.job.result?.stdout) output.appendLine(status.job.result.stdout);
+              if (status.job.result?.stderr || status.job.error) output.appendLine(status.job.result?.stderr || status.job.error || '');
+              output.show(true);
+              if (status.job.status === 'completed' && status.job.result?.exit_code === 0) void vscode.window.showInformationMessage('LeoCode hosted runtime completed.');
+              else void vscode.window.showWarningMessage('LeoCode hosted runtime finished with errors. See the LeoCode output channel.');
+              return;
+            }
+          }
+          output.appendLine('\nJob is still running. Use the job ID to check its status later.'); output.show(true);
+        } catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'LeoCode hosted runtime could not run.'); }
+      });
+    }),
     vscode.commands.registerCommand('leocode.runCommand', async () => {
       const command = await vscode.window.showInputBox({
         prompt: 'Enter a development command to run in a VS Code terminal',

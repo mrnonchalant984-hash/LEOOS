@@ -48,3 +48,5 @@ The default server origin is `https://leoos-omega.vercel.app`. A local developme
 LeoCode is published by the verified `leonardx` publisher. In VS Code, open Extensions (`Ctrl+Shift+X`), search for **LeoCode by LeonardX**, and install it. You can also install it from a terminal with `code --install-extension leonardx.leocode`.
 
 After installation, select the LeoCode icon in the Activity Bar, open **Leo Chat**, and choose **Connect** to sign in to your LeonardX account.
+
+To use the native VS Code agent, open Chat, open the agent picker, and select **LeoCode**. If the extension was updated while VS Code was open, run **Developer: Reload Window** first.

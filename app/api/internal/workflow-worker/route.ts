@@ -20,6 +20,8 @@ import {
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+const WORKER_SOFT_BUDGET_MS = 42_000;
+const WORKER_LEASE_SECONDS = 90;
 const safe = (value: unknown) => typeof value === 'string' ? value : '';
 const PARALLEL_READ_ONLY_TOOLS = new Set([
   'calendar_read',
@@ -54,8 +56,15 @@ async function executeWorkflowStep(
 ) {
   const stepOutputs: string[] = [];
   for (const agent of plan.agents) {
-    const output = await runAgent(agent, plan.task, context, owner, { runId, userId });
-    stepOutputs.push(`${agent.name}: ${output}`);
+    const startedAt = Date.now();
+    try {
+      const output = await runAgent(agent, plan.task, context, owner, { runId, userId });
+      stepOutputs.push(`${agent.name}: ${output}`);
+      console.info(JSON.stringify({ event: 'workflow.agent_step_completed', run_id: runId, user_id: userId, agent_id: agent.id, duration_ms: Date.now() - startedAt }));
+    } catch (error) {
+      console.warn(JSON.stringify({ event: 'workflow.agent_step_failed', run_id: runId, user_id: userId, agent_id: agent.id, duration_ms: Date.now() - startedAt, error_name: error instanceof Error ? error.name : 'unknown' }));
+      throw error;
+    }
   }
   return stepOutputs.join('\n\n').slice(0, 12_000);
 }
@@ -78,9 +87,10 @@ export async function POST(req: NextRequest) {
   const db = adminSupabase();
   const { error: scheduleError } = await db.rpc('enqueue_due_workflows', { p_limit: 10 });
   if (scheduleError) return NextResponse.json({ error: 'Schedule scan failed. Verify the workflow migration and service-role grants.' }, { status: 503 });
-  const { data: jobs, error: claimError } = await db.rpc('claim_workflow_jobs', { p_worker: workerId, p_limit: limit, p_lease_seconds: 300 });
+  const { data: jobs, error: claimError } = await db.rpc('claim_workflow_jobs', { p_worker: workerId, p_limit: limit, p_lease_seconds: WORKER_LEASE_SECONDS });
   if (claimError) return NextResponse.json({ error: 'Queue claim failed. Verify the workflow migration and service-role grants.' }, { status: 503 });
   const results: Array<{ run_id: string; status: string }> = [];
+  const workerStartedAt = Date.now();
 
   for (const job of jobs ?? []) {
     const runId = safe(job.run_id);
@@ -134,6 +144,20 @@ export async function POST(req: NextRequest) {
       }
       let waitingForApproval = false;
       while (completedStepIds.size < stepPlans.length) {
+        // Yield before the serverless hard limit. Completed step outputs are already
+        // checkpointed below, so a later worker can resume without repeating them.
+        if (Date.now() - workerStartedAt >= WORKER_SOFT_BUDGET_MS) {
+          const { error: yieldRunError } = await db.from('workflow_runs')
+            .update({ status: 'queued', output: outputs, error_code: 'worker_time_budget_yielded', error_message: 'Workflow paused safely and will resume in the next worker cycle.' })
+            .eq('id', runId).eq('user_id', run.user_id).eq('status', 'running');
+          const { error: yieldJobError } = await db.from('workflow_jobs')
+            .update({ status: 'queued', available_at: new Date(Date.now() + 5_000).toISOString(), lease_owner: null, lease_expires_at: null, last_error_code: null, updated_at: new Date().toISOString() })
+            .eq('id', job.id).eq('lease_owner', workerId);
+          if (yieldRunError || yieldJobError) throw new Error('workflow_checkpoint_yield_failed');
+          results.push({ run_id: runId, status: 'yielded_time_budget' });
+          waitingForApproval = true;
+          break;
+        }
         const { data: currentRun, error: statusError } = await db.from('workflow_runs')
           .select('status').eq('id', runId).eq('user_id', run.user_id).maybeSingle();
         if (statusError) throw new Error('workflow_status_unavailable');

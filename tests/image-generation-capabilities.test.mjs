@@ -5,11 +5,11 @@ import { isGeminiImageModel, resolveGeminiImageModel } from '../lib/generation/g
 
 test('image generation defaults to an image-capable Gemini model', () => {
   const source = fs.readFileSync('lib/generation/gemini-image.ts', 'utf8');
-  assert.match(source, /gemini-nano-banana-2\.1/);
+  assert.match(source, /gemini-2\.5-flash-image/);
   assert.match(source, /isGeminiImageModel/);
   assert.match(source, /text-capable and cannot generate/);
-  assert.equal(isGeminiImageModel('gemini-nano-banana-2.1'), true);
-  assert.equal(resolveGeminiImageModel('gemini-nano-banana-2.1'), 'gemini-nano-banana-2.1');
+  assert.equal(isGeminiImageModel('gemini-2.5-flash-image'), true);
+  assert.equal(resolveGeminiImageModel('gemini-2.5-flash-image'), 'gemini-2.5-flash-image');
   assert.equal(isGeminiImageModel('gemini-2.5-flash'), false);
   assert.throws(() => resolveGeminiImageModel('gemini-2.5-flash'), /text-capable/);
 });

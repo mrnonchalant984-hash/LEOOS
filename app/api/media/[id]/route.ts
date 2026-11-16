@@ -45,13 +45,27 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
   const db = adminSupabase();
   const { data: asset, error: assetError } = await db.from('media_assets')
-    .select('id,job_id,bucket,storage_path,kind')
+    .select('id,job_id,bucket,storage_path,kind,metadata')
     .eq('id', id).eq('user_id', user.user.id).maybeSingle();
   if (assetError) return NextResponse.json({ error: 'Image ownership could not be checked.' }, { status: 503 });
-  if (!asset || asset.kind !== 'image' || asset.bucket !== BUCKET || !asset.job_id) {
-    return NextResponse.json({ error: 'Generated image was not found.' }, { status: 404 });
+  if (!asset || asset.kind !== 'image' || asset.bucket !== BUCKET) {
+    return NextResponse.json({ error: 'Image was not found.' }, { status: 404 });
   }
 
+  const metadata = asset.metadata && typeof asset.metadata === 'object' ? asset.metadata as Record<string, unknown> : {};
+  const ownedChatUpload = metadata.chat_image === true
+    && typeof asset.storage_path === 'string'
+    && asset.storage_path.startsWith(`chat-images/${user.user.id}/`);
+  if (ownedChatUpload) {
+    const { error: storageError } = await db.storage.from(asset.bucket).remove([asset.storage_path]);
+    if (storageError) return NextResponse.json({ error: 'The uploaded image could not be removed from private storage.' }, { status: 502 });
+    const { data: deleted, error: deleteError } = await db.from('media_assets').delete()
+      .eq('id', asset.id).eq('user_id', user.user.id).select('id').maybeSingle();
+    if (deleteError || !deleted) return NextResponse.json({ error: 'The image file was removed, but its asset record could not be finalized.' }, { status: 503 });
+    return NextResponse.json({ deleted: true, kind: 'chat_upload' }, { headers: { 'Cache-Control': 'private, no-store' } });
+  }
+
+  if (!asset.job_id) return NextResponse.json({ error: 'Generated image was not found.' }, { status: 404 });
   const { data: job, error: jobError } = await db.from('generation_jobs')
     .select('id,job_type,status,metadata')
     .eq('id', asset.job_id).eq('user_id', user.user.id).maybeSingle();
@@ -69,13 +83,13 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     return NextResponse.json({ error: 'The image file was removed, but its library record could not be finalized. Retry deletion.' }, { status: 503 });
   }
 
-  const metadata = { ...(job.metadata || {}), asset_deleted_at: new Date().toISOString() };
-  delete metadata.asset_id;
-  delete metadata.storage_path;
-  delete metadata.mime_type;
-  delete metadata.size_bytes;
+  const historyMetadata = { ...(job.metadata || {}), asset_deleted_at: new Date().toISOString() };
+  delete historyMetadata.asset_id;
+  delete historyMetadata.storage_path;
+  delete historyMetadata.mime_type;
+  delete historyMetadata.size_bytes;
   const { error: historyError } = await db.from('generation_jobs').update({
-    metadata,
+    metadata: historyMetadata,
     updated_at: new Date().toISOString(),
   }).eq('id', job.id).eq('user_id', user.user.id);
   if (historyError) {

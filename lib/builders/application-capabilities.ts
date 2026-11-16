@@ -24,7 +24,7 @@ export function getApplicationCapabilities(env: NodeJS.ProcessEnv = process.env)
   const webConfigured = configured(env, ['GITHUB_TOKEN', 'VERCEL_TOKEN']);
   const expoConfigured = configured(env, ['EXPO_TOKEN']);
   const godotConfigured = configured(env, ['GODOT_BUILD_SERVICE_URL', 'GODOT_BUILD_SERVICE_TOKEN']);
-  const runnerConfigured = configured(env, ['REPOSITORY_RUNNER_URL', 'RUNNER_HMAC_SECRET']);
+  const runnerConfigured = configured(env, ['LEO_WORKSPACE_GITHUB_OWNER', 'LEO_WORKSPACE_GITHUB_REPOSITORY']);
   const androidToolchain = getAndroidBuildCapabilities(env);
   const androidStorageConfigured = configured(env, ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']);
   // Hosted GitHub Actions runs the toolchain outside Vercel; this explicit flag is an
@@ -81,7 +81,7 @@ export function getApplicationCapabilities(env: NodeJS.ProcessEnv = process.env)
       id: 'repository-operations', category: 'project_validation', projectType: null, frameworks: ['Runner-supported project manifests'],
       generator: 'none', buildAdapter: 'Isolated repository runner', buildMode: 'request_sync',
       status: runnerConfigured ? 'partially_available' : 'unavailable', configured: runnerConfigured,
-      requirements: ['MCP write scope', 'REPOSITORY_RUNNER_URL', 'RUNNER_HMAC_SECRET'],
+      requirements: ['MCP write scope', 'private GitHub Actions runtime adapter'],
       limitations: ['Runner operations are submitted synchronously and can time out.', 'Supported commands depend on the separately deployed runner image.'],
     },
     {

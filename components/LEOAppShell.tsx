@@ -50,7 +50,7 @@ const groups: { label: string; items: NavItem[] }[] = [
   ] },
 ];
 const adminGroup: { label: string; items: NavItem[] } = { label: 'Administration', items: [
-  ['Admin overview','/admin',ShieldCheck], ['Leo training','/admin/leo/training',Bot], ['Agent management','/admin/agents',Boxes], ['AI workforce','/workforce',Users], ['Meeting room','/meeting-room',Video], ['Engineer conversations','/workforce/conversations',Bot], ['Durable role queue','/workforce/jobs',Workflow],
+  ['Admin overview','/admin',ShieldCheck], ['Release readiness','/admin/release-readiness',ShieldCheck], ['Leo training','/admin/leo/training',Bot], ['Agent management','/admin/agents',Boxes], ['AI workforce','/workforce',Users], ['Meeting room','/meeting-room',Video], ['Engineer conversations','/workforce/conversations',Bot], ['Durable role queue','/workforce/jobs',Workflow],
   ['Announcements','/admin/announcements',Bell], ['Upgrade history','/admin/upgrade-history',ScrollText], ['Audit log','/audit',LockKeyhole],
 ] };
 const publicGroup: { label: string; items: NavItem[] } = { label: 'Public site', items: [
@@ -107,6 +107,8 @@ export function LEOAppShell({ children, title = 'LeonardX', subtitle = 'Your sof
   const navigate = (href: string) => { setPaletteOpen(false); setOpen(false); router.push(href); };
   const allNavItems = [...groups.flatMap(group => group.items), ...publicGroup.items, ...(isOwner ? adminGroup.items : [])];
   const activeHref = allNavItems.map(([, href]) => href).filter(href => pathname === href || (href !== '/' && pathname.startsWith(href + '/'))).sort((a, b) => b.length - a.length)[0];
+  const chatModeActive = pathname === '/app' || pathname.startsWith('/app/');
+  const workModeActive = ['/engineering', '/ide', '/workflows', '/workforce'].some(base => pathname === base || pathname.startsWith(`${base}/`));
 
   return <div className={`leo-app-shell ${collapsed ? 'leo-app-shell-collapsed' : ''}`} data-visual-identity={resolveVisualIdentity(pathname)}>
     <aside className={`leo-sidebar ${open ? 'leo-sidebar-open' : ''} ${collapsed ? 'leo-sidebar-collapsed' : ''}`}>
@@ -138,6 +140,10 @@ export function LEOAppShell({ children, title = 'LeonardX', subtitle = 'Your sof
         <button className="icon-button mobile-only" onClick={() => setOpen(true)} aria-label="Open navigation"><Menu size={19}/></button>
         <div className="topbar-page-context"><p className="eyebrow">LEONARDX <span>/</span> WORKSPACE</p><h1>{title}</h1><p>{subtitle}</p></div>
         <div className="topbar-actions">
+          <div className="flex shrink-0 items-center gap-1 rounded-xl border border-white/10 bg-white/[.025] p-1" role="group" aria-label="Workspace mode">
+            <Link href="/app" aria-current={chatModeActive ? 'page' : undefined} className={`rounded-lg px-2 py-1.5 text-[10px] font-semibold ${chatModeActive ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white'}`}>Chat</Link>
+            <Link href="/engineering" aria-current={workModeActive ? 'page' : undefined} className={`rounded-lg px-2 py-1.5 text-[10px] font-semibold ${workModeActive ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white'}`}>Work</Link>
+          </div>
           <button className="topbar-search" type="button" onClick={openPalette}><Search size={15}/><span>Search anything</span><kbd>Ctrl K</kbd></button>
           <Link href="/notifications" className="icon-button topbar-icon" aria-label="Notifications"><Bell size={16}/></Link>
           <Link href="/support" className="icon-button topbar-icon" aria-label="Help and support"><CircleHelp size={16}/></Link>

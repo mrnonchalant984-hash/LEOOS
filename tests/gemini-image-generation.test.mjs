@@ -19,7 +19,7 @@ test('Gemini image generation uses the documented image response modality and ca
 test('image generation and editing share the corrected Gemini image provider', () => {
   assert.match(imageRoute, /generateAndPersistImage/);
   assert.match(edit, /generateGeminiImage\(/);
-  assert.match(env, /^LEO_GEMINI_IMAGE_MODEL=gemini-nano-banana-2\.1$/m);
+  assert.match(env, /^LEO_GEMINI_IMAGE_MODEL=gemini-2\.5-flash-image$/m);
 });
 
 test('image failures surface model and billing configuration diagnostics without exposing credentials', () => {

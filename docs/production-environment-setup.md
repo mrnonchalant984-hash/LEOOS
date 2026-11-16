@@ -38,8 +38,7 @@ The current `.github/workflows/ci.yml` intentionally uses **dummy CI values**. D
 
 ## Isolated repository runner
 
-- Deploy `services/isolated-runner` on a dedicated disposable VM with rootless Podman, not on the Next.js production host. Build the fixed sandbox image from its Dockerfile. Use a private network and an authenticated TLS reverse proxy in addition to HMAC.
-- Configure `REPOSITORY_RUNNER_URL` and a random `RUNNER_HMAC_SECRET` in the Next.js server environment. Configure the same secret and `RUNNER_ALLOWED_REPOSITORIES` on the runner host. Only allow exact GitHub repository slugs you own/control. No remote push is enabled; local status/diff/branch/commit operations stay in the isolated workspace.
+- For LeonardX Work, use the separate private `LEOOS-RUNTIME` repository and GitHub-hosted ephemeral jobs as documented in `docs/workspace-runtime-github-actions.md`. Do not deploy the legacy Podman/gVisor runner for Work.
 - The sandbox has no network, drops Linux capabilities, runs non-root with resource limits, rejects secret-like files and never accepts arbitrary shell commands. Dependency installation is not supported inside the network-disabled sandbox; provide a reviewed prebuilt dependency image/cache or keep builds disabled until that is designed. Do not treat this component as deployed or penetration-tested until you deploy and test it.
 
 ## Workforce execution, monitoring and meetings

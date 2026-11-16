@@ -46,9 +46,7 @@ if (!staging) {
   }
 }
 
-const runnerUrl = process.env.REPOSITORY_RUNNER_URL?.trim();
 if (runnerUrl) await probe('repository-runner', runnerUrl, '/health');
-else add('repository-runner', false, 'REPOSITORY_RUNNER_URL is not configured; runner-dependent builds remain blocked.');
 
 const godotUrl = process.env.GODOT_BUILD_SERVICE_URL?.trim();
 if (godotUrl) await probe('godot-build-service', godotUrl, '/healthz');

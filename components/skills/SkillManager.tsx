@@ -134,8 +134,23 @@ export function SkillManager() {
     try {
       const response = await fetch('/api/skills/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: skillName, script_path: scriptPath, input, confirm: true }) });
       const data = await readJson(response);
-      if (!response.ok) throw new Error(data.error || 'Skill script did not complete.');
-      setNotice(`Script ${data.status}${typeof data.exit_code === 'number' ? ` (exit ${data.exit_code})` : ''}.`);
+      if (!response.ok) throw new Error(data.error || 'Skill script could not be queued.');
+      const jobId = data.data?.job_id;
+      if (!jobId) throw new Error('Runtime did not return a job ID.');
+      setNotice(`Skill script queued (${jobId}). Waiting for the isolated GitHub-hosted runner…`);
+      const deadline = Date.now() + 20 * 60 * 1000;
+      let status = 'queued';
+      while (Date.now() < deadline && (status === 'queued' || status === 'running')) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        const statusResponse = await fetch(`/api/runtime/jobs/${encodeURIComponent(jobId)}`, { cache: 'no-store' });
+        const statusData = await readJson(statusResponse);
+        if (!statusResponse.ok) throw new Error(statusData.error || 'Runtime job status could not be loaded.');
+        status = statusData.data?.status || 'failed';
+        setNotice(`Skill script ${status} (${jobId}).`);
+        if (status === 'completed') break;
+        if (status === 'failed' || status === 'cancelled') throw new Error(statusData.data?.error || `Skill script ${status}.`);
+      }
+      if (status === 'queued' || status === 'running') setNotice(`Skill script is still ${status}. Job ID: ${jobId}. You can refresh its status later.`);
       await loadExecutions(skillName);
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Skill script did not complete.'); }
     finally { setBusy(false); }

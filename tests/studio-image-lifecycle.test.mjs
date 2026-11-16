@@ -34,10 +34,12 @@ test('Leo workspace and Studio expose user-scoped image download and share actio
   assert.match(studio, /sharePrivateImage\(asset\.id\)/);
 });
 
-test('image deletion is owner-scoped and limited to completed generated images', async () => {
+test('image deletion is owner-scoped for chat uploads and completed generated images', async () => {
   const route = await read('app/api/media/[id]/route.ts');
   assert.match(route, /\.eq\('id', id\)\.eq\('user_id', user\.user\.id\)/);
-  assert.match(route, /asset\.kind !== 'image' \|\| asset\.bucket !== BUCKET \|\| !asset\.job_id/);
+  assert.match(route, /asset\.kind !== 'image' \|\| asset\.bucket !== BUCKET/);
+  assert.match(route, /metadata\.chat_image === true/);
+  assert.match(route, /if \(!asset\.job_id\)/);
   assert.match(route, /job\.job_type !== 'image' \|\| job\.status !== 'completed'/);
   assert.match(route, /job\.metadata\?\.asset_id !== asset\.id/);
   assert.match(route, /storage\.from\(asset\.bucket\)\.remove\(\[asset\.storage_path\]\)/);

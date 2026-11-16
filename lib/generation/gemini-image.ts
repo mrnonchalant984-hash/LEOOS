@@ -8,7 +8,7 @@ export function isGeminiImageModel(model: string) {
 }
 
 export function resolveGeminiImageModel(requested?: string) {
-  const model = (requested?.trim() || process.env.LEO_GEMINI_IMAGE_MODEL?.trim() || 'gemini-nano-banana-2.1').replace(/^google\//, '');
+  const model = (requested?.trim() || process.env.LEO_GEMINI_IMAGE_MODEL?.trim() || 'gemini-2.5-flash-image').replace(/^google\//, '');
   if (!isGeminiImageModel(model)) throw new Error(`Configured model "${model}" is text-capable and cannot generate or edit images. Set LEO_GEMINI_IMAGE_MODEL to a Gemini image or Imagen model.`);
   return model;
 }
