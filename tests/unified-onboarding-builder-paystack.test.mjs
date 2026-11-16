@@ -66,5 +66,5 @@ test('live IDE embeds Leo with the active project context and retains ZIP import
   assert.match(leo, /initialProjectId/);
   assert.match(leo, /setWorkspaceMode\("work"\)/);
   assert.match(ide, /Import ZIP/);
-  assert.match(ide, /github-import/);
+  assert.match(ide, /GitHubRepositoryImporter/);
 });
