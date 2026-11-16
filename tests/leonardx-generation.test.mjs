@@ -82,7 +82,7 @@ test('Google Veo video generation is configured server-side and only advertises 
 });
 
 test('environment template documents video credit conversion without secrets', () => {
-  assert.match(envExample, /RUNWAY_GEN45_PLATFORM_CREDITS_PER_SECOND=/);
+  assert.match(envExample, /GOOGLE_VEO_PLATFORM_CREDITS_PER_SECOND=/);
   assert.match(envExample, /LEO_GOOGLE_VIDEO_MODEL=/);
   assert.doesNotMatch(envExample, /RUNWAY_GEN45_PLATFORM_CREDITS_PER_SECOND=\d+/);
 });
