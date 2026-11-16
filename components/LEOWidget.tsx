@@ -168,8 +168,8 @@ function getRemoteDeviceId() {
 
 export function LEOWidget({ full = false, initialSessionId = "", embedded = false, initialProjectId = "", initialProjectName = "" }: { full?: boolean; initialSessionId?: string; embedded?: boolean; initialProjectId?: string; initialProjectName?: string }) {
   const [open, setOpen] = useState(full),
-    [workspaceMode, setWorkspaceMode] = useState<"chat" | "work">("chat"),
-    [workProject, setWorkProject] = useState<{ id: string; name: string } | null>(null),
+    [workspaceMode, setWorkspaceMode] = useState<"chat" | "work">(initialProjectId ? "work" : "chat"),
+    [workProject, setWorkProject] = useState<{ id: string; name: string } | null>(initialProjectId ? { id: initialProjectId, name: initialProjectName || "Current project" } : null),
     [workManifest, setWorkManifest] = useState<{ revision: number; files: Array<{ path: string; size: number; kind: string }>; totalBytes: number } | null>(null),
     [workUploading, setWorkUploading] = useState(false),
     [editingWorkspaceFile, setEditingWorkspaceFile] = useState(""),
@@ -236,16 +236,15 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     const params = new URLSearchParams(window.location.search);
     const initialPrompt = params.get("prompt");
     if (!initialPrompt) return;
-    setInput(initialPrompt.slice(0, 4000));
+    const timer = window.setTimeout(() => setInput(initialPrompt.slice(0, 4000)), 0);
     params.delete("prompt");
     const query = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+    return () => window.clearTimeout(timer);
   }, []);
   useEffect(() => {
     if (!initialProjectId) return;
     let active = true;
-    setWorkspaceMode("work");
-    setWorkProject({ id: initialProjectId, name: initialProjectName || "Current project" });
     void fetch(`/api/workspaces/${encodeURIComponent(initialProjectId)}/source`, { cache: "no-store" })
       .then(async response => {
         const result = await response.json().catch(() => ({}));
