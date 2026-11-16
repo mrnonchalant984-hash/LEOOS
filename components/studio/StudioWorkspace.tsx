@@ -26,7 +26,7 @@ type VideoResult = { job_id: string; status: string; asset_id?: string; video_ur
 const modes: Array<{ id: StudioMode; label: string; description: string }> = [
   { id: 'image', label: 'Create image', description: 'Text-to-image · Gemini' },
   { id: 'edit', label: 'Edit image', description: 'Image transformation · Gemini' },
-  { id: 'video', label: 'Create video', description: 'Text- or image-to-video · Runway Gen-4.5' },
+  { id: 'video', label: 'Create video', description: 'Text-to-video · Google Veo' },
 ];
 
 export default function StudioWorkspace() {
@@ -116,7 +116,7 @@ export default function StudioWorkspace() {
       return;
     }
     if (body.status === 'failed' || body.status === 'cancelled') throw new Error(body.error || 'The video provider could not complete this job.');
-    setStatus(`Runway is processing this job. Checking again in 10 seconds (${attempt + 1}/60).`);
+    setStatus(`Google is processing this job. Checking again in 10 seconds (${attempt + 1}/60).`);
     pollTimeout.current = setTimeout(() => {
       void pollVideo(jobId, attempt + 1).catch(cause => {
         if (!mounted.current) return;
@@ -159,7 +159,7 @@ export default function StudioWorkspace() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'The generation request failed.');
       if (mode === 'video' && body.job_id) {
-        setStatus('Video job submitted to Runway.');
+        setStatus('Video job submitted to Google.');
         await pollVideo(body.job_id);
       } else {
         setStatus(mode === 'edit' ? 'Edited image saved to your private media library.' : 'Image saved to your private media library.');
