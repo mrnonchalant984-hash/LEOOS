@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   if (![4, 6, 8].includes(duration)) return NextResponse.json({ error: 'Google Veo supports 4, 6, or 8 seconds in this Studio workflow.' }, { status: 400 });
   const { data: account } = await adminSupabase().from('platform_credit_accounts').select('balance').eq('user_id', ctx.user.id).maybeSingle();
   const required = owner ? 0 : (rate as number) * duration;
-  return NextResponse.json({ available: true, model, duration_seconds: duration, supported_durations: [4,6,8], aspect_ratios: ['landscape','portrait'], resolutions: ['720p','1080p'], platform_credits_required: required, platform_credits_per_second: rate, platform_credits_available: account?.balance ?? 0, provider_cost_estimate_usd: null, provider_cost_usd: null, mode: 'text_to_video' }, { headers: { 'Cache-Control': 'private, no-store' } });
+  return NextResponse.json({ available: true, provider_status: capabilities.connectivity_verified ? 'verified' : 'configured_unverified', model, duration_seconds: duration, supported_durations: [4,6,8], aspect_ratios: ['landscape','portrait'], resolutions: ['720p','1080p'], platform_credits_required: required, platform_credits_per_second: rate, platform_credits_available: account?.balance ?? 0, provider_cost_estimate_usd: null, provider_cost_usd: null, mode: 'text_to_video' }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
 export async function POST(req: NextRequest) {
