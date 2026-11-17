@@ -8,6 +8,7 @@ import { enforceLeoCodeDailyQuota } from '@/lib/leocode-entitlement';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 function event(controller: ReadableStreamDefaultController<Uint8Array>, value: Record<string, unknown>) {
   controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`));
