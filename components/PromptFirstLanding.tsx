@@ -45,13 +45,13 @@ export function PromptFirstLanding() {
         <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_15%_12%,rgba(147,197,253,.6),transparent_35%),radial-gradient(ellipse_at_85%_30%,rgba(196,181,253,.55),transparent_38%),radial-gradient(ellipse_at_50%_100%,rgba(251,207,232,.6),transparent_42%)]"/>
         <div className="mx-auto max-w-4xl text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/70 px-4 py-2 text-[11px] font-semibold uppercase tracking-[.16em] text-indigo-700 shadow-sm backdrop-blur"><Sparkles size={14}/> AI software creation workspace</span>
-          <h1 className="mt-7 text-4xl font-semibold tracking-[-.055em] sm:text-6xl">Describe it. <span className="bg-gradient-to-r from-indigo-600 via-violet-600 to-pink-500 bg-clip-text text-transparent">Build it with Leo.</span></h1>
+          <h1 className="mt-7 text-4xl font-semibold tracking-[-.055em] sm:text-6xl">Describe it. <span className="bg-gradient-to-r from-indigo-600 via-violet-600 to-pink-500 bg-clip-text text-transparent">Build it with Coder.</span></h1>
           <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-600">Start with an idea. LeonardX brings planning, project files, AI-assisted development and connected delivery tools into one workspace.</p>
           <form onSubmit={submit} className="mx-auto mt-9 max-w-3xl rounded-[26px] border border-white bg-white p-3 text-left shadow-[0_24px_75px_rgba(70,80,145,.15)]">
-            <label htmlFor="landing-prompt" className="sr-only">Describe the website or app you want Leo to build</label>
-            <textarea id="landing-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} rows={3} maxLength={6000} placeholder="Describe the website or app you want Leo to build... e.g., A booking site for my bakery" className="min-h-28 w-full resize-y rounded-2xl border-0 bg-transparent px-4 py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400"/>
+            <label htmlFor="landing-prompt" className="sr-only">Describe the website or app you want Coder to build</label>
+            <textarea id="landing-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} rows={3} maxLength={6000} placeholder="Describe the website or app you want Coder to build... e.g., A booking site for my bakery" className="min-h-28 w-full resize-y rounded-2xl border-0 bg-transparent px-4 py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400"/>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-2 pt-3">
-              <span className="text-xs text-slate-400">Your idea becomes the starting brief for Leo.</span>
+              <span className="text-xs text-slate-400">Your idea becomes the starting brief for Coder.</span>
               <button type="submit" disabled={!prompt.trim() || busy} className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy ? "Opening workspace…" : "Start building"} <ArrowRight size={15}/></button>
             </div>
           </form>
