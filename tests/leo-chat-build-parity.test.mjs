@@ -51,10 +51,10 @@ test('existing build/deploy route accepts Leo-chat generated files without skipp
 });
 
 test('natural-language website requests and short follow-ups stay in the same Coda build workflow', () => {
-  assert.match(route, /need\\|want\\|looking for/);
-  assert.match(route, /hasRecentBuildRequest/);
-  assert.match(route, /shortBuildContinuation/);
-  assert.match(route, /history\\.slice\\(-12\\)/);
+  assert.ok(route.includes('need|want|looking for'));
+  assert.ok(route.includes('hasRecentBuildRequest'));
+  assert.ok(route.includes('shortBuildContinuation'));
+  assert.ok(route.includes('history.slice(-12)'));
   assert.match(widget, /priorBuildRequest/);
   assert.match(widget, /buildContinuation/);
 });
