@@ -1809,7 +1809,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         <div className="leo-chat-workspace flex h-[100dvh] min-h-[480px] overflow-hidden bg-[#0b0b0b]">
           <aside className={`${sidebarOpen ? "w-[240px]" : "w-[60px]"} hidden shrink-0 flex-col border-r border-[#252525] bg-[#101010] transition-[width] duration-200 md:flex`}>
             <div className="flex h-14 items-center justify-between gap-2 border-b border-white/10 px-3">
-              {sidebarOpen && <div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--gold)] text-black"><CodaAvatar mood={error ? "oops" : loading ? "thinking" : messages.length === 0 ? "idle" : "default"} size={30}/></div><div><b className="text-sm">Coda</b><p className="text-[10px] text-zinc-500">Your workspace</p></div></div>}
+              {sidebarOpen && <div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--gold)] text-black"><CodaAvatar mood={error ? "oops" : loading ? "thinking" : buildProgress?.status === "completed" || buildProgress?.status === "success" ? "excited" : messages.length === 0 ? "idle" : "default"} size={30}/></div><div><b className="text-sm">Coda</b><p className="text-[10px] text-zinc-500">Your workspace</p></div></div>}
               <button type="button" onClick={() => setSidebarOpen((value) => !value)} className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white" aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}><PanelLeftClose size={16}/></button>
             </div>
             <div className="space-y-0.5 p-2">
