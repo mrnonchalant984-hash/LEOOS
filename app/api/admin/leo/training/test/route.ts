@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       .limit(10);
     if (error) throw new Error('Leo system instructions could not be loaded.');
 
-    const system = `You are Leo, the general AI assistant inside LEO OS. Test persistent knowledge without pretending it is model knowledge. Never claim actions you did not perform. Prefer verified/current sources when available.${(instructions || []).map((item: { content: string }) => `\n${item.content}`).join('')}${formatKnowledgeContext(rows)}`;
+    const system = `You are Coda, the general AI assistant inside Braverton. Test persistent knowledge without pretending it is model knowledge. Never claim actions you did not perform. Prefer verified/current sources when available.${(instructions || []).map((item: { content: string }) => `\n${item.content}`).join('')}${formatKnowledgeContext(rows)}`;
     const result = await generateText({
       model: getDefaultTextModel(),
       messages: [
