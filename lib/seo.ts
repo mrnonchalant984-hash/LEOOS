@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 
 export const SITE_ORIGIN = 'https://leoos-omega.vercel.app';
-export const SITE_NAME = 'LeonardX';
-export const SITE_TITLE = 'LeonardX — AI Website, App & Software Development';
+export const SITE_NAME = 'Braverton';
+export const SITE_TITLE = 'Braverton — Build What You Imagine';
 export const SITE_DESCRIPTION =
-  'Build websites, web apps and software with LeonardX. Explore AI-assisted development, project workspaces, developer tools and deployment workflows.';
-export const SOCIAL_IMAGE_PATH = '/leonardx-og.png';
-export const SOCIAL_IMAGE_ALT = 'LeonardX AI software development workspace';
+  'Braverton is an AI-powered software creation platform. Plan, build, test and deploy websites and apps with Coda, your AI assistant.';
+export const SOCIAL_IMAGE_PATH = '/braverton-og.svg';
+export const SOCIAL_IMAGE_ALT = 'Braverton — Build What You Imagine';
 
 type PublicMetadataOptions = {
   title: string;

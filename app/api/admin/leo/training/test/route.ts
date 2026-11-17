@@ -22,9 +22,9 @@ export async function POST(req: NextRequest) {
       .eq('active', true)
       .order('priority', { ascending: true })
       .limit(10);
-    if (error) throw new Error('Leo system instructions could not be loaded.');
+    if (error) throw new Error('Coda system instructions could not be loaded.');
 
-    const system = `You are Leo, the general AI assistant inside LEO OS. Test persistent knowledge without pretending it is model knowledge. Never claim actions you did not perform. Prefer verified/current sources when available.${(instructions || []).map((item: { content: string }) => `\n${item.content}`).join('')}${formatKnowledgeContext(rows)}`;
+    const system = `You are Coda, the general AI assistant inside Braverton. Test persistent knowledge without pretending it is model knowledge. Never claim actions you did not perform. Prefer verified/current sources when available.${(instructions || []).map((item: { content: string }) => `\n${item.content}`).join('')}${formatKnowledgeContext(rows)}`;
     const result = await generateText({
       model: getDefaultTextModel(),
       messages: [
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     const status = apiError.statusCode || apiError.status || 500;
     const message = status === 429
       ? 'Gemini quota or rate limit reached. Check the configured Gemini project quota and retry.'
-      : apiError.message || 'Leo training test failed.';
+      : apiError.message || 'Coda training test failed.';
     return NextResponse.json({ error: message }, { status: status >= 400 && status <= 599 ? status : 500 });
   }
 }

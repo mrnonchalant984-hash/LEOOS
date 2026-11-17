@@ -1,7 +1,7 @@
 import { createPublicMetadata } from '@/lib/seo';
 export const metadata = createPublicMetadata({
   title: 'About',
-  description: "Meet Leonard Udoh and learn about LeonardX, an AI-assisted software workspace built to help turn project ideas into working software.",
+  description: "Meet Leonard Udoh and learn about Braverton, an AI-assisted software workspace built to help turn project ideas into working software.",
   path: "/about",
   type: "website",
 });

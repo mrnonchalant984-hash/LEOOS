@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Bot } from "lucide-react";
+import { CodaAvatar } from "@/components/CodaAvatar";
 
 const LazyLEOWidget = dynamic(
   () => import("./LEOWidget").then((module) => module.LEOWidget),
@@ -11,11 +11,11 @@ const LazyLEOWidget = dynamic(
     ssr: false,
     loading: () => (
       <div
-        className="fixed bottom-5 right-5 z-40 rounded-full bg-[var(--gold)] px-4 py-3 text-sm font-semibold text-black shadow-2xl"
+        className="fixed bottom-5 right-5 z-40 rounded-full bg-[var(--coda-primary)] px-4 py-3 text-sm font-semibold text-white shadow-2xl"
         role="status"
         aria-live="polite"
       >
-        Opening Leo…
+        Opening Coda…
       </div>
     ),
   },
@@ -37,13 +37,13 @@ function LEOWidgetLauncher() {
   return (
     <button
       type="button"
-      className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--gold)] text-black shadow-2xl"
-      aria-label="Open Leo AI chat"
+      className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-[var(--coda-border)] bg-[var(--bv-surface)] text-white shadow-2xl"
+      aria-label="Open Coda chat"
       aria-haspopup="dialog"
       aria-expanded={false}
       onClick={() => setStarted(true)}
     >
-      <Bot aria-hidden="true" />
+      <CodaAvatar mood="idle" size={42} />
     </button>
   );
 }

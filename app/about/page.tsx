@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { profileImage, siteData } from '@/data/site';
 const notes = [
-  'I am Leonard Udoh, founder of LeonardX. I help businesses and creators turn digital ideas into clear, useful websites and software.',
+  'I am Leonard Udoh, founder of Braverton. I help businesses and creators turn digital ideas into clear, useful websites and software.',
   'My work combines thoughtful design, responsive development, and practical AI-assisted tools to solve real project needs.',
   'Whether you need a website concept, a guided software build, or a code review, we start by understanding your goals and agreeing on a clear scope.',
 ];
@@ -25,7 +25,7 @@ export default function AboutPage() {
         </div>
         <div className="about-copy">
           <div className="about-badge mb-4 inline-flex items-center gap-2 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-4 py-2 text-sm text-yellow-300">
-            <Sparkles size={16} /> About LeonardX
+            <Sparkles size={16} /> About Braverton
           </div>
           <h1 className="text-4xl font-black tracking-tight sm:text-6xl">Digital services built around what your business needs.</h1>
           <div className="about-notes mt-7 space-y-4 text-lg leading-8 text-zinc-300">

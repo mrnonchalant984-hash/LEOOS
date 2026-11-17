@@ -1,7 +1,7 @@
 import { createPublicMetadata } from '@/lib/seo';
 export const metadata = createPublicMetadata({
   title: "AI Software Development Blog",
-  description: "Read LeonardX articles about AI-assisted software development, website planning, freelance workflows and practical developer tools.",
+  description: "Read Braverton articles about AI-assisted software development, website planning, freelance workflows and practical developer tools.",
   path: "/blog",
   type: "website",
 });
