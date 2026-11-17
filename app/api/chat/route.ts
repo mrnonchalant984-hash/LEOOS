@@ -41,12 +41,13 @@ function inferProjectType(message: string): ProjectType | null {
 }
 
 function isExplicitBuildIntent(message: string) {
-  const asksToBuild = /\b(build|create|make|develop|generate|start|implement|code)\b/i.test(message);
+  // "I need the website; don't paste code here" asks for a deliverable.
+  // Only negate actual build/deploy verbs, not the word "code".
+  const asksToBuild = /\b(build|create|make|develop|generate|start|implement|need|want|looking for)\b/i.test(message);
   const namesProject = /\b(website|web\s?site|web\s?app|web\s?application|saas|game|platformer|racing|puzzle|browser\s?game|landing\s?page|portfolio|e-?commerce|marketplace|dashboard)\b/i.test(message);
-  const negatesAction = /\b(?:do not|don't|never|not)\b.{0,32}\b(?:build|create|make|develop|generate|start|implement|code)\b/i.test(message);
+  const negatesAction = /\b(?:do not|don't|never|not)\b.{0,32}\b(?:build|create|make|develop|generate|start|implement|deploy|publish|launch)\b/i.test(message);
   return asksToBuild && namesProject && !negatesAction;
 }
-
 function isRepositoryTask(message: string) {
   return /\b(github|git\s?hub|repository|repo)\b/i.test(message);
 }
@@ -208,27 +209,6 @@ export async function POST(req: NextRequest) {
       if (!customAgent) return NextResponse.json({ error: "Custom agent not found." }, { status: 404 });
       if (customAgent.allowed_tools.length && mode !== "tools") return NextResponse.json({ error: "This custom agent requires read-only tool mode." }, { status: 400 });
     }
-    const requestedProjectType = customAgent ? null : inferProjectType(message);
-    const webProjectRequest = requestedProjectType !== null && ['website', 'web_app', 'saas'].includes(requestedProjectType);
-    const negatesDeployment = /\b(?:do not|don't|never|not)\b.{0,32}\b(?:deploy|deployment|publish|launch|go live|put it online|make it live|host it)\b/i.test(message);
-    const explicitDeploymentIntent = Boolean(!customAgent && !negatesDeployment && /\b(deploy|deployment|publish|launch|go live|put it online|make it live|host it|deploy to production|production deployment)\b/i.test(message) && (webProjectRequest || requestedProjectType === 'game' || Boolean(project_id) || (!requestedProjectType && /\b(project|it|that|this|the site|the website)\b/i.test(message))));
-    const explicitImageIntent = mode === "normal" && !customAgent && !requestedToolName &&
-      requestsImageGeneration(message) && !explicitDeploymentIntent;
-    const explicitBuildIntent = Boolean(((webProjectRequest || requestedProjectType === 'game') && isExplicitBuildIntent(message) && !explicitImageIntent) || explicitDeploymentIntent);
-    const buildMode = Boolean(ctx && explicitBuildIntent && !customAgent);
-    const repositoryWorkflow = Boolean(ctx && !customAgent && isRepositoryTask(message));
-    const repositoryWriteWorkflow = Boolean(repositoryWorkflow && isRepositoryWriteIntent(message));
-    if (requestedWebSearch === true && (mode === 'tools' || buildMode || repositoryWorkflow)) {
-      return NextResponse.json({
-        error: "Grounded Web Search is available in Chat mode only. Turn off Web Search or switch out of authorized tool, build, and repository workflows.",
-      }, { status: 400 });
-    }
-    const webSearchRequested = mode !== 'tools' && (requestedWebSearch === true || shouldUseWebSearch(message));
-    if (mode === "tools" || requestedCustomAgentId || buildMode || repositoryWorkflow) {
-      if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });
-      const limited = await enforceUserRateLimit(ctx.user.id, requestedCustomAgentId ? 'leo-custom-agent-run' : buildMode ? 'leo-chat-build' : repositoryWorkflow ? 'leo-chat-repository' : 'leo-chat-tools', 10, 60);
-      if (limited) return limited;
-    }
     const db = ctx ? adminSupabase() : null;
     if (project_id !== null && (typeof project_id !== "string" || !PROJECT_ID_RE.test(project_id))) {
       return NextResponse.json({ error: "Invalid project ID." }, { status: 400 });
@@ -257,6 +237,43 @@ export async function POST(req: NextRequest) {
         assetId?: string;
         document_asset_ids?: string[];
       }>;
+    }
+    const recentUserMessages = history.slice(-12).filter((item) => item.role === "user");
+    const hasRecentBuildRequest = recentUserMessages.some((item) => isExplicitBuildIntent(item.content));
+    const shortBuildContinuation = hasRecentBuildRequest &&
+      /^(start|go ahead|proceed|continue|do it|build it|create it|deploy|publish|launch|put it live)[.!\s]*$/i.test(message.trim());
+    const requestedProjectType = customAgent ? null : inferProjectType(message) ??
+      [...recentUserMessages].reverse().map((item) => inferProjectType(item.content)).find((type): type is ProjectType => type !== null) ?? null;
+    const webProjectRequest = requestedProjectType !== null && ['website', 'web_app', 'saas'].includes(requestedProjectType);
+    const negatesDeployment = /\b(?:do not|don't|never|not)\b.{0,32}\b(?:deploy|deployment|publish|launch|go live|put it online|make it live|host it)\b/i.test(message);
+    const explicitDeploymentIntent = Boolean(!customAgent && !negatesDeployment &&
+      /\b(deploy|deployment|publish|launch|go live|put it online|make it live|host it|deploy to production|production deployment)\b/i.test(message) &&
+      (webProjectRequest || requestedProjectType === 'game' || Boolean(project_id) || hasRecentBuildRequest ||
+        (!requestedProjectType && /\b(project|it|that|this|the site|the website)\b/i.test(message))));
+    const explicitImageIntent = mode === "normal" && !customAgent && !requestedToolName &&
+      requestsImageGeneration(message) && !explicitDeploymentIntent;
+    const explicitBuildIntent = Boolean(((webProjectRequest || requestedProjectType === 'game') &&
+      (isExplicitBuildIntent(message) || shortBuildContinuation) && !explicitImageIntent) || explicitDeploymentIntent);
+    const repositoryWorkflow = Boolean(ctx && !customAgent && isRepositoryTask(message));
+    const repositoryWriteWorkflow = Boolean(repositoryWorkflow && isRepositoryWriteIntent(message));
+    if (requestedWebSearch === true && (mode === 'tools' || buildMode || repositoryWorkflow)) {
+      return NextResponse.json({
+        error: "Grounded Web Search is available in Chat mode only. Turn off Web Search or switch out of authorized tool, build, and repository workflows.",
+      }, { status: 400 });
+    }
+    const webSearchRequested = mode !== 'tools' && (requestedWebSearch === true || shouldUseWebSearch(message));
+    if (mode === "tools" || requestedCustomAgentId || buildMode || repositoryWorkflow) {
+      if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });
+      const limited = await enforceUserRateLimit(ctx.user.id, requestedCustomAgentId ? 'leo-custom-agent-run' : buildMode ? 'leo-chat-build' : repositoryWorkflow ? 'leo-chat-repository' : 'leo-chat-tools', 10, 60);
+      if (limited) return limited;
+    }
+    if (project_id !== null && (typeof project_id !== "string" || !PROJECT_ID_RE.test(project_id))) {
+      return NextResponse.json({ error: "Invalid project ID." }, { status: 400 });
+    }
+    if (ctx && db && project_id) {
+      const { data: project, error: projectError } = await db.from("projects").select("id").eq("id", project_id).eq("user_id", ctx.user.id).maybeSingle();
+      if (projectError) return NextResponse.json({ error: "Project context is temporarily unavailable." }, { status: 503 });
+      if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
     }
     const referencedDocumentIds = [...new Set([
       ...documentAssetIds,
