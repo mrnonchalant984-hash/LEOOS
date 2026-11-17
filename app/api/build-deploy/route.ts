@@ -674,10 +674,10 @@ export async function POST(req: NextRequest) {
     if (buildContext) {
       const status = buildContext.stage === 'deploying' ? 'deploy_failed' : 'build_failed';
       await recordBuildState(buildContext, status, status === 'deploy_failed' ? 'Deployment failed' : 'Build failed', {
-        error: mainDomainFailure || (githubFailure && githubOperation === 'create_repository' && [403, 404].includes(providerError.status)
+        error: mainDomainFailure || (githubFailure && githubOperation === 'create_repository' && [403, 404].includes(providerError?.status ?? 0)
           ? 'GitHub denied repository creation. The token needs Repository creation: write permission (fine-grained token) or repo scope (classic token), and must be authorized for the selected account.'
           : providerError?.message) || 'Build or deployment operation failed.',
-        message: mainDomainFailure || (githubFailure && githubOperation === 'create_repository' && [403, 404].includes(providerError.status)
+        message: mainDomainFailure || (githubFailure && githubOperation === 'create_repository' && [403, 404].includes(providerError?.status ?? 0)
           ? 'GitHub denied repository creation. Check the token permission and account authorization.'
           : providerError?.message) || 'Build or deployment operation failed.',
         diagnostics: githubDiagnostic,
