@@ -5,7 +5,7 @@ import { siteData } from '@/data/site';
 
 export const metadata = createPublicMetadata({
   title: "Website and Software Services",
-  description: "Explore LeonardX website concept, software development and code review services, with scope agreed before work begins.",
+  description: "Explore Braverton website concept, software development and code review services, with scope agreed before work begins.",
   path: "/services",
   type: "website",
 });
@@ -21,7 +21,7 @@ export default function ServicesPage() {
     <main className="mx-auto max-w-7xl px-4 py-16 sm:py-24">
       <section className="mx-auto max-w-3xl text-center">
         <p className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[.18em] text-yellow-300">
-          <Sparkles size={16} /> LeonardX services
+          <Sparkles size={16} /> Braverton services
         </p>
         <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-6xl">
           Practical digital services for your next step.
@@ -81,7 +81,7 @@ export default function ServicesPage() {
           Tell us what you’re trying to achieve and we’ll help you choose a sensible starting point.
         </p>
         <Link href="/contact" className="mt-6 inline-flex items-center gap-2 rounded-xl border border-white/20 px-5 py-3 font-semibold hover:border-yellow-300">
-          Contact LeonardX <ArrowRight size={16} />
+          Contact Braverton <ArrowRight size={16} />
         </Link>
       </section>
     </main>

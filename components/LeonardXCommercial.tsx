@@ -13,7 +13,7 @@ const sceneTitles = [
   'Watch it build.',
   'One idea. Any product.',
   'Live in minutes.',
-  'LeonardX',
+  'Braverton',
 ];
 
 function TypedCopy({ text, reducedMotion }: { text: string; reducedMotion: boolean }) {
@@ -68,8 +68,8 @@ export function LeonardXCommercial() {
   }
 
   return (
-    <section className={styles.section} aria-label="LeonardX product commercial">
-      <div className={styles.player} role="region" aria-label="LeonardX 36-second animated product commercial">
+    <section className={styles.section} aria-label="Braverton product commercial">
+      <div className={styles.player} role="region" aria-label="Braverton 36-second animated product commercial">
         <div className={styles.screen}>
           <div className={styles.scene} key={activeScene}>
             {activeScene === 0 && (
@@ -121,7 +121,7 @@ export function LeonardXCommercial() {
                 <h2>{sceneTitles[4]}</h2>
                 <div className={styles.liveAddress}>
                   <span className={styles.addressDot} aria-hidden="true" />
-                  <code>your-project.leonardx.app</code>
+                  <code>your-project.example</code>
                   <span className={styles.liveBadge}><i /> Live</span>
                 </div>
               </div>
@@ -129,7 +129,7 @@ export function LeonardXCommercial() {
 
             {activeScene === 5 && (
               <div className={styles.endScene}>
-                <p className={styles.wordmark}>LeonardX</p>
+                <p className={styles.wordmark}>Braverton</p>
                 <p className={styles.tagline}>Describe it. Build it. Launch it.</p>
                 <Link className={styles.cta} href="/auth?mode=signup">Start your first project</Link>
               </div>

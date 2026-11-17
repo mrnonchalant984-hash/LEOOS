@@ -1,7 +1,7 @@
 import { createPublicMetadata } from '@/lib/seo';
 export const metadata = createPublicMetadata({
   title: 'Pricing',
-  description: "Compare LeonardX software workspace plans, prepaid billing periods and the project tools included in each plan.",
+  description: "Compare Braverton software workspace plans, prepaid billing periods and the project tools included in each plan.",
   path: "/pricing",
   type: "website",
 });

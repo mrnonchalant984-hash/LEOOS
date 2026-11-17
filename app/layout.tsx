@@ -19,7 +19,7 @@ import {
 } from '@/lib/seo';
 
 export const viewport: Viewport = {
-  themeColor: '#F8F9FA',
+  themeColor: '#080810',
   colorScheme: 'light dark',
   width: 'device-width',
   initialScale: 1,
@@ -30,9 +30,10 @@ export const metadata: Metadata = {
   applicationName: SITE_NAME,
   title: {
     default: SITE_TITLE,
-    template: '%s | LeonardX',
+    template: '%s | Braverton',
   },
   description: SITE_DESCRIPTION,
+  keywords: ['Braverton', 'AI software development', 'build apps with AI', 'Coda AI assistant', 'web development Nigeria', 'AI platform Africa'],
   category: 'technology',
   authors: [{ name: SITE_NAME }, { name: 'Leonard Udoh' }],
   creator: SITE_NAME,
@@ -49,9 +50,9 @@ export const metadata: Metadata = {
     },
   },
   icons: {
-    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }, { url: '/favicon.ico', rel: 'icon' }],
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
     shortcut: '/favicon.svg',
-    apple: [{ url: '/leonardx-logo.svg', type: 'image/svg+xml' }],
+    apple: [{ url: '/braverton-logo.svg', type: 'image/svg+xml' }],
   },
   manifest: '/manifest.webmanifest',
   openGraph: {
@@ -80,9 +81,12 @@ const organizationSchema = {
   '@type': 'Organization',
   '@id': SITE_ORIGIN + '/#organization',
   name: SITE_NAME,
-  alternateName: ['LEO OS', 'Leonard X'],
+  description: 'AI-assisted software creation platform for building websites, web apps and software.',
+  areaServed: ['NG', 'Africa'],
+  contactPoint: { '@type': 'ContactPoint', contactType: 'customer support', url: SITE_ORIGIN + '/contact' },
+  alternateName: ['Braverton OS'],
   url: SITE_ORIGIN + '/',
-  logo: SITE_ORIGIN + '/leonardx-logo.svg',
+  logo: SITE_ORIGIN + '/braverton-logo.svg',
   founder: { '@type': 'Person', name: 'Leonard Udoh' },
 };
 
@@ -101,6 +105,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
         <script dangerouslySetInnerHTML={{ __html: "try{var t=localStorage.getItem('leonardx-theme');if(t==='dark'){document.documentElement.dataset.theme='dark';}else{document.documentElement.dataset.theme='light';}}catch(e){document.documentElement.dataset.theme='light';}" }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(organizationSchema) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(websiteSchema) }} />

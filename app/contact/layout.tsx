@@ -1,7 +1,7 @@
 import { createPublicMetadata } from '@/lib/seo';
 export const metadata = createPublicMetadata({
   title: 'Contact',
-  description: "Contact LeonardX about the platform, website and software services, developer tools, support or partnerships.",
+  description: "Contact Braverton about the platform, website and software services, developer tools, support or partnerships.",
   path: "/contact",
   type: "website",
 });

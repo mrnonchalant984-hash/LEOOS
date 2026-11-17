@@ -1,6 +1,6 @@
-# LeonardX — LeoOS platform
+# Braverton — AI software creation platform
 
-LeonardX is a software-services and LeoOS product platform with project demos, authenticated workspaces, developer APIs, billing, and integrations.
+Braverton is an AI-assisted software creation platform with project demos, authenticated workspaces, developer APIs, billing, and integrations.
 
 ## Added/connected
 - Owner/founder enforcement for `leonardudoh5@gmail.com` on the backend.
@@ -28,9 +28,9 @@ LeonardX is a software-services and LeoOS product platform with project demos, a
 
 ## Important
 A successful frontend payment redirect never unlocks a plan by itself. Subscription and credits are granted by the verified Paystack webhook. Owner access is checked against the authenticated account and the server-side owner email.
-## Leo AI welcome + live admin usage analytics
+## Coda assistant experience + live admin usage analytics
 
-This upgrade adds a personalized Leo AI opening state with the signed-in user's first name, a glowing Leo bubble, and quick actions for brainstorming, creating, deploying, fixing, and coding.
+This upgrade adds a personalized Coda opening state with the signed-in user's first name, a glowing Leo bubble, and quick actions for brainstorming, creating, deploying, fixing, and coding.
 
 It also adds the `ai_usage` Supabase table. Chat requests record provider usage, while feature credit consumption records credits used. The owner admin dashboard polls the protected analytics endpoint every 5 seconds and shows total AI tokens, credits used, request count, per-feature usage, and recent usage.
 
@@ -38,7 +38,7 @@ Run the updated `supabase/schema.sql` in Supabase before using the analytics das
 
 
 
-## Leo OS client builder extensions
+## Braverton client builder extensions
 - `/setup` — 20-type onboarding wizard with automatic country/timezone/currency detection.
 - `/setup/keys` — explains every public/secret integration key and why it is required.
 - `/payment/manual` — Email manual payment request flow when the client explicitly chooses manual payment.
@@ -47,7 +47,7 @@ Run the updated `supabase/schema.sql` in Supabase before using the analytics das
 - Google Search Console/GA4 automation is optional and requires Google API credentials; the app does not fabricate verification or analytics data.
 
 
-## LEO OS v2.0 production integrations
+## Braverton production integrations
 
 - Client-builder deployments create/verify a Vercel project and production deployment before reporting success.
 - Client environment variables are separated into public config and server secrets; secrets are never written to generated source.
@@ -126,7 +126,7 @@ Google sign-in is initiated from `/auth` and returns through `/auth/callback`. T
 
 The app verifies the returned Supabase session before setting its secure authentication cookies. If Google is not enabled in Supabase, the Google button cannot complete sign-in.
 
-### LeonardX MCP connection
+### Braverton MCP connection
 
 The deployed Streamable HTTP endpoint is `https://leoos-omega.vercel.app/mcp`. Clients authenticate through LeonardX's OAuth 2.1 authorization-code flow with PKCE; do not create or share API keys. The initial authorization can grant read-only access. Approving `mcp:write` additionally exposes project creation/rename, source-file saving, and plan-limited build/deploy tools. Reconnect an existing MCP client to review and grant the write scope.
 

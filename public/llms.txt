@@ -1,19 +1,29 @@
-# LeonardX
+# Braverton
 
-LeonardX is an AI-assisted software creation platform for planning, building, reviewing and managing websites, web apps and software projects.
+> Braverton is an AI-assisted software creation platform built by Leonard Udoh. It gives developers and creators a workspace to plan, build, test, and deploy websites, web apps, and software — from idea to production.
 
-## Public pages
-- https://leoos-omega.vercel.app/
-- https://leoos-omega.vercel.app/pricing
-- https://leoos-omega.vercel.app/leo-ai
-- https://leoos-omega.vercel.app/developers
-- https://leoos-omega.vercel.app/developers/docs
-- https://leoos-omega.vercel.app/docs
-- https://leoos-omega.vercel.app/templates
-- https://leoos-omega.vercel.app/tutorials
-- https://leoos-omega.vercel.app/resources
-- https://leoos-omega.vercel.app/integrations
-- https://leoos-omega.vercel.app/blog
+## What Braverton does
 
-## Indexing
-The XML sitemap is available at https://leoos-omega.vercel.app/sitemap.xml. Respect robots.txt and the canonical URL declared by each page.
+- **Coda**: An AI assistant that turns plain-language descriptions into structured build plans and coordinates development
+- **Braverton OS**: An AI workspace combining project management, agent assistance, and deployment
+- **BraverCode**: A developer tool and VS Code extension for AI-assisted coding
+- **Services**: Professional services including AI Mockups, Code Reviews, and custom software builds
+- **Integrations**: Vercel, Supabase, GitHub, Google Gemini, Paystack
+
+## Who it is for
+
+Developers, indie builders, and businesses in Nigeria and Africa who want to go from idea to working software.
+
+## Key pages
+
+- Homepage: https://leoos-omega.vercel.app/
+- Services: https://leoos-omega.vercel.app/services
+- Pricing: https://leoos-omega.vercel.app/pricing
+- Coda AI: https://leoos-omega.vercel.app/coda
+- Developer docs: https://leoos-omega.vercel.app/docs
+- About: https://leoos-omega.vercel.app/about
+- Contact: https://leoos-omega.vercel.app/contact
+
+## Founder
+
+Leonard Udoh — developer, founder, building Braverton in public.
