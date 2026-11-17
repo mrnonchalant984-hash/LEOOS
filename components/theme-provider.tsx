@@ -5,7 +5,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExte
 type Theme = 'light' | 'dark';
 type ThemeContextValue = { theme: Theme; toggleTheme: () => void; setTheme: (theme: Theme) => void };
 const ThemeContext = createContext<ThemeContextValue | null>(null);
-const STORAGE_KEY = 'leonardx-theme';
+const STORAGE_KEY = 'braverton-theme';
+const LEGACY_STORAGE_KEY = 'leonardx-theme';
 const THEME_CHANGE_EVENT = 'leonardx-theme-change';
 let currentTheme: Theme | null = null;
 
@@ -15,7 +16,7 @@ function applyTheme(theme: Theme) {
 
 function readStoredTheme(): Theme {
   try {
-    return window.localStorage.getItem(STORAGE_KEY) === 'dark' ? 'dark' : 'light';
+    return (window.localStorage.getItem(STORAGE_KEY) || window.localStorage.getItem(LEGACY_STORAGE_KEY)) === 'dark' ? 'dark' : 'light';
   } catch {
     return 'light';
   }
@@ -33,7 +34,7 @@ function getServerThemeSnapshot(): Theme {
 function subscribeToTheme(onChange: () => void) {
   const handleLocalChange = () => onChange();
   const handleStorageChange = (event: StorageEvent) => {
-    if (event.key !== STORAGE_KEY && event.key !== null) return;
+    if (event.key !== STORAGE_KEY && event.key !== LEGACY_STORAGE_KEY && event.key !== null) return;
     currentTheme = readStoredTheme();
     applyTheme(currentTheme);
     onChange();

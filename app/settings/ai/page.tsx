@@ -5,7 +5,7 @@ import { AIProviderStatus } from '@/components/AIProviderStatus';
 import { getUserAccess } from '@/lib/auth';
 import { createNoIndexMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = { ...createNoIndexMetadata(), title: 'AI provider status | LeonardX', description: 'Inspect server-reported AI provider configuration status.' };
+export const metadata: Metadata = { ...createNoIndexMetadata(), title: 'AI provider status | Braverton', description: 'Inspect server-reported AI provider configuration status.' };
 export const dynamic = 'force-dynamic';
 
 export default async function AIProviderSettingsPage() {

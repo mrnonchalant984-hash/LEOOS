@@ -1,7 +1,7 @@
 import { createPublicMetadata } from '@/lib/seo';
 export const metadata = createPublicMetadata({
-  title: "LeonardX Webhooks",
-  description: "Learn how LeonardX webhooks report supported project, deployment and API usage events to connected applications.",
+  title: "Braverton Webhooks",
+  description: "Learn how Braverton webhooks report supported project, deployment and API usage events to connected applications.",
   path: "/webhooks",
   type: "website",
 });

@@ -6,12 +6,12 @@ import { IntegrationStudio } from '@/components/IntegrationStudio';
 
 export const metadata = createPublicMetadata({
   title: 'TypeScript SDK',
-  description: "Install and use the LeonardX TypeScript SDK to authenticate and work with supported API projects and usage.",
+  description: "Install and use the Braverton TypeScript SDK to authenticate and work with supported API projects and usage.",
   path: "/docs/sdk",
   type: "website",
 });
 export default function SDK() {
-  return <LEOAppShell title="SDK" subtitle="Typed client for supported LeonardX API operations.">
+  return <LEOAppShell title="SDK" subtitle="Typed client for supported Braverton API operations.">
     <div className="page-hero">
       <span className="mini-label">@leo-os/sdk · v2.0.0 · npm package</span>
       <h2>Use the API from typed TypeScript.</h2>

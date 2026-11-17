@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'LeoOS Demo Work — LeonardX',
-  description: 'Explore software, web development and digital product demos built with LeoOS.',
+  title: 'Braverton Demo Work — Braverton',
+  description: 'Explore software, web development and digital product demos built with Braverton.',
   alternates: { canonical: '/portfolio' },
-  openGraph: { title: 'LeoOS Demo Work — LeonardX', description: 'Explore software, web development and digital product demos built with LeoOS.', url: '/portfolio', type: 'website' },
-  twitter: { card: 'summary_large_image', title: 'LeoOS Demo Work — LeonardX', description: 'Explore software, web development and digital product demos built with LeoOS.' },
+  openGraph: { title: 'Braverton Demo Work — Braverton', description: 'Explore software, web development and digital product demos built with Braverton.', url: '/portfolio', type: 'website' },
+  twitter: { card: 'summary_large_image', title: 'Braverton Demo Work — Braverton', description: 'Explore software, web development and digital product demos built with Braverton.' },
 };
 
 export default function PublicPageLayout({ children }: Readonly<{ children: React.ReactNode }>) { return children; }
