@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 
 function safeNext(value: string | null) {
-  return value?.startsWith('/') && !value.startsWith('//') && !value.includes('\\\\')
+  return value?.startsWith('/') && !value.startsWith('//') && !value.includes('\\')
     ? value
     : '/dashboard';
 }
