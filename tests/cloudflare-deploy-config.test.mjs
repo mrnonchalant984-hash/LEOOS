@@ -8,21 +8,22 @@ test('Cloudflare deployment does not upload source maps over the Worker size lim
   assert.equal(config.upload_source_maps, false);
 });
 
-test('Cloudflare uses the OpenNext worker build and deploy commands', async () => {
+test('Workers Builds production build creates the OpenNext Worker before Wrangler preview', async () => {
   const config = JSON.parse(await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
   const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-  const buildScript = await readFile(new URL('../scripts/build-cloudflare.mjs', import.meta.url), 'utf8');
+  const productionBuild = await readFile(new URL('../scripts/build-production.mjs', import.meta.url), 'utf8');
+  const cloudflareBuild = await readFile(new URL('../scripts/build-cloudflare.mjs', import.meta.url), 'utf8');
 
   assert.equal(config.main, '.open-next/worker.js');
   assert.deepEqual(config.assets, { directory: '.open-next/assets', binding: 'ASSETS' });
+  assert.equal(packageJson.scripts.build, 'node scripts/build-production.mjs');
   assert.equal(packageJson.scripts['cloudflare:build'], 'node scripts/build-cloudflare.mjs');
   assert.equal(packageJson.scripts['cloudflare:deploy'], 'opennextjs-cloudflare deploy');
   assert.equal(packageJson.scripts['cloudflare:preview'], 'npm run cloudflare:build && opennextjs-cloudflare preview');
   assert.equal(packageJson.devDependencies['@opennextjs/cloudflare'], '1.19.11');
-  assert.match(buildScript, /requestedHeapMb = 3072/);
-  assert.match(buildScript, /--max-old-space-size=\$\{requestedHeapMb\}/);
-  assert.match(buildScript, /\['run', 'typecheck'\]/);
-  assert.match(buildScript, /\['exec', '--', 'opennextjs-cloudflare', 'build'\]/);
+  assert.match(productionBuild, /\['exec', '--', 'next', 'build'\]/);
+  assert.match(productionBuild, /\['exec', '--', 'opennextjs-cloudflare', 'build', '--skipNextBuild'\]/);
+  assert.match(cloudflareBuild, /\['run', 'build'\]/);
 });
 
 test('Cloudflare Worker Previews include the Images API binding', async () => {
