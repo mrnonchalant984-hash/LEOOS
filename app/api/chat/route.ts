@@ -254,6 +254,7 @@ export async function POST(req: NextRequest) {
       requestsImageGeneration(message) && !explicitDeploymentIntent;
     const explicitBuildIntent = Boolean(((webProjectRequest || requestedProjectType === 'game') &&
       (isExplicitBuildIntent(message) || shortBuildContinuation) && !explicitImageIntent) || explicitDeploymentIntent);
+    const buildMode = Boolean(ctx && explicitBuildIntent && !customAgent);
     const repositoryWorkflow = Boolean(ctx && !customAgent && isRepositoryTask(message));
     const repositoryWriteWorkflow = Boolean(repositoryWorkflow && isRepositoryWriteIntent(message));
     if (requestedWebSearch === true && (mode === 'tools' || buildMode || repositoryWorkflow)) {
