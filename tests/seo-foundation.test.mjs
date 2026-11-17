@@ -24,7 +24,8 @@ test('sitemap lists real public pages and excludes private app surfaces', () => 
   const sitemap = read('../app/sitemap.ts');
   const paths = [...sitemap.matchAll(/path: '([^']+)'/g)].map((match) => match[1]);
   assert.ok(paths.includes('/'));
-  assert.ok(paths.includes('/leo-ai'));
+  assert.ok(paths.includes('/coda'));
+  assert.ok(!paths.includes('/leo-ai'));
   assert.ok(paths.includes('/pricing'));
   assert.ok(paths.includes('/blog'));
   assert.ok(paths.includes('/projects'));
@@ -54,13 +55,15 @@ test('robots exposes the canonical sitemap and blocks API endpoints while noinde
   assert.match(read('../lib/seo.ts'), /index: false, follow: false/);
 });
 
-test('homepage and Leo AI landing page have visible FAQ content and FAQ schema', () => {
+test('homepage and Coda landing page have visible FAQ content and FAQ schema', () => {
   const home = read('../app/page.tsx');
-  const leo = read('../app/leo-ai/page.tsx');
+  const coda = read('../app/leo-ai/page.tsx');
+  const codaRoute = read('../app/coda/page.tsx');
   assert.match(home, /FAQPage/);
   assert.match(home, /COMMON QUESTIONS/);
-  assert.match(leo, /FAQPage/);
-  assert.match(leo, /Frequently asked questions/);
+  assert.match(codaRoute, /CodaPage/);
+  assert.match(coda, /FAQPage/);
+  assert.match(coda, /Frequently asked questions/);
   assert.match(leo, /path: "\/leo-ai"/);
   assert.match(read('../app/blog/freelancers-ai-10x/page.tsx'), /BlogPosting/);
 });
