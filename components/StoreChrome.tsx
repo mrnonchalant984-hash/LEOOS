@@ -29,9 +29,9 @@ function StoreHeader() {
     <div className="bg-[#201a14] px-4 py-2 text-center text-xs font-medium tracking-wide text-amber-100">Shop from independent African sellers · Discover something good today</div>
     <header className="sticky top-0 z-40 border-b border-stone-200 bg-[#fffdf8]/95 shadow-sm backdrop-blur">
       <div className="mx-auto flex max-w-[1500px] items-center gap-4 px-4 py-3 sm:px-7">
-        <Link href="/store" className="flex shrink-0 items-center gap-2.5" aria-label="LeoX Market home">
+        <Link href="/store" className="flex shrink-0 items-center gap-2.5" aria-label="Braverton Market home">
           <span className="grid size-11 place-items-center rounded-2xl bg-[#eb6a2e] text-lg font-black text-white shadow-sm">LX</span>
-          <span className="leading-tight"><span className="block text-lg font-black tracking-tight text-stone-900">LeoX Market</span><span className="block text-[10px] font-semibold uppercase tracking-[.16em] text-stone-500">by LeonardX</span></span>
+          <span className="leading-tight"><span className="block text-lg font-black tracking-tight text-stone-900">Braverton Market</span><span className="block text-[10px] font-semibold uppercase tracking-[.16em] text-stone-500">by Braverton</span></span>
         </Link>
         <form action="/store" method="get" className="hidden min-w-0 flex-1 md:flex">
           <label htmlFor="market-search" className="sr-only">Search products</label>
@@ -69,7 +69,7 @@ const preservedThemePrefixes = [
 
 export function StoreChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || '/';
-  if (pathname === '/store' || pathname.startsWith('/store/')) return <div className="store-shell min-h-screen bg-[#f5f2ea] text-stone-900"><StoreHeader />{children}<footer className="mt-16 border-t border-stone-200 bg-[#201a14] px-5 py-9 text-sm text-amber-50"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5"><div><strong className="text-lg">LeoX Market</strong><p className="mt-1 text-xs text-amber-100/65">A marketplace from LeonardX · Made for discovery across Africa</p></div><nav className="flex flex-wrap gap-4 text-xs text-amber-100/75"><Link href="/store/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/support">Help</Link><Link href="/">LeonardX</Link></nav></div></footer></div>;
+  if (pathname === '/store' || pathname.startsWith('/store/')) return <div className="store-shell min-h-screen bg-[#f5f2ea] text-stone-900"><StoreHeader />{children}<footer className="mt-16 border-t border-stone-200 bg-[#201a14] px-5 py-9 text-sm text-amber-50"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5"><div><strong className="text-lg">Braverton Market</strong><p className="mt-1 text-xs text-amber-100/65">A marketplace from Braverton · Made for discovery across Africa</p></div><nav className="flex flex-wrap gap-4 text-xs text-amber-100/75"><Link href="/store/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/support">Help</Link><Link href="/">Braverton</Link></nav></div></footer></div>;
   const preserveExistingVisualSystem = preservedThemePrefixes.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
   return <div className="lx-route-scope" data-lx-theme-scope={preserveExistingVisualSystem ? 'preserve' : 'public'}><Header />{children}<GlobalLEOWidget /><Footer /></div>;
 }
