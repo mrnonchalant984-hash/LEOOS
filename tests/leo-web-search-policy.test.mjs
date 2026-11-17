@@ -33,7 +33,7 @@ test('Leo chat routes eligible normal-mode requests through Gemini grounded Goog
 });
 
 test('tool orchestration has a bounded text-only finalization and does not replay tools to recover final text', () => {
-  assert.match(provider, /const maxTurns = 5/);
+  assert.ok(provider.includes('const maxTurns = Math.max(1, Math.min(5, Math.trunc(request.maxToolTurns || 5)))'));
   assert.match(provider, /If the final permitted tool turn produced no user-facing answer/);
   assert.match(provider, /cannot re-run side effects because no function declarations are supplied/);
   assert.match(provider, /Gemini returned an empty response/);
