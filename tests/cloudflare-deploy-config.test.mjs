@@ -12,9 +12,11 @@ test('Workers Builds production build creates the OpenNext Worker before Wrangle
   const config = JSON.parse(await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
   const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
   const productionBuild = await readFile(new URL('../scripts/build-production.mjs', import.meta.url), 'utf8');
+  const nextConfig = await readFile(new URL('../next.config.js', import.meta.url), 'utf8');
   const cloudflareBuild = await readFile(new URL('../scripts/build-cloudflare.mjs', import.meta.url), 'utf8');
 
   assert.equal(config.main, '.open-next/worker.js');
+  assert.match(nextConfig, /output:\s*['\"]standalone['\"]/);
   assert.deepEqual(config.assets, { directory: '.open-next/assets', binding: 'ASSETS' });
   assert.equal(packageJson.scripts.build, 'node scripts/build-production.mjs');
   assert.equal(packageJson.scripts['cloudflare:build'], 'node scripts/build-cloudflare.mjs');
