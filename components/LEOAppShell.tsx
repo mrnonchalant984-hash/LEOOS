@@ -30,7 +30,7 @@ function getServerSidebarCollapsed() { return false; }
 type NavItem = readonly [string, string, typeof LayoutDashboard];
 const groups: { label: string; items: NavItem[] }[] = [
   { label: 'Workspace', items: [
-    ['Overview','/dashboard',LayoutDashboard], ['Projects','/projects',FolderKanban], ['Engineering','/engineering',Workflow], ['AI Studio','/studio',Image], ['Leo workspace','/app',Bot],
+    ['Overview','/dashboard',LayoutDashboard], ['Projects','/projects',FolderKanban], ['Engineering','/engineering',Workflow], ['AI Studio','/studio',Image], ['Coda workspace','/app',Bot],
     ['Agents','/agents',Boxes], ['Workflow studio','/workflows',GitBranch], ['Deployments','/deployments',GitBranch], ['Analytics','/analytics',BarChart3],
     ['Observability','/observability',Activity], ['System status','/status',Gauge],
   ] },
@@ -62,7 +62,7 @@ const publicDestinations = publicGroup.items.map(([label, href]) => [label, href
 
 type Destination = { label: string; href: string; group: string };
 
-export function LEOAppShell({ children, title = 'LeonardX', subtitle = 'Your software workspace' }: { children: React.ReactNode; title?: string; subtitle?: string }) {
+export function LEOAppShell({ children, title = 'Braverton', subtitle = 'Your software workspace' }: { children: React.ReactNode; title?: string; subtitle?: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -113,13 +113,13 @@ export function LEOAppShell({ children, title = 'LeonardX', subtitle = 'Your sof
   return <div className={`leo-app-shell ${collapsed ? 'leo-app-shell-collapsed' : ''}`} data-visual-identity={resolveVisualIdentity(pathname)}>
     <aside className={`leo-sidebar ${open ? 'leo-sidebar-open' : ''} ${collapsed ? 'leo-sidebar-collapsed' : ''}`}>
       <div className="leo-brand-row">
-        <Link href="/" className="leo-brand" aria-label="LeonardX home" onClick={() => setOpen(false)}>
-          <span className="leo-mark">LX</span><span className="leo-brand-copy"><strong>LEONARDX</strong><small>SOFTWARE PLATFORM</small></span>
+        <Link href="/" className="leo-brand" aria-label="Braverton home" onClick={() => setOpen(false)}>
+          <span className="leo-mark">B</span><span className="leo-brand-copy"><strong>Braverton</strong><small>SOFTWARE PLATFORM</small></span>
         </Link>
         <button className="icon-button mobile-only" onClick={() => setOpen(false)} aria-label="Close navigation"><X size={18}/></button>
       </div>
       <button className="command-button" type="button" onClick={openPalette} title="Search pages and actions"><Search size={15}/><span className="sidebar-label">Search workspace</span><kbd>Ctrl K</kbd></button>
-      <nav className="leo-nav" aria-label="LeonardX application navigation">
+      <nav className="leo-nav" aria-label="Braverton application navigation">
         {[...groups, ...(isOwner ? [adminGroup] : [])].map(group => <div className="leo-nav-group" key={group.label}>
           <p className="sidebar-label">{group.label}</p>
           {group.items.map(([label, href, Icon]) => {
@@ -138,7 +138,7 @@ export function LEOAppShell({ children, title = 'LeonardX', subtitle = 'Your sof
     <section className="leo-app-main">
       <header className="leo-topbar">
         <button className="icon-button mobile-only" onClick={() => setOpen(true)} aria-label="Open navigation"><Menu size={19}/></button>
-        <div className="topbar-page-context"><p className="eyebrow">LEONARDX <span>/</span> WORKSPACE</p><h1>{title}</h1><p>{subtitle}</p></div>
+        <div className="topbar-page-context"><p className="eyebrow">BRAVERTON <span>/</span> WORKSPACE</p><h1>{title}</h1><p>{subtitle}</p></div>
         <div className="topbar-actions">
           <div className="flex shrink-0 items-center gap-1 rounded-xl border border-white/10 bg-white/[.025] p-1" role="group" aria-label="Workspace mode">
             <Link href="/app" aria-current={chatModeActive ? 'page' : undefined} className={`rounded-lg px-2 py-1.5 text-[10px] font-semibold ${chatModeActive ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white'}`}>Chat</Link>
@@ -152,7 +152,7 @@ export function LEOAppShell({ children, title = 'LeonardX', subtitle = 'Your sof
       </header>
       <main className="leo-content">{children}</main>
     </section>
-    {paletteOpen && <div className="command-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setPaletteOpen(false); }}><section className="command-palette" role="dialog" aria-modal="true" aria-label="Search LeonardX" onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); (event.currentTarget.querySelector('.command-result') as HTMLButtonElement | null)?.focus(); } }}><div className="command-palette-search"><Search size={18}/><input autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="Search pages, tools, and settings…" aria-label="Search pages and tools"/><kbd>ESC</kbd></div><p className="command-section-label">NAVIGATION</p><div className="command-results">{results.map(item => <button className="command-result" key={`${item.label}:${item.href}`} onClick={() => navigate(item.href)}><span><small>{item.group}</small><strong>{item.label}</strong></span><code>{item.href}</code></button>)}{results.length === 0 && <div className="command-no-results">No matching pages. Try another search.</div>}</div><footer><span><kbd>↵</kbd> Open page</span><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>Esc</kbd> Close</span></footer></section></div>}
+    {paletteOpen && <div className="command-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setPaletteOpen(false); }}><section className="command-palette" role="dialog" aria-modal="true" aria-label="Search Braverton" onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); (event.currentTarget.querySelector('.command-result') as HTMLButtonElement | null)?.focus(); } }}><div className="command-palette-search"><Search size={18}/><input autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="Search pages, tools, and settings…" aria-label="Search pages and tools"/><kbd>ESC</kbd></div><p className="command-section-label">NAVIGATION</p><div className="command-results">{results.map(item => <button className="command-result" key={`${item.label}:${item.href}`} onClick={() => navigate(item.href)}><span><small>{item.group}</small><strong>{item.label}</strong></span><code>{item.href}</code></button>)}{results.length === 0 && <div className="command-no-results">No matching pages. Try another search.</div>}</div><footer><span><kbd>↵</kbd> Open page</span><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>Esc</kbd> Close</span></footer></section></div>}
   </div>;
 }
 
