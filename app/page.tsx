@@ -3,7 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowDown, ArrowRight, Bot, Boxes, Check, Code2, GitBranch, Globe2, Play, ShieldCheck, Sparkles, Terminal } from 'lucide-react';
 import { Reveal } from '@/components/Reveal';
-import BravertonEditorialHero from '@/components/LeonardXEditorialHero';
+import LeonardXEditorialHero from '@/components/LeonardXEditorialHero';
 import { LeonardXCommercial } from '@/components/LeonardXCommercial';
 import { siteData } from '@/data/site';
 import { JsonLd } from '@/components/JsonLd';
