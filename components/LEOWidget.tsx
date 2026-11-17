@@ -88,7 +88,7 @@ type ChatHistoryItem = { id: string; title: string; updatedAt: number };
 type MemoryItem = { id: string; memory: string; source?: string; created_at?: string };
 type RemotePairing = { id: string; created_device_name: string; paired_device_name?: string | null; status: "pending" | "paired" | "revoked" | "expired"; expires_at: string; paired_at?: string | null; last_seen_at?: string | null; created_at?: string };
 type RemoteEvent = { id: number; event_type: string; payload: { text?: string; [key: string]: unknown }; device_id: string; created_at: string };
-const LIVE_VOICE_SYSTEM_INSTRUCTION = "Direct Gemini Live is disabled until a secure server-side tool bridge is available; use the shared Leo orchestration endpoint.";
+const LIVE_VOICE_SYSTEM_INSTRUCTION = "Direct Gemini Live is disabled until a secure server-side tool bridge is available; use the shared Coda orchestration endpoint.";
 
 type VoiceStatus =
   | "Idle"
@@ -100,7 +100,7 @@ type VoiceStatus =
   | "Reconnecting"
   | "Error"
   | "Ended"
-  | "Leo Voice ready · tap to speak";
+  | "Coda Voice ready · tap to speak";
 type ToolOption = { name: string; description: string };
 type CustomAgentOption = { id: string; name: string; description: string; allowed_tools: string[] };
 type ModelOption = { id: string; name: string; provider: string; model: string; capabilities: string[]; configured: boolean };
@@ -525,7 +525,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
     try {
       const data = await remoteRequest("/api/remote/pairings", { method: "POST", body: JSON.stringify({ deviceName: `${navigator.platform || "Browser"} · Coda` }) });
       setRemoteCode(String(data.pairing?.code || ""));
-      setRemoteStatus("Code created. On your other device, sign in to the same Leo account and enter this code within five minutes.");
+      setRemoteStatus("Code created. On your other device, sign in to the same Coda account and enter this code within five minutes.");
       await loadRemotePairings();
     } catch (e) { setRemoteStatus(e instanceof Error ? e.message : "Could not create a pairing code."); }
     finally { setRemoteBusy(false); }
@@ -640,7 +640,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         setOfflineDraft(draft);
         setInput("");
         setMenu(false);
-        setError("You are offline. Your prompt is saved on this device and has not been sent to Leo.");
+        setError("You are offline. Your prompt is saved on this device and has not been sent to Coda.");
       } catch {
         setError("You are offline and this browser could not save the prompt locally. Copy it before leaving this page.");
       }
@@ -677,7 +677,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         });
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}));
-          throw new Error(failure.error || "Leo streaming is unavailable.");
+          throw new Error(failure.error || "Coda streaming is unavailable.");
         }
         if (!response.body) throw new Error("The streaming response was empty.");
         const reader = response.body.getReader();
@@ -699,11 +699,11 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
               streamedText += event.text;
               setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, content: streamedText } : item));
             } else if (event.type === "error") {
-              throw new Error(event.error || "Leo could not complete the response.");
+              throw new Error(event.error || "Coda could not complete the response.");
             } else if (event.type === "done") finished = true;
           }
         }
-        if (!streamedText.trim() && !aborter.signal.aborted) throw new Error("Leo returned an empty response.");
+        if (!streamedText.trim() && !aborter.signal.aborted) throw new Error("Coda returned an empty response.");
       } else {
         const r = await fetch("/api/chat", {
           method: "POST",
@@ -1208,7 +1208,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
       }
       if (session.mode === "gemini_turn_based") {
         setVoiceFallbackMode(true);
-        setVoiceStatus("Leo Voice ready · tap to speak");
+        setVoiceStatus("Coda Voice ready · tap to speak");
         return;
       }
       setVoiceFallbackMode(false);
@@ -1399,14 +1399,14 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         <button
           type="button"
           onClick={() => setMenu((v) => !v)}
-          aria-label="Open Leo tools"
+          aria-label="Open Coda tools"
           aria-expanded={menu}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[.04] hover:bg-white/[.08]"
         >
           <Plus size={20} />
         </button>
         {(selectedTool || selectedAgent) && <button type="button" onClick={() => { setSelectedTool(null); setSelectedAgent(null); }} aria-label="Remove selected tool or agent" className="flex max-w-[35%] shrink-0 items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-[10px] text-zinc-300"><Wrench size={11}/><span className="truncate">{selectedAgent ? `Agent: ${selectedAgent.name}` : selectedTool?.name}</span><X size={11}/></button>}
-        <label className="sr-only" htmlFor="leo-model-select">Leo model</label>
+        <label className="sr-only" htmlFor="leo-model-select">Coda model</label>
         <select id="leo-model-select" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)} disabled={!modelOptions.some((item) => item.configured)} title={modelLoadError || (!modelOptions.some((item) => item.configured) ? 'No configured text model is available.' : 'Choose the model for this message')} className="order-3 max-w-[150px] shrink-0 rounded-xl border border-white/10 bg-white/[.04] px-2 py-2 text-[10px] text-zinc-300 outline-none focus:border-[var(--gold)] disabled:opacity-50 sm:order-none">
           {modelOptions.some((item) => item.configured) ? <option value="auto">Auto</option> : <option value="unavailable">No model configured</option>}
           {modelOptions.filter((item) => item.configured).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.model}</option>)}
@@ -1423,7 +1423,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             if (e.key === "Enter") send();
           }}
           className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm outline-none placeholder:text-zinc-600"
-          placeholder={workspaceMode === "work" ? "Describe what you want Leo to do with your files…" : "Message Leo..."}
+          placeholder={workspaceMode === "work" ? "Describe what you want Coda to do with your files…" : "Message Coda..."}
         />
         <div className="relative">
         <button
@@ -1439,12 +1439,12 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             <Mic size={19} />
           )}
         </button>
-        {microphoneMenuOpen && <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 w-64 rounded-xl border border-white/15 bg-[#191919] p-2 shadow-2xl"><p className="px-2 py-1 text-[10px] uppercase tracking-[.14em] text-zinc-600">Microphone</p><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceInput(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Mic size={14}/> Dictate into composer</button><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceChat(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Volume2 size={14}/> Leo Voice conversation</button><div className="my-1 border-t border-white/10"/><p className="px-2 py-1 text-[10px] text-zinc-600">Audio input</p>{audioDevices.length ? audioDevices.map((device, index) => <button key={device.deviceId} type="button" onClick={() => setSelectedAudioDevice(device.deviceId)} className={`block w-full truncate rounded-lg px-2 py-1.5 text-left text-[11px] ${selectedAudioDevice === device.deviceId ? "bg-white/10 text-white" : "text-zinc-500 hover:bg-white/5"}`}>{device.label || `Microphone ${index + 1}`}</button>) : <p className="px-2 py-1 text-[11px] text-zinc-600">Device names appear after permission is granted.</p>}</div>}
+        {microphoneMenuOpen && <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 w-64 rounded-xl border border-white/15 bg-[#191919] p-2 shadow-2xl"><p className="px-2 py-1 text-[10px] uppercase tracking-[.14em] text-zinc-600">Microphone</p><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceInput(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Mic size={14}/> Dictate into composer</button><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceChat(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Volume2 size={14}/> Coda Voice conversation</button><div className="my-1 border-t border-white/10"/><p className="px-2 py-1 text-[10px] text-zinc-600">Audio input</p>{audioDevices.length ? audioDevices.map((device, index) => <button key={device.deviceId} type="button" onClick={() => setSelectedAudioDevice(device.deviceId)} className={`block w-full truncate rounded-lg px-2 py-1.5 text-left text-[11px] ${selectedAudioDevice === device.deviceId ? "bg-white/10 text-white" : "text-zinc-500 hover:bg-white/5"}`}>{device.label || `Microphone ${index + 1}`}</button>) : <p className="px-2 py-1 text-[11px] text-zinc-600">Device names appear after permission is granted.</p>}</div>}
         </div>
         <button
           type="button"
           onClick={startVoiceChat}
-          aria-label="Start Leo voice chat"
+          aria-label="Start Coda voice chat"
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 hover:bg-white/[.06]"
         >
           <Volume2 size={19} />
@@ -1648,7 +1648,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
         headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
         body: JSON.stringify({
           session_id: sidRef.current,
-          title: message.content.split(/\r?\n/).find(line => line.trim())?.replace(/^#+\s*/, "").slice(0, 100) || "Leo response",
+          title: message.content.split(/\r?\n/).find(line => line.trim())?.replace(/^#+\s*/, "").slice(0, 100) || "Coda response",
           content: message.content,
           format,
         }),
@@ -1743,7 +1743,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             <a href={m.image} target="_blank" rel="noreferrer" aria-label="Open saved generated image">
               <Image
                 src={m.image}
-                alt="Generated by Leo"
+                alt="Generated by Coda"
                 width={1200}
                 height={800}
                 unoptimized
@@ -1859,7 +1859,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
             </div>
           )}
           <div className="leo-chat-main relative mx-auto flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#0b0b0b]">
-            {remoteOpen && <div className="absolute inset-0 z-40 overflow-y-auto bg-[#080809]/95 p-4 backdrop-blur-xl md:p-7"><section className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-[#111113] p-5 shadow-2xl md:p-7"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-[var(--gold)]"><Laptop size={20}/><span className="text-xs font-bold uppercase tracking-[.18em]">Leo Remote</span></div><h2 className="mt-3 text-2xl font-black">Connect your devices</h2><p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">Sign in to the same Leo account on both devices. Create a one-time code on one device, then enter it on the other. Codes expire in five minutes.</p></div><button type="button" onClick={() => setRemoteOpen(false)} aria-label="Close remote devices" className="rounded-xl border border-white/10 p-2 text-zinc-400 hover:text-white"><X size={18}/></button></div>
+            {remoteOpen && <div className="absolute inset-0 z-40 overflow-y-auto bg-[#080809]/95 p-4 backdrop-blur-xl md:p-7"><section className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-[#111113] p-5 shadow-2xl md:p-7"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-[var(--gold)]"><Laptop size={20}/><span className="text-xs font-bold uppercase tracking-[.18em]">Coda Remote</span></div><h2 className="mt-3 text-2xl font-black">Connect your devices</h2><p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">Sign in to the same Coda account on both devices. Create a one-time code on one device, then enter it on the other. Codes expire in five minutes.</p></div><button type="button" onClick={() => setRemoteOpen(false)} aria-label="Close remote devices" className="rounded-xl border border-white/10 p-2 text-zinc-400 hover:text-white"><X size={18}/></button></div>
               <div className="mt-6 grid gap-4 md:grid-cols-2"><div className="rounded-2xl border border-white/10 bg-black/20 p-4"><h3 className="font-bold">Pair this device</h3><p className="mt-1 text-xs leading-5 text-zinc-500">Generate a short-lived code to enter on your other signed-in device.</p><button type="button" disabled={remoteBusy} onClick={() => void createRemotePairing()} className="mt-4 w-full rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">{remoteBusy ? "Please wait…" : "Generate pairing code"}</button>{remoteCode && <div className="mt-4 rounded-xl border border-[var(--gold)]/30 bg-[var(--gold)]/5 p-4 text-center"><p className="text-[10px] uppercase tracking-widest text-zinc-400">One-time pairing code</p><p className="my-2 font-mono text-2xl font-black tracking-[.22em] text-[var(--gold)]">{remoteCode}</p><button type="button" onClick={() => { void navigator.clipboard?.writeText(remoteCode); setRemoteStatus("Pairing code copied."); }} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-200">Copy code</button></div>}</div>
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4"><h3 className="font-bold">Join a device</h3><p className="mt-1 text-xs leading-5 text-zinc-500">Enter the code displayed on the other device. Both devices must belong to the same account.</p><form onSubmit={(event) => void claimRemotePairing(event)} className="mt-4 space-y-3"><input value={remoteClaimCode} onChange={(event) => setRemoteClaimCode(event.target.value.toUpperCase().replace(/[^A-F0-9]/g, "").slice(0, 10))} inputMode="text" autoComplete="one-time-code" maxLength={10} placeholder="10-character code" className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 font-mono text-sm uppercase tracking-widest outline-none focus:border-[var(--gold)]"/><button type="submit" disabled={remoteBusy || remoteClaimCode.length !== 10} className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-white disabled:opacity-40">Pair this device</button></form></div></div>
               {remoteStatus && <p role="status" aria-live="polite" className="mt-4 rounded-xl border border-white/10 bg-white/[.03] p-3 text-sm text-zinc-300">{remoteStatus}</p>}
@@ -1898,7 +1898,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
               chatPinnedToBottom.current = atBottom;
               setShowJumpToLatest(!atBottom && messages.length > 0);
             }} className="leo-chat-scroll relative min-h-0 flex-1 overflow-y-auto p-4 md:p-8">
-              {memoryOpen ? <div className="mx-auto max-w-2xl"><div className="mb-6 flex items-start gap-3"><div className="rounded-2xl bg-[var(--gold)]/10 p-3 text-[var(--gold)]"><Brain size={22}/></div><div><h1 className="text-2xl font-bold">Leo memory</h1><p className="mt-1 text-sm text-zinc-400">Saved notes help Leo retain useful context. Manage what is remembered.</p></div></div><form onSubmit={(event) => { event.preventDefault(); void addMemory(); }} className="mb-6 flex gap-2"><input value={memoryDraft} onChange={(event) => setMemoryDraft(event.target.value)} placeholder="Remember that I prefer…" maxLength={1000} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none focus:border-[var(--gold)]"/><button disabled={memoryBusy || !memoryDraft.trim()} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">Save</button></form>{memoryBusy ? <p className="text-sm text-zinc-500">Loading memories…</p> : memories.length ? <div className="space-y-2">{memories.map((memory) => <article key={memory.id} className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4"><div><p className="whitespace-pre-wrap text-sm text-zinc-200">{memory.memory}</p><p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-600">{memory.source || "saved"}</p></div><button type="button" onClick={() => void deleteMemory(memory.id)} className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-300" aria-label="Delete memory"><Trash size={15}/></button></article>)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center"><Bookmark className="mx-auto mb-3 text-zinc-500"/><p className="text-sm text-zinc-300">No saved memories yet</p><p className="mt-1 text-xs text-zinc-500">Add preferences, project context or instructions you want to keep.</p></div>}</div> : messages.length === 0 ? (
+              {memoryOpen ? <div className="mx-auto max-w-2xl"><div className="mb-6 flex items-start gap-3"><div className="rounded-2xl bg-[var(--gold)]/10 p-3 text-[var(--gold)]"><Brain size={22}/></div><div><h1 className="text-2xl font-bold">Coda memory</h1><p className="mt-1 text-sm text-zinc-400">Saved notes help Coda retain useful context. Manage what is remembered.</p></div></div><form onSubmit={(event) => { event.preventDefault(); void addMemory(); }} className="mb-6 flex gap-2"><input value={memoryDraft} onChange={(event) => setMemoryDraft(event.target.value)} placeholder="Remember that I prefer…" maxLength={1000} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none focus:border-[var(--gold)]"/><button disabled={memoryBusy || !memoryDraft.trim()} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">Save</button></form>{memoryBusy ? <p className="text-sm text-zinc-500">Loading memories…</p> : memories.length ? <div className="space-y-2">{memories.map((memory) => <article key={memory.id} className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4"><div><p className="whitespace-pre-wrap text-sm text-zinc-200">{memory.memory}</p><p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-600">{memory.source || "saved"}</p></div><button type="button" onClick={() => void deleteMemory(memory.id)} className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-300" aria-label="Delete memory"><Trash size={15}/></button></article>)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center"><Bookmark className="mx-auto mb-3 text-zinc-500"/><p className="text-sm text-zinc-300">No saved memories yet</p><p className="mt-1 text-xs text-zinc-500">Add preferences, project context or instructions you want to keep.</p></div>}</div> : messages.length === 0 ? (
                 <div className="mx-auto flex min-h-[52vh] max-w-2xl flex-col justify-center py-10 text-center">
                   <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--gold)]/40 text-[var(--gold)]">
                     <Bot size={22} />
@@ -1932,7 +1932,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
                   <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border border-[var(--gold)]/30 bg-[var(--gold)]/10">
                     <div className="h-14 w-14 rounded-full bg-[var(--gold)]/60 blur-sm" />
                   </div>
-                  <h2 className="mt-6 text-2xl font-black">Leo Voice</h2>
+                  <h2 className="mt-6 text-2xl font-black">Coda Voice</h2>
                   <p className="mt-2 text-sm text-zinc-500">{voiceStatus}</p>
                   <div className="mt-6 flex items-center justify-center gap-2">
                     <label className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-zinc-400">
@@ -1997,7 +1997,7 @@ export function LEOWidget({ full = false, initialSessionId = "" }: { full?: bool
               <b>CODA</b>
               {platformCredits !== null && <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] text-zinc-400" aria-live="polite">{platformCredits} platform credits</span>}
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Close Leo">
+            <button onClick={() => setOpen(false)} aria-label="Close Coda">
               <X size={18} />
             </button>
           </header>
