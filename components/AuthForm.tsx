@@ -161,17 +161,15 @@ export function AuthForm() {
       if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
         throw new Error('Authentication is not configured yet. Please contact the platform owner.');
       }
-      const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
       const requestedNext = safeInternalNext(new URLSearchParams(window.location.search).get('next'));
       const next = mode === 'signup' && storeSignup
         ? storeDestination(storeAccountType)
         : requestedNext ?? '/dashboard';
-      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo, queryParams: { access_type: 'offline', prompt: 'select_account' } },
-      });
-      if (error) throw error;
+      // Start OAuth on the server so the PKCE verifier is stored in the
+      // same cookie jar that the server callback uses to exchange the code.
+      const startUrl = new URL('/api/auth/google/start', window.location.origin);
+      startUrl.searchParams.set('next', next);
+      window.location.assign(startUrl.toString());
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Google sign-in could not be started.');
       setStatusError(true);
