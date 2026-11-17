@@ -708,26 +708,34 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         const decoder = new TextDecoder();
         let buffer = "";
         let streamedText = "";
-        let finished = false;
-        while (!finished) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const frames = buffer.split("\n\n");
-          buffer = frames.pop() || "";
-          for (const frame of frames) {
-            const line = frame.split("\n").find((part) => part.startsWith("data: "));
-            if (!line) continue;
-            const event = JSON.parse(line.slice(6)) as { type?: string; text?: string; error?: string };
-            if (event.type === "delta" && typeof event.text === "string") {
-              streamedText += event.text;
-              setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, content: streamedText } : item));
-            } else if (event.type === "error") {
-              throw new Error(event.error || "Coda could not complete the response.");
-            } else if (event.type === "done") finished = true;
+        let receivedDone = false;
+        const consumeFrame = (frame: string) => {
+          const line = frame.split(/\r?\n/).find((part) => part.startsWith("data: "));
+          if (!line) return;
+          const event = JSON.parse(line.slice(6)) as { type?: string; text?: string; error?: string };
+          if (event.type === "delta" && typeof event.text === "string") {
+            streamedText += event.text;
+            setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, content: streamedText } : item));
+          } else if (event.type === "error") {
+            throw new Error(event.error || "Leo could not complete the response.");
+          } else if (event.type === "done") {
+            receivedDone = true;
           }
+        };
+        let readerDone = false;
+        while (!readerDone && !receivedDone) {
+          const { value, done } = await reader.read();
+          readerDone = done;
+          buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+          const frames = buffer.split(/\r?\n\r?\n/);
+          buffer = frames.pop() || "";
+          for (const frame of frames) consumeFrame(frame);
         }
-        if (!streamedText.trim() && !aborter.signal.aborted) throw new Error("Coda returned an empty response.");
+        if (!receivedDone && buffer.trim()) consumeFrame(buffer);
+        if (!aborter.signal.aborted && !receivedDone) {
+          throw new Error("Leo's response stream ended before completion. Please retry.");
+        }
+        if (!streamedText.trim() && !aborter.signal.aborted) throw new Error("Leo returned an empty response.");
       } else {
         const r = await fetch("/api/chat", {
           method: "POST",
