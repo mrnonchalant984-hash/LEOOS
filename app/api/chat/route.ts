@@ -648,7 +648,7 @@ export async function POST(req: NextRequest) {
           executeTool: available.execute,
           maxToolCalls: selectedTool ? 1 : 6,
           ...(selectedTool ? { requiredToolName: selectedTool.name } : {}),
-        }), undefined, { shouldFallbackOnError: () => !request.signal?.aborted }));
+        }), undefined, { shouldFallbackOnError: () => !request.signal?.aborted });
         const response = outcome.result;
         reply = response.text || "I could not generate a reply.";
         usage = response.usage;
