@@ -1,6 +1,7 @@
 import { createPublicMetadata } from '@/lib/seo';
 import Link from 'next/link';
 import { ArrowRight, Bot, Code2, Globe, Workflow, ShieldCheck, Sparkles } from 'lucide-react';
+import { CodaAvatar } from '@/components/CodaAvatar';
 
 export const metadata = createPublicMetadata({
   title: 'Meet Coda',
@@ -30,7 +31,7 @@ export default function CodaAIPage() {
       <div className="leo-ai-hero-copy">
         <p className="leo-ai-eyebrow"><span><Sparkles size={15}/></span> AI assistant for building software</p>
         <h1>Meet Coda.<br/><em>Make the work move.</em></h1>
-        <p className="leo-ai-lead">Turn your ideas into structured project work. Coda helps you plan, coordinate specialist tasks, work with project context and verify progress inside LeonardX.</p>
+        <p className="leo-ai-lead">Turn your ideas into structured project work. Coda helps you plan, coordinate specialist tasks, work with project context and verify progress inside Braverton.</p>
         <div className="leo-ai-actions">
           <Link href="/app" className="leo-ai-primary">Open Coda <ArrowRight size={17}/></Link>
           <Link href="/pricing" className="leo-ai-secondary">Explore plans</Link>
@@ -38,7 +39,7 @@ export default function CodaAIPage() {
         <div className="leo-ai-proof"><span><Bot size={15}/> Project-aware assistance</span><span><ShieldCheck size={15}/> Review before action</span></div>
       </div>
       <div className="leo-ai-product-card" aria-label="Coda workflow overview">
-        <div className="leo-ai-card-head"><span className="leo-ai-avatar"><Bot size={21}/></span><div><strong>Coda</strong><small>Software workspace assistant</small></div><span className="leo-ai-online"><i/> READY</span></div>
+        <div className="leo-ai-card-head"><span className="leo-ai-avatar"><CodaAvatar mood="default" size={36}/></span><div><strong>Coda</strong><small>Software workspace assistant</small></div><span className="leo-ai-online"><i/> READY</span></div>
         <div className="leo-ai-card-message"><small>YOUR IDEA</small><p>Build a customer portal with account access, project tracking and a responsive dashboard.</p></div>
         <div className="leo-ai-card-step"><span>01</span><div><strong>Understand the request</strong><small>Requirements and project context</small></div><span className="leo-ai-step-state">Ready</span></div>
         <div className="leo-ai-card-step"><span>02</span><div><strong>Coordinate the work</strong><small>Design, engineering and testing</small></div><span className="leo-ai-step-state">Planned</span></div>
@@ -59,6 +60,6 @@ export default function CodaAIPage() {
 
     <section className="leo-ai-section leo-ai-faq"><div className="leo-ai-section-heading"><span>COMMON QUESTIONS</span><h2>Frequently asked questions</h2></div><div className="leo-ai-faq-list">{faq.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div></section>
 
-    <section className="leo-ai-cta"><div><span>READY WHEN YOU ARE</span><h2>Start with the idea you want to build.</h2><p>Open your workspace and bring your next project into focus.</p></div><Link href="/app" className="leo-ai-primary">Get started with Leo <ArrowRight size={17}/></Link></section>
+    <section className="leo-ai-cta"><div><span>READY WHEN YOU ARE</span><h2>Start with the idea you want to build.</h2><p>Open your workspace and bring your next project into focus.</p></div><Link href="/app" className="leo-ai-primary">Get started with Coda <ArrowRight size={17}/></Link></section>
   </main>;
 }
