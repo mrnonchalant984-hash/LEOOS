@@ -15,7 +15,7 @@ const LazyLEOWidget = dynamic(
         role="status"
         aria-live="polite"
       >
-        Opening Leo…
+        Opening Coda…
       </div>
     ),
   },
@@ -38,7 +38,7 @@ function LEOWidgetLauncher() {
     <button
       type="button"
       className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--gold)] text-black shadow-2xl"
-      aria-label="Open Leo AI chat"
+      aria-label="Open Coda chat"
       aria-haspopup="dialog"
       aria-expanded={false}
       onClick={() => setStarted(true)}
