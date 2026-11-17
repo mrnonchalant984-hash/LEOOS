@@ -678,9 +678,17 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     setSelectedTool(null);
     setSelectedAgent(null);
     const negatesBuild = /\b(?:do not|don't|never|not)\b.{0,32}\b(?:build|create|make|deploy|publish|launch)\b/i.test(next);
-    const buildIntent = !negatesBuild &&
-      /\b(build|create|make|deploy|publish|launch)\b/i.test(next) &&
-      /\b(website|web\s?app|saas|game|project|site)\b/i.test(next);
+    const priorBuildRequest = messages.slice(-12).some((item) =>
+      item.role === "user" &&
+      /\b(build|create|make|develop|generate|need|want|looking for)\b/i.test(item.content) &&
+      /\b(website|web\s?site|web\s?app|saas|game|project|site)\b/i.test(item.content) &&
+      !/\b(?:do not|don't|never|not)\b.{0,32}\b(?:build|create|make|deploy|publish|launch)\b/i.test(item.content)
+    );
+    const directBuildRequest = /\b(build|create|make|develop|generate|need|want|looking for)\b/i.test(next) &&
+      /\b(website|web\s?site|web\s?app|saas|game|project|site)\b/i.test(next);
+    const buildContinuation = priorBuildRequest &&
+      /^(start|go ahead|proceed|continue|do it|build it|create it|deploy|publish|launch|put it live)[.!\s]*$/i.test(next);
+    const buildIntent = !negatesBuild && (directBuildRequest || buildContinuation);
     if (buildIntent) { setBuildTrackingSince(new Date().toISOString()); setBuildProgress({ status: 'preparing', step: 'Preparing your build request', message: 'Coda is preparing the project and will show persisted build events here.' }); setTrackBuildProgress(true); }
     setLoading(true);
     setError("");
@@ -733,9 +741,9 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         }
         if (!receivedDone && buffer.trim()) consumeFrame(buffer);
         if (!aborter.signal.aborted && !receivedDone) {
-          throw new Error("Leo's response stream ended before completion. Please retry.");
+          throw new Error("Coda's response stream ended before completion. Please retry.");
         }
-        if (!streamedText.trim() && !aborter.signal.aborted) throw new Error("Leo returned an empty response.");
+        if (!streamedText.trim() && !aborter.signal.aborted) throw new Error("Coda returned an empty response.");
       } else {
         const r = await fetch("/api/chat", {
           method: "POST",
