@@ -48,3 +48,13 @@ test('existing build/deploy route accepts Leo-chat generated files without skipp
   assert.match(buildRoute, /planAllows\(plan, requiredFeature\)/);
   assert.match(buildRoute, /validateGeneratedSite\(\{ files: suppliedMcpFiles \}, false\)/);
 });
+
+test('natural-language website requests and short follow-ups stay in the same Coda build workflow', () => {
+  assert.match(route, /need\\|want\\|looking for/);
+  assert.match(route, /hasRecentBuildRequest/);
+  assert.match(route, /shortBuildContinuation/);
+  assert.match(route, /history\\.slice\\(-12\\)/);
+  const widget = require('node:fs').readFileSync(new URL('../components/LEOWidget.tsx', import.meta.url), 'utf8');
+  assert.match(widget, /priorBuildRequest/);
+  assert.match(widget, /buildContinuation/);
+});
