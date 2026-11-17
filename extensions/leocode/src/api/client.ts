@@ -76,6 +76,29 @@ export class LeonardXApi {
     return data as T;
   }
 
+  async requestStream(path: string, init: RequestInit = {}): Promise<Response> {
+    if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Invalid LeonardX API path.');
+    let token = await this.accessToken();
+    let response = await this.send(path, token, init);
+    if (response.status === 401) {
+      token = await this.refreshSession(true);
+      response = await this.send(path, token, init);
+    }
+    if (response.status === 401) {
+      await this.signOut();
+      throw new LeonardXSessionError('Your LeonardX session expired. Connect your account again.');
+    }
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({})) as { error?: unknown };
+      const error = data.error;
+      const message = typeof error === 'string' ? error :
+        error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+          ? error.message : `LeonardX request failed (${response.status}).`;
+      throw new Error(message);
+    }
+    return response;
+  }
+
   private async send(path: string, token: string, init: RequestInit) {
     const headers = new Headers(init.headers);
     headers.set('Authorization', `Bearer ${token}`);

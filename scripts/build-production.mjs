@@ -12,6 +12,9 @@ for (const command of [
   ['run', 'typecheck'],
   ['run', 'clean'],
   ['exec', '--', 'next', 'build'],
+  // Workers Builds runs `npm run build` followed by `wrangler preview`.
+  // Generate the OpenNext Worker bundle here so Wrangler's configured entrypoint exists.
+  ['exec', '--', 'opennextjs-cloudflare', 'build', '--skipNextBuild'],
 ]) {
   const executable = npmCli ? process.execPath : 'npm';
   const args = npmCli ? [npmCli, ...command] : command;

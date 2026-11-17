@@ -1,0 +1,55 @@
+name: LeoCode extension CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+    paths:
+      - "extensions/leocode/**"
+      - ".github/workflows/leocode-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "extensions/leocode/**"
+      - ".github/workflows/leocode-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leocode-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-and-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: extensions/leocode
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extensions/leocode/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Compile TypeScript
+        run: npm run compile
+      - name: Validate and package VSIX
+        run: |
+          mkdir -p ../../artifacts
+          npx --yes @vscode/vsce package --out ../../artifacts/LeoCode.vsix
+      - name: Upload installable extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: leocode-vsix-${{ github.sha }}
+          path: artifacts/LeoCode.vsix
+          if-no-files-found: error
+          retention-days: 14

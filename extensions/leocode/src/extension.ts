@@ -8,12 +8,14 @@ import { CodeReviewCentre } from './review/centre';
 import { coordinateSpecialists } from './review/orchestration';
 import { discoverWorkspaceTests, runApprovedTerminalCommand } from './workspace/terminal';
 import { LeoAgentHost } from './ahp/host';
+import { LeonardXLanguageModelProvider } from './provider';
 
 let chatView: LeoChatView | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('LeoCode');
   const api = new LeonardXApi(context.secrets);
+  context.subscriptions.push(vscode.lm.registerLanguageModelChatProvider('leonardx', new LeonardXLanguageModelProvider(api)));
   const agentHost = new LeoAgentHost();
   const proposals = createProposalContentProvider();
   const reviewCentre = new CodeReviewCentre(context.extensionUri, prompt => chatView?.queuePrompt(prompt));
