@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Bot } from "lucide-react";
+import { CodaAvatar } from "@/components/CodaAvatar";
 
 const LazyLEOWidget = dynamic(
   () => import("./LEOWidget").then((module) => module.LEOWidget),
@@ -43,7 +43,7 @@ function LEOWidgetLauncher() {
       aria-expanded={false}
       onClick={() => setStarted(true)}
     >
-      <Bot aria-hidden="true" />
+      <CodaAvatar mood="idle" size={42} />
     </button>
   );
 }
