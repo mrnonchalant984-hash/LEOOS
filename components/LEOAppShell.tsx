@@ -41,7 +41,7 @@ const groups: { label: string; items: NavItem[] }[] = [
     ['Plugins','/plugins',Package], ['Organizations','/organizations',Building2],
   ] },
   { label: 'Explore', items: [
-    ['Marketplace / templates','/templates',Package], ['Resources','/resources',Layers3], ['Tutorials','/tutorials',BookOpen], ['Leo overview','/leo-ai',Bot],
+    ['Marketplace / templates','/templates',Package], ['Resources','/resources',Layers3], ['Tutorials','/tutorials',BookOpen], ['Coda overview','/leo-ai',Bot],
     ['What’s new','/whats-new',Newspaper], ['Blog','/blog',FileText],
   ] },
   { label: 'Account', items: [
@@ -50,7 +50,7 @@ const groups: { label: string; items: NavItem[] }[] = [
   ] },
 ];
 const adminGroup: { label: string; items: NavItem[] } = { label: 'Administration', items: [
-  ['Admin overview','/admin',ShieldCheck], ['Release readiness','/admin/release-readiness',ShieldCheck], ['Leo training','/admin/leo/training',Bot], ['Agent management','/admin/agents',Boxes], ['AI workforce','/workforce',Users], ['Meeting room','/meeting-room',Video], ['Engineer conversations','/workforce/conversations',Bot], ['Durable role queue','/workforce/jobs',Workflow],
+  ['Admin overview','/admin',ShieldCheck], ['Release readiness','/admin/release-readiness',ShieldCheck], ['Coda training','/admin/leo/training',Bot], ['Agent management','/admin/agents',Boxes], ['AI workforce','/workforce',Users], ['Meeting room','/meeting-room',Video], ['Engineer conversations','/workforce/conversations',Bot], ['Durable role queue','/workforce/jobs',Workflow],
   ['Announcements','/admin/announcements',Bell], ['Upgrade history','/admin/upgrade-history',ScrollText], ['Audit log','/audit',LockKeyhole],
 ] };
 const publicGroup: { label: string; items: NavItem[] } = { label: 'Public site', items: [
