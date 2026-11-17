@@ -13,7 +13,7 @@ type SitemapPage = {
 
 const publicPages: SitemapPage[] = [
   { path: '/', priority: 1, changeFrequency: 'weekly' },
-  { path: '/leo-ai', priority: 0.9, changeFrequency: 'monthly' },
+  { path: '/coda', priority: 0.9, changeFrequency: 'monthly' }
   { path: '/services', priority: 0.85, changeFrequency: 'monthly' },
   { path: '/pricing', priority: 0.9, changeFrequency: 'monthly' },
   { path: '/developers', priority: 0.85, changeFrequency: 'monthly' },
