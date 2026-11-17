@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const route = await readFile(new URL('../app/api/chat/route.ts', import.meta.url), 'utf8');
 const tools = await readFile(new URL('../lib/ai/tool-orchestrator.ts', import.meta.url), 'utf8');
+const widget = await readFile(new URL('../components/LEOWidget.tsx', import.meta.url), 'utf8');
 const buildRoute = await readFile(new URL('../app/api/build-deploy/route.ts', import.meta.url), 'utf8');
 
 test('explicit website build requests activate the existing Leo tool orchestrator from normal chat', () => {
@@ -54,7 +55,6 @@ test('natural-language website requests and short follow-ups stay in the same Co
   assert.match(route, /hasRecentBuildRequest/);
   assert.match(route, /shortBuildContinuation/);
   assert.match(route, /history\\.slice\\(-12\\)/);
-  const widget = require('node:fs').readFileSync(new URL('../components/LEOWidget.tsx', import.meta.url), 'utf8');
   assert.match(widget, /priorBuildRequest/);
   assert.match(widget, /buildContinuation/);
 });
