@@ -13,7 +13,7 @@ export const big12Projects: Project[] = [
   {id:"medicalplus",name:"MedicalPlus",type:"Medical",description:"A healthcare website concept for services, doctors, appointments and patient information.",image:"https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1600&q=85",url:projectUrl("medicalplus"),status:projectUrl("medicalplus")?"live":"preview"},
   {id:"noxva-export",name:"Noxva Export",type:"Export / Business",description:"A global export business concept for products, logistics, company information and enquiries.",image:"https://images.unsplash.com/photo-1494412574643-ff11b0a5c1c3?auto=format&fit=crop&w=1600&q=85",url:projectUrl("noxva-export"),status:projectUrl("noxva-export")?"live":"preview"},
   {id:"explorenijia",name:"ExploreNijia",type:"Travel",description:"A travel discovery concept for destinations, experiences and trip inspiration.",image:"https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=1600&q=85",url:projectUrl("explorenijia"),status:projectUrl("explorenijia")?"live":"preview"},
-  {id:"leonard-collage",name:"Leonard Collage",type:"Creative Showcase",description:"A visual creative showcase demo for artwork, design projects and personal work.",image:"https://images.unsplash.com/photo-1549490349-8643362247b5?auto=format&fit=crop&w=1600&q=85",url:projectUrl("leonard-collage"),status:projectUrl("leonard-collage")?"live":"preview"},
+  {id:"leonard-collage",name:"Codernard Collage",type:"Creative Showcase",description:"A visual creative showcase demo for artwork, design projects and personal work.",image:"https://images.unsplash.com/photo-1549490349-8643362247b5?auto=format&fit=crop&w=1600&q=85",url:projectUrl("leonard-collage"),status:projectUrl("leonard-collage")?"live":"preview"},
   {id:"pixel-forge",name:"Pixel Forge",type:"Gaming",description:"A gaming and digital entertainment concept with an immersive visual direction.",image:"https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1600&q=85",url:projectUrl("pixel-forge"),status:projectUrl("pixel-forge")?"live":"preview"}
 ]
 
@@ -21,15 +21,15 @@ export const projects = big12Projects
 export const profileImage = '/profile.png'
 
 export const siteData = {
-  owner: 'Leonard Udoh', title: 'Software & AI Services', description: 'Website concepts, software builds, and practical code reviews for businesses and creators.', tagline: 'Practical website and software services, powered by thoughtful design and AI-assisted development.', price: 'Practical services for software teams', location: 'Remote — Worldwide', email: 'leonardudoh5@gmail.com', phone: '+2349115936466', phoneDisplay: '+234 911 593 6466', brand: '#FFD700', cv: '/documents/Leonard-Udoh-CV.pdf',
+  owner: 'Codernard Udoh', title: 'Software & AI Services', description: 'Website concepts, software builds, and practical code reviews for businesses and creators.', tagline: 'Practical website and software services, powered by thoughtful design and AI-assisted development.', price: 'Practical services for software teams', location: 'Remote — Worldwide', email: 'leonardudoh5@gmail.com', phone: '+2349115936466', phoneDisplay: '+234 911 593 6466', brand: '#FFD700', cv: '/documents/Codernard-Udoh-CV.pdf',
   liveProjects: [
     {name:'Qveli',description:'A social media platform for creators.',url:process.env.NEXT_PUBLIC_LIVE_QVELI_URL||'',image:'/qveli-logo.svg'},
-    {name:'Braverton',description:'A freelancing platform connecting clients with freelancers.',url:process.env.NEXT_PUBLIC_LIVE_LEONARDX_URL||'',image:'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1600&q=85'}
+    {name:'Braverton',description:'A freelancing platform connecting clients with freelancers.',url:process.env.NEXT_PUBLIC_LIVE_CoderNARDX_URL||'',image:'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1600&q=85'}
   ],
   demoProjects: big12Projects,
   services: [
     {name:'AI Mockup',price:'₦50,000',description:'Turn a business idea into a polished visual website direction before development.',href:'/app',details:'You get a visual concept, page direction, section ideas, content direction, and a clearer blueprint for the final website.'},
     {name:'Braverton Builder',price:'Included with plan',description:'Build websites, web apps, and SaaS projects within your plan limits.',href:'/pricing',details:'Your plan controls project types, project capacity, and monthly build limits. Each successful deployment includes a 90-day hosting trial; hosting is separate after the trial.'},
-    {name:'Code Review',price:'₦20,000',description:'A practical review of your codebase with prioritized problems, explanations, and fixes.',href:'/app',details:'Coda can inspect structure, bugs, responsiveness, performance, security risks, accessibility, SEO, and code quality, then give practical fixes.'}
+    {name:'Code Review',price:'₦20,000',description:'A practical review of your codebase with prioritized problems, explanations, and fixes.',href:'/app',details:'Coder can inspect structure, bugs, responsiveness, performance, security risks, accessibility, SEO, and code quality, then give practical fixes.'}
   ]
 };
