@@ -33,6 +33,7 @@ export const metadata: Metadata = {
     template: '%s | Braverton',
   },
   description: SITE_DESCRIPTION,
+  keywords: ['Braverton', 'AI software development', 'build apps with AI', 'Coda AI assistant', 'web development Nigeria', 'AI platform Africa'],
   category: 'technology',
   authors: [{ name: SITE_NAME }, { name: 'Leonard Udoh' }],
   creator: SITE_NAME,
@@ -107,9 +108,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
         <script dangerouslySetInnerHTML={{ __html: "try{var t=localStorage.getItem('leonardx-theme');if(t==='dark'){document.documentElement.dataset.theme='dark';}else{document.documentElement.dataset.theme='light';}}catch(e){document.documentElement.dataset.theme='light';}" }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(organizationSchema) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(websiteSchema) }} />
