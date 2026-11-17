@@ -45,6 +45,8 @@ function createReportOnlyCsp() {
 }
 
 const nextConfig = {
+  // OpenNext Cloudflare reads the standalone Next.js server output.
+  output: 'standalone',
   // npm run build checks types first. Avoid Next's duplicate TypeScript pass
   // so constrained production builders do not run out of memory.
   typescript: { ignoreBuildErrors: true },
