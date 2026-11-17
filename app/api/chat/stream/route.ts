@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
           event(controller, { type: 'done', usage: result.usage, model: `${result.provider}/${result.model}` });
         } catch (error) {
           if (!abortController.signal.aborted) {
-            const message = error instanceof ModelProviderError ? error.message : 'Leo could not complete the streamed response.';
+            const message = error instanceof ModelProviderError ? error.message : 'Coda could not complete the streamed response.';
             event(controller, { type: 'error', error: message });
           }
         } finally {
