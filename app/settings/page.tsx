@@ -9,7 +9,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   ...createNoIndexMetadata(),
   title: 'Account settings',
-  description: 'Manage your private LeonardX account and security settings.',
+  description: 'Manage your private Braverton account and security settings.',
 };
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +17,7 @@ export default async function SettingsPage() {
   const access = await getUserAccess();
   if (!access) redirect('/auth?next=%2Fsettings');
 
-  return <LEOAppShell title="Settings" subtitle="Manage your LeonardX account and security.">
+  return <LEOAppShell title="Settings" subtitle="Manage your Braverton account and security.">
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
       <header>
         <p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--gold)]">Account</p>
