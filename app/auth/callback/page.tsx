@@ -24,23 +24,17 @@ export default function AuthCallbackPage() {
         if (providerError) {
           throw new Error(providerError.replace(/\+/g, ' ').slice(0, 240));
         }
-        const code = callbackParams.get('code');
-        if (!code) throw new Error('Google did not return an authentication code. Check that Google is enabled in Supabase and this callback URL is allowlisted, then try again.');
-        const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-        // The server callback reads the PKCE verifier from the cookie written
-        // by the server-side OAuth start route and performs the code exchange.
-        const exchangeResponse = await fetch('/api/auth/google/callback', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code }),
-          cache: 'no-store',
-        });
-        const exchangeResult = await exchangeResponse.json().catch(() => ({}));
-        if (!exchangeResponse.ok || !exchangeResult.session?.access_token || !exchangeResult.session?.refresh_token) {
-          throw new Error(exchangeResult.error || 'Google sign-in could not be completed.');
+        if (callbackParams.get('oauth') !== 'complete') {
+          throw new Error('The secure Google callback was not completed. Please start sign-in again.');
         }
-        const { error: syncBrowserError } = await supabase.auth.setSession(exchangeResult.session);
-        if (syncBrowserError) throw new Error('Your Google session could not be synchronized with this browser.');
+        const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+        // The server callback has already exchanged the code and written the
+        // Supabase session cookies. Read that session from the same browser store.
+        const { data: browserSession, error: browserSessionError } = await supabase.auth.getSession();
+        if (browserSessionError || !browserSession.session?.access_token || !browserSession.session?.refresh_token) {
+          throw new Error('Google sign-in completed, but the browser session could not be read. Please try again.');
+        }
+        const exchangeResult = { session: browserSession.session };
 
         const sessionResponse = await fetch('/api/auth/session', {
           method: 'POST',
