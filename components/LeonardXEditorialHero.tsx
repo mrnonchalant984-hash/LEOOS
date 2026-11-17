@@ -46,7 +46,7 @@ export default function LeonardXEditorialHero() {
         <div className="lx-editorial-hero-content">
           <p className="lx-editorial-kicker">AI SOFTWARE CREATION PLATFORM</p>
           <h1 id="lx-hero-title"><span>BUILD WHAT YOU</span><span>IMAGINE.</span></h1>
-          <p className="lx-editorial-lead">Turn an idea into working software with Leo, project workspaces and a connected path from planning to deployment.</p>
+          <p className="lx-editorial-lead">Turn an idea into working software with Coda, project workspaces and a connected path from planning to deployment.</p>
           <div className="lx-editorial-actions">
             <Link href="/app" className="lx-cyan-button">START BUILDING <ArrowRight size={16} /></Link>
             <Link href="#story" className="lx-editorial-outline"><Play size={14} /> EXPLORE THE PLATFORM</Link>
@@ -58,10 +58,10 @@ export default function LeonardXEditorialHero() {
 
       <section id="story" className="lx-editorial-about" aria-labelledby="lx-about-title">
         <div className="lx-editorial-about-copy">
-          <p className="lx-editorial-kicker">THE LEONARDX WORKSPACE</p>
+          <p className="lx-editorial-kicker">THE BRAVERTON WORKSPACE</p>
           <h2 id="lx-about-title"><span>FROM IDEA</span><span>TO PRODUCT.</span></h2>
-          <p>LeonardX gives modern builders a clear place to plan, build, test and improve software. Leo helps structure the work while the platform keeps project context, files, integrations and delivery state connected.</p>
-          <Link href="/about" className="lx-cyan-button">MEET LEONARD <ArrowRight size={16} /></Link>
+          <p>Braverton gives modern builders a clear place to plan, build, test and improve software. Coda helps structure the work while the platform keeps project context, files, integrations and delivery state connected.</p>
+          <Link href="/about" className="lx-cyan-button">MEET BRAVERTON <ArrowRight size={16} /></Link>
         </div>
         <div className="lx-editorial-about-media">
           <ResilientVideo src={ABOUT_VIDEO} className="lx-editorial-about-video" preload="none" />
