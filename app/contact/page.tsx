@@ -56,8 +56,8 @@ export default function ContactPage() {
                 name: submission.name,
                 email: submission.email,
                 replyto: submission.email,
-                subject: `New LeonardX contact: ${submission.service}`,
-                from_name: 'LeonardX Contact Form',
+                subject: `New Braverton contact: ${submission.service}`,
+                from_name: 'Braverton Contact Form',
                 message: `Service requested: ${submission.service}\n\n${submission.message}`,
                 botcheck: '',
               }),
@@ -81,7 +81,7 @@ export default function ContactPage() {
       setStatus({
         type: delivered ? 'success' : 'error',
         message: delivered
-          ? 'Your message has been received and LeonardX has been notified.'
+          ? 'Your message has been received and Braverton has been notified.'
           : `Your message was saved, but notification delivery is not confirmed. ${deliveryError || 'Configure Web3Forms or SMTP/Resend.'}`,
       });
       formElement.reset();
@@ -101,7 +101,7 @@ export default function ContactPage() {
     <main className="mx-auto max-w-7xl px-4 py-14 sm:py-20">
       <header className="mx-auto max-w-2xl text-center">
         <p className="text-xs font-bold uppercase tracking-[.2em] text-zinc-400">
-          LeonardX services
+          Braverton services
         </p>
         <h1 className="mt-4 text-4xl font-black tracking-tight sm:text-6xl">
           Contact Us
@@ -239,7 +239,7 @@ export default function ContactPage() {
           href={`mailto:${siteData.email}`}
           className="font-medium text-zinc-300 underline decoration-white/30 underline-offset-4 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         >
-          Contact LeonardX directly
+          Contact Braverton directly
         </a>
       </p>
     </main>
