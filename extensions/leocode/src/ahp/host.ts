@@ -70,12 +70,12 @@ export class LeoAgentHost {
 
     const modelConfig = await api.request<{ model?: string; models?: Array<{ id: string; name?: string }> }>('/api/leocode/agent/v1/models');
     if (typeof modelConfig.model !== 'string' || !modelConfig.model.startsWith('google/')) {
-      throw new Error('LeonardX did not return a supported server-controlled Gemini model for Leo.');
+      throw new Error('LeonardX did not return a supported server-controlled Gemini model for Coda.');
     }
     const agent = cofoldAgent({
       provider: 'leonardx',
       displayName: 'Leo',
-      description: 'LeonardX coding agent using your account-authorized Gemini model routing.',
+      description: 'Braverton coding agent using your account-authorized Gemini model routing.',
       baseUrl: `${api.baseUrl}/api/leocode/agent/v1`,
       apiKey: () => api.getAccessTokenForAgentHost(),
       model: modelConfig.model,
@@ -88,7 +88,7 @@ export class LeoAgentHost {
         memory: false,
       },
       instructions: [
-        'You are Leo, the LeonardX coding agent. Use the signed-in LeonardX account and the server-controlled Gemini model router.',
+        'You are Coda, the Braverton coding assistant. Use the signed-in LeonardX account and the server-controlled Gemini model router.',
         'Inspect the workspace before changing it. Keep changes focused and preserve unrelated user work.',
         'Use the AHP permission workflow. Every file write, patch, delete, rename, and shell command must request user approval. Never bypass a denied approval.',
         'Do not commit, push, publish, deploy, change account settings, or modify remote services unless the user explicitly asks for that exact action in the current task.',
@@ -101,10 +101,10 @@ export class LeoAgentHost {
           if (!name) return { behavior: 'deny', reason: 'The tool name is invalid.' };
           const inputText = typeof input === 'string' ? input : JSON.stringify(input ?? {});
           if (/\bgit\b[\s\S]{0,40}\b(commit|push|tag)\b|\bgh\s+pr\s+(create|merge)\b|\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:deploy|publish|release)\b|\b(?:vercel|wrangler)\s+deploy\b/i.test(inputText)) {
-            return { behavior: 'deny', reason: 'Git publishing and deployment commands are disabled in this initial Leo Agent Host.' };
+            return { behavior: 'deny', reason: 'Git publishing and deployment commands are disabled in this initial Coda Agent Host.' };
           }
           if (/(commit|push|publish|deploy|release|credential|secret|keychain|mcp|network|http|fetch|browser)/.test(name)) {
-            return { behavior: 'deny', reason: 'This action is not enabled in the initial Leo Agent Host. Use the existing LeonardX approval flows for remote operations.' };
+            return { behavior: 'deny', reason: 'This action is not enabled in the initial Leo Agent Host. Use the existing Braverton approval flows for remote operations.' };
           }
           if (/(read|list|search|glob|grep|stat|status|diff|log|tree|find)/.test(name) && !/(write|edit|delete|remove|rename|move|create)/.test(name)) {
             return { behavior: 'allow' };
