@@ -2,13 +2,13 @@ export default function Terms() {
   return (
     <main className="mx-auto max-w-4xl px-4 py-16">
       <article className="rounded-3xl border border-white/10 bg-white/[.04] p-7 md:p-10">
-        <p className="text-sm font-bold text-yellow-300">LEO OS · LEGAL</p>
+        <p className="text-sm font-bold text-yellow-300">Braverton · LEGAL</p>
         <h1 className="mt-2 text-4xl font-black">Terms of Service</h1>
         <p className="mt-3 text-sm text-zinc-500">
           Last updated: October 2, 2026
         </p>
         <p className="mt-6 leading-7 text-zinc-300">
-          These terms apply to LEO OS accounts, subscriptions, project builders, generated project artifacts, and hosting services. LEO OS uses AI and third-party providers to assist with project creation. Available project types and usage are determined by the current plan and configured providers.
+          These terms apply to Braverton accounts, subscriptions, project builders, generated project artifacts, and hosting services. Braverton uses AI and third-party providers to assist with project creation. Available project types and usage are determined by the current plan and configured providers.
         </p>
         <div className="mt-8 space-y-7 text-zinc-300 leading-7">
           <section>
@@ -63,7 +63,7 @@ export default function Terms() {
               6. AI-assisted work
             </h2>
             <p className="mt-2">
-              Generated output may contain errors and requires review before production use. LEO OS does not invent or verify customer credentials, regulated claims, or supplied facts. Customers must review code, content, security, legal obligations, and third-party dependencies before launch.
+              Generated output may contain errors and requires review before production use. Braverton does not invent or verify customer credentials, regulated claims, or supplied facts. Customers must review code, content, security, legal obligations, and third-party dependencies before launch.
             </p>
           </section>
           <section>
