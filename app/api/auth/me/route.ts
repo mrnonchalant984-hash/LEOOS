@@ -8,7 +8,7 @@ export async function GET() {
   if (!access) return NextResponse.json({ authenticated: false });
   return NextResponse.json({
     authenticated: true,
-    user: { id: access.user.id, email: access.user.email, role: access.profile?.role ?? 'user' },
+    user: { id: access.user.id, email: access.user.email, role: access.profile?.role ?? 'user', onboarding_completed: access.profile?.onboarding_completed === true, theme_preference: access.profile?.theme_preference === 'dark' ? 'dark' : 'light' },
     isPlatformOwner: isPlatformOwner({ role: access.profile?.role, email: access.user.email }),
     subscription: access.subscription,
     features: access.features,

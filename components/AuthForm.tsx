@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { ArrowRight, Chrome, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, UserRound } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -56,6 +56,38 @@ export function AuthForm() {
   const [status, setStatus] = useState('');
   const [statusError, setStatusError] = useState(false);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (locationMode === 'forgot' || locationMode === 'reset') return;
+    let active = true;
+    async function routeConfirmedSession() {
+      try {
+        if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return;
+        const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+        const session = (await supabase.auth.getSession()).data.session;
+        if (!session || !active) return;
+        const response = await fetch('/api/auth/profile', {
+          headers: { Authorization: 'Bearer ' + session.access_token },
+          cache: 'no-store',
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!active) return;
+        if (!response.ok || !result.user) {
+          setStatus(result.error || 'Your account profile could not be checked. Please sign in again.');
+          setStatusError(true);
+          return;
+        }
+        const next = safeInternalNext(new URLSearchParams(window.location.search).get('next')) || '/dashboard';
+        window.location.replace(result.user.onboarding_completed === true ? next : '/getting-started');
+      } catch {
+        if (active) {
+          setStatus('Your existing session could not be checked. Please sign in again.');
+          setStatusError(true);
+        }
+      }
+    }
+    void routeConfirmedSession();
+    return () => { active = false; };
+  }, [locationMode]);
 
   function changeMode(next: Mode) { setModeOverride(next); setStatus(''); setStatusError(false); }
 
@@ -97,11 +129,19 @@ export function AuthForm() {
         const next = mode === 'signup' && storeSignup
           ? storeDestination(storeAccountType)
           : requestedNext ?? (accountType === 'buyer' || accountType === 'seller' ? storeDestination(accountType) : '/dashboard');
+        const profileResponse = await fetch('/api/auth/profile', { headers: { Authorization: `Bearer ${result.session.access_token}` }, cache: 'no-store' });
+        const profileResult = profileResponse.ok ? await profileResponse.json().catch(() => null) : null;
+        if (!profileResponse.ok || !profileResult?.user) {
+          throw new Error(profileResult?.error || 'Your account profile could not be checked. Please try again.');
+        }
+        const destinationAfterProfile = profileResult.user.onboarding_completed !== true
+          ? `/getting-started?next=${encodeURIComponent(next)}`
+          : next;
         const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (assuranceError) throw assuranceError;
         const destination = assurance.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2'
-          ? `/auth/mfa?next=${encodeURIComponent(next)}`
-          : next;
+          ? `/auth/mfa?next=${encodeURIComponent(destinationAfterProfile)}`
+          : destinationAfterProfile;
         setStatus(mode === 'login' ? 'Signed in successfully. Redirecting to your workspace…' : 'Account created. Redirecting to your workspace…');
         window.location.assign(destination);
       } else {

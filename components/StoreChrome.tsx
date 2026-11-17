@@ -59,7 +59,7 @@ function StoreHeader() {
 }
 
 const preservedThemePrefixes = [
-  '/app', '/dashboard', '/admin', '/account', '/agents', '/analytics', '/api-keys',
+  '/auth', '/getting-started', '/app', '/dashboard', '/admin', '/account', '/agents', '/analytics', '/api-keys',
   '/audit', '/deployments', '/integrations', '/notifications', '/observability',
   '/organizations', '/projects', '/settings', '/studio', '/team', '/webhooks',
   '/workflows', '/workforce', '/ide', '/meeting-room', '/offline', '/mcp', '/payment',

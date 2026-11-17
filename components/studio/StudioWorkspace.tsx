@@ -168,6 +168,7 @@ export default function StudioWorkspace() {
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Generation is temporarily unavailable.');
+      void loadCredits();
       setBusy(false);
     }
   }
@@ -235,6 +236,7 @@ export default function StudioWorkspace() {
   }
 
   const activeResult = activeAsset || assets.find(asset => asset.id === jobs[0]?.asset_id) || null;
+  const insufficientCredits = /no credits|insufficient.*credits?|credits? (are )?exhausted/i.test(error);
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -266,7 +268,7 @@ export default function StudioWorkspace() {
             <div className="flex flex-wrap items-center gap-3"><button type="submit" disabled={busy || prompt.trim().length < 3 || (mode === 'edit' && !file)} className="inline-flex items-center gap-2 rounded-xl bg-[var(--gold)] px-5 py-3 text-sm font-bold text-black disabled:cursor-not-allowed disabled:opacity-50">{busy ? <LoaderCircle size={16} className="animate-spin"/> : mode === 'video' ? <Video size={16}/> : <Sparkles size={16}/>} {busy ? 'Working…' : mode === 'edit' ? 'Edit image' : mode === 'video' ? 'Generate video' : 'Generate image'}</button><span className="text-[11px] text-zinc-500">Provider pricing can vary. Review your plan and credit balance before submitting.</span></div>
           </form>
           {status && <p role="status" aria-live="polite" className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3 text-xs text-emerald-100">{status}</p>}
-          {error && <p role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-400/5 p-3 text-xs text-red-200">{error}</p>}
+          {error && <div role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-400/5 p-3 text-xs text-red-200"><p>{error}</p>{insufficientCredits && <div className="mt-3 flex flex-wrap items-center gap-3"><a href="/pricing" className="rounded-lg bg-[var(--gold)] px-3 py-2 font-semibold text-black">Review plans</a><button type="button" onClick={() => void loadCredits()} className="inline-flex items-center gap-1 rounded-lg border border-red-200/20 px-3 py-2 text-red-100"><RefreshCw size={13}/> Refresh balance</button></div>}</div>}
         </Panel>
 
         <Panel className="min-h-[360px] p-5 sm:p-6">

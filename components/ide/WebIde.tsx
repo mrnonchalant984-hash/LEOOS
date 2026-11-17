@@ -1,10 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Download, FileCode2, FolderDown, Play, Save, TerminalSquare } from 'lucide-react';
+import { ChevronRight, Download, FileCode2, FolderDown, Play, Save, TerminalSquare, Upload } from 'lucide-react';
 import CloudBuildPanel from '@/components/ide/CloudBuildPanel';
 import { LivePreviewFrame } from '@/components/engineering/LivePreviewFrame';
+import { PaystackIntegrationGenerator } from '@/components/ide/PaystackIntegrationGenerator';
+import { GitHubRepositoryImporter } from '@/components/ide/GitHubRepositoryImporter';
+import { LEOWidget } from '@/components/LEOWidget';
 
 type Workspace = { id: string; project_name: string; type: string | null; status: string | null; files: Record<string, string> };
 type TerminalLine = { kind: 'input' | 'output' | 'error'; text: string };
@@ -36,6 +39,11 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
   const [preview, setPreview] = useState<PreviewJob | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importSource, setImportSource] = useState<'zip' | 'github'>('zip');
+  const [githubRepositoryUrl, setGithubRepositoryUrl] = useState('');
+  const [rightPanel, setRightPanel] = useState<'leo' | 'terminal'>('leo');
+  const importInputRef = useRef<HTMLInputElement>(null);
   const filePaths = useMemo(() => flattenFiles(files), [files]);
   const folderPaths = useMemo(() => [...new Set(filePaths.flatMap(filePath => {
     const parts = filePath.split('/');
@@ -54,6 +62,56 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
     if (!isDirty) return;
     event.preventDefault();
     setError('Save your workspace changes before downloading the saved project files.');
+  }
+
+  async function importWorkspaceArchive(file: File) {
+    if (isDirty) {
+      setError('Save or discard your editor changes before importing an archive.');
+      if (importInputRef.current) importInputRef.current.value = '';
+      return;
+    }
+    setImporting(true);
+    setError('');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/source`, { method: 'POST', body: form });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Project archive could not be imported.');
+      setTerminal(lines => [...lines, { kind: 'output', text: `Imported ${result.data?.file_count ?? 'project'} files from ${file.name}. Reloading the project source context…` }]);
+      window.location.reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Project archive could not be imported.');
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  }
+
+  async function importGitHubRepository() {
+    const repositoryUrl = githubRepositoryUrl.trim();
+    if (!repositoryUrl) {
+      setError('Enter a public GitHub repository URL.');
+      return;
+    }
+    setImporting(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/github-import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repository_url: repositoryUrl }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'GitHub repository could not be imported.');
+      await loadWorkspace();
+      setTerminal(lines => [...lines, { kind: 'output', text: `Imported GitHub repository ${result.repository || repositoryUrl}.` }]);
+      setGithubRepositoryUrl('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'GitHub repository could not be imported.');
+    } finally {
+      setImporting(false);
+    }
   }
 
   const refreshPreview = useCallback(async () => {
@@ -239,9 +297,21 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
   return <main className="min-h-[calc(100vh-140px)] bg-[#090a0c] px-3 py-5 text-white sm:px-6">
     <header className="mx-auto mb-4 flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
       <div><div className="flex items-center gap-2 text-xs text-white/45"><Link href="/dashboard" className="hover:text-white">Dashboard</Link><ChevronRight size={13}/><span>Web IDE</span></div><h1 className="mt-1 text-xl font-semibold">{workspace?.project_name || 'Workspace'}</h1></div>
-      <div className="flex flex-wrap items-center gap-2"><span className="rounded border border-white/10 px-2 py-1 text-xs text-white/55">{workspace?.status || 'Workspace'}</span><span className={`text-xs ${isDirty ? 'text-amber-300' : 'text-emerald-300'}`}>{isDirty ? 'Unsaved changes' : 'All changes saved'}</span><a href={exportUrl()} onClick={blockUnsavedExport} aria-disabled={isDirty} className={`inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 ${isDirty ? 'cursor-not-allowed opacity-45' : ''}`}><Download size={15}/>Download project ZIP</a><button onClick={() => void saveFiles()} disabled={saving || !isDirty} className="inline-flex items-center gap-2 rounded-md bg-[#d7aa70] px-3 py-2 text-sm font-medium text-black disabled:opacity-60"><Save size={15}/>{saving ? 'Saving…' : 'Save files'}</button></div>
+      <div className="flex flex-wrap items-center gap-2"><span className="rounded border border-white/10 px-2 py-1 text-xs text-white/55">{workspace?.status || 'Workspace'}</span><select aria-label="Import source" value={importSource} onChange={event => setImportSource(event.target.value as 'zip' | 'github')} className="rounded-md border border-white/15 bg-[#101114] px-2 py-2 text-xs text-white"><option value="zip">ZIP archive</option><option value="github">GitHub repository</option></select>{importSource === 'zip' ? <><input ref={importInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="sr-only" aria-label="Choose a ZIP archive to import" onChange={event => { const file = event.target.files?.[0]; if (file) void importWorkspaceArchive(file); }} /><button type="button" onClick={() => importInputRef.current?.click()} disabled={importing || isDirty || saving} className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 disabled:opacity-50"><Upload size={15}/>{importing ? 'Importing…' : 'Import ZIP'}</button></> : <><input aria-label="Public GitHub repository URL" value={githubRepositoryUrl} onChange={event => setGithubRepositoryUrl(event.target.value)} placeholder="https://github.com/owner/repo" className="w-44 rounded-md border border-white/15 bg-black/20 px-2 py-2 text-xs text-white outline-none focus:border-[#d7aa70]/60" /><button type="button" onClick={() => void importGitHubRepository()} disabled={importing || !githubRepositoryUrl.trim()} className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 disabled:opacity-50">{importing ? 'Importing…' : 'Import repo'}</button></>}<span className={`text-xs ${isDirty ? 'text-amber-300' : 'text-emerald-300'}`}>{isDirty ? 'Unsaved changes' : 'All changes saved'}</span><GitHubRepositoryImporter workspaceId={workspaceId} disabled={isDirty || saving || importing} /><a href={exportUrl()} onClick={blockUnsavedExport} aria-disabled={isDirty} className={`inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 ${isDirty ? 'cursor-not-allowed opacity-45' : ''}`}><Download size={15}/>Download project ZIP</a><button onClick={() => void saveFiles()} disabled={saving || !isDirty} className="inline-flex items-center gap-2 rounded-md bg-[#d7aa70] px-3 py-2 text-sm font-medium text-black disabled:opacity-60"><Save size={15}/>{saving ? 'Saving…' : 'Save files'}</button></div>
     </header>
     <CloudBuildPanel projectId={workspaceId} projectType={workspace?.type || null} />
+    <PaystackIntegrationGenerator existingFiles={files} onGenerate={(generated) => {
+      const conflicts = Object.keys(generated).filter(path => path in files);
+      if (conflicts.length) {
+        setError(`Paystack generator did not overwrite existing files: ${conflicts.join(', ')}`);
+        return false;
+      }
+      setFiles(previous => ({ ...previous, ...generated }));
+      setSelected(Object.keys(generated)[0] || '');
+      setError('');
+      setTerminal(lines => [...lines, { kind: 'output', text: `Added ${Object.keys(generated).length} Paystack integration files. Review and save the changes.` }]);
+      return true;
+    }} />
     {error && <div role="alert" className="mx-auto mb-3 max-w-[1600px] rounded-md border border-red-400/30 bg-red-950/30 px-4 py-2 text-sm text-red-200">{error}</div>}
     <section aria-label="Cloudflare static preview" className="mx-auto mb-4 max-w-[1600px] rounded-xl border border-white/10 bg-[#101114] p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -274,7 +344,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
         </div>
       )}
     </section>
-    <section aria-label="Workspace editor" className="mx-auto grid min-h-[68vh] max-w-[1600px] overflow-hidden rounded-xl border border-white/10 bg-[#101114] lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.75fr)]">
+    <section aria-label="Workspace editor" className="mx-auto grid min-h-[68vh] max-w-[1600px] overflow-hidden rounded-xl border border-white/10 bg-[#101114] lg:grid-cols-[minmax(0,1.85fr)_minmax(320px,1fr)]">
       <div className="flex min-h-[58vh] flex-col border-b border-white/10 lg:border-b-0 lg:border-r">
         <div className="flex h-11 items-center gap-2 border-b border-white/10 px-4 text-xs text-white/55"><FileCode2 size={15}/> Files <input aria-label="Search files" value={fileSearch} onChange={event => setFileSearch(event.target.value)} placeholder="Search files…" className="ml-auto min-w-0 w-32 rounded border border-white/10 bg-black/20 px-2 py-1 text-xs text-white outline-none focus:border-[#d7aa70]/60"/><button onClick={createFile} className="ml-auto rounded px-2 py-1 text-white/70 hover:bg-white/10 hover:text-white">New file</button><span>{filePaths.length} items</span></div>
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(150px,0.28fr)_minmax(0,1fr)]">
@@ -282,10 +352,22 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
           <div className="flex min-h-[50vh] min-w-0 flex-col"><div className="flex h-10 items-center gap-2 border-b border-white/10 px-4 font-mono text-xs text-white/55"><span className="truncate">{selected || 'No file selected'}</span>{selected && /\.json$/i.test(selected) && <button onClick={formatSelectedFile} className="ml-auto rounded px-2 py-1 hover:bg-white/10">Format JSON</button>}</div>{selected ? <textarea aria-label={`Edit ${selected}`} spellCheck={false} value={files[selected] || ''} onChange={event => setFiles(previous => ({ ...previous, [selected]: event.target.value }))} className="min-h-[48vh] flex-1 resize-y bg-transparent p-4 font-mono text-[13px] leading-6 text-[#e6e7e9] outline-none focus:ring-1 focus:ring-inset focus:ring-[#d7aa70]/40" /> : <div className="grid flex-1 place-items-center p-8 text-center text-sm text-white/40">Choose a project file to start editing.</div>}</div>
         </div>
       </div>
-      <aside aria-label="Workspace terminal" className="flex min-h-[45vh] flex-col bg-[#0b0c0e]">
-        <div className="flex h-11 items-center gap-2 border-b border-white/10 px-4 text-xs text-white/60"><TerminalSquare size={15}/> Workspace tools <span className="ml-auto rounded bg-white/5 px-2 py-1 text-[10px] uppercase tracking-wide">Safe mode</span></div>
-        <div className="flex-1 space-y-3 overflow-auto p-4 font-mono text-xs leading-5" aria-live="polite">{terminal.map((line, index) => <pre key={`${index}-${line.text}`} className={`whitespace-pre-wrap break-words ${line.kind === 'input' ? 'text-[#d7aa70]' : line.kind === 'error' ? 'text-red-300' : 'text-white/65'}`}>{line.text}</pre>)}</div>
-        <form onSubmit={runPreviewCommand} className="flex items-center gap-2 border-t border-white/10 p-3"><span aria-hidden="true" className="font-mono text-[#d7aa70]">›</span><input aria-label="Preview command" value={terminalInput} onChange={event => setTerminalInput(event.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-xs text-white outline-none placeholder:text-white/35" placeholder="help, ls, find <name>, cat <path>"/><button aria-label="Run preview command" className="rounded p-2 text-white/60 hover:bg-white/10 hover:text-white"><Play size={14}/></button></form>
+      <aside aria-label="Leo chat and workspace terminal" className="flex min-h-[45vh] min-w-0 flex-col overflow-hidden bg-[#0b0c0e]">
+        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-white/10 px-3 text-xs text-white/60">
+          <button type="button" onClick={() => setRightPanel('leo')} aria-pressed={rightPanel === 'leo'} className={`rounded-md px-3 py-2 font-semibold ${rightPanel === 'leo' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>Leo chat</button>
+          <button type="button" onClick={() => setRightPanel('terminal')} aria-pressed={rightPanel === 'terminal'} className={`rounded-md px-3 py-2 font-semibold ${rightPanel === 'terminal' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>Terminal</button>
+          <span className="ml-auto rounded bg-white/5 px-2 py-1 text-[10px] uppercase tracking-wide">{rightPanel === 'leo' ? '35% assistant' : 'Safe mode'}</span>
+        </div>
+        {rightPanel === 'leo' ? (
+          <div className="min-h-0 min-w-0 flex-1">
+            <LEOWidget full embedded initialSessionId={workspaceId} initialProjectId={workspaceId} initialProjectName={workspace?.project_name || "Current project"} />
+          </div>
+        ) : (
+          <>
+            <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4 font-mono text-xs leading-5" aria-live="polite">{terminal.map((line, index) => <pre key={`${index}-${line.text}`} className={`whitespace-pre-wrap break-words ${line.kind === 'input' ? 'text-[#d7aa70]' : line.kind === 'error' ? 'text-red-300' : 'text-white/65'}`}>{line.text}</pre>)}</div>
+            <form onSubmit={runPreviewCommand} className="flex shrink-0 items-center gap-2 border-t border-white/10 p-3"><span aria-hidden="true" className="font-mono text-[#d7aa70]">›</span><input aria-label="Preview command" value={terminalInput} onChange={event => setTerminalInput(event.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-xs text-white outline-none placeholder:text-white/35" placeholder="help, ls, find <name>, cat <path>"/><button aria-label="Run preview command" className="rounded p-2 text-white/60 hover:bg-white/10 hover:text-white"><Play size={14}/></button></form>
+          </>
+        )}
       </aside>
     </section>
   </main>;
