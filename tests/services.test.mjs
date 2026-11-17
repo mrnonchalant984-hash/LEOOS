@@ -11,7 +11,7 @@ test('public services page presents the configured service offers and contact pa
   assert.match(page, /Discuss your project/);
   assert.match(page, /clear scope and a conversation/);
   assert.match(services, /AI Mockup/);
-  assert.match(services, /LEO OS Builder/);
+  assert.match(services, /Braverton Builder/);
   assert.match(services, /Code Review/);
 });
 
