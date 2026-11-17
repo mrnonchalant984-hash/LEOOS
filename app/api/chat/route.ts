@@ -210,14 +210,6 @@ export async function POST(req: NextRequest) {
       if (customAgent.allowed_tools.length && mode !== "tools") return NextResponse.json({ error: "This custom agent requires read-only tool mode." }, { status: 400 });
     }
     const db = ctx ? adminSupabase() : null;
-    if (project_id !== null && (typeof project_id !== "string" || !PROJECT_ID_RE.test(project_id))) {
-      return NextResponse.json({ error: "Invalid project ID." }, { status: 400 });
-    }
-    if (ctx && db && project_id) {
-      const { data: project, error: projectError } = await db.from("projects").select("id").eq("id", project_id).eq("user_id", ctx.user.id).maybeSingle();
-      if (projectError) return NextResponse.json({ error: "Project context is temporarily unavailable." }, { status: 503 });
-      if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
-    }
     let history: Array<{ role: "user" | "assistant"; content: string; image?: string; assetId?: string; document_asset_ids?: string[] }> = [];
     let existingChat = false;
     if (ctx && db) {
