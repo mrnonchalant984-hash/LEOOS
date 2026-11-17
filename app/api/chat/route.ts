@@ -27,6 +27,7 @@ import { generateAndPersistImage } from '@/lib/generation/images';
 import { inspectImageUpload, MAX_STUDIO_IMAGE_BYTES } from '@/lib/generation/image-input';
 import { getWorkspaceManifest, readWorkspaceTextFile } from '@/lib/workspace-source';
 export const runtime = "nodejs";
+export const maxDuration = 110;
 const PROJECT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CHAT_REQUEST_ID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
 
@@ -581,8 +582,10 @@ export async function POST(req: NextRequest) {
       const request = {
         model: selectedModel,
         messages,
+        signal: AbortSignal.timeout(100_000),
         temperature: mode === "deep" ? 0.3 : 0.7,
-        maxOutputTokens: mode === "deep" ? 1200 : 900,
+        maxOutputTokens: buildMode ? 8192 : mode === "deep" ? 1200 : 900,
+        maxToolTurns: buildMode ? 4 : 5,
         ...(chatImages.length ? { images: chatImages.map(({ mimeType, data }) => ({ mimeType, data })) } : {}),
         ...(mode === "deep" ? { reasoning: { effort: "high" as const } } : {}),
       };
@@ -645,7 +648,7 @@ export async function POST(req: NextRequest) {
           executeTool: available.execute,
           maxToolCalls: selectedTool ? 1 : 6,
           ...(selectedTool ? { requiredToolName: selectedTool.name } : {}),
-        }));
+        }), undefined, { shouldFallbackOnError: () => !request.signal?.aborted }));
         const response = outcome.result;
         reply = response.text || "I could not generate a reply.";
         usage = response.usage;
@@ -655,7 +658,7 @@ export async function POST(req: NextRequest) {
         const fallbackModel = customAgent && !owner
           ? undefined
           : getSafeFallbackModel(selectedModel, process.env.LEO_FALLBACK_MODEL?.trim());
-        const outcome = await generateWithExplicitFallback(selectedModel, fallbackModel, model => generateText({ ...request, model, webSearch: webSearchRequested }));
+        const outcome = await generateWithExplicitFallback(selectedModel, fallbackModel, model => generateText({ ...request, model, webSearch: webSearchRequested }), undefined, { shouldFallbackOnError: () => !request.signal?.aborted });
         const response = outcome.result;
         citations = (response.sources || []).flatMap(source => {
           try {
