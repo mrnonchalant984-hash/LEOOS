@@ -3,7 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowDown, ArrowRight, Bot, Boxes, Check, Code2, GitBranch, Globe2, Play, ShieldCheck, Sparkles, Terminal } from 'lucide-react';
 import { Reveal } from '@/components/Reveal';
-import LeonardXEditorialHero from '@/components/LeonardXEditorialHero';
+import BravertonEditorialHero from '@/components/LeonardXEditorialHero';
 import { LeonardXCommercial } from '@/components/LeonardXCommercial';
 import { siteData } from '@/data/site';
 import { JsonLd } from '@/components/JsonLd';
@@ -60,9 +60,10 @@ export default function Home(){
     name: SITE_NAME,
     applicationCategory: 'DeveloperApplication',
     operatingSystem: 'Web',
-    url: SITE_ORIGIN + '/',
+    url: SITE_ORIGIN + '/app',
     description: 'An AI-assisted workspace for planning and developing websites, web apps and software projects.',
     image: SITE_ORIGIN + SOCIAL_IMAGE_PATH,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'NGN', description: 'Free tier available. Paid plans on the pricing page.' },
     publisher: { '@id': SITE_ORIGIN + '/#organization' },
   }} />
   <JsonLd data={faqSchema} />
@@ -71,7 +72,7 @@ export default function Home(){
     <div className="landing-hero-content">
       <div className="landing-eyebrow"><span/> BRAVERTON <span className="slash">/</span> AI SOFTWARE CREATION</div>
       <h2>Turn bold ideas into <em>working software.</em></h2>
-      <p className="landing-lead">Get help shaping a website concept, building a digital product, or improving your code. LeonardX combines practical services with AI-assisted development.</p>
+      <p className="landing-lead">Get help shaping a website concept, building a digital product, or improving your code. Braverton combines practical services with AI-assisted development.</p>
       <div className="landing-actions"><Link href="/services" className="landing-primary">Explore services <ArrowRight size={16}/></Link><Link href="/app" className="landing-secondary"><Bot size={16}/> Open workspace</Link></div>
       <div className="landing-proof"><span>IDEA</span><i>→</i><span>CODA</span><i>→</i><span>BUILD</span><i>→</i><span>TEST</span><i>→</i><span>DEPLOY</span></div>
     </div>
