@@ -6,7 +6,7 @@ import { CodaAvatar } from '@/components/CodaAvatar';
 export const metadata = createPublicMetadata({
   title: 'Meet Coda',
   description: 'Learn how Coda helps organize software ideas, project context and development work inside the Braverton workspace.',
-  path: "/leo-ai",
+  path: "/coda",
   type: 'website',
 });
 
