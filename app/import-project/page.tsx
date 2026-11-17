@@ -57,7 +57,7 @@ export default function ImportProjectPage() {
 
   const verifiedConnections=connections.filter(item=>item.status==='verified');
   const canImport=source==='website'?websiteUrl.trim().length>0:source==='github'?repositoryUrl.trim().length>0&&Boolean(connectionId):Boolean(zipFile);
-  return <main className="min-h-screen bg-[#f7f6fa] px-4 py-10 text-[#191722] sm:px-6">
+  return <main className="min-h-screen bg-[var(--lx-bg)] px-4 py-10 text-[var(--lx-text)] sm:px-6">
     <div className="mx-auto max-w-3xl">
       <button onClick={()=>router.back()} className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-zinc-600 hover:text-zinc-900"><ArrowLeft size={16}/> Back</button>
       <div className="mb-8"><p className="text-xs font-bold uppercase tracking-[.2em] text-indigo-600">LEONARDX · PROJECT SETUP</p><h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Import your website or project</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-600">Bring a public website in as a reference, or import a GitHub repository into a private Leo workspace. Your source is kept separate from other users.</p></div>
@@ -79,7 +79,7 @@ export default function ImportProjectPage() {
         <label className="mt-5 block text-sm font-semibold">Workspace name <span className="font-normal text-zinc-400">(optional)</span><input value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="Use the source name" className="mt-2 w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm font-normal outline-none focus:border-indigo-500"/></label>
         {error&&<p role="alert" className="mt-5 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {notice&&<p role="status" className="mt-5 rounded-xl bg-indigo-50 p-3 text-sm text-indigo-800">{notice}</p>}
-        <button disabled={!canImport||busy||(source==='github'&&loadingConnections)} onClick={()=>void importProject()} className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#17151e] px-6 py-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy?<><LoaderCircle className="animate-spin" size={17}/> Importing project...</>:<>Import into Leo Workspace <ArrowRight size={17}/></>}</button>
+        <button disabled={!canImport||busy||(source==='github'&&loadingConnections)} onClick={()=>void importProject()} className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-full bg-zinc-900 px-6 py-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy?<><LoaderCircle className="animate-spin" size={17}/> Importing project...</>:<>Import into Leo Workspace <ArrowRight size={17}/></>}</button>
       </section>
       <p className="mt-5 flex items-center justify-center gap-2 text-center text-xs text-zinc-500"><UploadCloud size={14}/> Your imported workspace is saved to your LeonardX account.</p>
     </div>
