@@ -91,7 +91,7 @@ export function AccountSecuritySettings({ email, fullName }: { email: string; fu
     try {
       const { data, error: enrollError } = await supabase.auth.mfa.enroll({
         factorType: 'totp',
-        friendlyName: 'LeonardX authenticator',
+        friendlyName: 'Braverton authenticator',
       });
       if (enrollError) throw enrollError;
       setEnrollment({
@@ -173,7 +173,7 @@ export function AccountSecuritySettings({ email, fullName }: { email: string; fu
     <section className="rounded-2xl border border-white/10 bg-zinc-950 p-5 sm:p-6">
       <div className="flex items-start gap-3">
         <span className="rounded-xl border border-white/10 bg-white/[.04] p-2"><KeyRound size={18}/></span>
-        <div><h2 className="text-lg font-semibold">Account</h2><p className="mt-1 text-sm text-zinc-400">Your verified LeonardX sign-in identity.</p></div>
+        <div><h2 className="text-lg font-semibold">Account</h2><p className="mt-1 text-sm text-zinc-400">Your verified Braverton sign-in identity.</p></div>
       </div>
       <dl className="mt-5 grid gap-4 sm:grid-cols-2">
         <div><dt className="text-xs text-zinc-500">Name</dt><dd className="mt-1 text-sm text-zinc-100">{fullName || 'Not provided'}</dd></div>
@@ -184,7 +184,7 @@ export function AccountSecuritySettings({ email, fullName }: { email: string; fu
     <section className="rounded-2xl border border-white/10 bg-zinc-950 p-5 sm:p-6">
       <div className="flex items-start gap-3">
         <span className="rounded-xl border border-emerald-300/15 bg-emerald-300/[.05] p-2 text-emerald-200"><ShieldCheck size={18}/></span>
-        <div><h2 className="text-lg font-semibold">Two-factor authentication</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-400">Use an authenticator app to verify sign-ins. When enabled, LeonardX asks for a one-time code before protected workspace pages and API actions are available.</p></div>
+        <div><h2 className="text-lg font-semibold">Two-factor authentication</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-400">Use an authenticator app to verify sign-ins. When enabled, Braverton asks for a one-time code before protected workspace pages and API actions are available.</p></div>
       </div>
 
       {error && <p role="alert" className="mt-4 rounded-xl border border-red-400/20 bg-red-950/30 p-3 text-sm text-red-200">{error}</p>}
