@@ -74,7 +74,7 @@ export default function Home(){
       <h2>Turn bold ideas into <em>working software.</em></h2>
       <p className="landing-lead">Get help shaping a website concept, building a digital product, or improving your code. Braverton combines practical services with AI-assisted development.</p>
       <div className="landing-actions"><Link href="/services" className="landing-primary">Explore services <ArrowRight size={16}/></Link><Link href="/app" className="landing-secondary"><Bot size={16}/> Open workspace</Link></div>
-      <div className="landing-proof"><span>IDEA</span><i>→</i><span>CODA</span><i>→</i><span>BUILD</span><i>→</i><span>TEST</span><i>→</i><span>DEPLOY</span></div>
+      <div className="landing-proof"><span>IDEA</span><i>→</i><span>CODER</span><i>→</i><span>BUILD</span><i>→</i><span>TEST</span><i>→</i><span>DEPLOY</span></div>
     </div>
     <a href="#story" className="landing-scroll"><ArrowDown size={15}/> Explore the platform</a>
   </section>
