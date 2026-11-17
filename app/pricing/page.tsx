@@ -17,7 +17,7 @@ import {
 } from "@/lib/pricing";
 
 const featureLabels: Record<string, string> = {
-  chat: "Leo AI workspace",
+  chat: "Coda AI workspace",
   "file-review": "Project file review",
   "image-generation": "Image generation",
   "code-review": "Code review",
@@ -141,7 +141,7 @@ export default function Pricing() {
     <main className="pricing-page mx-auto max-w-7xl px-4 py-14 sm:py-20">
       <header className="mx-auto max-w-3xl text-center">
         <p className="text-xs font-bold uppercase tracking-[.2em] text-zinc-400">
-          LeonardX plans <span aria-hidden="true">·</span> prepaid, transparent pricing
+          Braverton plans <span aria-hidden="true">·</span> prepaid, transparent pricing
         </p>
         <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-6xl">
           Build at your pace.
@@ -222,7 +222,7 @@ export default function Pricing() {
               }`}
             >
               <div className="pricing-card-top flex items-center justify-between gap-3">
-                <span>{recommended ? "RECOMMENDED" : "LEONARDX PLAN"}</span>
+                <span>{recommended ? "RECOMMENDED" : "BRAVERTON PLAN"}</span>
                 {savingsPercent > 0 && (
                   <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold tracking-normal text-emerald-200">
                     Save {savingsPercent}%
