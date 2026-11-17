@@ -22,7 +22,7 @@ test('stream endpoint authenticates, rate limits, checks chat ownership, persist
   assert.match(route, /export const maxDuration = 110/);
   assert.match(route, /AbortSignal\.timeout\(100_000\)/);
   assert.match(provider, /timeout: 30_000/);
-  assert.match(provider, /maxAttempts: 1/);
+  assert.match(provider, /maxAttempts: 2/);
   assert.match(route, /type: 'delta'/);
   assert.match(route, /type: 'done'/);
   assert.match(route, /type: 'error'/);
