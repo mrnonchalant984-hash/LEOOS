@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Menu, X, ArrowRight, Search } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
-const links = [['Product','/'],['Services','/services'],['Coda','/coda'],['LeoCode','/leocode-early-access'],['Developers','/developers'],['Resources','/resources'],['Pricing','/pricing'],['Company','/about']] as const;
+const links = [['Product','/'],['Services','/services'],['Coda','/coda'],['BraverCode','/leocode-early-access'],['Developers','/developers'],['Resources','/resources'],['Pricing','/pricing'],['Company','/about']] as const;
 const appPrefixes = ['/dashboard','/app','/projects','/agents','/deployments','/analytics','/api-keys','/audit','/auth','/account','/admin','/developers','/docs','/integrations','/notifications','/observability','/organizations','/engineering','/leocode-early-access','/resources','/settings','/status','/support','/templates','/tutorials','/setup/keys','/team','/webhooks','/workflows','/workforce','/studio','/ide','/cli','/plugins','/meeting-room','/offline','/mcp','/payment'];
 export function Header(){
   const [open,setOpen]=useState(false); const [authenticated,setAuthenticated]=useState<boolean|null>(null); const pathname=usePathname();
