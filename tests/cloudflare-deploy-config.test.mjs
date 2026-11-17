@@ -25,6 +25,12 @@ test('Cloudflare uses the OpenNext worker build and deploy commands', async () =
   assert.match(buildScript, /\['exec', '--', 'opennextjs-cloudflare', 'build'\]/);
 });
 
+test('Cloudflare Worker Previews include the Images API binding', async () => {
+  const config = JSON.parse(await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
+
+  assert.deepEqual(config.previews, { images: { binding: 'IMAGES' } });
+});
+
 test('Cloudflare auth uses Edge Middleware and enforces MFA', async () => {
   const middleware = await readFile(new URL('../middleware.ts', import.meta.url), 'utf8');
 
