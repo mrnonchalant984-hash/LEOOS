@@ -33,6 +33,7 @@ const publicPages: SitemapPage[] = [
   { path: '/contact', priority: 0.6, changeFrequency: 'yearly' },
   { path: '/support', priority: 0.55, changeFrequency: 'yearly' },
   { path: '/blog', priority: 0.8, changeFrequency: 'weekly' },
+  { path: '/blog/building-braverton', priority: 0.8, changeFrequency: 'weekly' },
   { path: '/blog/freelancers-ai-10x', priority: 0.7, changeFrequency: 'monthly' },
   { path: '/blog/leo-vs-chatgpt', priority: 0.7, changeFrequency: 'monthly' },
   { path: '/blog/build-website-10-minutes-5000', priority: 0.7, changeFrequency: 'monthly' },
