@@ -4,9 +4,9 @@ import { LEOAppShell, Panel } from '@/components/LEOAppShell';
 import { IntegrationStudio } from '@/components/IntegrationStudio';
 
 export default function Developers() {
-  return <LEOAppShell title="Developer Platform" subtitle="Build on top of LEO OS with scoped APIs, webhooks and SDKs.">
+  return <LEOAppShell title="Developer Platform" subtitle="Build on top of Braverton with scoped APIs, webhooks and SDKs.">
     <div className="page-hero">
-      <span className="mini-label">LEO OS API</span>
+      <span className="mini-label">Braverton API</span>
       <h2>Build your own layer on top of Leo.</h2>
       <p>The developer surface includes authenticated requests, explicit scopes, request IDs, usage tracking, signed event delivery, and private custom agents on paid Developer API plans.</p>
       <div className="hero-actions">
