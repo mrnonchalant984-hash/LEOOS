@@ -49,7 +49,7 @@ export default function CodaAIPage() {
     </section>
 
     <section className="leo-ai-section leo-ai-features">
-      <div className="leo-ai-section-heading"><span>WHAT LEO CAN HELP WITH</span><h2>One assistant. A connected way to work.</h2><p>Keep the idea, the plan and the work connected as your product takes shape.</p></div>
+      <div className="leo-ai-section-heading"><span>WHAT CODA CAN HELP WITH</span><h2>One assistant. A connected way to work.</h2><p>Keep the idea, the plan and the work connected as your product takes shape.</p></div>
       <div className="leo-ai-feature-grid">{features.map(({ icon: Icon, title, text }) => <article className="leo-ai-feature-card" key={title}><span className="leo-ai-feature-icon"><Icon size={22}/></span><h3>{title}</h3><p>{text}</p></article>)}</div>
     </section>
 
