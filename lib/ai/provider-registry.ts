@@ -42,7 +42,7 @@ async function withProviderError<T>(provider: ModelProvider, model: string, requ
     // One attempt per model call: the outer router may try one different Gemini
     // model, while route-level deadlines prevent nested retries from exhausting
     // the Vercel request window.
-    return await retryProviderRequest(request, { signal, maxAttempts: 1, baseDelayMs: 250, maxDelayMs: 1_000 });
+    return await retryProviderRequest(request, { signal, maxAttempts: 2, baseDelayMs: 250, maxDelayMs: 1_000 });
   } catch (error) {
     if (error instanceof ModelProviderError) throw error;
     const candidate = error && typeof error === 'object' ? error as { status?: unknown; statusCode?: unknown } : {};
