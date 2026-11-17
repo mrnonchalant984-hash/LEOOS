@@ -27,13 +27,25 @@ export default function AuthCallbackPage() {
         const code = callbackParams.get('code');
         if (!code) throw new Error('Google did not return an authentication code. Check that Google is enabled in Supabase and this callback URL is allowlisted, then try again.');
         const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-        const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-        if (exchangeError || !data.session) throw exchangeError || new Error('Google sign-in could not be completed.');
+        // The server callback reads the PKCE verifier from the cookie written
+        // by the server-side OAuth start route and performs the code exchange.
+        const exchangeResponse = await fetch('/api/auth/google/callback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+          cache: 'no-store',
+        });
+        const exchangeResult = await exchangeResponse.json().catch(() => ({}));
+        if (!exchangeResponse.ok || !exchangeResult.session?.access_token || !exchangeResult.session?.refresh_token) {
+          throw new Error(exchangeResult.error || 'Google sign-in could not be completed.');
+        }
+        const { error: syncBrowserError } = await supabase.auth.setSession(exchangeResult.session);
+        if (syncBrowserError) throw new Error('Your Google session could not be synchronized with this browser.');
 
         const sessionResponse = await fetch('/api/auth/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ access_token: data.session.access_token, refresh_token: data.session.refresh_token }),
+          body: JSON.stringify(exchangeResult.session),
           cache: 'no-store',
         });
         const sessionResult = await sessionResponse.json().catch(() => ({}));
