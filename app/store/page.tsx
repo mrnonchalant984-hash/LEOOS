@@ -7,7 +7,7 @@ import { getVerifiedStoreSellerIds } from '@/lib/store/seller-access';
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'LeoX Market — Find your next good thing',
-  description: 'Shop products from independent sellers across Africa on LeoX Market, by LeonardX.',
+  description: 'Shop products from independent sellers across Africa on LeoX Market, by Braverton.',
   alternates: { canonical: '/store' },
 };
 
@@ -67,7 +67,7 @@ export default async function StorePage({ searchParams }: PageProps<'/store'>) {
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-stone-950/75 via-stone-950/20 to-transparent p-6 pt-24 sm:p-9 sm:pt-28">
             {feature ? <Link href={`/store/product/${feature.slug}`} className="block max-w-lg text-white"><span className="rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#c8501c]">Fresh on LeoX</span><h2 className="mt-4 text-2xl font-bold sm:text-3xl">{feature.title}</h2><p className="mt-1 text-sm text-white/85">{feature.city}, {feature.country_code} <span aria-hidden>·</span> {formatProductPrice(Number(feature.price), feature.currency)}</p></Link> : <div className="text-white"><span className="rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#c8501c]">Made for everyday discovery</span><p className="mt-4 max-w-md text-2xl font-bold sm:text-3xl">Your next favourite thing is waiting.</p></div>}
           </div>
-          <div className="absolute right-5 top-5 rounded-2xl border border-white/50 bg-white/75 px-4 py-3 shadow-lg backdrop-blur"><p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">Proudly local</p><p className="mt-0.5 text-sm font-extrabold text-stone-900">by LeonardX</p></div>
+          <div className="absolute right-5 top-5 rounded-2xl border border-white/50 bg-white/75 px-4 py-3 shadow-lg backdrop-blur"><p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">Proudly local</p><p className="mt-0.5 text-sm font-extrabold text-stone-900">by Braverton</p></div>
         </div>
       </section>
 
