@@ -21,7 +21,10 @@ function subscribeDashboardPreferences(onChange: () => void) {
   };
 }
 function getThemeSnapshot(): "light" | "dark" {
-  return localStorage.getItem("leonardx-theme") === "dark" ? "dark" : "light";
+  const saved = localStorage.getItem("leonardx-theme");
+  return saved === "dark" || saved === "light"
+    ? saved
+    : document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
 function getRecentProjectsSnapshot() {
   return localStorage.getItem("leonardx_recent_projects") || "[]";
@@ -74,9 +77,18 @@ export function DashboardHome({ data }: { data: DashboardData }) {
   const [error, setError] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [recentIds, setRecentIds] = useState<string[]>([]);
-  useEffect(() => { try { const recent = JSON.parse(localStorage.getItem("leonardx_recent_projects") || "[]"); if (Array.isArray(recent)) setRecentIds(recent.filter((id): id is string => typeof id === "string").slice(0, 20)); const saved = localStorage.getItem("leonardx-theme"); const preferred = saved === "dark" || saved === "light" ? saved : document.documentElement.dataset.theme === "dark" ? "dark" : "light"; setTheme(preferred); } catch { setTheme("light"); } }, []);
+  const theme = useSyncExternalStore(subscribeDashboardPreferences, getThemeSnapshot, () => "light");
+  const recentProjectsSnapshot = useSyncExternalStore(subscribeDashboardPreferences, getRecentProjectsSnapshot, () => "[]");
+  const recentIds = useMemo(() => {
+    try {
+      const recent = JSON.parse(recentProjectsSnapshot);
+      return Array.isArray(recent)
+        ? recent.filter((id): id is string => typeof id === "string").slice(0, 20)
+        : [];
+    } catch {
+      return [];
+    }
+  }, [recentProjectsSnapshot]);
   function setPrompt(value: string) {
     try {
       if (value) localStorage.setItem("leonardx_initial_prompt", value);
