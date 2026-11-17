@@ -14,7 +14,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
   return createPublicMetadata({
     title: `${project.name} Project Preview`,
-    description: `${project.description} View this public Leo OS project preview and its current status.`,
+    description: `${project.description} View this public Braverton project preview and its current status.`,
     path: `/projects/${slug}`,
   });
 }
