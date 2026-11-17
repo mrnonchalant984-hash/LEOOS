@@ -18,11 +18,19 @@ function profilePayload(context: NonNullable<Awaited<ReturnType<typeof getProfil
 }
 
 export async function GET(req: NextRequest) {
-  const context = await getProfile(req);
-  if (!context) return NextResponse.json({ authenticated: false }, { status: 401 });
-  return NextResponse.json({ authenticated: true, user: profilePayload(context) }, {
-    headers: { 'Cache-Control': 'private, no-store' },
-  });
+  try {
+    const context = await getProfile(req);
+    if (!context) return NextResponse.json({ authenticated: false, error: 'Your sign-in session is missing or expired. Please sign in again.' }, { status: 401 });
+    return NextResponse.json({ authenticated: true, user: profilePayload(context) }, {
+      headers: { 'Cache-Control': 'private, no-store' },
+    });
+  } catch (error) {
+    console.error('Authenticated profile lookup failed:', error instanceof Error ? error.message : error);
+    return NextResponse.json({
+      error: 'Your sign-in succeeded, but the account profile service is temporarily unavailable. Please retry shortly.',
+      code: 'PROFILE_LOOKUP_UNAVAILABLE',
+    }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
 }
 
 export async function PATCH(req: NextRequest) {
