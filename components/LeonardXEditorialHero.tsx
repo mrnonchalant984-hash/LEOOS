@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Play } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { ArrowRight, Play, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import DesignWorldScene from "@/components/DesignWorldScene";
 
 const ABOUT_VIDEO = "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260823_063501_2e2c8971-de1e-473a-8611-a0c9ae7ee186.mp4";
@@ -38,6 +38,12 @@ function ResilientVideo({ src, className, preload = "metadata" }: { src: string;
 }
 
 export default function LeonardXEditorialHero() {
+  const [prompt, setPrompt] = useState("");
+  function startBuilding(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const value = prompt.trim();
+    window.location.assign(value ? `/app?prompt=${encodeURIComponent(value)}` : "/app");
+  }
   return (
     <>
       <section className="lx-editorial-hero" aria-labelledby="lx-hero-title">
@@ -47,6 +53,14 @@ export default function LeonardXEditorialHero() {
           <p className="lx-editorial-kicker">AI SOFTWARE CREATION PLATFORM</p>
           <h1 id="lx-hero-title"><span>BUILD WHAT YOU</span><span>IMAGINE.</span></h1>
           <p className="lx-editorial-lead">Turn an idea into working software with Coda, project workspaces and a connected path from planning to deployment.</p>
+          <form onSubmit={startBuilding} className="mx-auto mt-7 w-full max-w-2xl rounded-2xl border border-white/20 bg-black/55 p-2 text-left shadow-2xl shadow-black/30 backdrop-blur-xl">
+            <label htmlFor="lx-home-prompt" className="sr-only">Describe what you want to build</label>
+            <textarea id="lx-home-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} rows={2} maxLength={4000} placeholder="Describe the website, app or software you want Leo to build…" className="min-h-20 w-full resize-y bg-transparent px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/45" />
+            <div className="flex flex-wrap items-center justify-between gap-3 px-2 pb-1">
+              <span className="text-[11px] text-white/45">Start with an idea. Refine the brief with Leo.</span>
+              <button type="submit" className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-xs font-bold tracking-wide text-slate-950 transition hover:bg-cyan-200 focus:outline-none focus:ring-2 focus:ring-cyan-100"><Sparkles size={15} /> BUILD WITH LEO <ArrowRight size={15} /></button>
+            </div>
+          </form>
           <div className="lx-editorial-actions">
             <Link href="/app" className="lx-cyan-button">START BUILDING <ArrowRight size={16} /></Link>
             <Link href="#story" className="lx-editorial-outline"><Play size={14} /> EXPLORE THE PLATFORM</Link>
