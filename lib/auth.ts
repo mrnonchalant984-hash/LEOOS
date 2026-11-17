@@ -47,9 +47,38 @@ export function isPlatformOwner(profile: { role?: string | null; email?: string 
 export async function getProfile(req: NextRequest) {
   const user = await getUserFromRequest(req);
   if (!user) return null;
+
   const db = adminSupabase();
-  const { data } = await db.from('profiles').select('*').eq('id', user.id).maybeSingle();
-  return data ? { user, profile: data } : null;
+  const { data: existing, error: readError } = await db
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (existing) return { user, profile: existing };
+
+  // Older accounts can exist without a matching public profile row if the
+  // auth-user trigger was not installed when they were created. Restore only
+  // a basic user profile; never assign owner/admin privileges here.
+  const metadataName = typeof user.user_metadata?.full_name === 'string'
+    ? user.user_metadata.full_name.trim()
+    : '';
+  const fallbackName = user.email?.split('@')[0] || 'New user';
+  const { error: insertError } = await db.from('profiles').upsert({
+    id: user.id,
+    email: user.email ?? null,
+    full_name: metadataName || fallbackName,
+    role: 'user',
+  }, { onConflict: 'id', ignoreDuplicates: true });
+  if (insertError) throw insertError;
+
+  const { data: restored, error: restoredReadError } = await db
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (restoredReadError) throw restoredReadError;
+  return restored ? { user, profile: restored } : null;
 }
 
 export async function isTrustedAdminDevice(req: NextRequest, userId: string, db = adminSupabase()) {
