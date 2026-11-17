@@ -19,6 +19,7 @@ test('stream endpoint authenticates, rate limits, checks chat ownership, persist
   assert.match(route, /enforceLeoCodeDailyQuota/);
   assert.match(route, /chat\.user_id !== ctx\.user\.id/);
   assert.match(route, /generateTextStream\(/);
+  assert.match(route, /export const maxDuration = 60/);
   assert.match(route, /type: 'delta'/);
   assert.match(route, /type: 'done'/);
   assert.match(route, /type: 'error'/);
@@ -30,6 +31,8 @@ test('Leo UI consumes server-sent deltas and supports cancellation for streamed 
   assert.match(widget, /fetch\("\/api\/chat\/stream"/);
   assert.match(widget, /reader\.read\(\)/);
   assert.match(widget, /streamedText \+= event\.text/);
+  assert.match(widget, /receivedDone/);
+  assert.match(widget, /response stream ended before completion/);
   assert.match(widget, /function stopGeneration\(\)/);
   assert.match(widget, /chatAbortController\.current\?\.abort\(\)/);
   assert.match(widget, /Coda is thinking/);
