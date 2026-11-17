@@ -19,8 +19,13 @@ export default function AuthCallbackPage() {
     async function complete() {
       try {
         if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) throw new Error('Authentication is not configured.');
-        const code = new URLSearchParams(window.location.search).get('code');
-        if (!code) throw new Error('Google did not return an authentication code. Please try again.');
+        const callbackParams = new URLSearchParams(window.location.search);
+        const providerError = callbackParams.get('error_description') || callbackParams.get('error');
+        if (providerError) {
+          throw new Error(providerError.replace(/\+/g, ' ').slice(0, 240));
+        }
+        const code = callbackParams.get('code');
+        if (!code) throw new Error('Google did not return an authentication code. Check that Google is enabled in Supabase and this callback URL is allowlisted, then try again.');
         const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
         const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
         if (exchangeError || !data.session) throw exchangeError || new Error('Google sign-in could not be completed.');
@@ -32,10 +37,21 @@ export default function AuthCallbackPage() {
           cache: 'no-store',
         });
         const sessionResult = await sessionResponse.json().catch(() => ({}));
-        if (!sessionResponse.ok) throw new Error(sessionResult.error || 'Your sign-in session could not be secured.');
+        if (!sessionResponse.ok || !sessionResult.session?.access_token || !sessionResult.session?.refresh_token) {
+          throw new Error(sessionResult.error || 'Your sign-in session could not be secured. Please try again.');
+        }
+
+        // The server rotates the refresh token when it secures the session cookie.
+        // Keep the browser Supabase client in sync or its next refresh can reuse
+        // the now-invalid pre-rotation token.
+        const { error: syncError } = await supabase.auth.setSession({
+          access_token: sessionResult.session.access_token,
+          refresh_token: sessionResult.session.refresh_token,
+        });
+        if (syncError) throw new Error('Your Google session was created but could not be synchronized. Please sign in again.');
 
         const profileResponse = await fetch('/api/auth/profile', {
-          headers: { Authorization: 'Bearer ' + sessionResult.session?.access_token },
+          headers: { Authorization: 'Bearer ' + sessionResult.session.access_token },
           cache: 'no-store',
         });
         const profileResult = await profileResponse.json().catch(() => ({}));
