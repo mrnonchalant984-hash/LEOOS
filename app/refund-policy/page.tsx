@@ -3,14 +3,14 @@ export default function RefundPolicyPage() {
     <main className="mx-auto max-w-4xl px-4 py-16">
       <article className="rounded-3xl border border-white/10 bg-white/[.04] p-8 md:p-10">
         <p className="text-sm font-bold text-yellow-300">
-          LEO OS · LEGAL
+          Braverton · LEGAL
         </p>
         <h1 className="text-4xl font-black">Refund Policy</h1>
         <p className="mt-3 text-sm text-zinc-500">
           Last updated: October 2, 2026
         </p>
         <p className="mt-6 leading-7 text-zinc-300">
-          This policy applies to LEO OS subscriptions and separately paid hosting. Nothing here limits rights or remedies that cannot legally be excluded.
+          This policy applies to Braverton subscriptions and separately paid hosting. Nothing here limits rights or remedies that cannot legally be excluded.
         </p>
         <div className="mt-8 space-y-7 leading-7 text-zinc-300">
           <section>
@@ -38,7 +38,7 @@ export default function RefundPolicyPage() {
           </section>
           <section>
             <h2 className="text-xl font-bold text-white">
-              3. LEO OS subscriptions
+              3. Braverton subscriptions
             </h2>
             <p className="mt-2">
               Plans are prepaid and do not automatically renew. There is no recurring plan charge to cancel; access continues through the paid period and then expires unless another period is purchased. Contact support promptly about duplicate, unauthorized, or incorrectly processed charges. Refund requests are reviewed under applicable law and payment-provider rules.
