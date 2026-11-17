@@ -20,14 +20,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Supabase authentication is not configured.' }, { status: 503 });
   }
 
-  const response = NextResponse.json({ ok: false });
+  // Buffer cookie writes until the response is created. This preserves every
+  // Supabase cookie option (including expiry, path and same-site settings).
+  const pendingCookies: Array<{ name: string; value: string; options?: Record<string, unknown> }> = [];
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+        pendingCookies.push(...cookiesToSet);
       },
     },
   });
@@ -39,22 +41,16 @@ export async function POST(request: NextRequest) {
     }, { status: 401 });
   }
 
-  response.headers.set('Cache-Control', 'no-store');
-  response.headers.set('Content-Type', 'application/json');
-  // Return tokens only to the same-origin callback page so it can synchronize
-  // its browser Supabase client; the server has already persisted the cookie session.
-  response.headers.delete('Content-Length');
-  const payload = JSON.stringify({
+  const response = NextResponse.json({
     ok: true,
     session: {
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token,
     },
     user: { id: data.user.id, email: data.user.email },
-  });
-  return new NextResponse(payload, {
-    status: 200,
-    headers: response.headers,
-    cookies: response.cookies,
-  });
+  }, { headers: { 'Cache-Control': 'no-store' } });
+  for (const cookie of pendingCookies) {
+    response.cookies.set(cookie.name, cookie.value, cookie.options as any);
+  }
+  return response;
 }
