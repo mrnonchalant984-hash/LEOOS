@@ -37,7 +37,7 @@ function ResilientVideo({ src, className, preload = "metadata" }: { src: string;
   return <video ref={ref} className={className} src={src} autoPlay muted loop playsInline preload={preload} aria-hidden="true" />;
 }
 
-export default function CodernardXEditorialHero() {
+export default function LeonardXEditorialHero() {
   const [prompt, setPrompt] = useState("");
   function startBuilding(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,7 +58,7 @@ export default function CodernardXEditorialHero() {
             <textarea id="lx-home-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} rows={2} maxLength={4000} placeholder="Describe the website, app or software you want Coder to build…" className="min-h-20 w-full resize-y bg-transparent px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/45" />
             <div className="flex flex-wrap items-center justify-between gap-3 px-2 pb-1">
               <span className="text-[11px] text-white/45">Start with an idea. Refine the brief with Coder.</span>
-              <button type="submit" className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-xs font-bold tracking-wide text-slate-950 transition hover:bg-cyan-200 focus:outline-none focus:ring-2 focus:ring-cyan-100"><Sparkles size={15} /> BUILD WITH Coder <ArrowRight size={15} /></button>
+              <button type="submit" className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-xs font-bold tracking-wide text-slate-950 transition hover:bg-cyan-200 focus:outline-none focus:ring-2 focus:ring-cyan-100"><Sparkles size={15} /> BUILD WITH CODER <ArrowRight size={15} /></button>
             </div>
           </form>
           <div className="lx-editorial-actions">
