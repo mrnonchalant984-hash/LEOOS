@@ -64,6 +64,6 @@ test('homepage and Coda landing page have visible FAQ content and FAQ schema', (
   assert.match(codaRoute, /CodaPage/);
   assert.match(coda, /FAQPage/);
   assert.match(coda, /Frequently asked questions/);
-  assert.match(coda, /path: "\/leo-ai"/);
+  assert.match(coda, /path: "\/coda"/);
   assert.match(read('../app/blog/freelancers-ai-10x/page.tsx'), /BlogPosting/);
 });
