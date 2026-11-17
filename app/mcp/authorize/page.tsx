@@ -70,11 +70,11 @@ export default function McpConsentPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#09090b] px-4 py-12 text-white">
       <section className="w-full max-w-lg rounded-2xl border border-white/10 bg-white/[.03] p-6 shadow-2xl sm:p-8">
-        <p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--gold)]">LeonardX secure connection</p>
+        <p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--gold)]">Braverton secure connection</p>
         <h1 className="mt-3 text-2xl font-bold">Connect an MCP client</h1>
         {needsSignIn ? (
           <>
-            <p className="mt-4 text-sm leading-6 text-zinc-300">Sign in to review and approve this connection to your LeonardX account.</p>
+            <p className="mt-4 text-sm leading-6 text-zinc-300">Sign in to review and approve this connection to your Braverton account.</p>
             <a href={signInHref} className="mt-6 inline-flex rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black">Sign in to continue</a>
           </>
         ) : consent ? (
