@@ -725,7 +725,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
             streamedText += event.text;
             setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, content: streamedText } : item));
           } else if (event.type === "error") {
-            throw new Error(event.error || "Leo could not complete the response.");
+            throw new Error(event.error || "Coda could not complete the response.");
           } else if (event.type === "done") {
             receivedDone = true;
           }
