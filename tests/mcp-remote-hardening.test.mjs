@@ -55,3 +55,14 @@ test('manual MCP execution rejects arguments that do not match the discovered sc
   assert.match(route, /validateMcpToolArguments\(tool\.inputSchema, remoteArgs\)/);
   assert.match(orchestrator, /validateMcpToolArguments\(remoteTool\.inputSchema, remoteArgs\)/);
 });
+
+test('BramChat exposes TinyFish as an explicitly user-connected MCP browser provider', () => {
+  const manager = read('components/McpConnectionManager.tsx');
+  assert.match(manager, /https:\/\/agent\.tinyfish\.ai\/mcp/);
+  assert.match(manager, /Browser automation provider/);
+  assert.match(manager, /Account connection required/);
+  assert.match(manager, /Hosted computer-use browser sessions are disabled/);
+  assert.match(manager, /Set up TinyFish connection/);
+  assert.match(manager, /discover its tools/);
+  assert.match(manager, /Write-capable website actions require explicit confirmation/);
+});
