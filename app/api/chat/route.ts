@@ -61,6 +61,13 @@ function isWebsiteResearchIntent(message: string) {
   return action && (site || url);
 }
 
+function isWebsiteWriteIntent(message: string) {
+  const action = /\b(create|write|publish|submit|fill|buy|purchase|shop|order|book|post|edit|update|send)\b/i.test(message);
+  const target = /\b(website|web\s?site|site|webpage|web\s?page|form|online|store|shop|product|checkout|page|domain)\b/i.test(message) || /https?:\/\/[^\s<>()]+/i.test(message);
+  const negatesAction = /\b(?:do not|don't|never|not)\b.{0,32}\b(create|write|publish|submit|fill|buy|purchase|shop|order|book|post|edit|update|send)\b/i.test(message);
+  return action && target && !negatesAction;
+}
+
 function isRepositoryWriteIntent(message: string) {
   const writeVerbs = '(create|make|add|edit|write|commit|push|fix|change|update|modify|repair|deploy|redeploy|publish)';
   const asksToWrite = new RegExp(`\\b${writeVerbs}\\b`, 'i').test(message);
@@ -267,7 +274,8 @@ export async function POST(req: NextRequest) {
       (isExplicitBuildIntent(message) || shortBuildContinuation) && !explicitImageIntent) || explicitDeploymentIntent);
     const buildMode = Boolean(ctx && explicitBuildIntent && !customAgent);
     const repositoryWorkflow = Boolean(ctx && !customAgent && isRepositoryTask(message));
-    const webResearchWorkflow = Boolean(ctx && !customAgent && isWebsiteResearchIntent(message));
+    const websiteWriteWorkflow = Boolean(ctx && !customAgent && isWebsiteWriteIntent(message));
+    const webResearchWorkflow = Boolean(ctx && !customAgent && (isWebsiteResearchIntent(message) || websiteWriteWorkflow));
     const repositoryWriteWorkflow = Boolean(repositoryWorkflow && isRepositoryWriteIntent(message));
     if (requestedWebSearch === true && (mode === 'tools' || buildMode || repositoryWorkflow)) {
       return NextResponse.json({
@@ -275,7 +283,7 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     const webSearchRequested = mode !== 'tools' && (requestedWebSearch === true || shouldUseWebSearch(message));
-    if (mode === "tools" || requestedCustomAgentId || buildMode || repositoryWorkflow || webResearchWorkflow) {
+    if (mode === "tools" || requestedCustomAgentId || buildMode || repositoryWorkflow || webResearchWorkflow || websiteWriteWorkflow) {
       if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });
       const limited = await enforceUserRateLimit(ctx.user.id, requestedCustomAgentId ? 'leo-custom-agent-run' : buildMode ? 'leo-chat-build' : repositoryWorkflow ? 'leo-chat-repository' : 'leo-chat-tools', 10, 60);
       if (limited) return limited;
@@ -630,7 +638,7 @@ export async function POST(req: NextRequest) {
           customAgentUsageId = usageId;
         }
       }
-      if (mode === "tools" || buildMode || repositoryWorkflow || webResearchWorkflow) {
+      if (mode === "tools" || buildMode || repositoryWorkflow || webResearchWorkflow || websiteWriteWorkflow) {
         if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });
         const available = await createUserAssistantTools(ctx.user.id, {
           request: req,
@@ -640,6 +648,7 @@ export async function POST(req: NextRequest) {
           allowRepositoryAccess: repositoryWorkflow,
           allowRepositoryWrites: repositoryWriteWorkflow,
           allowWebResearch: webResearchWorkflow,
+          allowRemoteWrites: websiteWriteWorkflow,
           allowBrowserGame: requestedProjectType === 'game',
         });
         const agentTools = customAgent
