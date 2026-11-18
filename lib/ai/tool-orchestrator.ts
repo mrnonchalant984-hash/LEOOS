@@ -22,7 +22,7 @@ type RemoteToolReference = {
   agentId?: string;
 };
 
-type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'publish_browser_game' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -79,6 +79,9 @@ async function postAsUser(request: Request, path: string, body: Record<string, u
   let response: Response;
   if (url.pathname === '/api/setup/projects') {
     const { POST } = await import('@/app/api/setup/projects/route');
+    response = await POST(internalRequest);
+  } else if (url.pathname === '/api/research') {
+    const { POST } = await import('@/app/api/research/route');
     response = await POST(internalRequest);
   } else if (url.pathname === '/api/agents/run') {
     const { POST } = await import('@/app/api/agents/run/route');
@@ -158,6 +161,7 @@ type LeoBuildToolOptions = {
   allowDeployment: boolean;
   allowRepositoryAccess?: boolean;
   allowRepositoryWrites?: boolean;
+  allowWebResearch?: boolean;
   allowBrowserGame?: boolean;
   allowAgentExecution?: boolean;
 };
@@ -198,6 +202,11 @@ export async function createUserAssistantTools(
 
   // Repository read tools are independent of project-builder/write capabilities.
   // This is essential for read-only specialists such as Code Review and Security.
+  if (options?.allowWebResearch) {
+    const tool = { name: 'web_research', description: 'Search the public web and read supplied public URLs. For each supplied website, safely follow relevant same-site links (respecting robots.txt) up to the requested page/depth limits. This tool is read-only: it never submits forms, logs in, purchases, or changes website content.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, urls: { type: 'array', items: { type: 'string' } }, max_pages: { type: 'integer' }, crawl_depth: { type: 'integer' } }, required: ['query'], additionalProperties: false } };
+    tools.push(tool as AssistantTool);
+    references.set('web_research', { kind: 'web_research' });
+  }
   if (options?.allowRepositoryAccess) {
     const repositoryTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [
       { name: 'github_repository_tree', description: 'Read a bounded list of files in a repository using the authenticated user’s connected GitHub account.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, branch: { type: 'string' } }, required: ['repo'], additionalProperties: false } },
@@ -343,6 +352,18 @@ export async function createUserAssistantTools(
         return { text: 'The project workspace was created but could not be linked safely; cleanup was attempted and deployment was not started.', isError: true };
       }
       return { text: JSON.stringify({ ...project, website_project_id: websiteId, files_persisted: true }) };
+    }
+    if (reference.kind === 'web_research') {
+      if (!options?.request || !options.allowWebResearch) return { text: 'Website research is not enabled for this request.', isError: true };
+      const query = typeof args.query === 'string' ? args.query.trim().slice(0, 4000) : '';
+      const urls = Array.isArray(args.urls) ? args.urls.filter((url): url is string => typeof url === 'string').slice(0, 5) : [];
+      if (!query || urls.some(url => url.length > 2048)) return { text: 'Provide a research question and up to five valid public URLs.', isError: true };
+      try {
+        const result = await postAsUser(options.request, '/api/research', { query, urls, max_pages: args.max_pages, crawl_depth: args.crawl_depth });
+        return { text: JSON.stringify(result) };
+      } catch (error) {
+        return { text: error instanceof Error ? error.message : 'Website research could not be completed.', isError: true };
+      }
     }
     if (reference.kind === 'github_repository_tree' || reference.kind === 'github_read_file' || reference.kind === 'github_commit_status' || reference.kind === 'github_commit_files' || reference.kind === 'github_create_repository' || reference.kind === 'github_create_branch' || reference.kind === 'github_create_file') {
       if (!options?.request || !options.allowRepositoryAccess) return { text: 'Connected repository access is not enabled for this request.', isError: true };
