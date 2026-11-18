@@ -74,7 +74,7 @@ test('installation token exchange scopes token to the configured repository and 
   assert.equal(first, 'ghs_test_installation_token');
   assert.equal(second, first);
   assert.equal(calls, 1);
-  assert.deepEqual(seenBody, { repository_names: ['LEOOS'] });
+  assert.deepEqual(seenBody, { repositories: ['LEOOS'] });
   assert.equal(decodePart(seenJwt.split('.')[0]).alg, 'RS256');
 });
 
