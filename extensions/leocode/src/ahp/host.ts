@@ -43,7 +43,7 @@ export class LeoAgentHost {
 
   private async startInternal(api: LeonardXApi, context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<string> {
     const folder = vscode.workspace.workspaceFolders?.[0];
-    if (!folder) throw new Error('Open a workspace folder before starting the Coda Agent Host.');
+    if (!folder) throw new Error('Open a workspace folder before starting the Bram Agent Host.');
     if (Number(process.versions.node.split('.')[0]) < 22) {
       throw new Error('Leo Agent Host requires a VS Code version whose extension host runs Node.js 22 or newer. Update VS Code and try again.');
     }
@@ -70,11 +70,11 @@ export class LeoAgentHost {
 
     const modelConfig = await api.request<{ model?: string; models?: Array<{ id: string; name?: string }> }>('/api/leocode/agent/v1/models');
     if (typeof modelConfig.model !== 'string' || !modelConfig.model.startsWith('google/')) {
-      throw new Error('LeonardX did not return a supported server-controlled Gemini model for Coda.');
+      throw new Error('LeonardX did not return a supported server-controlled Gemini model for Bram.');
     }
     const agent = cofoldAgent({
       provider: 'leonardx',
-      displayName: 'Coda',
+      displayName: 'Bram',
       description: 'Braverton coding agent using your account-authorized Gemini model routing.',
       baseUrl: `${api.baseUrl}/api/leocode/agent/v1`,
       apiKey: () => api.getAccessTokenForAgentHost(),
@@ -88,7 +88,7 @@ export class LeoAgentHost {
         memory: false,
       },
       instructions: [
-        'You are Coda, the Braverton coding assistant. Use the signed-in Braverton account and the server-controlled Gemini model router.',
+        'You are Bram, the Braverton coding assistant. Use the signed-in Braverton account and the server-controlled Gemini model router.',
         'Inspect the workspace before changing it. Keep changes focused and preserve unrelated user work.',
         'Use the AHP permission workflow. Every file write, patch, delete, rename, and shell command must request user approval. Never bypass a denied approval.',
         'Do not commit, push, publish, deploy, change account settings, or modify remote services unless the user explicitly asks for that exact action in the current task.',
@@ -101,7 +101,7 @@ export class LeoAgentHost {
           if (!name) return { behavior: 'deny', reason: 'The tool name is invalid.' };
           const inputText = typeof input === 'string' ? input : JSON.stringify(input ?? {});
           if (/\bgit\b[\s\S]{0,40}\b(commit|push|tag)\b|\bgh\s+pr\s+(create|merge)\b|\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:deploy|publish|release)\b|\b(?:vercel|wrangler)\s+deploy\b/i.test(inputText)) {
-            return { behavior: 'deny', reason: 'Git publishing and deployment commands are disabled in this initial Coda Agent Host.' };
+            return { behavior: 'deny', reason: 'Git publishing and deployment commands are disabled in this initial Bram Agent Host.' };
           }
           if (/(commit|push|publish|deploy|release|credential|secret|keychain|mcp|network|http|fetch|browser)/.test(name)) {
             return { behavior: 'deny', reason: 'This action is not enabled in the initial Leo Agent Host. Use the existing Braverton approval flows for remote operations.' };
@@ -110,7 +110,7 @@ export class LeoAgentHost {
             return { behavior: 'allow' };
           }
           if (/(write|edit|patch|delete|remove|rename|move|create|mkdir|shell|bash|command|exec|terminal|run)/.test(name)) {
-            return { behavior: 'ask', reason: 'Coda needs your approval before modifying files or running a command.' };
+            return { behavior: 'ask', reason: 'Bram needs your approval before modifying files or running a command.' };
           }
           return { behavior: 'deny', reason: 'This tool is not in the initial LeoCode Agent Host allowlist.' };
         },
