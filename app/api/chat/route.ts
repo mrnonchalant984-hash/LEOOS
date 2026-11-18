@@ -501,7 +501,12 @@ export async function POST(req: NextRequest) {
       try {
         const capabilityUrl = new URL('/api/bram/capabilities', req.url);
         capabilityUrl.searchParams.set('timezone', localTimezone);
-        const capabilityResponse = await fetch(capabilityUrl, { headers: req.headers, cache: 'no-store', signal: AbortSignal.timeout(8000) });
+        const capabilityHeaders = new Headers();
+        const authorization = req.headers.get('authorization');
+        const cookie = req.headers.get('cookie');
+        if (authorization) capabilityHeaders.set('authorization', authorization);
+        if (cookie) capabilityHeaders.set('cookie', cookie);
+        const capabilityResponse = await fetch(capabilityUrl, { headers: capabilityHeaders, cache: 'no-store', signal: AbortSignal.timeout(8000) });
         if (capabilityResponse.ok) {
           const capabilityData = await capabilityResponse.json();
           capabilityContext = '\nLIVE ACCOUNT CAPABILITIES (queried from the authenticated Braverton capability registry for this request):\n' +
