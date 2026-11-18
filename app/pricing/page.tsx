@@ -17,7 +17,7 @@ import {
 } from "@/lib/pricing";
 
 const featureLabels: Record<string, string> = {
-  chat: "Coda AI workspace",
+  chat: "Bram AI workspace",
   "file-review": "Project file review",
   "image-generation": "Image generation",
   "code-review": "Code review",
