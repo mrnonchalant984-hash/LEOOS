@@ -31,7 +31,8 @@ test('BramChat web research follows bounded same-origin links and remains read-o
   assert.match(research, /internalPageLinks/);
   assert.match(research, /url\.origin !== origin/);
   assert.match(research, /robots\.txt/);
-  assert.match(research, /Math\.min\(20/);
+  assert.match(research, /Math\.min\(12/);
+  assert.match(research, /maxDuration = 60/);
   assert.match(research, /Math\.min\(2/);
 });
 
