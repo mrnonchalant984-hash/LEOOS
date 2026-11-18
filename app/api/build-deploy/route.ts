@@ -90,37 +90,48 @@ async function getCustomerProviderToken(userId: string, provider: 'vercel'): Pro
   }
 }
 
-type CustomerGitHubAuth = { token: string; accountLogin: string; connectionId: string; authMethod: 'github_app' | 'oauth' };
+type CustomerGitHubAuth = { token: string; accountLogin: string; connectionId: string };
 
 async function getCustomerGitHubAuth(userId: string): Promise<CustomerGitHubAuth> {
   const { data, error } = await adminSupabase().from('user_integrations')
     .select('id,credential_ciphertext,status')
     .eq('user_id', userId).eq('provider', 'github')
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
-  if (error) throw new Error('Your GitHub connection could not be loaded. Reconnect GitHub in Braverton Integrations.');
+  if (error) throw new Error('Your GitHub connection could not be loaded. Reconnect the Braverton GitHub App in Integrations.');
   if (!data?.credential_ciphertext) {
     throw new Error('Install the Braverton GitHub App from Integrations before asking Bram to create a website repository.');
   }
   if (data.status !== 'verified') {
-    throw new Error('Your GitHub connection needs attention. Reconnect the Braverton GitHub App in Integrations before retrying.');
+    throw new Error('Your GitHub App installation needs attention. Reinstall it from Braverton Integrations before retrying.');
   }
   try {
     const config = JSON.parse(decryptMcpCredential(data.credential_ciphertext)) as Record<string, unknown>;
-    if (config.auth_method === 'github_app') {
-      const installationId = typeof config.installation_id === 'string' ? config.installation_id : '';
-      const accountLogin = typeof config.account_login === 'string' ? config.account_login : '';
-      if (!/^\\d{1,20}$/.test(installationId) || !/^[A-Za-z0-9_.-]{1,100}$/.test(accountLogin)) {
-        throw new Error('The saved GitHub App installation details are incomplete. Reinstall the Braverton GitHub App.');
-      }
-      const token = await getGitHubAppInstallationTokenForId(installationId);
-      return { token, accountLogin, connectionId: data.id, authMethod: 'github_app' };
+    if (config.auth_method !== 'github_app') {
+      throw new Error('Legacy GitHub OAuth connections are not used by Bram builds. Install the Braverton GitHub App from Integrations.');
     }
-    const token = typeof config.token === 'string' ? config.token.trim() : '';
-    if (!token) throw new Error('The saved GitHub OAuth credential is missing.');
-    return { token, accountLogin: '', connectionId: data.id, authMethod: 'oauth' };
+    const installationId = typeof config.installation_id === 'string' ? config.installation_id : '';
+    const accountLogin = typeof config.account_login === 'string' ? config.account_login : '';
+    if (!/^\\d{1,20}$/.test(installationId) || !/^[A-Za-z0-9_.-]{1,100}$/.test(accountLogin)) {
+      throw new Error('The saved GitHub App installation details are incomplete. Reinstall the Braverton GitHub App.');
+    }
+    let token: string;
+    try {
+      token = await getGitHubAppInstallationTokenForId(installationId);
+    } catch (error) {
+      if (error instanceof Error && /authentication was rejected|installation or requested repository was not found/i.test(error.message)) {
+        await adminSupabase().from('user_integrations').update({
+          status: 'verification_failed',
+          last_verified_at: null,
+          last_error_code: 'GITHUB_APP_INSTALLATION_INVALID',
+        }).eq('id', data.id).eq('user_id', userId);
+        throw new Error('Your Braverton GitHub App installation is no longer valid. Reinstall it from Integrations, then retry the build.');
+      }
+      throw new Error('Braverton could not refresh the GitHub App installation token. Check the installation and retry.');
+    }
+    return { token, accountLogin, connectionId: data.id };
   } catch (error) {
-    if (error instanceof Error && /GitHub App|GitHub OAuth|installation details/.test(error.message)) throw error;
-    throw new Error('The connected GitHub credential could not be decrypted. Reconnect GitHub in Integrations before building.');
+    if (error instanceof Error && /Braverton GitHub App|Legacy GitHub OAuth|GitHub App installation/.test(error.message)) throw error;
+    throw new Error('The connected GitHub App details could not be decrypted. Reinstall the Braverton GitHub App in Integrations before building.');
   }
 }
 
@@ -446,10 +457,8 @@ export async function POST(req: NextRequest) {
     const githubToken = githubAuth.token;
     const vercelToken = await getCustomerProviderToken(ctx.user.id, 'vercel');
     if (!vercelToken) throw new Error('Connect your own Vercel account in Braverton Integrations before deploying.');
-    githubOperation = githubAuth.authMethod === 'github_app' ? 'verify_installation_access' : 'verify_token_identity';
-    const me = githubAuth.authMethod === 'github_app'
-      ? { login: githubAuth.accountLogin }
-      : await gh('/user', {}, githubToken);
+    githubOperation = 'verify_installation_access';
+    const me = { login: githubAuth.accountLogin };
     const repoName = `${process.env.VERCEL_PROJECT_PREFIX || 'leo-site'}-${Date.now()}`;
     githubOperation = 'create_repository';
     const repo = await gh('/user/repos', {
