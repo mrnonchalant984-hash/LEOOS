@@ -16,9 +16,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const body = await request.json().catch(() => null);
   const toolName = typeof body?.tool_name === 'string' ? body.tool_name : '';
   const approved = body?.approved;
-  const accessLevel = body?.access_level === 'write' ? 'write' : 'read';
+  const accessLevel = body?.access_level === undefined || body?.access_level === 'read' ? 'read' : body?.access_level === 'write' ? 'write' : null;
   const agentIds = Array.isArray(body?.agent_ids) ? body.agent_ids : [];
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(toolName) || typeof approved !== 'boolean') {
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(toolName) || typeof approved !== 'boolean' || !accessLevel) {
     return NextResponse.json({ error: 'Provide a discovered tool name and an explicit approval decision.' }, { status: 400 });
   }
   const mcpCapableAgents = new Map(listAgents(true).map(agent => [agent.id, agent]));
