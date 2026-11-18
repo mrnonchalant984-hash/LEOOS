@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
-import { createHostingExpiredDeployment, promoteVercelDeployment } from '@/lib/vercel-hosting';
+import { createHostingExpiredDeployment, getVercelTokenForUser, promoteVercelDeployment } from '@/lib/vercel-hosting';
 import crypto from 'node:crypto';
 
 export const runtime = 'nodejs';
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const soon = new Date(now);
   soon.setDate(soon.getDate() + 7);
   const { data: items, error } = await db.from('hosting_subscriptions')
-    .select('id,status,ends_at,client_email,website_project_id,website_projects(business_name,custom_domain,live_url,vercel_project_id,live_deployment_id,suspended_deployment_id,hosting_enforcement_status)')
+    .select('id,status,ends_at,client_email,website_project_id,website_projects(owner_user_id,business_name,custom_domain,live_url,vercel_project_id,live_deployment_id,suspended_deployment_id,hosting_enforcement_status)')
     .in('status', ['trial', 'active'])
     .lte('ends_at', soon.toISOString());
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -47,14 +47,16 @@ export async function GET(req: NextRequest) {
     if (end <= now) {
       if (site?.vercel_project_id && process.env.LEO_HOSTING_ENFORCEMENT !== 'false') {
         try {
+          const vercelToken = await getVercelTokenForUser(String(site.owner_user_id || ''));
           const maintenance = await createHostingExpiredDeployment(
             String(site.vercel_project_id),
             String(site.business_name || 'Website'),
             `${process.env.NEXT_PUBLIC_SITE_URL || ''}/payment/hosting-renewal?hosting_id=${encodeURIComponent(h.id)}&token=${renewalToken(h.id)}`,
+            vercelToken,
           );
           const maintenanceId = String(maintenance.id || maintenance.uid || '');
           if (maintenanceId) {
-            await promoteVercelDeployment(String(site.vercel_project_id), maintenanceId);
+            await promoteVercelDeployment(String(site.vercel_project_id), maintenanceId, vercelToken);
             await db.from('website_projects').update({
               status: 'suspended',
               hosting_enforcement_status: 'suspended',
