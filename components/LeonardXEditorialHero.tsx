@@ -52,13 +52,13 @@ export default function LeonardXEditorialHero() {
         <div className="lx-editorial-hero-content">
           <p className="lx-editorial-kicker">AI SOFTWARE CREATION PLATFORM</p>
           <h1 id="lx-hero-title"><span>BUILD WHAT YOU</span><span>IMAGINE.</span></h1>
-          <p className="lx-editorial-lead">Turn an idea into working software with Coda, project workspaces and a connected path from planning to deployment.</p>
+          <p className="lx-editorial-lead">Turn an idea into working software with Bram, project workspaces and a connected path from planning to deployment.</p>
           <form onSubmit={startBuilding} className="mx-auto mt-7 w-full max-w-2xl rounded-2xl border border-white/20 bg-black/55 p-2 text-left shadow-2xl shadow-black/30 backdrop-blur-xl">
             <label htmlFor="lx-home-prompt" className="sr-only">Describe what you want to build</label>
-            <textarea id="lx-home-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} rows={2} maxLength={4000} placeholder="Describe the website, app or software you want Coda to build…" className="min-h-20 w-full resize-y bg-transparent px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/45" />
+            <textarea id="lx-home-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} rows={2} maxLength={4000} placeholder="Describe the website, app or software you want Bram to build…" className="min-h-20 w-full resize-y bg-transparent px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/45" />
             <div className="flex flex-wrap items-center justify-between gap-3 px-2 pb-1">
-              <span className="text-[11px] text-white/45">Start with an idea. Refine the brief with Coda.</span>
-              <button type="submit" className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-xs font-bold tracking-wide text-slate-950 transition hover:bg-cyan-200 focus:outline-none focus:ring-2 focus:ring-cyan-100"><Sparkles size={15} /> BUILD WITH CODA <ArrowRight size={15} /></button>
+              <span className="text-[11px] text-white/45">Start with an idea. Refine the brief with Bram.</span>
+              <button type="submit" className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-xs font-bold tracking-wide text-slate-950 transition hover:bg-cyan-200 focus:outline-none focus:ring-2 focus:ring-cyan-100"><Sparkles size={15} /> BUILD WITH BRAM <ArrowRight size={15} /></button>
             </div>
           </form>
           <div className="lx-editorial-actions">
@@ -74,7 +74,7 @@ export default function LeonardXEditorialHero() {
         <div className="lx-editorial-about-copy">
           <p className="lx-editorial-kicker">THE BRAVERTON WORKSPACE</p>
           <h2 id="lx-about-title"><span>FROM IDEA</span><span>TO PRODUCT.</span></h2>
-          <p>Braverton gives modern builders a clear place to plan, build, test and improve software. Coda helps structure the work while the platform keeps project context, files, integrations and delivery state connected.</p>
+          <p>Braverton gives modern builders a clear place to plan, build, test and improve software. Bram helps structure the work while the platform keeps project context, files, integrations and delivery state connected.</p>
           <Link href="/about" className="lx-cyan-button">MEET BRAVERTON <ArrowRight size={16} /></Link>
         </div>
         <div className="lx-editorial-about-media">
