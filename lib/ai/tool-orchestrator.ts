@@ -22,7 +22,7 @@ type RemoteToolReference = {
   agentId?: string;
 };
 
-type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'publish_browser_game' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'publish_browser_game' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -205,6 +205,11 @@ export async function createUserAssistantTools(
       { name: 'github_commit_status', description: 'Read bounded commit check and status information from the authenticated user’s connected GitHub account.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, sha: { type: 'string' } }, required: ['repo', 'sha'], additionalProperties: false } },
     ];
     if (options.allowRepositoryWrites) repositoryTools.push({ name: 'github_commit_files', description: 'Commit 1–50 validated source files atomically to the connected repository. Use only after the user explicitly requested this commit and set confirm=true. Secret files and secret-like contents are rejected server-side.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, branch: { type: 'string' }, message: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } }, confirm: { type: 'boolean', const: true } }, required: ['repo', 'files', 'confirm'], additionalProperties: false } });
+    if (options.allowRepositoryWrites) repositoryTools.push(
+      { name: 'github_create_repository', description: 'Create a repository in the authenticated user’s connected GitHub account. Only call after the user explicitly asks to create the repository. Requires confirm=true; defaults to private.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' }, private: { type: 'boolean' }, confirm: { type: 'boolean', const: true } }, required: ['name', 'confirm'], additionalProperties: false } },
+      { name: 'github_create_branch', description: 'Create a new branch in a repository accessible to the connected GitHub account, from the requested source branch. Requires an explicit user request and confirm=true.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, branch: { type: 'string' }, from_branch: { type: 'string' }, confirm: { type: 'boolean', const: true } }, required: ['repo', 'branch', 'confirm'], additionalProperties: false } },
+      { name: 'github_create_file', description: 'Create or update one UTF-8 file in a repository accessible to the connected GitHub account and commit it to the selected branch. Secret paths and secret-like contents are rejected. Requires confirm=true.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, path: { type: 'string' }, content: { type: 'string' }, branch: { type: 'string' }, message: { type: 'string' }, confirm: { type: 'boolean', const: true } }, required: ['repo', 'path', 'content', 'confirm'], additionalProperties: false } }
+    );
     for (const tool of repositoryTools) {
       tools.push(tool as AssistantTool);
       references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
@@ -339,14 +344,17 @@ export async function createUserAssistantTools(
       }
       return { text: JSON.stringify({ ...project, website_project_id: websiteId, files_persisted: true }) };
     }
-    if (reference.kind === 'github_repository_tree' || reference.kind === 'github_read_file' || reference.kind === 'github_commit_status' || reference.kind === 'github_commit_files') {
+    if (reference.kind === 'github_repository_tree' || reference.kind === 'github_read_file' || reference.kind === 'github_commit_status' || reference.kind === 'github_commit_files' || reference.kind === 'github_create_repository' || reference.kind === 'github_create_branch' || reference.kind === 'github_create_file') {
       if (!options?.request || !options.allowRepositoryAccess) return { text: 'Connected repository access is not enabled for this request.', isError: true };
-      if (reference.kind === 'github_commit_files' && (!options.allowRepositoryWrites || args.confirm !== true)) return { text: 'Repository writes require an explicit user request and confirm=true.', isError: true };
+      if (['github_commit_files', 'github_create_repository', 'github_create_branch', 'github_create_file'].includes(reference.kind) && (!options.allowRepositoryWrites || args.confirm !== true)) return { text: 'Repository writes require an explicit user request and confirm=true.', isError: true };
       const actions = {
         github_repository_tree: 'repository-tree',
         github_read_file: 'read-file',
         github_commit_status: 'commit-status',
         github_commit_files: 'commit-files',
+        github_create_repository: 'create-repo',
+        github_create_branch: 'create-branch',
+        github_create_file: 'commit-file',
       } as const;
       try {
         const result = await postAsUser(options.request, `/api/integrations/github/${actions[reference.kind]}`, args as Record<string, unknown>);
