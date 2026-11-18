@@ -178,4 +178,4 @@ Server configuration:
 - `LEO_GEMINI_AUDIO_MODEL` for audio transcription (defaults to `gemini-2.5-flash`).
 - `LEO_GEMINI_TTS_MODEL` for speech generation (defaults to `gemini-2.5-flash-preview-tts`).
 
-This is hands-free, turn-based voice with automatic speech detection and spoken responses; it is not advertised as a direct browser-to-Gemini Live connection.
+The voice session is handled by Braverton's authenticated server-side session and voice endpoints. Automatic speech detection keeps the conversation flowing without manual per-turn controls.
