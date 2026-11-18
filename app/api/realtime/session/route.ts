@@ -29,9 +29,15 @@ export async function POST(req: NextRequest) {
       mode: 'gemini_turn_based',
       status: 'ready',
       provider: 'google',
+      assistant: 'Bram',
       voice,
       realtime: false,
-      orchestration: 'shared-leo-chat',
+      transport: 'server-orchestrated-hands-free-turns',
+      transcription_endpoint: '/api/voice',
+      assistant_response_endpoint: '/api/voice',
+      audio_response: 'json-base64',
+      automatic_turn_detection: { enabled: true, silence_ms: 1200, max_utterance_ms: 25000 },
+      orchestration: 'shared-braverton-assistant',
     }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     console.error('Leo voice session setup failed:', error instanceof Error ? error.message : 'unknown error');
