@@ -1173,8 +1173,10 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         voiceLoopAudioContext.current = context;
         voiceLoopAnalyser.current = analyser;
       }
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
-      const recorder = new MediaRecorder(local, { mimeType });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "";
+      const recorder = new MediaRecorder(local, mimeType ? { mimeType } : undefined);
       const chunks: Blob[] = [];
       let speechStartedAt = 0;
       let silenceStartedAt = 0;
@@ -1186,6 +1188,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       };
       recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
       recorder.onstop = async () => {
+        setRecording(false);
         stopMonitor();
         if (!voiceLoopActive.current || finished) return;
         finished = true;
