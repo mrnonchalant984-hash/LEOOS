@@ -10,6 +10,7 @@ import { normalizeGeminiModelId } from '@/lib/ai/model-catalog';
 import { getProfile } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 const googleKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 const MAX_VOICE_AUDIO_BYTES = 15 * 1024 * 1024;
@@ -37,7 +38,7 @@ async function geminiTranscribe(audio: File) {
   const mimeType = audio.type.split(';')[0]?.trim().toLowerCase() || 'audio/webm';
   if (!SUPPORTED_AUDIO_TYPES.has(mimeType)) throw new Error('Use a supported audio format: WebM, OGG, WAV, MP3, MP4, AAC, or FLAC.');
   const bytes = Buffer.from(await audio.arrayBuffer());
-  const client = new GoogleGenAI({ apiKey: key });
+  const client = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 30_000 } });
   const response = await client.models.generateContent({
     model: normalizeGeminiModelId(process.env.LEO_GEMINI_AUDIO_MODEL?.trim() || 'gemini-2.5-flash'),
     contents: [{ role: 'user', parts: [
