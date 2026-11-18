@@ -4,7 +4,7 @@ import { adminSupabase } from '@/lib/auth';
 import { verifyAndApplyPaystack, verifyPaystackTransaction } from '@/lib/payments';
 import { notifyMarketplaceUser } from '@/lib/store-notifications';
 import { matchesHostingRenewal } from '@/lib/payments-core';
-import { promoteVercelDeployment } from '@/lib/vercel-hosting';
+import { getVercelTokenForUser, promoteVercelDeployment } from '@/lib/vercel-hosting';
 import { withOperationalMonitoring } from '@/lib/monitoring';
 import { verifyAndConfirmDonation } from '@/lib/donations';
 import { dispatchSupplierFulfillment } from '@/lib/store/supplier-connectors';
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
       if (applied === false) return NextResponse.json({ received: true, idempotent: true });
 
       const { data: site, error: siteError } = await db.from('website_projects')
-        .select('vercel_project_id,live_deployment_id')
+        .select('owner_user_id,vercel_project_id,live_deployment_id')
         .eq('id', hosting.website_project_id)
         .maybeSingle();
       if (siteError) throw siteError;
@@ -168,7 +168,8 @@ export async function POST(req: NextRequest) {
       let restoreError = '';
       if (site?.vercel_project_id && site.live_deployment_id && process.env.LEO_HOSTING_ENFORCEMENT !== 'false') {
         try {
-          await promoteVercelDeployment(String(site.vercel_project_id), String(site.live_deployment_id));
+          const vercelToken = await getVercelTokenForUser(String(site.owner_user_id || ''));
+          await promoteVercelDeployment(String(site.vercel_project_id), String(site.live_deployment_id), vercelToken);
           restored = true;
           await db.from('website_projects').update({
             status: 'deployed',
