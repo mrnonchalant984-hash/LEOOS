@@ -217,6 +217,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
   const [locationPermissionStatus, setLocationPermissionStatus] = useState<"not_requested" | "requesting" | "granted" | "denied" | "unavailable">("not_requested");
   const [localContextEnabled, setLocalContextEnabled] = useState(true);
   const [toolActivityEvents, setToolActivityEvents] = useState<BramToolActivity[]>([]);
+  const [toolActivitySince, setToolActivitySince] = useState("");
   const [buildProgress, setBuildProgress] = useState<BuildProgressState | null>(null);
   const [trackBuildProgress, setTrackBuildProgress] = useState(false);
   const [buildTrackingSince, setBuildTrackingSince] = useState("");
@@ -315,7 +316,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     const poll = async () => {
       try {
         const accessToken = await token();
-        const response = await fetch(`/api/bram/activity?session_id=${encodeURIComponent(sidRef.current)}&after=${cursor}`, {
+        const response = await fetch(`/api/bram/activity?session_id=${encodeURIComponent(sidRef.current)}&after=${cursor}&since=${encodeURIComponent(toolActivitySince)}`, {
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}, cache: "no-store",
         });
         if (!response.ok) return;
@@ -335,7 +336,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     void poll();
     const timer = window.setInterval(() => { void poll(); }, 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [loading, activeChatId]);
+  }, [loading, activeChatId, toolActivitySince]);
 
   useEffect(() => {
     const updateNetworkState = () => setNetworkOnline(navigator.onLine);
@@ -825,6 +826,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     if (buildIntent) { setBuildTrackingSince(new Date().toISOString()); setBuildProgress({ status: 'preparing', step: 'Preparing your build request', message: 'Bram is preparing the project and will show persisted build events here.' }); setTrackBuildProgress(true); }
     setActivityLabel("Thinking");
     setToolActivityEvents([]);
+    setToolActivitySince(new Date().toISOString());
     setLoading(true);
     setError("");
     try {
@@ -2163,6 +2165,10 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           {trackBuildProgress && <p className="mt-2 text-[10px] text-zinc-600">Updating from saved build events…</p>}
         </div>
       )}
+      {toolActivityEvents.length > 0 && <section className="max-w-[92%] rounded-xl border border-white/10 bg-black/25 p-3" aria-label="Confirmed tool activity">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Tool activity · confirmed events</p>
+        <ol className="space-y-1.5">{toolActivityEvents.slice(-8).map(event => <li key={event.id} className="flex items-center justify-between gap-3 text-[11px]"><span className="min-w-0 truncate text-zinc-300">{event.tool_name}</span><span className={event.status === "succeeded" ? "shrink-0 text-emerald-400" : event.status === "failed" ? "shrink-0 text-rose-400" : "shrink-0 text-amber-300"}>{event.event_type === "started" ? "Started" : event.event_type === "completed" ? "Completed" : "Failed"}</span></li>)}</ol>
+      </section>}
       {loading && (
         <div className="flex max-w-fit items-center gap-3 rounded-3xl bg-black/40 p-3 text-sm text-zinc-400" role="status" aria-live="polite">
           <style jsx>{`
