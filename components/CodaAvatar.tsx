@@ -13,7 +13,7 @@ export function CodaAvatar({ mood = "default", size = 48, className = "" }: { mo
     : "M39 55 Q50 70 61 55";
   const faceStyle: CSSProperties = { width: size, height: size, display: "inline-block", flex: "0 0 auto" };
   return (
-    <svg className={className} style={faceStyle} viewBox="0 0 100 112" role="img" aria-label={`Coda ${mood} expression`} xmlns="http://www.w3.org/2000/svg">
+    <svg className={className} style={faceStyle} viewBox="0 0 100 112" role="img" aria-label={`Bram ${mood} expression`} xmlns="http://www.w3.org/2000/svg">
       {mood === "idle" && <text x="74" y="19" fill="#b8aaff" fontSize="12" fontFamily="monospace">Zz</text>}
       {mood === "thinking" && <g fill="#b8aaff"><circle cx="78" cy="20" r="3"/><circle cx="85" cy="12" r="5"/></g>}
       {mood === "excited" && <g fill="#ffd978"><path d="M17 18l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/><path d="M83 42l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></g>}
