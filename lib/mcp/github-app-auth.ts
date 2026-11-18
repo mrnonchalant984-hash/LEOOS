@@ -112,7 +112,7 @@ export async function getGitHubAppInstallationToken(
         'Content-Type': 'application/json',
         'User-Agent': 'LeonardX-MCP',
       },
-      body: JSON.stringify({ repository_names: [target.repository] }),
+      body: JSON.stringify({ repositories: [target.repository] }),
       signal: AbortSignal.timeout(15_000),
     });
   } catch {
