@@ -180,7 +180,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
       const files = Array.isArray(body.files) ? body.files as Json[] : [];
       if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) || !/^[A-Za-z0-9_.\/-]{1,200}$/.test(branch) || files.length < 1 || files.length > 50) throw new Error('Provide a valid repository, branch, and 1–50 files.');
       if (body.confirm !== true) throw new Error('Explicit confirmation is required before committing to the connected repository.');
-      if (/(^|\/)\.env(?:\.|$)|(^|\/)(?:node_modules|\.git|credentials?|secrets?)(?:\.|\/|$)|private[-_]?key/i.test(path) || /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9_-]{24,}|AKIA[0-9A-Z]{16})\b/.test(content) || content.includes('\0')) throw new Error('Credential, secret, environment, binary, or generated dependency files cannot be committed.');
       const seen = new Set<string>();
       const normalized = files.map(file => {
         const path = typeof file.path === 'string' ? file.path : '';
