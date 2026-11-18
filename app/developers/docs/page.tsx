@@ -84,7 +84,7 @@ export default function DeveloperDocsPage() {
     </Section>
 
     <Section id="sdk" title="TypeScript SDK">
-      <p><code>@braverton/sdk@2.0.0</code> is published on npm. It wraps the API with typed errors and a webhook verifier, has no runtime dependencies, and needs Node 18 or newer.</p>
+      <p><code>@braverton/sdk@2.0.0</code> is available as repository source. It wraps the API with typed errors and a webhook verifier, has no runtime dependencies, and needs Node 18 or newer.</p>
       <Code>{`import { BravertonClient, verifyWebhookSignature } from '@braverton/sdk';\n\nconst leo = new BravertonClient({ apiKey: process.env.BRAVERTON_API_KEY! });\nconst { data } = await leo.projects.list();\n\n// In your webhook handler (rawBody is the unparsed request body string):\nconst ok = verifyWebhookSignature(secret, req.headers['leo-signature'], rawBody);`}</Code>
     </Section>
 
