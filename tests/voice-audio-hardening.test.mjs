@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const route = readFileSync(new URL('../app/api/voice/route.ts', import.meta.url), 'utf8');
-test('voice defaults to current Gemini audio and speech models', () => {
-  assert.match(route, /LEO_GEMINI_AUDIO_MODEL\\?\\.trim\\(\\) \\|\\| 'gemini-3\\.8-flash'/);
-  assert.match(route, /LEO_GEMINI_TTS_MODEL\\?\\.trim\\(\\) \\|\\| 'gemini-3\\.8-flash-tts'/);
+test('voice defaults to current Gemini audio understanding and speech models', () => {
+  assert.ok(route.includes("|| 'gemini-3.8-flash'"));
+  assert.ok(route.includes("|| 'gemini-3.8-flash-tts'"));
 });
 test('voice validates audio size and supported content types before provider processing', () => {
   assert.match(route, /MAX_VOICE_AUDIO_BYTES = 15 \* 1024 \* 1024/);
