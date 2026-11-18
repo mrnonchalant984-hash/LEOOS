@@ -63,7 +63,7 @@ function isWebsiteResearchIntent(message: string) {
 
 function isWebsiteWriteIntent(message: string) {
   const action = /\b(create|write|publish|submit|fill|buy|purchase|shop|order|book|post|edit|update|send)\b/i.test(message);
-  const target = /\b(website|web\s?site|site|webpage|web\s?page|form|online|store|shop|product|checkout|page|domain)\b/i.test(message) || /https?:\/\/[^\s<>()]+/i.test(message);
+  const target = /\b(website|web\s?site|site|webpage|web\s?page|form|content|online|store|shop|product|checkout|page|domain)\b/i.test(message) || /https?:\/\/[^\s<>()]+/i.test(message);
   const negatesAction = /\b(?:do not|don't|never|not)\b.{0,32}\b(create|write|publish|submit|fill|buy|purchase|shop|order|book|post|edit|update|send)\b/i.test(message);
   return action && target && !negatesAction;
 }
