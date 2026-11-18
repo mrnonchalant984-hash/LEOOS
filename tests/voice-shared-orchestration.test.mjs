@@ -24,7 +24,9 @@ test('voice uses the existing account-scoped tool executor and supports agent ex
 
 test('browser voice sessions do not mint a direct Gemini Live token that bypasses shared orchestration', () => {
   assert.match(session, /mode: 'gemini_turn_based'/);
-  assert.match(session, /shared-leo-chat/);
+  assert.match(session, /shared-braverton-assistant/);
+  assert.match(session, /assistant: 'Bram'/);
+  assert.match(session, /transcription_endpoint: '\/api\/voice'/);
   assert.doesNotMatch(session, /authTokens\.create/);
 });
 
@@ -49,4 +51,24 @@ test('realtime session setup reports infrastructure failures as an actionable 50
   assert.match(rateLimit, /consume_user_rate_limit failed/);
   assert.match(rateLimit, /consume_rate_limit_bucket/);
   assert.match(rateLimit, /primary\.error\.code === 'PGRST202' \|\| primary\.error\.code === '42883'/);
+});
+
+
+test('voice endpoint returns a structured transcript, Bram answer and playable speech payload', () => {
+  assert.match(voice, /transcript,/);
+  assert.match(voice, /assistantReply,/);
+  assert.match(voice, /audio: \{ contentType: speech\.contentType, data: speech\.bytes\.toString\('base64'\) \}/);
+  assert.match(voice, /NextResponse\.json\(/);
+  assert.match(voice, /maxDuration = 60/);
+});
+
+test('Bram voice chat automatically detects speech pauses, displays both transcript turns and resumes listening', () => {
+  assert.match(widget, /startHandsFreeVoiceLoop/);
+  assert.match(widget, /captureHandsFreeVoiceTurn/);
+  assert.match(widget, /silenceStartedAt/);
+  assert.match(widget, /now - silenceStartedAt >= 1200/);
+  assert.match(widget, /setMessages\(current => \[\.\.\.current, \{ role: "user", content: result\.transcript!/);
+  assert.match(widget, /playback\.onended/);
+  assert.match(widget, /speak naturally; Bram replies automatically/);
+  assert.doesNotMatch(widget, /Stop speaking/);
 });
