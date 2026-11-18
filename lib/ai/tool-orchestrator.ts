@@ -537,11 +537,11 @@ export async function createUserAssistantTools(
     const requestId = randomUUID();
     let result: { isError: boolean; text: string };
     try {
-      if (!validateMcpToolArguments(remoteTool.inputSchema, args)) {
-        return { text: 'Arguments do not match the currently discovered input schema. No remote call was made.', isError: true };
-      }
       const remoteArgs = { ...args };
       delete remoteArgs.confirm;
+      if (!validateMcpToolArguments(remoteTool.inputSchema, remoteArgs)) {
+        return { text: 'Arguments do not match the currently discovered input schema. No remote call was made.', isError: true };
+      }
       result = await callMcpTool(server.endpoint_url, credential, reference.remoteName, remoteArgs, remoteTool.inputSchema, signal);
     } catch {
       const { error } = await db.from('mcp_tool_audit').insert({
