@@ -47,7 +47,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!approval) return NextResponse.json({ error: 'Approve this tool before calling it.' }, { status: 403 });
   const accessLevel = approval.access_level === 'write' ? 'write' : 'read';
   if (accessLevel === 'read' && (tool.annotations?.readOnlyHint !== true || tool.annotations?.destructiveHint === true)) return NextResponse.json({ error: 'This tool is not approved for read-only use.' }, { status: 403 });
-  if (accessLevel === 'write' && (tool.annotations?.readOnlyHint === true || body.confirm !== true)) return NextResponse.json({ error: 'Write access requires an approved non-destructive tool and confirm=true.' }, { status: 403 });
+  if (accessLevel === 'write' && (tool.annotations?.readOnlyHint === true || body.confirm !== true)) return NextResponse.json({ error: 'Write access requires an approved tool not marked read-only and confirm=true.' }, { status: 403 });
   let bearerToken: string | undefined;
   try {
     bearerToken = server.credential_ciphertext ? decryptMcpCredential(server.credential_ciphertext) : undefined;
