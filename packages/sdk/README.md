@@ -4,7 +4,7 @@ Official TypeScript client for the Braverton API. Zero dependencies. Requires No
 
 ## Install
 
-Published on npm as `@braverton/sdk@2.0.0`:
+Repository source package: `@braverton/sdk` (npm publication is a separate release step).
 
 ```sh
 npm install @braverton/sdk
