@@ -4,7 +4,7 @@ export const SITE_ORIGIN = 'https://leoos-omega.vercel.app';
 export const SITE_NAME = 'Braverton';
 export const SITE_TITLE = 'Braverton — Build What You Imagine';
 export const SITE_DESCRIPTION =
-  'Braverton is an AI-powered software creation platform. Plan, build, test and deploy websites and apps with Coda, your AI assistant.';
+  'Braverton is an AI-powered software creation platform. Plan, build, test and deploy websites and apps with Bram, your AI assistant.';
 export const SOCIAL_IMAGE_PATH = '/braverton-og.svg';
 export const SOCIAL_IMAGE_ALT = 'Braverton — Build What You Imagine';
 
