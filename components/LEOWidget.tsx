@@ -336,7 +336,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     void poll();
     const timer = window.setInterval(() => { void poll(); }, 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [loading, activeChatId, toolActivitySince]);
+  }, [loading, toolActivitySince]);
 
   useEffect(() => {
     const updateNetworkState = () => setNetworkOnline(navigator.onLine);
