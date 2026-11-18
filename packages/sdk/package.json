@@ -1,9 +1,9 @@
 {
-  "name":"@leo-os/sdk",
+  "name":"@braverton/sdk",
   "version":"2.0.0",
   "private":false,
   "publishConfig":{"access":"public"},
-  "description":"Official TypeScript SDK for the LEO OS API v1.",
+  "description":"Official TypeScript SDK for the Braverton API v1.",
   "type":"module",
   "main":"./dist/index.js",
   "types":"./dist/index.d.ts",
