@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     template: '%s | Braverton',
   },
   description: SITE_DESCRIPTION,
-  keywords: ['Braverton', 'AI software development', 'build apps with AI', 'Coda AI assistant', 'web development Nigeria', 'AI platform Africa'],
+  keywords: ['Braverton', 'AI software development', 'build apps with AI', 'Bram AI assistant', 'web development Nigeria', 'AI platform Africa'],
   category: 'technology',
   authors: [{ name: SITE_NAME }, { name: 'Leonard Udoh' }],
   creator: SITE_NAME,
