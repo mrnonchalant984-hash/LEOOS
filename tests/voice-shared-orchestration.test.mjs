@@ -24,7 +24,7 @@ test('voice uses the existing account-scoped tool executor and supports agent ex
 
 test('browser voice sessions do not mint a direct Gemini Live token that bypasses shared orchestration', () => {
   assert.match(session, /mode: 'gemini_turn_based'/);
-  assert.match(session, /shared-braverton-assistant/);
+  assert.match(session, /shared-leo-chat/);
   assert.match(session, /assistant: 'Bram'/);
   assert.match(session, /transcription_endpoint: '\/api\/voice'/);
   assert.doesNotMatch(session, /authTokens\.create/);
