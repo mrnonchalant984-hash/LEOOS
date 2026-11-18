@@ -13,6 +13,13 @@ test('Leo chat enables project creation and generation only for explicit build r
   assert.match(chat, /allowRepositoryWrites: repositoryWriteWorkflow/);
 });
 
+test('unrelated chat turns do not inherit a previous website builder card', async () => {
+  const chat = await source('app/api/chat/route.ts');
+  assert.match(chat, /Carry a previous project type forward only for an explicit short continuation/);
+  assert.match(chat, /shortBuildContinuation\s*\?\s*\[\.\.\.recentUserMessages\]/);
+  assert.match(chat, /never\\s\+ask\(\?:ed\|ing\)|not\\s\+ask\(\?:ing\|ed\)/);
+});
+
 test('project creation, file writes, and deployment tools are gated by explicit request state', async () => {
   const tools = await source('lib/ai/tool-orchestrator.ts');
   assert.match(tools, /if \(options\?\.allowBuildActions\)/);
