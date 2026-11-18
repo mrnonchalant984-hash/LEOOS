@@ -10,6 +10,8 @@ export type TextGenerationRequest = {
   messages: ModelMessage[];
   signal?: AbortSignal;
   maxOutputTokens?: number;
+  /** Bound multi-turn tool execution so a single chat request can finish inside the hosting request window. */
+  maxToolTurns?: number;
   temperature?: number;
   reasoning?: { effort: 'low' | 'medium' | 'high' };
   /** Enable Gemini's grounded Google Search tool for current or explicitly researched questions. */
@@ -37,7 +39,10 @@ function normalizeUsage(inputTokens?: number | null, outputTokens?: number | nul
 
 async function withProviderError<T>(provider: ModelProvider, model: string, request: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   try {
-    return await retryProviderRequest(request, { signal, maxAttempts: 3, baseDelayMs: 400, maxDelayMs: 4_000 });
+    // One attempt per model call: the outer router may try one different Gemini
+    // model, while route-level deadlines prevent nested retries from exhausting
+    // the Vercel request window.
+    return await retryProviderRequest(request, { signal, maxAttempts: 2, baseDelayMs: 250, maxDelayMs: 1_000 });
   } catch (error) {
     if (error instanceof ModelProviderError) throw error;
     const candidate = error && typeof error === 'object' ? error as { status?: unknown; statusCode?: unknown } : {};
@@ -117,7 +122,7 @@ export async function generateTextWithTools(
     throw new ModelProviderError('The selected tool is not available for this request.', 400);
   }
 
-  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '', httpOptions: { timeout: 45_000 } });
+  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '', httpOptions: { timeout: 30_000 } });
   const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
   const contents: Content[] = providerContents(request.messages, request.images);
   const definitions = request.tools.map(tool => ({
@@ -126,7 +131,7 @@ export async function generateTextWithTools(
     parametersJsonSchema: tool.inputSchema,
   }));
   const maxCalls = Math.max(1, Math.min(8, Math.trunc(request.maxToolCalls || 6)));
-  const maxTurns = 5;
+  const maxTurns = Math.max(1, Math.min(5, Math.trunc(request.maxToolTurns || 5)));
   let callsMade = 0;
   let toolErrors = 0;
   let totalInputTokens = 0;
@@ -242,7 +247,7 @@ export async function generateTextStream(
   if (resolved.provider !== 'google') throw new ModelProviderError('Only Gemini model execution is enabled. Configure GEMINI_API_KEY.', 503);
   if (!isProviderConfigured('google')) throw new ModelProviderError('Gemini is not configured. Set GEMINI_API_KEY on the server.', 503);
 
-  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '', httpOptions: { timeout: 45_000 } });
+  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '', httpOptions: { timeout: 30_000 } });
   const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
   const maxOutputTokens = Math.max(64, Math.min(20_000, Math.trunc(request.maxOutputTokens || 1200)));
   const temperature = Math.max(0, Math.min(2, request.temperature ?? 0.3));
@@ -274,7 +279,7 @@ export async function generateText(request: TextGenerationRequest): Promise<Text
     throw new ModelProviderError('Gemini is not configured. Set GEMINI_API_KEY on the server.', 503);
   }
 
-  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '', httpOptions: { timeout: 45_000 } });
+  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '', httpOptions: { timeout: 30_000 } });
   const system = request.messages.filter(message => message.role === 'system' || message.role === 'developer').map(message => message.content).join('\n\n');
   const maxOutputTokens = Math.max(64, Math.min(20_000, Math.trunc(request.maxOutputTokens || 1200)));
   const temperature = Math.max(0, Math.min(2, request.temperature ?? 0.3));
