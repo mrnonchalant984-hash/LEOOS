@@ -150,7 +150,14 @@ export async function POST(req: NextRequest) {
     let speech: { bytes: Buffer; contentType: string };
     let speechProvider = 'google';
     speech = await geminiSpeak(speechText);
-    return new NextResponse(new Uint8Array(speech.bytes), { headers: { 'Content-Type': speech.contentType, 'X-Transcript': encodeURIComponent(transcript), 'X-Assistant-Reply': encodeURIComponent(assistantReply), 'X-Transcription-Provider': transcriptionProvider, 'X-Speech-Provider': speechProvider, 'X-Cache-Control': 'no-store', 'Cache-Control': 'no-store' } });
+    return NextResponse.json({
+      transcript,
+      assistantReply,
+      mode: turnMode ? 'chat' : 'transcribe',
+      transcriptionProvider,
+      speechProvider,
+      audio: { contentType: speech.contentType, data: speech.bytes.toString('base64') },
+    }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     console.error('Voice processing failed:', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json({ error: 'Voice processing is temporarily unavailable. Gemini voice configuration or model access is unavailable.' }, { status: 502 });
