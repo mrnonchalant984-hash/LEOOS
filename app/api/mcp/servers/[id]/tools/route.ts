@@ -40,8 +40,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const tools = Array.isArray(server.discovered_tools) ? server.discovered_tools : [];
   if (!tools.some(tool => tool.name === toolName)) return NextResponse.json({ error: 'That tool was not discovered on this connection.' }, { status: 404 });
   const selectedTool = tools.find(tool => tool.name === toolName);
-  if (approved && accessLevel === 'write' && (selectedTool?.annotations?.readOnlyHint === true || selectedTool?.annotations?.destructiveHint === true || agentIds.length > 0)) {
-    return NextResponse.json({ error: 'Write access is available only for non-read-only, non-destructive tools and cannot be delegated to specialist agents.' }, { status: 400 });
+  if (approved && accessLevel === 'write' && (selectedTool?.annotations?.readOnlyHint === true || agentIds.length > 0)) {
+    return NextResponse.json({ error: 'Write access is available only for tools not marked read-only and cannot be delegated to specialist agents.' }, { status: 400 });
   }
   if (approved) {
     const { error } = await db.from('mcp_remote_tool_approvals')
