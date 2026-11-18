@@ -122,7 +122,9 @@ body:has(.landing-page) .landing-hero h1 em { background: linear-gradient(110deg
 .lx-editorial-outline { border: 1px solid rgba(43,48,51,.35); color: #3a3a3a; }
 .lx-editorial-outline:hover { background: #2b3033; color: #fff; }
 .lx-editorial-proof { display: flex; flex-wrap: wrap; gap: 18px; margin: 24px 0 0 min(238px, 28vw); color: #7a8083; font-size: 8px; letter-spacing: .1em; }
-.lx-editorial-telemetry { position: absolute; right: clamp(20px, 8vw, 120px); top: 24%; z-index: 1; display: grid; gap: 7px; min-width: 155px; padding: 14px; border: 1px solid rgba(255,255,255,.45); background: rgba(20,24,26,.66); color: #fff; font-size: 8px; letter-spacing: .1em; backdrop-filter: blur(14px); }
+.lx-editorial-telemetry { position: absolute; right: clamp(20px, 8vw, 120px); top: 24%; z-index: 1; display: flex; flex-direction: column; gap: 9px; min-width: 190px; padding: 14px; border: 1px solid rgba(255,255,255,.45); background: rgba(20,24,26,.66); color: #fff; font-size: 8px; letter-spacing: .1em; backdrop-filter: blur(14px); }
+.lx-editorial-telemetry-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lx-editorial-telemetry small span { display: inline-block; margin: 0 3px; }
 .lx-editorial-telemetry b { color: #79e7b0; font-size: 8px; }
 .lx-editorial-telemetry small { color: rgba(255,255,255,.65); font-size: 8px; letter-spacing: .04em; }
 .lx-editorial-about { display: flex; flex-wrap: wrap; align-items: center; gap: 40px; padding: clamp(70px, 10vw, 140px) 0 clamp(50px, 6vw, 80px) clamp(20px, 9vw, 118px); background: linear-gradient(180deg, #f2f1f0 0%, #f7f6f8 18%, #f7f6f8 100%); color: #2b3033; }
