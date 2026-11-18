@@ -53,6 +53,14 @@ function isRepositoryTask(message: string) {
   return /\b(github|git\s?hub|repository|repo)\b/i.test(message);
 }
 
+
+function isWebsiteResearchIntent(message: string) {
+  const action = /\b(search|research|crawl|browse|read|fetch|inspect|summari[sz]e|analy[sz]e)\b/i.test(message);
+  const site = /\b(website|web\s?site|site|webpage|web\s?page|pages|domain)\b/i.test(message);
+  const url = /https?:\/\/[^\s<>()]+/i.test(message);
+  return action && (site || url);
+}
+
 function isRepositoryWriteIntent(message: string) {
   const writeVerbs = '(create|make|add|edit|write|commit|push|fix|change|update|modify|repair|deploy|redeploy|publish)';
   const asksToWrite = new RegExp(`\\b${writeVerbs}\\b`, 'i').test(message);
@@ -259,6 +267,7 @@ export async function POST(req: NextRequest) {
       (isExplicitBuildIntent(message) || shortBuildContinuation) && !explicitImageIntent) || explicitDeploymentIntent);
     const buildMode = Boolean(ctx && explicitBuildIntent && !customAgent);
     const repositoryWorkflow = Boolean(ctx && !customAgent && isRepositoryTask(message));
+    const webResearchWorkflow = Boolean(ctx && !customAgent && isWebsiteResearchIntent(message));
     const repositoryWriteWorkflow = Boolean(repositoryWorkflow && isRepositoryWriteIntent(message));
     if (requestedWebSearch === true && (mode === 'tools' || buildMode || repositoryWorkflow)) {
       return NextResponse.json({
@@ -266,7 +275,7 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     const webSearchRequested = mode !== 'tools' && (requestedWebSearch === true || shouldUseWebSearch(message));
-    if (mode === "tools" || requestedCustomAgentId || buildMode || repositoryWorkflow) {
+    if (mode === "tools" || requestedCustomAgentId || buildMode || repositoryWorkflow || webResearchWorkflow) {
       if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });
       const limited = await enforceUserRateLimit(ctx.user.id, requestedCustomAgentId ? 'leo-custom-agent-run' : buildMode ? 'leo-chat-build' : repositoryWorkflow ? 'leo-chat-repository' : 'leo-chat-tools', 10, 60);
       if (limited) return limited;
@@ -621,7 +630,7 @@ export async function POST(req: NextRequest) {
           customAgentUsageId = usageId;
         }
       }
-      if (mode === "tools" || buildMode || repositoryWorkflow) {
+      if (mode === "tools" || buildMode || repositoryWorkflow || webResearchWorkflow) {
         if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });
         const available = await createUserAssistantTools(ctx.user.id, {
           request: req,
@@ -630,6 +639,7 @@ export async function POST(req: NextRequest) {
           allowDeployment: explicitDeploymentIntent,
           allowRepositoryAccess: repositoryWorkflow,
           allowRepositoryWrites: repositoryWriteWorkflow,
+          allowWebResearch: webResearchWorkflow,
           allowBrowserGame: requestedProjectType === 'game',
         });
         const agentTools = customAgent
