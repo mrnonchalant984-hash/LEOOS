@@ -86,3 +86,18 @@ test('provider OAuth environment and operational docs are included', async () =>
   for (const key of ['GITHUB_OAUTH_CLIENT_SECRET', 'VERCEL_OAUTH_CLIENT_SECRET', 'GOOGLE_OAUTH_CLIENT_SECRET', 'META_APP_SECRET', 'INTEGRATION_OAUTH_CALLBACK_URL']) assert.match(env, new RegExp(key));
   for (const item of ['apply-migration', 'firestore-document', 'youtube', 'WhatsApp Business', 'MCP_CREDENTIAL_ENCRYPTION_KEY']) assert.match(docs, new RegExp(item, 'i'));
 });
+
+
+test('hosting suspension and renewal use the website owner’s verified Vercel token, not only the platform token', async () => {
+  const helper = await read('lib/vercel-hosting.ts');
+  const cron = await read('app/api/cron/hosting/route.ts');
+  const webhook = await read('app/api/payment/webhook/route.ts');
+  assert.match(helper, /getVercelTokenForUser/);
+  assert.match(helper, /\.eq\('user_id', userId\)/);
+  assert.match(helper, /openConnectionConfig\(data\.credential_ciphertext\)/);
+  assert.match(helper, /teamQuery\(token\)/);
+  assert.match(cron, /getVercelTokenForUser\(String\(site\.owner_user_id/);
+  assert.match(cron, /promoteVercelDeployment\([^\n]+vercelToken\)/);
+  assert.match(webhook, /getVercelTokenForUser\(String\(site\.owner_user_id/);
+  assert.match(webhook, /promoteVercelDeployment\([^\n]+vercelToken\)/);
+});
