@@ -138,6 +138,7 @@ export async function POST(req: NextRequest) {
       document_asset_ids: requestedDocumentAssetIds,
       image_asset_ids: requestedImageAssetIds,
       work_mode: requestedWorkMode,
+      request_type: requestedRequestType,
     } = await req.json();
     if (!session_id || typeof message !== "string" || !message.trim())
       return NextResponse.json(
@@ -146,6 +147,9 @@ export async function POST(req: NextRequest) {
       );
     if (request_id !== undefined && typeof request_id !== "string") return NextResponse.json({ error: "Invalid request ID." }, { status: 400 });
     if (requestedWorkMode !== undefined && typeof requestedWorkMode !== "boolean") return NextResponse.json({ error: "Work mode must be enabled or disabled explicitly." }, { status: 400 });
+    if (requestedRequestType !== undefined && requestedRequestType !== 'build' && requestedRequestType !== 'repair') return NextResponse.json({ error: "Choose a supported request type." }, { status: 400 });
+    const repairRequest = requestedRequestType === 'repair';
+    if (repairRequest && (!project_id || typeof project_id !== 'string' || !PROJECT_ID_RE.test(project_id))) return NextResponse.json({ error: "Error repair requires a valid project workspace." }, { status: 400 });
     const requestId = req.headers.get("idempotency-key") || request_id || randomUUID();
     if (!CHAT_REQUEST_ID_RE.test(requestId)) return NextResponse.json({ error: "Invalid request ID." }, { status: 400 });
     if (!["normal", "deep", "tools"].includes(mode)) return NextResponse.json({ error: "Choose a supported chat mode." }, { status: 400 });
@@ -185,6 +189,11 @@ export async function POST(req: NextRequest) {
     if (imageAssetIds.length && !ctx) return NextResponse.json({ error: 'Sign in to use uploaded chat images.' }, { status: 401 });
     if (documentAssetIds.length && !ctx) return NextResponse.json({ error: "Sign in to use uploaded chat documents." }, { status: 401 });
     const owner = isPlatformOwner(ctx?.profile);
+    if (repairRequest) {
+      if (!ctx) return NextResponse.json({ error: "Sign in to request a workspace repair." }, { status: 401 });
+      const repairLimit = await enforceUserRateLimit(ctx.user.id, 'leo-free-repair', 10, 60 * 60);
+      if (repairLimit) return repairLimit;
+    }
     if (ctx) {
       try {
         const quota = await enforceLeoCodeDailyQuota(ctx.user.id);
@@ -245,7 +254,7 @@ export async function POST(req: NextRequest) {
         (!requestedProjectType && /\b(project|it|that|this|the site|the website)\b/i.test(message))));
     const explicitImageIntent = mode === "normal" && !customAgent && !requestedToolName &&
       requestsImageGeneration(message) && !explicitDeploymentIntent;
-    const explicitBuildIntent = Boolean(((webProjectRequest || requestedProjectType === 'game') &&
+    const explicitBuildIntent = Boolean(repairRequest || ((webProjectRequest || requestedProjectType === 'game') &&
       (isExplicitBuildIntent(message) || shortBuildContinuation) && !explicitImageIntent) || explicitDeploymentIntent);
     const buildMode = Boolean(ctx && explicitBuildIntent && !customAgent);
     const repositoryWorkflow = Boolean(ctx && !customAgent && isRepositoryTask(message));
