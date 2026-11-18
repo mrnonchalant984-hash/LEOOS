@@ -15,7 +15,7 @@ const LazyLEOWidget = dynamic(
         role="status"
         aria-live="polite"
       >
-        Opening Coda…
+        Opening Bram…
       </div>
     ),
   },
@@ -38,7 +38,7 @@ function LEOWidgetLauncher() {
     <button
       type="button"
       className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-[var(--coda-border)] bg-[var(--bv-surface)] text-white shadow-2xl"
-      aria-label="Open Coda chat"
+      aria-label="Open Bram chat"
       aria-haspopup="dialog"
       aria-expanded={false}
       onClick={() => setStarted(true)}
