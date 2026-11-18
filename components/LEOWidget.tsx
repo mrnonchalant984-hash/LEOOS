@@ -2105,7 +2105,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
             })}
             {!workProject && <p className="mt-2 text-[10px] text-zinc-500">Open a project workspace to save checklist progress.</p>}
             {workProject && <p className="mt-2 text-[10px] text-zinc-600">Changes save to this project workspace.</p>}
-          </section>
+          </section>}
           {m.role === "assistant" && m.content.trim() && /\b(?:create|make|generate|export|download|save|provide|give me)\b.{0,60}\b(?:pdf|docx|word document|document file)\b|\b(?:pdf|docx)\b.{0,40}\b(?:file|download|export)\b/i.test(messages.slice(0, i).reverse().find(item => item.role === "user")?.content || "") && <div className="mt-3 flex flex-wrap gap-2" aria-label="Requested document exports">
             {(["pdf", "docx", "txt"] as const).map(format => {
               const operation = `${i}-${format}`;
