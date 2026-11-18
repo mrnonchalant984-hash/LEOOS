@@ -4,7 +4,7 @@
 
 ## What Braverton does
 
-- **Coda**: An AI assistant that turns plain-language descriptions into structured build plans and coordinates development
+- **Bram**: An AI assistant that turns plain-language descriptions into structured build plans and coordinates development
 - **Braverton OS**: An AI workspace combining project management, agent assistance, and deployment
 - **BraverCode**: A developer tool and VS Code extension for AI-assisted coding
 - **Services**: Professional services including AI Mockups, Code Reviews, and custom software builds
@@ -19,7 +19,7 @@ Developers, indie builders, and businesses in Nigeria and Africa who want to go 
 - Homepage: https://leoos-omega.vercel.app/
 - Services: https://leoos-omega.vercel.app/services
 - Pricing: https://leoos-omega.vercel.app/pricing
-- Coda AI: https://leoos-omega.vercel.app/coda
+- Bram AI: https://leoos-omega.vercel.app/coda
 - Developer docs: https://leoos-omega.vercel.app/docs
 - About: https://leoos-omega.vercel.app/about
 - Contact: https://leoos-omega.vercel.app/contact

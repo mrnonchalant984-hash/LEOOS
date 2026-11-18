@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LeoClient, LeoApiError, LeoRateLimitError, verifyWebhookSignature } from '../packages/sdk/src/index.ts';
+import { BravertonClient, LeoClient, LeoApiError, LeoRateLimitError, verifyWebhookSignature } from '../packages/sdk/src/index.ts';
 import { signatureHeader, generateWebhookSecret } from '../lib/webhooks-core.ts';
 import { appendScratchpadEntry, createScratchpadManifest, isAgentPathAllowed, validateScratchpadManifest } from '../packages/sdk/src/orchestration.ts';
 
@@ -79,4 +79,11 @@ test('SDK defaults to the deployed LeonardX base URL and supports models and mes
   assert.equal(seen[1].url, 'https://leoos-omega.vercel.app/api/v1/messages');
   assert.equal(seen[1].method, 'POST');
   assert.equal(message.content[0].text, 'Hello');
+});
+
+
+test('BravertonClient is the primary SDK export while LeoClient remains a backwards-compatible alias', () => {
+  const client = new BravertonClient({ apiKey: 'braverton_live_test', baseUrl: 'https://example.test', fetch: async () => json(200, { data: [], request_id: 'r1' }) });
+  assert.ok(client instanceof BravertonClient);
+  assert.equal(LeoClient, BravertonClient);
 });

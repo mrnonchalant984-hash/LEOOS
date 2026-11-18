@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const route = await readFile(new URL('../app/api/chat/route.ts', import.meta.url), 'utf8');
 const tools = await readFile(new URL('../lib/ai/tool-orchestrator.ts', import.meta.url), 'utf8');
+const widget = await readFile(new URL('../components/LEOWidget.tsx', import.meta.url), 'utf8');
 const buildRoute = await readFile(new URL('../app/api/build-deploy/route.ts', import.meta.url), 'utf8');
 
 test('explicit website build requests activate the existing Leo tool orchestrator from normal chat', () => {
@@ -47,4 +48,13 @@ test('existing build/deploy route accepts Leo-chat generated files without skipp
   assert.match(buildRoute, /\.eq\('owner_user_id', ctx\.user\.id\)/);
   assert.match(buildRoute, /planAllows\(plan, requiredFeature\)/);
   assert.match(buildRoute, /validateGeneratedSite\(\{ files: suppliedMcpFiles \}, false\)/);
+});
+
+test('natural-language website requests and short follow-ups stay in the same Bram build workflow', () => {
+  assert.ok(route.includes('need|want|looking for'));
+  assert.ok(route.includes('hasRecentBuildRequest'));
+  assert.ok(route.includes('shortBuildContinuation'));
+  assert.ok(route.includes('history.slice(-12)'));
+  assert.match(widget, /priorBuildRequest/);
+  assert.match(widget, /buildContinuation/);
 });

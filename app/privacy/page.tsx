@@ -26,7 +26,7 @@ export default function Privacy() {
               2. How information is used
             </h2>
             <p className="mt-2">
-              Information is used to authenticate users, provide Coda and plan-authorized builders, enforce usage limits, create and manage customer projects, verify payments, operate hosting, prevent abuse, provide support, and meet legal obligations. Customer prompts and requirements may be sent to configured AI providers to generate requested outputs.
+              Information is used to authenticate users, provide Bram and plan-authorized builders, enforce usage limits, create and manage customer projects, verify payments, operate hosting, prevent abuse, provide support, and meet legal obligations. Customer prompts and requirements may be sent to configured AI providers to generate requested outputs.
             </p>
           </section>
           <section>

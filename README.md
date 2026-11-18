@@ -11,7 +11,7 @@ Braverton is an AI-assisted software creation platform with project demos, authe
 - Credit-gated image generation with owner bypass.
 - `/dashboard` and owner-only `/admin`.
 - TOTP 2FA setup for the owner admin path with backup codes.
-- Full-screen ChatGPT-style LEO chat UI with voice input, suggestions, generated-image display and per-user chat persistence.
+- Full-screen ChatGPT-style LEO chat UI with hands-free voice conversation, transcript display, spoken assistant replies, suggestions, generated-image display and per-user chat persistence.
 - 3D particle background and reusable glass-card styling.
 - Blog, terms, privacy, refund-policy, sitemap and robots routes.
 
@@ -28,9 +28,9 @@ Braverton is an AI-assisted software creation platform with project demos, authe
 
 ## Important
 A successful frontend payment redirect never unlocks a plan by itself. Subscription and credits are granted by the verified Paystack webhook. Owner access is checked against the authenticated account and the server-side owner email.
-## Coda assistant experience + live admin usage analytics
+## Bram assistant experience + usage analytics
 
-This upgrade adds a personalized Coda opening state with the signed-in user's first name, a glowing Leo bubble, and quick actions for brainstorming, creating, deploying, fixing, and coding.
+This upgrade adds a personalized Bram opening state with the signed-in user's first name, a glowing Leo bubble, and quick actions for brainstorming, creating, deploying, fixing, and coding.
 
 It also adds the `ai_usage` Supabase table. Chat requests record provider usage, while feature credit consumption records credits used. The owner admin dashboard polls the protected analytics endpoint every 5 seconds and shows total AI tokens, credits used, request count, per-feature usage, and recent usage.
 
@@ -159,3 +159,23 @@ Leo's Web Search action uses the authenticated `/api/research` endpoint. It grou
 Leo skills live in `skills/<name>/SKILL.md` with optional `scripts/`, `references/`, and `assets/` folders. User skills can be created or imported as a ZIP from **App → Customize → Skills**, edited with semantic version updates, enabled/disabled, exported, and inspected through version and execution history. Skill ZIPs require a `.leonardx-skill.json` manifest and one directory matching the skill name. Supported paths are limited to `SKILL.md`, `scripts/`, `references/`, and `assets/`; packages are capped at 8 MB and 100 supporting files.
 
 Apply `supabase/migrations/20261026200000_skills.sql`, `supabase/migrations/20261111150000_skill_versions_and_executions.sql`, and `supabase/migrations/20261115190000_private_runtime_jobs.sql` before using the user skill lifecycle. Skill scripts remain restricted to user-owned, enabled skills and require explicit confirmation. Approved scripts are queued on the separate private `LEOOS-RUNTIME` GitHub Actions repository, which must have the `LEONARDX_BASE_URL` and `CRON_SECRET` Actions secrets configured. Jobs run on ephemeral GitHub-hosted runners; they are not persistent terminals or a self-managed Podman/gVisor sandbox.
+
+
+## Bram hands-free voice conversation
+
+The authenticated `POST /api/realtime/session` endpoint initializes the server-orchestrated voice session and returns the selected voice plus the `gemini_turn_based` mode. The browser does not receive a provider API key or a direct Gemini Live token.
+
+During a voice session, the Braverton client keeps the microphone open, detects the end of each spoken turn using a short silence window, and submits the recording to the authenticated `POST /api/voice` endpoint. That endpoint:
+- transcribes the audio with the configured server-side Gemini audio model;
+- passes the transcript, recent conversation, user-approved memories, retrieved Braverton knowledge and permitted tools through the same server-side assistant orchestration used by chat;
+- persists the user transcript and Bram's reply in the user's chat when a valid session ID is supplied;
+- generates speech from Bram's reply and returns a structured JSON response containing `transcript`, `assistantReply`, and base64-encoded audio.
+
+The client displays both sides of the conversation, plays Bram's answer, and automatically resumes listening after playback. Users end the session with **End Voice Chat**; they do not need to press a separate stop-speaking button after each utterance. Microphone permission, browser audio playback permission, Gemini audio model access, and the authenticated Supabase session are required.
+
+Server configuration:
+- `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) for transcription, assistant orchestration and speech generation.
+- `LEO_GEMINI_AUDIO_MODEL` for audio transcription (defaults to `gemini-2.5-flash`).
+- `LEO_GEMINI_TTS_MODEL` for speech generation (defaults to `gemini-2.5-flash-preview-tts`).
+
+The voice session is handled by Braverton's authenticated server-side session and voice endpoints. Automatic speech detection keeps the conversation flowing without manual per-turn controls.

@@ -10,6 +10,7 @@ import { normalizeGeminiModelId } from '@/lib/ai/model-catalog';
 import { getProfile } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 const googleKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 const MAX_VOICE_AUDIO_BYTES = 15 * 1024 * 1024;
@@ -37,7 +38,7 @@ async function geminiTranscribe(audio: File) {
   const mimeType = audio.type.split(';')[0]?.trim().toLowerCase() || 'audio/webm';
   if (!SUPPORTED_AUDIO_TYPES.has(mimeType)) throw new Error('Use a supported audio format: WebM, OGG, WAV, MP3, MP4, AAC, or FLAC.');
   const bytes = Buffer.from(await audio.arrayBuffer());
-  const client = new GoogleGenAI({ apiKey: key });
+  const client = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 30_000 } });
   const response = await client.models.generateContent({
     model: normalizeGeminiModelId(process.env.LEO_GEMINI_AUDIO_MODEL?.trim() || 'gemini-2.5-flash'),
     contents: [{ role: 'user', parts: [
@@ -56,7 +57,7 @@ async function geminiTranscribe(audio: File) {
 async function geminiSpeak(text: string) {
   const key = googleKey();
   if (!key) throw new Error('Gemini is not configured.');
-  const client = new GoogleGenAI({ apiKey: key });
+  const client = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 30_000 } });
   const response = await client.models.generateContent({
     model: process.env.LEO_GEMINI_TTS_MODEL?.trim() || 'gemini-2.5-flash-preview-tts',
     contents: [{ role: 'user', parts: [{ text }] }],
@@ -150,7 +151,14 @@ export async function POST(req: NextRequest) {
     let speech: { bytes: Buffer; contentType: string };
     let speechProvider = 'google';
     speech = await geminiSpeak(speechText);
-    return new NextResponse(new Uint8Array(speech.bytes), { headers: { 'Content-Type': speech.contentType, 'X-Transcript': encodeURIComponent(transcript), 'X-Assistant-Reply': encodeURIComponent(assistantReply), 'X-Transcription-Provider': transcriptionProvider, 'X-Speech-Provider': speechProvider, 'X-Cache-Control': 'no-store', 'Cache-Control': 'no-store' } });
+    return NextResponse.json({
+      transcript,
+      assistantReply,
+      mode: turnMode ? 'chat' : 'transcribe',
+      transcriptionProvider,
+      speechProvider,
+      audio: { contentType: speech.contentType, data: speech.bytes.toString('base64') },
+    }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     console.error('Voice processing failed:', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json({ error: 'Voice processing is temporarily unavailable. Gemini voice configuration or model access is unavailable.' }, { status: 502 });

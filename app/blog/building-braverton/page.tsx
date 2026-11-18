@@ -13,7 +13,7 @@ export default function BuildingBravertonPost() {
         <h2 className="mt-10 text-2xl font-bold">What this log will cover</h2>
         <ul className="mt-4 list-disc space-y-3 pl-6 leading-8 text-zinc-300">
           <li>How the platform evolves from idea and planning into working software</li>
-          <li>Changes to Coda, project workspaces, developer tools and integrations</li>
+          <li>Changes to Bram, project workspaces, developer tools and integrations</li>
           <li>What has been implemented, what has been tested and what is still in progress</li>
           <li>Build decisions, trade-offs and lessons from developing in Nigeria</li>
         </ul>

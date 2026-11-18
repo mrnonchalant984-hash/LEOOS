@@ -25,7 +25,7 @@ export type LeoMessageResponse = {
   request_id: string;
 };
 type Options = { apiKey: string; baseUrl?: string; fetch?: FetchLike };
-export class LeoClient {
+export class BravertonClient {
   private readonly baseUrl: string;
   private readonly fetcher: FetchLike;
   public readonly projects = {
@@ -67,7 +67,7 @@ export class LeoClient {
       let body: any = null;
       try { body = await response.json(); } catch { /* keep generic error */ }
       const error = body?.error || {};
-      throw new LeoApiError(response.status, String(error.code || 'api_error'), String(error.message || `LEO OS API error (${response.status})`), requestId || body?.request_id);
+      throw new LeoApiError(response.status, String(error.code || 'api_error'), String(error.message || `Braverton API error (${response.status})`), requestId || body?.request_id);
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -113,7 +113,7 @@ export class LeoClient {
     if (!response.ok) {
       const error = body?.error || {};
       const code = String(error.code || 'api_error');
-      const message = String(error.message || `LEO OS API error (${response.status})`);
+      const message = String(error.message || `Braverton API error (${response.status})`);
       const retry = Number(response.headers.get('retry-after'));
       if (response.status === 429) throw new LeoRateLimitError(response.status, message, requestId || error.request_id, Number.isFinite(retry) ? retry : null);
       throw new LeoApiError(response.status, code, message, requestId || error.request_id);
@@ -121,7 +121,8 @@ export class LeoClient {
     return body as T;
   }
 }
-export class LeoOS extends LeoClient {}
+export { BravertonClient as LeoClient };
+export class LeoOS extends BravertonClient {}
 
 export function verifyWebhookSignature(secret: string, header: string | undefined, rawBody: string, options: { toleranceSeconds?: number; nowSeconds?: number } = {}) {
   if (!secret || !header) return false;

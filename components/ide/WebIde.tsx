@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronRight, Download, FileCode2, FolderDown, Play, Save, TerminalSquare, Upload } from 'lucide-react';
 import CloudBuildPanel from '@/components/ide/CloudBuildPanel';
 import { LivePreviewFrame } from '@/components/engineering/LivePreviewFrame';
+import { WorkspaceBuilderSplit } from '@/components/ide/WorkspaceBuilderSplit';
 import { PaystackIntegrationGenerator } from '@/components/ide/PaystackIntegrationGenerator';
 import { GitHubRepositoryImporter } from '@/components/ide/GitHubRepositoryImporter';
 import { LEOWidget } from '@/components/LEOWidget';
@@ -25,7 +26,7 @@ function flattenFiles(files: Record<string, string>) {
   return Object.keys(files).sort((a, b) => a.localeCompare(b));
 }
 
-export default function WebIde({ workspaceId }: { workspaceId: string }) {
+export default function WebIde({ workspaceId, initialSessionId = '' }: { workspaceId: string; initialSessionId?: string }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [files, setFiles] = useState<Record<string, string>>({});
   const [savedFiles, setSavedFiles] = useState<Record<string, string>>({});
@@ -300,6 +301,15 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
       <div className="flex flex-wrap items-center gap-2"><span className="rounded border border-white/10 px-2 py-1 text-xs text-white/55">{workspace?.status || 'Workspace'}</span><select aria-label="Import source" value={importSource} onChange={event => setImportSource(event.target.value as 'zip' | 'github')} className="rounded-md border border-white/15 bg-[#101114] px-2 py-2 text-xs text-white"><option value="zip">ZIP archive</option><option value="github">GitHub repository</option></select>{importSource === 'zip' ? <><input ref={importInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="sr-only" aria-label="Choose a ZIP archive to import" onChange={event => { const file = event.target.files?.[0]; if (file) void importWorkspaceArchive(file); }} /><button type="button" onClick={() => importInputRef.current?.click()} disabled={importing || isDirty || saving} className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 disabled:opacity-50"><Upload size={15}/>{importing ? 'Importing…' : 'Import ZIP'}</button></> : <><input aria-label="Public GitHub repository URL" value={githubRepositoryUrl} onChange={event => setGithubRepositoryUrl(event.target.value)} placeholder="https://github.com/owner/repo" className="w-44 rounded-md border border-white/15 bg-black/20 px-2 py-2 text-xs text-white outline-none focus:border-[#d7aa70]/60" /><button type="button" onClick={() => void importGitHubRepository()} disabled={importing || !githubRepositoryUrl.trim()} className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 disabled:opacity-50">{importing ? 'Importing…' : 'Import repo'}</button></>}<span className={`text-xs ${isDirty ? 'text-amber-300' : 'text-emerald-300'}`}>{isDirty ? 'Unsaved changes' : 'All changes saved'}</span><GitHubRepositoryImporter workspaceId={workspaceId} disabled={isDirty || saving || importing} /><a href={exportUrl()} onClick={blockUnsavedExport} aria-disabled={isDirty} className={`inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 text-sm text-white hover:bg-white/5 ${isDirty ? 'cursor-not-allowed opacity-45' : ''}`}><Download size={15}/>Download project ZIP</a><button onClick={() => void saveFiles()} disabled={saving || !isDirty} className="inline-flex items-center gap-2 rounded-md bg-[#d7aa70] px-3 py-2 text-sm font-medium text-black disabled:opacity-60"><Save size={15}/>{saving ? 'Saving…' : 'Save files'}</button></div>
     </header>
     <CloudBuildPanel projectId={workspaceId} projectType={workspace?.type || null} />
+    <WorkspaceBuilderSplit
+      projectId={workspaceId}
+      projectName={workspace?.project_name || 'Workspace'}
+      previewUrl={preview?.status === 'deployed' ? preview.deployment_url : null}
+      previewError={previewError || (preview?.status === 'failed' ? 'The latest preview build failed. Review the build status and ask Bram to repair the project.' : '')}
+      initialSessionId={initialSessionId}
+      onOpenCode={() => document.getElementById('workspace-code-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+      onCreatePreview={() => void createCloudflarePreview()}
+    />
     <PaystackIntegrationGenerator existingFiles={files} onGenerate={(generated) => {
       const conflicts = Object.keys(generated).filter(path => path in files);
       if (conflicts.length) {
@@ -344,7 +354,7 @@ export default function WebIde({ workspaceId }: { workspaceId: string }) {
         </div>
       )}
     </section>
-    <section aria-label="Workspace editor" className="mx-auto grid min-h-[68vh] max-w-[1600px] overflow-hidden rounded-xl border border-white/10 bg-[#101114] lg:grid-cols-[minmax(0,1.85fr)_minmax(320px,1fr)]">
+    <section id="workspace-code-editor" aria-label="Workspace editor" className="mx-auto grid min-h-[68vh] max-w-[1600px] overflow-hidden rounded-xl border border-white/10 bg-[#101114] lg:grid-cols-[minmax(0,1.85fr)_minmax(320px,1fr)]">
       <div className="flex min-h-[58vh] flex-col border-b border-white/10 lg:border-b-0 lg:border-r">
         <div className="flex h-11 items-center gap-2 border-b border-white/10 px-4 text-xs text-white/55"><FileCode2 size={15}/> Files <input aria-label="Search files" value={fileSearch} onChange={event => setFileSearch(event.target.value)} placeholder="Search files…" className="ml-auto min-w-0 w-32 rounded border border-white/10 bg-black/20 px-2 py-1 text-xs text-white outline-none focus:border-[#d7aa70]/60"/><button onClick={createFile} className="ml-auto rounded px-2 py-1 text-white/70 hover:bg-white/10 hover:text-white">New file</button><span>{filePaths.length} items</span></div>
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(150px,0.28fr)_minmax(0,1fr)]">

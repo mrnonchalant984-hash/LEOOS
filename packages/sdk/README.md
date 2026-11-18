@@ -1,13 +1,13 @@
-# @leo-os/sdk
+# @braverton/sdk
 
-Official TypeScript client for the LEO OS API. Zero dependencies. Requires Node 18+.
+Official TypeScript client for the Braverton API. Zero dependencies. Requires Node 18+.
 
 ## Install
 
-Published on npm as `@leo-os/sdk@2.0.0`:
+Repository source package: `@braverton/sdk` (npm publication is a separate release step).
 
 ```sh
-npm install @leo-os/sdk
+npm install @braverton/sdk
 ```
 
 ## Quick start
@@ -15,9 +15,9 @@ npm install @leo-os/sdk
 Create a key at `/developers` with `read` scope for account, model-list, and project reads. Include `write` scope if you want to create projects or call model inference, then:
 
 ```ts
-import { LeoClient, LeoApiError, LeoRateLimitError } from '@leo-os/sdk';
+import { BravertonClient, LeoApiError, LeoRateLimitError } from '@braverton/sdk';
 
-const leo = new LeoClient({ apiKey: process.env.LEO_API_KEY! }); // defaults to https://leoos-omega.vercel.app
+const leo = new BravertonClient({ apiKey: process.env.BRAVERTON_API_KEY! }); // defaults to https://leoos-omega.vercel.app
 // Pass baseUrl explicitly for self-hosted or staging deployments.
 
 try {
@@ -38,7 +38,7 @@ Never put your API key in browser code. Keep it on a server.
 ## Webhook signatures
 
 ```ts
-import { verifyWebhookSignature } from '@leo-os/sdk';
+import { verifyWebhookSignature } from '@braverton/sdk';
 
 // rawBody must be the exact request body string, before JSON parsing.
 const ok = verifyWebhookSignature(process.env.LEO_WEBHOOK_SECRET!, req.headers['leo-signature'] as string, rawBody);
@@ -51,7 +51,7 @@ Requests older than 5 minutes are rejected by default (`toleranceSeconds`).
 
 The SDK supports authenticated project listing/creation/status, model listing, non-streaming and server-sent-event streaming text messages, usage history, and webhook signature verification. File uploads and tool calls are not exposed by the current public v1 API. Cloud deployment requires a configured project and connected deployment provider.
 
-Agent coordination contracts (path boundaries, run telemetry, and bounded scratchpad metadata) are available from `@leo-os/sdk/orchestration`. They are contracts and local policy helpers, not a hosted multi-agent worker service.
+Agent coordination contracts (path boundaries, run telemetry, and bounded scratchpad metadata) are available from `@braverton/sdk/orchestration`. They are contracts and local policy helpers, not a hosted multi-agent worker service.
 
 ### Streaming responses
 
