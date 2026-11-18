@@ -130,8 +130,19 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
       result = await providerFetch('https://api.vercel.com/v13/deployments', c.token, { method: 'POST', body: JSON.stringify({ name, gitSource: { type: 'github', repo, ref }, target: 'production' }) });
     } else if (provider === 'github' && action === 'create-repo') {
       const name = typeof body.name === 'string' ? body.name.trim() : '';
+      if (body.confirm !== true) throw new Error('Explicit confirmation is required before creating a GitHub repository.');
       if (!/^[A-Za-z0-9_.-]{1,100}$/.test(name)) throw new Error('Repository name may contain letters, numbers, dots, underscores, and hyphens.');
-      result = await providerFetch('https://api.github.com/user/repos', c.token, { method: 'POST', headers: { 'User-Agent': 'LeonardX', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }, body: JSON.stringify({ name, private: body.private !== false, auto_init: true, description: typeof body.description === 'string' ? body.description.slice(0, 350) : 'Created with LeonardX' }) });
+      result = await providerFetch('https://api.github.com/user/repos', c.token, { method: 'POST', headers: { 'User-Agent': 'Braverton', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }, body: JSON.stringify({ name, private: body.private !== false, auto_init: true, description: typeof body.description === 'string' ? body.description.slice(0, 350) : 'Created with Braverton' }) });
+    } else if (provider === 'github' && action === 'create-branch') {
+      const repo = typeof body.repo === 'string' ? body.repo : '';
+      const branch = typeof body.branch === 'string' ? body.branch.trim() : '';
+      const fromBranch = typeof body.from_branch === 'string' && body.from_branch.trim() ? body.from_branch.trim() : 'main';
+      if (body.confirm !== true) throw new Error('Explicit confirmation is required before creating a GitHub branch.');
+      if (!/^[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+$/.test(repo) || !/^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[A-Za-z0-9_.\\/-]{1,200}$/.test(branch) || !/^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[A-Za-z0-9_.\\/-]{1,200}$/.test(fromBranch)) throw new Error('Provide a valid repository, new branch name, and source branch.');
+      const source = await providerFetch(`https://api.github.com/repos/${repo}/git/ref/heads/${fromBranch.split('/').map(encodeURIComponent).join('/')}`, c.token, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Braverton' } });
+      const sha = String((source.object as Json | undefined)?.sha || '');
+      if (!/^[0-9a-f]{40}$/i.test(sha)) throw new Error('GitHub did not return a valid source branch commit.');
+      result = await providerFetch(`https://api.github.com/repos/${repo}/git/refs`, c.token, { method: 'POST', headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Braverton', 'X-GitHub-Api-Version': '2022-11-28' }, body: JSON.stringify({ ref: `refs/heads/${branch}`, sha }) });
     } else if (provider === 'github' && action === 'read-file') {
       const repo = typeof body.repo === 'string' ? body.repo : '';
       const path = typeof body.path === 'string' ? body.path : '';
@@ -210,6 +221,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
   }
 }
 function supportedActions(provider: CustomerProvider) {
-  const actions: Partial<Record<CustomerProvider, string[]>> = { github: ['create-repo','read-file','repository-tree','commit-file','commit-files','commit-status'], vercel: ['create-project','deploy-git-repo','deployment-status','delete-deployment'], supabase: ['apply-migration'], firebase: ['project','firestore-document'], youtube: ['channel','analytics'], meta: ['pages','page-insights','send-message'], whatsapp_business: ['send'] };
+  const actions: Partial<Record<CustomerProvider, string[]>> = { github: ['create-repo','create-branch','read-file','repository-tree','commit-file','commit-files','commit-status'], vercel: ['create-project','deploy-git-repo','deployment-status','delete-deployment'], supabase: ['apply-migration'], firebase: ['project','firestore-document'], youtube: ['channel','analytics'], meta: ['pages','page-insights','send-message'], whatsapp_business: ['send'] };
   return actions[provider] || [];
 }
