@@ -55,8 +55,8 @@ function isRepositoryTask(message: string) {
 
 function isRepositoryWriteIntent(message: string) {
   const writeVerbs = '(create|make|add|edit|write|commit|push|fix|change|update|modify|repair|deploy|redeploy|publish)';
-  const asksToWrite = new RegExp(`\\\\b${writeVerbs}\\\\b`, 'i').test(message);
-  const negatesAction = new RegExp(`\\\\b(?:do not|don't|never|not)\\\\b.{0,32}\\\\b${writeVerbs}\\\\b`, 'i').test(message);
+  const asksToWrite = new RegExp(`\\b${writeVerbs}\\b`, 'i').test(message);
+  const negatesAction = new RegExp(`\\b(?:do not|don't|never|not)\\b.{0,32}\\b${writeVerbs}\\b`, 'i').test(message);
   return asksToWrite && !negatesAction;
 }
 
