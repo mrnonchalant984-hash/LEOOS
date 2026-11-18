@@ -55,13 +55,13 @@ test('robots exposes the canonical sitemap and blocks API endpoints while noinde
   assert.match(read('../lib/seo.ts'), /index: false, follow: false/);
 });
 
-test('homepage and Coda landing page have visible FAQ content and FAQ schema', () => {
+test('homepage and Bram landing page have visible FAQ content and FAQ schema', () => {
   const home = read('../app/page.tsx');
   const coda = read('../app/leo-ai/page.tsx');
   const codaRoute = read('../app/coda/page.tsx');
   assert.match(home, /FAQPage/);
   assert.match(home, /COMMON QUESTIONS/);
-  assert.match(codaRoute, /CodaPage/);
+  assert.match(codaRoute, /BramPage/);
   assert.match(coda, /FAQPage/);
   assert.match(coda, /Frequently asked questions/);
   assert.match(coda, /path: "\/coda"/);
