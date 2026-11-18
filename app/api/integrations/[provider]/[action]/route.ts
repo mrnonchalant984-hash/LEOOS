@@ -138,7 +138,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
       const branch = typeof body.branch === 'string' ? body.branch.trim() : '';
       const fromBranch = typeof body.from_branch === 'string' && body.from_branch.trim() ? body.from_branch.trim() : 'main';
       if (body.confirm !== true) throw new Error('Explicit confirmation is required before creating a GitHub branch.');
-      const repoPattern = new RegExp('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+
+      const repoPattern = new RegExp('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$');
+      const branchPattern = new RegExp('^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]{1,200}$');
+      if (!repoPattern.test(repo) || !branchPattern.test(branch) || !branchPattern.test(fromBranch)) throw new Error('Provide a valid repository, new branch name, and source branch.');
       const source = await providerFetch(`https://api.github.com/repos/${repo}/git/ref/heads/${fromBranch.split('/').map(encodeURIComponent).join('/')}`, c.token, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Braverton' } });
       const sha = String((source.object as Json | undefined)?.sha || '');
       if (!/^[0-9a-f]{40}$/i.test(sha)) throw new Error('GitHub did not return a valid source branch commit.');
