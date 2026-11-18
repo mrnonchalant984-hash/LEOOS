@@ -88,7 +88,7 @@ type ChatHistoryItem = { id: string; title: string; updatedAt: number };
 type MemoryItem = { id: string; memory: string; source?: string; created_at?: string };
 type RemotePairing = { id: string; created_device_name: string; paired_device_name?: string | null; status: "pending" | "paired" | "revoked" | "expired"; expires_at: string; paired_at?: string | null; last_seen_at?: string | null; created_at?: string };
 type RemoteEvent = { id: number; event_type: string; payload: { text?: string; [key: string]: unknown }; device_id: string; created_at: string };
-const LIVE_VOICE_SYSTEM_INSTRUCTION = "Direct Gemini Live is disabled until a secure server-side tool bridge is available; use the shared Coda orchestration endpoint.";
+const LIVE_VOICE_SYSTEM_INSTRUCTION = "You are Bram, the conversational assistant inside Braverton. Listen carefully, answer the user directly, and keep spoken responses natural and concise.";
 
 type VoiceStatus =
   | "Idle"
@@ -100,7 +100,7 @@ type VoiceStatus =
   | "Reconnecting"
   | "Error"
   | "Ended"
-  | "Coda Voice ready · tap to speak";
+  | "Bram Voice ready · speak naturally";
 type ToolOption = { name: string; description: string };
 type CustomAgentOption = { id: string; name: string; description: string; allowed_tools: string[] };
 type ModelOption = { id: string; name: string; provider: string; model: string; capabilities: string[]; configured: boolean };
@@ -320,6 +320,12 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
   const chatAbortController = useRef<AbortController | null>(null);
   const [activeChatId, setActiveChatId] = useState("");
   const media = useRef<MediaRecorder | null>(null);
+  const voiceLoopActive = useRef(false);
+  const voiceLoopAudioContext = useRef<AudioContext | null>(null);
+  const voiceLoopAnalyser = useRef<AnalyserNode | null>(null);
+  const voiceMonitorTimer = useRef<number | null>(null);
+  const voicePlayback = useRef<HTMLAudioElement | null>(null);
+  const voiceTurnAbort = useRef<AbortController | null>(null);
   const chunks = useRef<Blob[]>([]);
   const pc = useRef<RTCPeerConnection | null>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -723,7 +729,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
               streamedText += event.text;
               setMessages((current) => current.map((item, index) => index === current.length - 1 ? { ...item, content: streamedText } : item));
             } else if (event.type === "error") {
-              throw new Error(event.error || "Coda could not complete the response.");
+              throw new Error(event.error || "Bram could not complete the response.");
             } else if (event.type === "done") finished = true;
           }
         }
@@ -735,7 +741,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           body: JSON.stringify({ session_id: sidRef.current, message: next, work_mode: workspaceMode === "work", ...(workspaceMode === "work" && workProject ? { project_id: workProject.id } : {}), mode: effectiveMode, request_id: crypto.randomUUID(), ...(attachedTool ? { tool_name: attachedTool.name } : {}), ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}), ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}), ...(forceWebSearch ? { web_search: true } : {}), ...(attachedDocuments.length ? { document_asset_ids: attachedDocuments.map(document => document.assetId) } : {}), ...(attachedImages.length ? { image_asset_ids: attachedImages.map(image => image.assetId) } : {}) }),
         });
         const d = await r.json();
-        if (!r.ok) throw new Error(d.error || "Coda is unavailable");
+        if (!r.ok) throw new Error(d.error || "Bram is unavailable");
         const citations = Array.isArray(d.citations) ? d.citations.filter((item: unknown): item is ChatCitation => {
           if (!item || typeof item !== 'object' || typeof (item as ChatCitation).url !== 'string') return false;
           try {
@@ -1079,16 +1085,20 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
             const d = await r.json().catch(() => ({}));
             throw new Error(d.error || "Voice processing failed");
           }
-          const text = decodeURIComponent(r.headers.get("X-Transcript") || "");
-          const assistantReply = decodeURIComponent(r.headers.get("X-Assistant-Reply") || "");
+          const voiceResult = await r.json() as { transcript?: string; assistantReply?: string; audio?: { data?: string; contentType?: string } };
+          const text = typeof voiceResult.transcript === "string" ? voiceResult.transcript : "";
+          const assistantReply = typeof voiceResult.assistantReply === "string" ? voiceResult.assistantReply : "";
           if (!text.trim()) throw new Error("No speech was detected.");
           if (voiceFallbackMode) {
-            setMessages((current) => [...current, { role: "user", content: text }, { role: "assistant", content: assistantReply || "I processed your voice message." }]);
+            setMessages((current) => [...current, { role: "user", content: text }, { role: "assistant", content: assistantReply || "I could not form a response to that." }]);
             setVoiceStatus("Speaking");
           } else {
             setInput(text);
           }
-          const audioBlob = await r.blob();
+          const audioData = typeof voiceResult.audio?.data === "string" ? atob(voiceResult.audio.data) : "";
+          const audioBytes = new Uint8Array(audioData.length);
+          for (let index = 0; index < audioData.length; index += 1) audioBytes[index] = audioData.charCodeAt(index);
+          const audioBlob = new Blob([audioBytes], { type: voiceResult.audio?.contentType || "audio/wav" });
           const audioUrl = URL.createObjectURL(audioBlob);
           const playback = new Audio(audioUrl);
           playback.onended = () => { URL.revokeObjectURL(audioUrl); if (voiceFallbackMode) setVoiceStatus("Listening"); };
@@ -1106,6 +1116,177 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       setError("Microphone permission was denied or unavailable.");
     }
   }
+  function stopHandsFreeVoiceLoop() {
+    voiceLoopActive.current = false;
+    if (voiceMonitorTimer.current !== null) window.clearInterval(voiceMonitorTimer.current);
+    voiceMonitorTimer.current = null;
+    voiceTurnAbort.current?.abort();
+    voiceTurnAbort.current = null;
+    if (voicePlayback.current) {
+      voicePlayback.current.pause();
+      voicePlayback.current.src = "";
+      voicePlayback.current = null;
+    }
+    voiceLoopAnalyser.current = null;
+    void voiceLoopAudioContext.current?.close().catch(() => {});
+    voiceLoopAudioContext.current = null;
+  }
+
+  async function captureHandsFreeVoiceTurn() {
+    if (!voiceLoopActive.current) return;
+    try {
+      let local = stream.current;
+      if (!local || local.getAudioTracks().every(track => track.readyState !== "live")) {
+        local = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            ...(selectedAudioDevice ? { deviceId: { exact: selectedAudioDevice } } : {}),
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+        stream.current = local;
+      }
+      if (!voiceLoopActive.current) return;
+      if (!voiceLoopAudioContext.current) {
+        const context = new AudioContext();
+        await context.resume();
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 1024;
+        context.createMediaStreamSource(local).connect(analyser);
+        voiceLoopAudioContext.current = context;
+        voiceLoopAnalyser.current = analyser;
+      }
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const recorder = new MediaRecorder(local, { mimeType });
+      const chunks: Blob[] = [];
+      let speechStartedAt = 0;
+      let silenceStartedAt = 0;
+      let finished = false;
+      const samples = new Uint8Array(voiceLoopAnalyser.current?.fftSize || 1024);
+      const stopMonitor = () => {
+        if (voiceMonitorTimer.current !== null) window.clearInterval(voiceMonitorTimer.current);
+        voiceMonitorTimer.current = null;
+      };
+      recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+      recorder.onstop = async () => {
+        stopMonitor();
+        if (!voiceLoopActive.current || finished) return;
+        finished = true;
+        if (!speechStartedAt || !chunks.length) {
+          window.setTimeout(() => { void captureHandsFreeVoiceTurn(); }, 250);
+          return;
+        }
+        setVoiceStatus("Thinking");
+        try {
+          const form = new FormData();
+          form.append("audio", new Blob(chunks, { type: recorder.mimeType || "audio/webm" }), "bram-voice.webm");
+          form.append("mode", "chat");
+          form.append("session_id", sidRef.current);
+          const accessToken = await token();
+          const controller = new AbortController();
+          voiceTurnAbort.current = controller;
+          const response = await fetch("/api/voice", {
+            method: "POST",
+            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+            body: form,
+            signal: controller.signal,
+            cache: "no-store",
+          });
+          const result = await response.json().catch(() => ({})) as {
+            error?: string; transcript?: string; assistantReply?: string;
+            audio?: { data?: string; contentType?: string };
+          };
+          if (!response.ok) throw new Error(result.error || "Bram could not process that voice turn.");
+          if (!result.transcript?.trim()) throw new Error("No speech was detected. Please try again.");
+          if (!result.assistantReply?.trim()) throw new Error("Bram received your transcript but did not return an answer.");
+          setMessages(current => [...current, { role: "user", content: result.transcript! }, { role: "assistant", content: result.assistantReply! }]);
+          if (result.audio?.data) {
+            const binary = atob(result.audio.data);
+            const bytes = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+            const audioUrl = URL.createObjectURL(new Blob([bytes], { type: result.audio.contentType || "audio/wav" }));
+            const playback = new Audio(audioUrl);
+            voicePlayback.current = playback;
+            playback.onended = () => {
+              URL.revokeObjectURL(audioUrl);
+              if (voicePlayback.current === playback) voicePlayback.current = null;
+              if (voiceLoopActive.current) {
+                setVoiceStatus("Listening");
+                window.setTimeout(() => { void captureHandsFreeVoiceTurn(); }, 250);
+              }
+            };
+            playback.onerror = () => {
+              URL.revokeObjectURL(audioUrl);
+              if (voicePlayback.current === playback) voicePlayback.current = null;
+              if (voiceLoopActive.current) window.setTimeout(() => { void captureHandsFreeVoiceTurn(); }, 400);
+            };
+            setVoiceStatus("Speaking");
+            await playback.play();
+          } else {
+            setVoiceStatus("Listening");
+            window.setTimeout(() => { void captureHandsFreeVoiceTurn(); }, 250);
+          }
+        } catch (error) {
+          if (!(error instanceof DOMException && error.name === "AbortError")) {
+            setError(error instanceof Error ? error.message : "Voice chat failed.");
+            setVoiceStatus("Listening");
+          }
+          if (voiceLoopActive.current) window.setTimeout(() => { void captureHandsFreeVoiceTurn(); }, 900);
+        } finally {
+          voiceTurnAbort.current = null;
+        }
+      };
+      recorder.onerror = () => {
+        stopMonitor();
+        if (voiceLoopActive.current) window.setTimeout(() => { void captureHandsFreeVoiceTurn(); }, 500);
+      };
+      recorder.start(200);
+      media.current = recorder;
+      setRecording(true);
+      setVoiceStatus("Listening");
+      voiceMonitorTimer.current = window.setInterval(() => {
+        if (!voiceLoopActive.current || recorder.state !== "recording") {
+          stopMonitor();
+          return;
+        }
+        const analyser = voiceLoopAnalyser.current;
+        if (!analyser) return;
+        analyser.getByteTimeDomainData(samples);
+        let sum = 0;
+        for (let index = 0; index < samples.length; index += 1) {
+          const normalized = (samples[index] - 128) / 128;
+          sum += normalized * normalized;
+        }
+        const rms = Math.sqrt(sum / samples.length);
+        const now = Date.now();
+        if (rms > 0.025) {
+          if (!speechStartedAt) speechStartedAt = now;
+          silenceStartedAt = 0;
+        } else if (speechStartedAt && !silenceStartedAt) {
+          silenceStartedAt = now;
+        }
+        if ((speechStartedAt && silenceStartedAt && now - silenceStartedAt >= 1200) ||
+            (!speechStartedAt && now - (recorder as MediaRecorder & { startedAt?: number }).startedAt! >= 12000) ||
+            (speechStartedAt && now - speechStartedAt >= 25000)) {
+          stopMonitor();
+          if (recorder.state === "recording") recorder.stop();
+        }
+      }, 100);
+      (recorder as MediaRecorder & { startedAt?: number }).startedAt = Date.now();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Microphone permission was denied or unavailable.");
+      setVoiceStatus("Error");
+      endVoiceChat();
+    }
+  }
+
+  async function startHandsFreeVoiceLoop() {
+    voiceLoopActive.current = true;
+    setVoiceStatus("Listening · speak naturally; Bram replies automatically");
+    await captureHandsFreeVoiceTurn();
+  }
+
   async function connectGeminiLive(session: { token: string; model: string; voice?: string }) {
     const local = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -1232,7 +1413,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       }
       if (session.mode === "gemini_turn_based") {
         setVoiceFallbackMode(true);
-        setVoiceStatus("Coda Voice ready · tap to speak");
+        await startHandsFreeVoiceLoop();
         return;
       }
       setVoiceFallbackMode(false);
@@ -1293,6 +1474,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     }
   }
   function endVoiceChat() {
+    stopHandsFreeVoiceLoop();
     if (recording) stopRecording();
     liveSessionActive.current = false;
     if (liveSessionTimer.current !== null) window.clearTimeout(liveSessionTimer.current);
@@ -1468,7 +1650,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         <button
           type="button"
           onClick={startVoiceChat}
-          aria-label="Start Coda voice chat"
+          aria-label="Start Bram voice chat"
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 hover:bg-white/[.06]"
         >
           <Volume2 size={19} />
@@ -1803,7 +1985,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       {loading && (
         <div className="flex max-w-fit items-center gap-3 rounded-3xl bg-black/40 p-3 text-sm text-zinc-400">
           <Loader2 size={15} className="animate-spin" />
-          <span>Coda is thinking…</span>
+          <span>Bram is thinking…</span>
           {chatAbortController.current && <button type="button" onClick={stopGeneration} className="rounded-lg border border-white/10 px-2 py-1 text-xs text-zinc-300 hover:bg-white/10">Stop</button>}
         </div>
       )}
@@ -1956,7 +2138,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
                   <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border border-[var(--gold)]/30 bg-[var(--gold)]/10">
                     <div className="h-14 w-14 rounded-full bg-[var(--gold)]/60 blur-sm" />
                   </div>
-                  <h2 className="mt-6 text-2xl font-black">Coda Voice</h2>
+                  <h2 className="mt-6 text-2xl font-black">Bram Voice</h2>
                   <p className="mt-2 text-sm text-zinc-500">{voiceStatus}</p>
                   <div className="mt-6 flex items-center justify-center gap-2">
                     <label className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-zinc-400">
@@ -1975,7 +2157,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
                       </select>
                     </label>
                   </div>
-                  {voiceFallbackMode && <button type="button" onClick={() => void startVoiceInput()} disabled={loading} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[var(--gold)] px-5 py-3 font-bold text-black disabled:opacity-50"><Mic size={17} />{recording ? "Stop speaking" : loading ? "Coda is responding…" : "Talk to Coda"}</button>}
+                  {voiceFallbackMode && <p className="mt-5 rounded-xl border border-white/10 bg-white/[.04] px-4 py-3 text-sm leading-6 text-zinc-300">Speak naturally. Bram detects when you finish, shows your transcript, answers aloud, and then listens for your next message. You do not need to press a stop-speaking button.</p>}
                   <div className="mt-7 flex justify-center gap-3">
                     {!voiceFallbackMode && <button
                       onClick={toggleMute}
@@ -2006,7 +2188,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           type="button"
           onClick={() => setOpen(true)}
           className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--gold)] text-black shadow-2xl"
-          aria-label="Open Coda chat"
+          aria-label="Open Bram chat"
           aria-haspopup="dialog"
           aria-expanded={false}
         >
@@ -2018,7 +2200,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           <header className="flex items-center justify-between border-b border-white/10 p-4">
             <div className="flex items-center gap-2">
               <Bot size={18} />
-              <b>CODA</b>
+              <b>BRAM</b>
               {platformCredits !== null && <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] text-zinc-400" aria-live="polite">{platformCredits} platform credits</span>}
             </div>
             <button onClick={() => setOpen(false)} aria-label="Close Coda">
