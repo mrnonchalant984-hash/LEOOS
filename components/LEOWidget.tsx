@@ -2176,7 +2176,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
                       </select>
                     </label>
                   </div>
-                  {voiceFallbackMode && <p className="mt-5 rounded-xl border border-white/10 bg-white/[.04] px-4 py-3 text-sm leading-6 text-zinc-300">Speak naturally. Bram detects when you finish, shows your transcript, answers aloud, and then listens for your next message. You do not need to press a stop-speaking button.</p>}
+                  {voiceFallbackMode && <p className="mt-5 rounded-xl border border-white/10 bg-white/[.04] px-4 py-3 text-sm leading-6 text-zinc-300">Speak naturally; Bram replies automatically. Bram detects when you finish, shows your transcript, answers aloud, and then listens for your next message. You do not need to press a stop-speaking button.</p>}
                   <div className="mt-7 flex justify-center gap-3">
                     {!voiceFallbackMode && <button
                       onClick={toggleMute}
