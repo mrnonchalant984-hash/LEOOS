@@ -205,9 +205,9 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
                     </label>
                     <label className="flex items-center gap-2 text-xs text-zinc-300">
                       Access
-                      <select value={tool.access_level || 'read'} disabled={busy || !server.enabled || tool.annotations?.readOnlyHint === true || tool.annotations?.destructiveHint === true} onChange={event => void mutate(`/api/mcp/servers/${server.id}/tools`, 'POST', { tool_name: tool.name, approved: true, access_level: event.target.value, agent_ids: event.target.value === 'read' ? tool.allowed_agent_ids : [] })} className="rounded-md border border-white/15 bg-black/40 px-2 py-1 text-xs">
+                      <select value={tool.access_level || 'read'} disabled={busy || !server.enabled || tool.annotations?.readOnlyHint === true} onChange={event => void mutate(`/api/mcp/servers/${server.id}/tools`, 'POST', { tool_name: tool.name, approved: true, access_level: event.target.value, agent_ids: event.target.value === 'read' ? tool.allowed_agent_ids : [] })} className="rounded-md border border-white/15 bg-black/40 px-2 py-1 text-xs">
                         <option value="read">Read only</option>
-                        <option value="write" disabled={tool.annotations?.readOnlyHint === true || tool.annotations?.destructiveHint === true}>Write access</option>
+                        <option value="write" disabled={tool.annotations?.readOnlyHint === true}>Write access</option>
                       </select>
                     </label>
                     {tool.approved && tool.access_level !== 'write' && tool.annotations?.readOnlyHint === true && !tool.annotations.destructiveHint && agentOptions.length > 0 && (
