@@ -2060,7 +2060,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         <div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold text-zinc-200">Project resources · {workProject.name}</p><span className="text-[10px] text-zinc-500">{projectResources.length} saved</span></div>
         {workspaceCollectionBusy && <p className="mt-2 text-[11px] text-zinc-500">Syncing project collections…</p>}
         {workspaceCollectionError && <p role="alert" className="mt-2 text-[11px] text-amber-300">{workspaceCollectionError}</p>}
-        {projectResources.length > 0 ? <ul className="mt-2 space-y-1.5">{projectResources.slice(0, 8).map(resource => <li key={resource.id} className="flex min-w-0 items-center justify-between gap-2 text-[11px]"><a href={resource.url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-sky-300 underline underline-offset-2">{resource.title}</a><span className="shrink-0 text-zinc-600">{resource.source_type}</span></li>)}</ul> : <p className="mt-2 text-[11px] text-zinc-500">Research sources can be saved here from Bram's responses.</p>}
+        {projectResources.length > 0 ? <ul className="mt-2 space-y-1.5">{projectResources.slice(0, 8).map(resource => <li key={resource.id} className="flex min-w-0 items-center justify-between gap-2 text-[11px]"><a href={resource.url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-sky-300 underline underline-offset-2">{resource.title}</a><span className="shrink-0 text-zinc-600">{resource.source_type}</span></li>)}</ul> : <p className="mt-2 text-[11px] text-zinc-500">Research sources can be saved here from Bram&apos;s responses.</p>}
       </section>}
       {messages.map((m, i) => (
         <div
