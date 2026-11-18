@@ -16,8 +16,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const body = await request.json().catch(() => null);
   const toolName = typeof body?.tool_name === 'string' ? body.tool_name : '';
   const approved = body?.approved;
+  const accessLevel = body?.access_level === undefined || body?.access_level === 'read' ? 'read' : body?.access_level === 'write' ? 'write' : null;
   const agentIds = Array.isArray(body?.agent_ids) ? body.agent_ids : [];
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(toolName) || typeof approved !== 'boolean') {
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(toolName) || typeof approved !== 'boolean' || !accessLevel) {
     return NextResponse.json({ error: 'Provide a discovered tool name and an explicit approval decision.' }, { status: 400 });
   }
   const mcpCapableAgents = new Map(listAgents(true).map(agent => [agent.id, agent]));
@@ -38,9 +39,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!server) return NextResponse.json({ error: 'MCP connection not found.' }, { status: 404 });
   const tools = Array.isArray(server.discovered_tools) ? server.discovered_tools : [];
   if (!tools.some(tool => tool.name === toolName)) return NextResponse.json({ error: 'That tool was not discovered on this connection.' }, { status: 404 });
+  const selectedTool = tools.find(tool => tool.name === toolName);
+  if (approved && accessLevel === 'write' && (selectedTool?.annotations?.readOnlyHint === true || agentIds.length > 0)) {
+    return NextResponse.json({ error: 'Write access is available only for tools not marked read-only and cannot be delegated to specialist agents.' }, { status: 400 });
+  }
   if (approved) {
     const { error } = await db.from('mcp_remote_tool_approvals')
-      .upsert({ server_id: id, tool_name: toolName, allowed_agent_ids: agentIds }, { onConflict: 'server_id,tool_name' });
+      .upsert({ server_id: id, tool_name: toolName, access_level: accessLevel, allowed_agent_ids: agentIds }, { onConflict: 'server_id,tool_name' });
     if (error) return NextResponse.json({ error: 'The MCP tool permission could not be saved.' }, { status: 503 });
   } else {
     const { error } = await db.from('mcp_remote_tool_approvals')
@@ -49,5 +54,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .eq('tool_name', toolName);
     if (error) return NextResponse.json({ error: 'The MCP tool permission could not be revoked.' }, { status: 503 });
   }
-  return NextResponse.json({ server_id: id, tool_name: toolName, approved, allowed_agent_ids: approved ? agentIds : [] }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ server_id: id, tool_name: toolName, approved, access_level: approved ? accessLevel : null, allowed_agent_ids: approved && accessLevel === 'read' ? agentIds : [] }, { headers: { 'Cache-Control': 'no-store' } });
 }

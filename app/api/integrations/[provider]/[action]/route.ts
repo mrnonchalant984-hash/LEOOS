@@ -130,8 +130,21 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
       result = await providerFetch('https://api.vercel.com/v13/deployments', c.token, { method: 'POST', body: JSON.stringify({ name, gitSource: { type: 'github', repo, ref }, target: 'production' }) });
     } else if (provider === 'github' && action === 'create-repo') {
       const name = typeof body.name === 'string' ? body.name.trim() : '';
+      if (body.confirm !== true) throw new Error('Explicit confirmation is required before creating a GitHub repository.');
       if (!/^[A-Za-z0-9_.-]{1,100}$/.test(name)) throw new Error('Repository name may contain letters, numbers, dots, underscores, and hyphens.');
-      result = await providerFetch('https://api.github.com/user/repos', c.token, { method: 'POST', headers: { 'User-Agent': 'LeonardX', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }, body: JSON.stringify({ name, private: body.private !== false, auto_init: true, description: typeof body.description === 'string' ? body.description.slice(0, 350) : 'Created with LeonardX' }) });
+      result = await providerFetch('https://api.github.com/user/repos', c.token, { method: 'POST', headers: { 'User-Agent': 'Braverton', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }, body: JSON.stringify({ name, private: body.private !== false, auto_init: true, description: typeof body.description === 'string' ? body.description.slice(0, 350) : 'Created with Braverton' }) });
+    } else if (provider === 'github' && action === 'create-branch') {
+      const repo = typeof body.repo === 'string' ? body.repo : '';
+      const branch = typeof body.branch === 'string' ? body.branch.trim() : '';
+      const fromBranch = typeof body.from_branch === 'string' && body.from_branch.trim() ? body.from_branch.trim() : 'main';
+      if (body.confirm !== true) throw new Error('Explicit confirmation is required before creating a GitHub branch.');
+      const repoPattern = new RegExp('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$');
+      const branchPattern = new RegExp('^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]{1,200}$');
+      if (!repoPattern.test(repo) || !branchPattern.test(branch) || !branchPattern.test(fromBranch)) throw new Error('Provide a valid repository, new branch name, and source branch.');
+      const source = await providerFetch(`https://api.github.com/repos/${repo}/git/ref/heads/${fromBranch.split('/').map(encodeURIComponent).join('/')}`, c.token, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Braverton' } });
+      const sha = String((source.object as Json | undefined)?.sha || '');
+      if (!/^[0-9a-f]{40}$/i.test(sha)) throw new Error('GitHub did not return a valid source branch commit.');
+      result = await providerFetch(`https://api.github.com/repos/${repo}/git/refs`, c.token, { method: 'POST', headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Braverton', 'X-GitHub-Api-Version': '2022-11-28' }, body: JSON.stringify({ ref: `refs/heads/${branch}`, sha }) });
     } else if (provider === 'github' && action === 'read-file') {
       const repo = typeof body.repo === 'string' ? body.repo : '';
       const path = typeof body.path === 'string' ? body.path : '';
@@ -196,6 +209,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
       const repo = typeof body.repo === 'string' ? body.repo : ''; const path = typeof body.path === 'string' ? body.path : ''; const content = typeof body.content === 'string' ? body.content : '';
       if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) || !/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9_.@/-]{1,240}$/.test(path) || content.length > 500_000) throw new Error('Provide a valid owner/repository, safe file path, and content under 500 KB.');
       if (body.confirm !== true) throw new Error('Explicit confirmation is required before committing to the connected repository.');
+      if (/(^|\/)\.env(?:\.|$)|(^|\/)(?:node_modules|\.git|credentials?|secrets?)(?:\.|\/|$)|private[-_]?key/i.test(path) || /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9_-]{24,}|AKIA[0-9A-Z]{16})\b/.test(content) || content.includes('\0')) throw new Error('Credential, secret, environment, binary, or generated dependency files cannot be committed.');
       const encodedPath = path.split('/').map(encodeURIComponent).join('/');
       const prior = await fetch(`https://api.github.com/repos/${repo}/contents/${encodedPath}`, { headers: { Authorization: `Bearer ${c.token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'LeonardX' }, cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15000) });
       let sha: string | undefined; if (prior.ok) { const data = await prior.json() as Json; if (typeof data.sha === 'string') sha = data.sha; } else if (prior.status !== 404) throw new Error(`GitHub file lookup failed with HTTP ${prior.status}.`);
@@ -210,6 +224,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
   }
 }
 function supportedActions(provider: CustomerProvider) {
-  const actions: Partial<Record<CustomerProvider, string[]>> = { github: ['create-repo','read-file','repository-tree','commit-file','commit-files','commit-status'], vercel: ['create-project','deploy-git-repo','deployment-status','delete-deployment'], supabase: ['apply-migration'], firebase: ['project','firestore-document'], youtube: ['channel','analytics'], meta: ['pages','page-insights','send-message'], whatsapp_business: ['send'] };
+  const actions: Partial<Record<CustomerProvider, string[]>> = { github: ['create-repo','create-branch','read-file','repository-tree','commit-file','commit-files','commit-status'], vercel: ['create-project','deploy-git-repo','deployment-status','delete-deployment'], supabase: ['apply-migration'], firebase: ['project','firestore-document'], youtube: ['channel','analytics'], meta: ['pages','page-insights','send-message'], whatsapp_business: ['send'] };
   return actions[provider] || [];
 }

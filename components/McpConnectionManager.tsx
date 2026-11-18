@@ -8,6 +8,7 @@ type McpTool = {
   description: string;
   annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
   approved: boolean;
+  access_level: 'read' | 'write';
   allowed_agent_ids: string[];
 };
 type McpAgentOption = { id: string; name: string };
@@ -139,7 +140,7 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
           <h2 className="text-lg font-semibold">Remote MCP connections</h2>
           <p className="mt-1 max-w-3xl text-sm text-zinc-400">
             Connect an operator-allowlisted HTTPS MCP server. Credentials are encrypted at rest.
-            Approving a tool permits manual calls. Read-only tools are available to specialists only when you grant each tool to specific agents.
+            Approve read access for research tools, or explicitly grant write access to connected tools that can change websites. Write-capable tools are never delegated to specialist agents; confirm important actions in chat.
           </p>
         </div>
         <button type="button" onClick={() => { setError(''); setBusy(true); void load().finally(() => setBusy(false)); }} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm disabled:opacity-50">
@@ -195,14 +196,21 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
                 {server.tools.map(tool => (
                   <li key={tool.name} className="flex flex-wrap items-start justify-between gap-3 py-3">
                     <div className="min-w-0 flex-1">
-                      <p className="break-all text-sm">{tool.name} {tool.annotations?.readOnlyHint === true && !tool.annotations.destructiveHint && <span className="text-emerald-300">· read-only</span>}</p>
+                      <p className="break-all text-sm">{tool.name} {tool.annotations?.readOnlyHint === true && !tool.annotations.destructiveHint && <span className="text-emerald-300">· read-only</span>} {tool.approved && <span className={tool.access_level === 'write' ? 'text-amber-300' : 'text-emerald-300'}>· {tool.access_level} access</span>}</p>
                       <p className="mt-1 whitespace-pre-wrap text-xs text-zinc-500">{tool.description}</p>
                     </div>
                     <label className="flex items-center gap-2 text-xs text-zinc-300">
-                      <input type="checkbox" checked={tool.approved} disabled={busy || !server.enabled} onChange={event => void mutate(`/api/mcp/servers/${server.id}/tools`, 'POST', { tool_name: tool.name, approved: event.target.checked, agent_ids: event.target.checked ? tool.allowed_agent_ids : [] })} />
+                      <input type="checkbox" checked={tool.approved} disabled={busy || !server.enabled} onChange={event => void mutate(`/api/mcp/servers/${server.id}/tools`, 'POST', { tool_name: tool.name, approved: event.target.checked, access_level: tool.access_level || 'read', agent_ids: event.target.checked && tool.access_level !== 'write' ? tool.allowed_agent_ids : [] })} />
                       Approve
                     </label>
-                    {tool.approved && tool.annotations?.readOnlyHint === true && !tool.annotations.destructiveHint && agentOptions.length > 0 && (
+                    <label className="flex items-center gap-2 text-xs text-zinc-300">
+                      Access
+                      <select value={tool.access_level || 'read'} disabled={busy || !server.enabled || tool.annotations?.readOnlyHint === true} onChange={event => void mutate(`/api/mcp/servers/${server.id}/tools`, 'POST', { tool_name: tool.name, approved: true, access_level: event.target.value, agent_ids: event.target.value === 'read' ? tool.allowed_agent_ids : [] })} className="rounded-md border border-white/15 bg-black/40 px-2 py-1 text-xs">
+                        <option value="read">Read only</option>
+                        <option value="write" disabled={tool.annotations?.readOnlyHint === true}>Write access</option>
+                      </select>
+                    </label>
+                    {tool.approved && tool.access_level !== 'write' && tool.annotations?.readOnlyHint === true && !tool.annotations.destructiveHint && agentOptions.length > 0 && (
                       <details className="basis-full rounded-lg border border-white/10 px-3 py-2">
                         <summary className="cursor-pointer text-xs text-zinc-300">Grant to specialist agents ({tool.allowed_agent_ids.length})</summary>
                         <div className="mt-2 grid gap-2 sm:grid-cols-2">

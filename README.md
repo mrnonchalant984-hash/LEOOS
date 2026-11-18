@@ -179,3 +179,12 @@ Server configuration:
 - `LEO_GEMINI_TTS_MODEL` for speech generation (defaults to `gemini-2.5-flash-preview-tts`).
 
 The voice session is handled by Braverton's authenticated server-side session and voice endpoints. Automatic speech detection keeps the conversation flowing without manual per-turn controls.
+
+
+## BramChat website and GitHub execution
+
+BramChat exposes an authenticated `web_research` tool for grounded web search and public-site reading. When a user supplies a website, research follows same-origin links within a bounded crawl (up to 12 pages and depth 2), respects discovered `robots.txt` disallow rules, uses the DNS-pinned public-site fetcher, and stores cited research reports under the signed-in user's account. This built-in crawler is read-only and fetches public HTML; JavaScript-heavy, authenticated, or blocked pages may require a connected browser-capable MCP provider.
+
+Remote MCP tools now have separate per-tool **Read only** and **Write access** approvals. Read tools are available for research when approved. Write-capable tools are exposed in BramChat only when the current user message explicitly requests a website action, the individual tool has been approved for write access, and the tool call includes `confirm=true`. Write tools are not delegated to specialist agents. Before payment, checkout, purchase, or final form submission, Bram must show the exact details and obtain the user's separate explicit confirmation. Apply `supabase/migrations/20261118100000_mcp_remote_tool_write_access.sql` before enabling the new access-level controls. Remote MCP hostnames must remain in the operator allowlist and credentials are encrypted at rest.
+
+The connected GitHub integration exposes repository creation, branch creation, file creation/update, repository-tree and file reading, commit status, and atomic multi-file commits. Operations use the signed-in user's own GitHub integration credential. Repository, branch, and file writes require an explicit user request and `confirm=true`; secret and environment files remain blocked. Connect GitHub in the user's Integrations settings and grant the required GitHub App/OAuth repository permissions.

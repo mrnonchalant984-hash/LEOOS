@@ -52,6 +52,6 @@ test('MCP connections rediscover tools, revoke stale approvals, and support lega
 test('manual MCP execution rejects arguments that do not match the discovered schema', () => {
   const route = read('app/api/mcp/servers/[id]/call/route.ts');
   const orchestrator = read('lib/ai/tool-orchestrator.ts');
-  assert.match(route, /validateMcpToolArguments\(tool\.inputSchema, args\)/);
-  assert.match(orchestrator, /validateMcpToolArguments\(remoteTool\.inputSchema, args\)/);
+  assert.match(route, /validateMcpToolArguments\(tool\.inputSchema, remoteArgs\)/);
+  assert.match(orchestrator, /validateMcpToolArguments\(remoteTool\.inputSchema, remoteArgs\)/);
 });
