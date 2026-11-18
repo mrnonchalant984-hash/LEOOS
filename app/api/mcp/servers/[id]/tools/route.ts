@@ -45,7 +45,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   if (approved) {
     const { error } = await db.from('mcp_remote_tool_approvals')
-      .upsert({ server_id: id, tool_name: toolName, access_level: accessLevel, allowed_agent_ids: accessLevel === 'read' ? agentIds : [] }, { onConflict: 'server_id,tool_name' });
+      .upsert({ server_id: id, tool_name: toolName, access_level: accessLevel, allowed_agent_ids: agentIds }, { onConflict: 'server_id,tool_name' });
     if (error) return NextResponse.json({ error: 'The MCP tool permission could not be saved.' }, { status: 503 });
   } else {
     const { error } = await db.from('mcp_remote_tool_approvals')
