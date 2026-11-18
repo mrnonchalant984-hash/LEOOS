@@ -717,6 +717,14 @@ export async function POST(req: NextRequest) {
           ...(selectedTool ? { requiredToolName: selectedTool.name } : {}),
         }), undefined, { shouldFallbackOnError: () => !request.signal?.aborted });
         const response = outcome.result;
+        citations = (response.sources || []).flatMap(source => {
+          try {
+            const url = new URL(source.uri);
+            return url.protocol === 'https:' && !url.username && !url.password
+              ? [{ title: source.title, url: url.toString() }]
+              : [];
+          } catch { return []; }
+        });
         reply = response.text || "I could not generate a reply.";
         usage = response.usage;
         selectedModel = `${response.provider}/${response.model}`;
