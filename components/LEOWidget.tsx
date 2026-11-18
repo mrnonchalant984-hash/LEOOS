@@ -683,7 +683,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     setMessages((m) => [...m, { role: "user", content: next, ...(attachedDocuments.length ? { documents: attachedDocuments } : {}), ...(attachedImages.length ? { images: attachedImages } : {}), ...((attachedTool || attachedAgent) ? { selectedToolLabel: attachedTool?.name || attachedAgent?.name } : {}) }]);
     setSelectedTool(null);
     setSelectedAgent(null);
-    const negatesBuild = /\b(?:do not|don't|never|not)\b.{0,32}\b(?:build|create|make|deploy|publish|launch)\b/i.test(next);
+    const negatesBuild = /\b(?:do not|don't|never|not)\b.{0,32}\b(?:build|create|make|deploy|publish|launch)\b/i.test(next) || /\b(?:never\s+ask(?:ed|ing)|not\s+ask(?:ing|ed)|did(?:n't| not)\s+ask|am\s+not\s+asking|not\s+requesting|don't\s+want|do\s+not\s+want|never\s+wanted)\b/i.test(next);
     const priorBuildRequest = messages.slice(-12).some((item) =>
       item.role === "user" &&
       /\b(build|create|make|develop|generate|need|want|looking for)\b/i.test(item.content) &&
