@@ -842,7 +842,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           method: "POST",
           signal: aborter.signal,
           headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
-          body: JSON.stringify({ session_id: sidRef.current, message: next, ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}) }),
+          body: JSON.stringify({ session_id: sidRef.current, message: next, ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}), local_context: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", local_datetime: new Date().toString(), ...(localContextEnabled && localLocation ? { location: localLocation } : {}) } }),
         });
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}));
