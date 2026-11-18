@@ -67,7 +67,7 @@ export default function LeonardXEditorialHero() {
           </div>
           <div className="lx-editorial-proof"><span>NO CREDIT CARD REQUIRED</span><span>FREE TEMPLATES</span><span>BUILT FOR DEVELOPERS</span></div>
         </div>
-        <div className="lx-editorial-telemetry" aria-hidden="true"><span>PROJECT DEPLOYED</span><b>LIVE</b><small>Build → Test → Deploy</small></div>
+        <div className="lx-editorial-telemetry" aria-hidden="true"><div className="lx-editorial-telemetry-heading"><span>PROJECT DEPLOYED</span><b>LIVE</b></div><small>Build <span>→</span> Test <span>→</span> Deploy</small></div>
       </section>
 
       <section id="story" className="lx-editorial-about" aria-labelledby="lx-about-title">
