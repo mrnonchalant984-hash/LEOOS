@@ -37,12 +37,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'Tool arguments do not match the currently discovered input schema.' }, { status: 400 });
   }
   const { data: approval, error: approvalError } = await db.from('mcp_remote_tool_approvals')
-    .select('tool_name')
+    .select('tool_name,access_level')
     .eq('server_id', id)
     .eq('tool_name', toolName)
     .maybeSingle();
   if (approvalError) return NextResponse.json({ error: 'MCP tool permissions could not be checked.' }, { status: 503 });
   if (!approval) return NextResponse.json({ error: 'Approve this tool before calling it.' }, { status: 403 });
+  const accessLevel = approval.access_level === 'write' ? 'write' : 'read';
+  if (accessLevel === 'read' && (tool.annotations?.readOnlyHint !== true || tool.annotations?.destructiveHint === true)) return NextResponse.json({ error: 'This tool is not approved for read-only use.' }, { status: 403 });
+  if (accessLevel === 'write' && (tool.annotations?.readOnlyHint === true || tool.annotations?.destructiveHint === true || body.confirm !== true)) return NextResponse.json({ error: 'Write access requires an approved non-destructive tool and confirm=true.' }, { status: 403 });
   let bearerToken: string | undefined;
   try {
     bearerToken = server.credential_ciphertext ? decryptMcpCredential(server.credential_ciphertext) : undefined;
@@ -54,7 +57,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const requestId = request.headers.get('x-request-id') || randomUUID();
   let result: { isError: boolean; text: string };
   try {
-    result = await callMcpTool(server.endpoint_url, bearerToken, toolName, args as Record<string, unknown>, tool.inputSchema);
+    const remoteArgs = { ...(args as Record<string, unknown>) };
+    delete remoteArgs.confirm;
+    result = await callMcpTool(server.endpoint_url, bearerToken, toolName, remoteArgs, tool.inputSchema);
   } catch {
     const { error } = await db.from('mcp_tool_audit').insert({
       user_id: ctx.user.id,
