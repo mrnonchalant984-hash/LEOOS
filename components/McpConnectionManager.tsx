@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Loader2, Plus, RefreshCw, Trash2 } from 'lucide-react';
 
+const TINYFISH_MCP_ENDPOINT = 'https://agent.tinyfish.ai/mcp';
+
 type McpTool = {
   name: string;
   description: string;
@@ -24,6 +26,14 @@ function subscribeToBrowserOrigin() {
   return () => {};
 }
 
+function isTinyFishEndpoint(endpoint: string) {
+  try {
+    return new URL(endpoint).hostname.toLowerCase() === 'agent.tinyfish.ai';
+  } catch {
+    return false;
+  }
+}
+
 export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredLeonardXMcpUrl?: string }) {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [agentOptions, setAgentOptions] = useState<McpAgentOption[]>([]);
@@ -39,6 +49,8 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
     () => '',
   );
   const leonardXMcpEndpoint = configuredLeonardXMcpUrl || (browserOrigin ? `${browserOrigin}/mcp` : '');
+  const tinyFishConnection = servers.find(server => isTinyFishEndpoint(server.endpoint_url));
+  const tinyFishConnected = Boolean(tinyFishConnection?.enabled);
 
   const fetchServers = useCallback(async () => {
     const response = await fetch('/api/mcp/servers', { cache: 'no-store' });
@@ -106,6 +118,13 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
     }
   }
 
+  function prepareTinyFishConnection() {
+    setName('TinyFish Browser Automation');
+    setEndpoint(TINYFISH_MCP_ENDPOINT);
+    setNotice('TinyFish endpoint added to the form. Submit “Discover and add server” to connect this account and discover its tools.');
+    setError('');
+  }
+
   return (
     <section className="mt-8 rounded-2xl border border-white/10 bg-white/[.03] p-5">
       <div className="mb-5 rounded-xl border border-violet-300/20 bg-violet-300/[.05] p-4">
@@ -135,6 +154,40 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
         </div>
         <p className="mt-2 text-xs text-zinc-500">New connections request project access so the assistant can create projects, save code, and build/deploy within your plan. Review and approve those permissions on the consent screen. If an existing connection is read-only, remove it from Claude or ChatGPT and connect again to refresh its permissions.</p>
       </div>
+
+      <div className="mb-5 rounded-xl border border-sky-300/20 bg-sky-300/[.05] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">Browser automation provider</h3>
+            <p className="mt-1 text-sm leading-6 text-zinc-300">
+              TinyFish is the configured remote MCP route for interactive website actions. Its hostname is allowlisted for outbound MCP requests, but that does not connect or authorize a user account.
+            </p>
+          </div>
+          <span className={tinyFishConnected ? 'rounded-full border border-emerald-400/30 px-3 py-1 text-xs text-emerald-300' : 'rounded-full border border-amber-300/30 px-3 py-1 text-xs text-amber-200'}>
+            {tinyFishConnected ? 'Account connection enabled' : 'Account connection required'}
+          </span>
+        </div>
+        <ul className="mt-3 grid gap-2 text-xs leading-5 text-zinc-400">
+          <li>• Hosted computer-use browser sessions are disabled. BramChat must use this connected TinyFish MCP server for browser actions; it must not silently fall back to the disabled hosted browser agent.</li>
+          <li>• Connect the provider below to discover its tools. Each tool remains blocked until you approve it and choose read-only or write access.</li>
+          <li>• Write-capable website actions require explicit confirmation when executed. If TinyFish requires a bearer credential, enter it below; credentials are encrypted at rest.</li>
+        </ul>
+        {tinyFishConnection && (
+          <p className="mt-3 text-xs text-zinc-300">
+            {tinyFishConnected ? 'This account has an enabled TinyFish connection.' : 'A TinyFish connection exists but is disabled. Enable it in the connection list below.'}
+            {' '}{tinyFishConnection.tools.filter(tool => tool.approved).length} of {tinyFishConnection.tools.length} discovered tools are approved.
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={prepareTinyFishConnection}
+          disabled={busy || tinyFishConnected}
+          className="mt-4 inline-flex items-center gap-2 rounded-lg border border-sky-300/30 px-3 py-2 text-sm text-sky-100 disabled:opacity-50"
+        >
+          <Plus size={15} /> {tinyFishConnected ? 'TinyFish connected' : 'Set up TinyFish connection'}
+        </button>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Remote MCP connections</h2>
