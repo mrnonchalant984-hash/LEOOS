@@ -196,6 +196,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     [voiceLocked, setVoiceLocked] = useState(false),
     [voiceFallbackMode, setVoiceFallbackMode] = useState(false);
   const [platformCredits, setPlatformCredits] = useState<number | null>(null);
+  const [activityLabel, setActivityLabel] = useState("Thinking");
   const [buildProgress, setBuildProgress] = useState<BuildProgressState | null>(null);
   const [trackBuildProgress, setTrackBuildProgress] = useState(false);
   const [buildTrackingSince, setBuildTrackingSince] = useState("");
@@ -696,6 +697,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       /^(start|go ahead|proceed|continue|do it|build it|create it|deploy|publish|launch|put it live)[.!\s]*$/i.test(next);
     const buildIntent = !negatesBuild && (directBuildRequest || buildContinuation);
     if (buildIntent) { setBuildTrackingSince(new Date().toISOString()); setBuildProgress({ status: 'preparing', step: 'Preparing your build request', message: 'Bram is preparing the project and will show persisted build events here.' }); setTrackBuildProgress(true); }
+    setActivityLabel(buildIntent ? "Creating project" : forceWebSearch || isCurrentResearchRequest(next) ? "Web searched" : attachedDocuments.length || attachedImages.length ? "Reading document" : "Thinking");
     setLoading(true);
     setError("");
     try {
@@ -2002,9 +2004,19 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         </div>
       )}
       {loading && (
-        <div className="flex max-w-fit items-center gap-3 rounded-3xl bg-black/40 p-3 text-sm text-zinc-400">
-          <Loader2 size={15} className="animate-spin" />
-          <span>Bram is thinking…</span>
+        <div className="flex max-w-fit items-center gap-3 rounded-3xl bg-black/40 p-3 text-sm text-zinc-400" role="status" aria-live="polite">
+          <style jsx>{`
+            @keyframes bram-thinking-dot {
+              0%, 60%, 100% { transform: translateY(0); opacity: .48; }
+              30% { transform: translateY(-4px); opacity: 1; }
+            }
+          `}</style>
+          <span className="inline-flex h-3 items-center gap-[3px]" aria-hidden="true">
+            <span className="h-1.5 w-1.5 rounded-full bg-current [animation:bram-thinking-dot_1s_ease-in-out_infinite] [animation-delay:0ms]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-current [animation:bram-thinking-dot_1s_ease-in-out_infinite] [animation-delay:140ms]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-current [animation:bram-thinking-dot_1s_ease-in-out_infinite] [animation-delay:280ms]" />
+          </span>
+          <span>{activityLabel}</span>
           {chatAbortController.current && <button type="button" onClick={stopGeneration} className="rounded-lg border border-white/10 px-2 py-1 text-xs text-zinc-300 hover:bg-white/10">Stop</button>}
         </div>
       )}
