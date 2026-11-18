@@ -522,7 +522,7 @@ export async function createUserAssistantTools(
     const remoteTool = (Array.isArray(server.discovered_tools) ? server.discovered_tools : [])
       .find(item => item.name === reference.remoteName);
     const currentAccessLevel = approval?.access_level === 'write' ? 'write' : 'read';
-    if (!approval || currentAccessLevel !== reference.accessLevel ||
+    if (!approval || !remoteTool || currentAccessLevel !== reference.accessLevel ||
         (currentAccessLevel === 'read' && (remoteTool?.annotations?.readOnlyHint !== true || remoteTool.annotations?.destructiveHint === true)) ||
         (currentAccessLevel === 'write' && (!options?.allowRemoteWrites || reference.agentId || args.confirm !== true || remoteTool?.annotations?.readOnlyHint === true))) {
       return { text: 'This MCP tool permission is missing, changed, or not authorized for the requested access level.', isError: true };
