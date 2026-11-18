@@ -553,9 +553,9 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
   async function createRemotePairing() {
     setRemoteBusy(true); setRemoteStatus("");
     try {
-      const data = await remoteRequest("/api/remote/pairings", { method: "POST", body: JSON.stringify({ deviceName: `${navigator.platform || "Browser"} · Coda` }) });
+      const data = await remoteRequest("/api/remote/pairings", { method: "POST", body: JSON.stringify({ deviceName: `${navigator.platform || "Browser"} · Bram` }) });
       setRemoteCode(String(data.pairing?.code || ""));
-      setRemoteStatus("Code created. On your other device, sign in to the same Coda account and enter this code within five minutes.");
+      setRemoteStatus("Code created. On your other device, sign in to the same Bram account and enter this code within five minutes.");
       await loadRemotePairings();
     } catch (e) { setRemoteStatus(e instanceof Error ? e.message : "Could not create a pairing code."); }
     finally { setRemoteBusy(false); }
@@ -564,7 +564,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
   async function claimRemotePairing(event?: FormEvent) {
     event?.preventDefault(); setRemoteBusy(true); setRemoteStatus("");
     try {
-      const data = await remoteRequest("/api/remote/pairings/claim", { method: "POST", body: JSON.stringify({ code: remoteClaimCode, deviceName: `${navigator.platform || "Browser"} · Coda` }) });
+      const data = await remoteRequest("/api/remote/pairings/claim", { method: "POST", body: JSON.stringify({ code: remoteClaimCode, deviceName: `${navigator.platform || "Browser"} · Bram` }) });
       const id = String(data.pairing?.id || "");
       setRemoteClaimCode(""); setRemoteSessionId(id); setRemoteEvents([]); setRemoteCursor(0);
       setRemoteStatus("Device paired. Keep this panel open on both devices to exchange remote workspace messages.");
@@ -582,7 +582,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     if (!remoteSessionId) return;
     setRemoteBusy(true); setRemoteStatus("");
     try {
-      const title = messages.find((message) => message.role === "user")?.content.slice(0, 54) || "Shared Coda chat";
+      const title = messages.find((message) => message.role === "user")?.content.slice(0, 54) || "Shared Bram chat";
       const data = await remoteRequest(`/api/remote/sessions/${encodeURIComponent(remoteSessionId)}/events`, { method: "POST", body: JSON.stringify({ type: "chat.open", deviceId: getRemoteDeviceId(), payload: { sessionId: sidRef.current, title } }) });
       if (data.event) { const item = data.event as RemoteEvent; setRemoteEvents((current) => current.some((e) => e.id === item.id) ? current : [...current, item].slice(-80)); setRemoteCursor((cursor) => Math.max(cursor, item.id)); }
       setRemoteStatus("Current chat handoff sent. On your other device, choose Open shared chat in the relay.");
@@ -670,7 +670,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         setOfflineDraft(draft);
         setInput("");
         setMenu(false);
-        setError("You are offline. Your prompt is saved on this device and has not been sent to Coda.");
+        setError("You are offline. Your prompt is saved on this device and has not been sent to Bram.");
       } catch {
         setError("You are offline and this browser could not save the prompt locally. Copy it before leaving this page.");
       }
@@ -687,7 +687,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     const buildIntent = !negatesBuild &&
       /\b(build|create|make|deploy|publish|launch)\b/i.test(next) &&
       /\b(website|web\s?app|saas|game|project|site)\b/i.test(next);
-    if (buildIntent) { setBuildTrackingSince(new Date().toISOString()); setBuildProgress({ status: 'preparing', step: 'Preparing your build request', message: 'Coda is preparing the project and will show persisted build events here.' }); setTrackBuildProgress(true); }
+    if (buildIntent) { setBuildTrackingSince(new Date().toISOString()); setBuildProgress({ status: 'preparing', step: 'Preparing your build request', message: 'Bram is preparing the project and will show persisted build events here.' }); setTrackBuildProgress(true); }
     setLoading(true);
     setError("");
     try {
@@ -707,7 +707,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         });
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}));
-          throw new Error(failure.error || "Coda streaming is unavailable.");
+          throw new Error(failure.error || "Bram streaming is unavailable.");
         }
         if (!response.body) throw new Error("The streaming response was empty.");
         const reader = response.body.getReader();
@@ -733,7 +733,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
             } else if (event.type === "done") finished = true;
           }
         }
-        if (!streamedText.trim() && !aborter.signal.aborted) throw new Error("Coda returned an empty response.");
+        if (!streamedText.trim() && !aborter.signal.aborted) throw new Error("Bram returned an empty response.");
       } else {
         const r = await fetch("/api/chat", {
           method: "POST",
@@ -769,7 +769,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     } catch (e) {
       setMessages((current) => current.filter((item, index) => !(index === current.length - 1 && item.role === "assistant" && !item.content)));
       if (!(e instanceof DOMException && e.name === "AbortError")) {
-        setError(e instanceof Error ? e.message : "Coda is temporarily unavailable.");
+        setError(e instanceof Error ? e.message : "Bram is temporarily unavailable.");
       }
     } finally {
       chatAbortController.current = null;
@@ -1605,14 +1605,14 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         <button
           type="button"
           onClick={() => setMenu((v) => !v)}
-          aria-label="Open Coda tools"
+          aria-label="Open Bram tools"
           aria-expanded={menu}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[.04] hover:bg-white/[.08]"
         >
           <Plus size={20} />
         </button>
         {(selectedTool || selectedAgent) && <button type="button" onClick={() => { setSelectedTool(null); setSelectedAgent(null); }} aria-label="Remove selected tool or agent" className="flex max-w-[35%] shrink-0 items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-[10px] text-zinc-300"><Wrench size={11}/><span className="truncate">{selectedAgent ? `Agent: ${selectedAgent.name}` : selectedTool?.name}</span><X size={11}/></button>}
-        <label className="sr-only" htmlFor="leo-model-select">Coda model</label>
+        <label className="sr-only" htmlFor="leo-model-select">Bram model</label>
         <select id="leo-model-select" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)} disabled={!modelOptions.some((item) => item.configured)} title={modelLoadError || (!modelOptions.some((item) => item.configured) ? 'No configured text model is available.' : 'Choose the model for this message')} className="order-3 max-w-[150px] shrink-0 rounded-xl border border-white/10 bg-white/[.04] px-2 py-2 text-[10px] text-zinc-300 outline-none focus:border-[var(--gold)] disabled:opacity-50 sm:order-none">
           {modelOptions.some((item) => item.configured) ? <option value="auto">Auto</option> : <option value="unavailable">No model configured</option>}
           {modelOptions.filter((item) => item.configured).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.model}</option>)}
@@ -1629,7 +1629,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
             if (e.key === "Enter") send();
           }}
           className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm outline-none placeholder:text-zinc-600"
-          placeholder={workspaceMode === "work" ? "Describe what you want Coda to do with your files…" : "Message Coda..."}
+          placeholder={workspaceMode === "work" ? "Describe what you want Bram to do with your files…" : "Message Bram..."}
         />
         <div className="relative">
         <button
@@ -1645,7 +1645,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
             <Mic size={19} />
           )}
         </button>
-        {microphoneMenuOpen && <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 w-64 rounded-xl border border-white/15 bg-[#191919] p-2 shadow-2xl"><p className="px-2 py-1 text-[10px] uppercase tracking-[.14em] text-zinc-600">Microphone</p><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceInput(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Mic size={14}/> Dictate into composer</button><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceChat(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Volume2 size={14}/> Coda Voice conversation</button><div className="my-1 border-t border-white/10"/><p className="px-2 py-1 text-[10px] text-zinc-600">Audio input</p>{audioDevices.length ? audioDevices.map((device, index) => <button key={device.deviceId} type="button" onClick={() => setSelectedAudioDevice(device.deviceId)} className={`block w-full truncate rounded-lg px-2 py-1.5 text-left text-[11px] ${selectedAudioDevice === device.deviceId ? "bg-white/10 text-white" : "text-zinc-500 hover:bg-white/5"}`}>{device.label || `Microphone ${index + 1}`}</button>) : <p className="px-2 py-1 text-[11px] text-zinc-600">Device names appear after permission is granted.</p>}</div>}
+        {microphoneMenuOpen && <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 w-64 rounded-xl border border-white/15 bg-[#191919] p-2 shadow-2xl"><p className="px-2 py-1 text-[10px] uppercase tracking-[.14em] text-zinc-600">Microphone</p><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceInput(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Mic size={14}/> Dictate into composer</button><button type="button" onClick={() => { setMicrophoneMenuOpen(false); void startVoiceChat(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-zinc-300 hover:bg-white/5"><Volume2 size={14}/> Bram Voice conversation</button><div className="my-1 border-t border-white/10"/><p className="px-2 py-1 text-[10px] text-zinc-600">Audio input</p>{audioDevices.length ? audioDevices.map((device, index) => <button key={device.deviceId} type="button" onClick={() => setSelectedAudioDevice(device.deviceId)} className={`block w-full truncate rounded-lg px-2 py-1.5 text-left text-[11px] ${selectedAudioDevice === device.deviceId ? "bg-white/10 text-white" : "text-zinc-500 hover:bg-white/5"}`}>{device.label || `Microphone ${index + 1}`}</button>) : <p className="px-2 py-1 text-[11px] text-zinc-600">Device names appear after permission is granted.</p>}</div>}
         </div>
         <button
           type="button"
@@ -1854,7 +1854,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
         body: JSON.stringify({
           session_id: sidRef.current,
-          title: message.content.split(/\r?\n/).find(line => line.trim())?.replace(/^#+\s*/, "").slice(0, 100) || "Coda response",
+          title: message.content.split(/\r?\n/).find(line => line.trim())?.replace(/^#+\s*/, "").slice(0, 100) || "Bram response",
           content: message.content,
           format,
         }),
@@ -1949,7 +1949,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
             <a href={m.image} target="_blank" rel="noreferrer" aria-label="Open saved generated image">
               <Image
                 src={m.image}
-                alt="Generated by Coda"
+                alt="Generated by Bram"
                 width={1200}
                 height={800}
                 unoptimized
@@ -2015,7 +2015,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         <div className={`leo-chat-workspace flex ${embedded ? "h-full min-h-0" : "h-[100dvh] min-h-[480px]"} overflow-hidden bg-[#0b0b0b]`}>
           <aside className={`${embedded ? "hidden" : `${sidebarOpen ? "w-[240px]" : "w-[60px]"} hidden shrink-0 flex-col border-r border-[#252525] bg-[#101010] transition-[width] duration-200 md:flex`}`}>
             <div className="flex h-14 items-center justify-between gap-2 border-b border-white/10 px-3">
-              {sidebarOpen && <div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center"><CodaAvatar mood={error ? "oops" : loading ? "thinking" : buildProgress?.status === "completed" || buildProgress?.status === "success" ? "excited" : messages.length === 0 ? "idle" : "default"} size={30}/></div><div><b className="text-sm">Coda</b><p className="text-[10px] text-zinc-500">Your workspace</p></div></div>}
+              {sidebarOpen && <div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center"><CodaAvatar mood={error ? "oops" : loading ? "thinking" : buildProgress?.status === "completed" || buildProgress?.status === "success" ? "excited" : messages.length === 0 ? "idle" : "default"} size={30}/></div><div><b className="text-sm">Bram</b><p className="text-[10px] text-zinc-500">Your workspace</p></div></div>}
               <button type="button" onClick={() => setSidebarOpen((value) => !value)} className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white" aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}><PanelLeftClose size={16}/></button>
             </div>
             <div className="space-y-0.5 p-2">
@@ -2035,11 +2035,11 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
             </div>
           </aside>
           {mobileSidebarOpen && (
-            <div className="fixed inset-0 z-[60] md:hidden" role="dialog" aria-modal="true" aria-label="Coda workspace navigation">
+            <div className="fixed inset-0 z-[60] md:hidden" role="dialog" aria-modal="true" aria-label="Bram workspace navigation">
               <button type="button" className="absolute inset-0 bg-black/70" aria-label="Close workspace navigation" onClick={() => setMobileSidebarOpen(false)} />
               <aside className="absolute inset-y-0 left-0 flex w-[min(84vw,320px)] flex-col border-r border-white/10 bg-[#0b0b0d] shadow-2xl">
                 <div className="flex items-center justify-between border-b border-white/10 p-4">
-                  <div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center"><CodaAvatar mood={error ? "oops" : loading ? "thinking" : messages.length === 0 ? "idle" : "default"} size={34}/></div><div><b className="text-sm">Coda</b><p className="text-[10px] text-zinc-500">Your workspace</p></div></div>
+                  <div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center"><CodaAvatar mood={error ? "oops" : loading ? "thinking" : messages.length === 0 ? "idle" : "default"} size={34}/></div><div><b className="text-sm">Bram</b><p className="text-[10px] text-zinc-500">Your workspace</p></div></div>
                   <button type="button" onClick={() => setMobileSidebarOpen(false)} className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white" aria-label="Close workspace navigation"><X size={18}/></button>
                 </div>
                 <div className="space-y-1 p-3">
@@ -2065,12 +2065,12 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
             </div>
           )}
           <div className="leo-chat-main relative mx-auto flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#0b0b0b]">
-            {remoteOpen && <div className="absolute inset-0 z-40 overflow-y-auto bg-[#080809]/95 p-4 backdrop-blur-xl md:p-7"><section className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-[#111113] p-5 shadow-2xl md:p-7"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-[var(--gold)]"><Laptop size={20}/><span className="text-xs font-bold uppercase tracking-[.18em]">Coda Remote</span></div><h2 className="mt-3 text-2xl font-black">Connect your devices</h2><p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">Sign in to the same Coda account on both devices. Create a one-time code on one device, then enter it on the other. Codes expire in five minutes.</p></div><button type="button" onClick={() => setRemoteOpen(false)} aria-label="Close remote devices" className="rounded-xl border border-white/10 p-2 text-zinc-400 hover:text-white"><X size={18}/></button></div>
+            {remoteOpen && <div className="absolute inset-0 z-40 overflow-y-auto bg-[#080809]/95 p-4 backdrop-blur-xl md:p-7"><section className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-[#111113] p-5 shadow-2xl md:p-7"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-[var(--gold)]"><Laptop size={20}/><span className="text-xs font-bold uppercase tracking-[.18em]">Bram Remote</span></div><h2 className="mt-3 text-2xl font-black">Connect your devices</h2><p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">Sign in to the same Bram account on both devices. Create a one-time code on one device, then enter it on the other. Codes expire in five minutes.</p></div><button type="button" onClick={() => setRemoteOpen(false)} aria-label="Close remote devices" className="rounded-xl border border-white/10 p-2 text-zinc-400 hover:text-white"><X size={18}/></button></div>
               <div className="mt-6 grid gap-4 md:grid-cols-2"><div className="rounded-2xl border border-white/10 bg-black/20 p-4"><h3 className="font-bold">Pair this device</h3><p className="mt-1 text-xs leading-5 text-zinc-500">Generate a short-lived code to enter on your other signed-in device.</p><button type="button" disabled={remoteBusy} onClick={() => void createRemotePairing()} className="mt-4 w-full rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">{remoteBusy ? "Please wait…" : "Generate pairing code"}</button>{remoteCode && <div className="mt-4 rounded-xl border border-[var(--gold)]/30 bg-[var(--gold)]/5 p-4 text-center"><p className="text-[10px] uppercase tracking-widest text-zinc-400">One-time pairing code</p><p className="my-2 font-mono text-2xl font-black tracking-[.22em] text-[var(--gold)]">{remoteCode}</p><button type="button" onClick={() => { void navigator.clipboard?.writeText(remoteCode); setRemoteStatus("Pairing code copied."); }} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-200">Copy code</button></div>}</div>
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4"><h3 className="font-bold">Join a device</h3><p className="mt-1 text-xs leading-5 text-zinc-500">Enter the code displayed on the other device. Both devices must belong to the same account.</p><form onSubmit={(event) => void claimRemotePairing(event)} className="mt-4 space-y-3"><input value={remoteClaimCode} onChange={(event) => setRemoteClaimCode(event.target.value.toUpperCase().replace(/[^A-F0-9]/g, "").slice(0, 10))} inputMode="text" autoComplete="one-time-code" maxLength={10} placeholder="10-character code" className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 font-mono text-sm uppercase tracking-widest outline-none focus:border-[var(--gold)]"/><button type="submit" disabled={remoteBusy || remoteClaimCode.length !== 10} className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-white disabled:opacity-40">Pair this device</button></form></div></div>
               {remoteStatus && <p role="status" aria-live="polite" className="mt-4 rounded-xl border border-white/10 bg-white/[.03] p-3 text-sm text-zinc-300">{remoteStatus}</p>}
               <div className="mt-6"><div className="mb-3 flex items-center justify-between gap-3"><h3 className="font-bold">Devices and sessions</h3><button type="button" onClick={() => void loadRemotePairings()} className="text-xs text-[var(--gold)]">Refresh</button></div>{remotePairings.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 p-5 text-sm text-zinc-500">No devices paired yet. Generate a code to begin.</p> : <div className="space-y-2">{remotePairings.map((pairing) => <div key={pairing.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{pairing.created_device_name}{pairing.paired_device_name ? ` ↔ ${pairing.paired_device_name}` : ""}</p><p className="mt-1 text-xs text-zinc-500">{pairing.status === "paired" ? "Connected · remote message relay available" : `Waiting for pairing · expires ${new Date(pairing.expires_at).toLocaleTimeString()}`}</p></div><div className="flex gap-2">{pairing.status === "paired" && <button type="button" onClick={() => { setRemoteSessionId(pairing.id); setRemoteEvents([]); setRemoteCursor(0); }} className={`rounded-lg px-3 py-2 text-xs font-semibold ${remoteSessionId === pairing.id ? "bg-[var(--gold)] text-black" : "border border-white/10 text-white"}`}>{remoteSessionId === pairing.id ? "Selected" : "Open relay"}</button>}<button type="button" onClick={() => void revokeRemotePairing(pairing.id)} className="rounded-lg border border-red-400/20 px-3 py-2 text-xs text-red-300">Disconnect</button></div></div>)}</div>}</div>
-              {remoteSessionId && <div className="mt-6 rounded-2xl border border-[var(--gold)]/20 bg-black/20 p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="font-bold">Live remote message relay</h3><p className="mt-1 text-xs text-zinc-500">Messages sent here appear on the paired device when it opens this session.</p></div><span className="rounded-full border border-emerald-500/20 px-2 py-1 text-[10px] text-emerald-300">Connected</span></div><div className="mt-4 max-h-52 space-y-2 overflow-y-auto">{remoteEvents.length === 0 ? <p className="text-xs text-zinc-600">Waiting for messages or chat handoffs from either device…</p> : remoteEvents.map((item) => <article key={item.id} className="rounded-xl border border-white/10 bg-white/[.03] p-3">{item.event_type === "chat.open" && typeof item.payload.sessionId === "string" ? <><p className="text-sm font-semibold text-zinc-200">Shared chat: {String(item.payload.title || "Coda conversation")}</p><button type="button" onClick={() => { void openSavedChat({ id: String(item.payload.sessionId), title: String(item.payload.title || "Shared Coda chat"), updatedAt: Date.now() }); setRemoteOpen(false); }} className="mt-2 rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-bold text-black">Open shared chat</button></> : <p className="whitespace-pre-wrap break-words text-sm text-zinc-200">{item.event_type === "message" ? String(item.payload.text || "") : `[${item.event_type}]`}</p>}<p className="mt-1 text-[10px] text-zinc-600">{item.device_id} · {new Date(item.created_at).toLocaleTimeString()}</p></article>)}</div><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={remoteBusy} onClick={() => void shareCurrentChat()} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-200 disabled:opacity-50">Share current chat</button></div><form onSubmit={(event) => void sendRemoteMessage(event)} className="mt-3 flex gap-2"><input value={remoteMessage} onChange={(event) => setRemoteMessage(event.target.value)} maxLength={4000} placeholder="Send a message to the paired device…" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none focus:border-[var(--gold)]"/><button type="submit" disabled={remoteBusy || !remoteMessage.trim()} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-40"><Send size={16}/></button></form></div>}
+              {remoteSessionId && <div className="mt-6 rounded-2xl border border-[var(--gold)]/20 bg-black/20 p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="font-bold">Live remote message relay</h3><p className="mt-1 text-xs text-zinc-500">Messages sent here appear on the paired device when it opens this session.</p></div><span className="rounded-full border border-emerald-500/20 px-2 py-1 text-[10px] text-emerald-300">Connected</span></div><div className="mt-4 max-h-52 space-y-2 overflow-y-auto">{remoteEvents.length === 0 ? <p className="text-xs text-zinc-600">Waiting for messages or chat handoffs from either device…</p> : remoteEvents.map((item) => <article key={item.id} className="rounded-xl border border-white/10 bg-white/[.03] p-3">{item.event_type === "chat.open" && typeof item.payload.sessionId === "string" ? <><p className="text-sm font-semibold text-zinc-200">Shared chat: {String(item.payload.title || "Bram conversation")}</p><button type="button" onClick={() => { void openSavedChat({ id: String(item.payload.sessionId), title: String(item.payload.title || "Shared Bram chat"), updatedAt: Date.now() }); setRemoteOpen(false); }} className="mt-2 rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-bold text-black">Open shared chat</button></> : <p className="whitespace-pre-wrap break-words text-sm text-zinc-200">{item.event_type === "message" ? String(item.payload.text || "") : `[${item.event_type}]`}</p>}<p className="mt-1 text-[10px] text-zinc-600">{item.device_id} · {new Date(item.created_at).toLocaleTimeString()}</p></article>)}</div><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={remoteBusy} onClick={() => void shareCurrentChat()} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-200 disabled:opacity-50">Share current chat</button></div><form onSubmit={(event) => void sendRemoteMessage(event)} className="mt-3 flex gap-2"><input value={remoteMessage} onChange={(event) => setRemoteMessage(event.target.value)} maxLength={4000} placeholder="Send a message to the paired device…" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none focus:border-[var(--gold)]"/><button type="submit" disabled={remoteBusy || !remoteMessage.trim()} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-40"><Send size={16}/></button></form></div>}
               <p className="mt-5 text-[11px] leading-5 text-zinc-600">Security: pairing is limited to the same signed-in account; codes are one-time and expire after five minutes. Revoke a paired device to stop further access. This provides a live message relay, not unattended screen or mouse control.</p>
             </section></div>}
             <header className="flex items-center justify-between border-b border-white/10 p-3 sm:p-4">
@@ -2080,7 +2080,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
                   <Bot size={20} />
                 </div>
                 <div className="min-w-0">
-                  <b className="text-sm">{messages.length ? (chatHistory.find((chat) => chat.id === activeChatId)?.title || "Coda chat") : "Coda"}</b>
+                  <b className="text-sm">{messages.length ? (chatHistory.find((chat) => chat.id === activeChatId)?.title || "Bram chat") : "Bram"}</b>
                 </div>
               </div>
               <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[.06] p-1" role="group" aria-label="Workspace mode">
@@ -2104,17 +2104,17 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
               chatPinnedToBottom.current = atBottom;
               setShowJumpToLatest(!atBottom && messages.length > 0);
             }} className="leo-chat-scroll relative min-h-0 flex-1 overflow-y-auto p-4 md:p-8">
-              {memoryOpen ? <div className="mx-auto max-w-2xl"><div className="mb-6 flex items-start gap-3"><div className="rounded-2xl bg-[var(--gold)]/10 p-3 text-[var(--gold)]"><Brain size={22}/></div><div><h1 className="text-2xl font-bold">Coda memory</h1><p className="mt-1 text-sm text-zinc-400">Saved notes help Coda retain useful context. Manage what is remembered.</p></div></div><form onSubmit={(event) => { event.preventDefault(); void addMemory(); }} className="mb-6 flex gap-2"><input value={memoryDraft} onChange={(event) => setMemoryDraft(event.target.value)} placeholder="Remember that I prefer…" maxLength={1000} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none focus:border-[var(--gold)]"/><button disabled={memoryBusy || !memoryDraft.trim()} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">Save</button></form>{memoryBusy ? <p className="text-sm text-zinc-500">Loading memories…</p> : memories.length ? <div className="space-y-2">{memories.map((memory) => <article key={memory.id} className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4"><div><p className="whitespace-pre-wrap text-sm text-zinc-200">{memory.memory}</p><p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-600">{memory.source || "saved"}</p></div><button type="button" onClick={() => void deleteMemory(memory.id)} className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-300" aria-label="Delete memory"><Trash size={15}/></button></article>)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center"><Bookmark className="mx-auto mb-3 text-zinc-500"/><p className="text-sm text-zinc-300">No saved memories yet</p><p className="mt-1 text-xs text-zinc-500">Add preferences, project context or instructions you want to keep.</p></div>}</div> : messages.length === 0 ? (
+              {memoryOpen ? <div className="mx-auto max-w-2xl"><div className="mb-6 flex items-start gap-3"><div className="rounded-2xl bg-[var(--gold)]/10 p-3 text-[var(--gold)]"><Brain size={22}/></div><div><h1 className="text-2xl font-bold">Bram memory</h1><p className="mt-1 text-sm text-zinc-400">Saved notes help Bram retain useful context. Manage what is remembered.</p></div></div><form onSubmit={(event) => { event.preventDefault(); void addMemory(); }} className="mb-6 flex gap-2"><input value={memoryDraft} onChange={(event) => setMemoryDraft(event.target.value)} placeholder="Remember that I prefer…" maxLength={1000} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none focus:border-[var(--gold)]"/><button disabled={memoryBusy || !memoryDraft.trim()} className="rounded-xl bg-[var(--gold)] px-4 py-3 text-sm font-bold text-black disabled:opacity-50">Save</button></form>{memoryBusy ? <p className="text-sm text-zinc-500">Loading memories…</p> : memories.length ? <div className="space-y-2">{memories.map((memory) => <article key={memory.id} className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4"><div><p className="whitespace-pre-wrap text-sm text-zinc-200">{memory.memory}</p><p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-600">{memory.source || "saved"}</p></div><button type="button" onClick={() => void deleteMemory(memory.id)} className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-300" aria-label="Delete memory"><Trash size={15}/></button></article>)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center"><Bookmark className="mx-auto mb-3 text-zinc-500"/><p className="text-sm text-zinc-300">No saved memories yet</p><p className="mt-1 text-xs text-zinc-500">Add preferences, project context or instructions you want to keep.</p></div>}</div> : messages.length === 0 ? (
                 <div className="mx-auto flex min-h-[52vh] max-w-2xl flex-col justify-center py-10 text-center">
                   <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--gold)]/40 text-[var(--gold)]">
                     <Bot size={22} />
                   </div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-[.2em] text-[var(--gold)]">{workspaceMode === "work" ? "Coda workspace" : "Your workspace is ready"}</p>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-[.2em] text-[var(--gold)]">{workspaceMode === "work" ? "Bram workspace" : "Your workspace is ready"}</p>
                   <h1 className="text-2xl font-semibold tracking-tight text-zinc-100 md:text-4xl">
                     {workspaceMode === "work" ? "What should we work on?" : `${timeGreeting}, ${welcomeName}.`}
                   </h1>
                   <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-zinc-400">
-                    {workspaceMode === "work" ? "Upload a ZIP archive or source files to create a persistent project workspace. Edit and review the same project with Coda in this conversation." : "Tell Coda what you want to work on. Your projects, tools and conversation context stay connected as you go."}
+                    {workspaceMode === "work" ? "Upload a ZIP archive or source files to create a persistent project workspace. Edit and review the same project with Bram in this conversation." : "Tell Bram what you want to work on. Your projects, tools and conversation context stay connected as you go."}
                   </p>
                   {workspaceMode === "work" && <div className="mx-auto mt-8 w-full max-w-2xl text-left"><p className="mb-3 text-xs font-medium text-zinc-500">Suggested ways to work</p><div className="flex flex-wrap gap-2">{[{label:"Review project files",prompt:"Inspect the uploaded project files. Explain the architecture, current state, and the highest-priority improvements."},{label:"Debug an issue",prompt:"Help me investigate and fix the issue described here. Start by inspecting the available files and evidence."},{label:"Improve a document",prompt:"Review the uploaded document and help me improve it while preserving its purpose and structure."},{label:"Analyse a dataset",prompt:"Inspect the uploaded data, explain its structure, identify quality issues, and summarize useful findings."}].map(item => <button key={item.label} type="button" onClick={() => setInput(item.prompt)} className="rounded-xl border border-white/10 bg-white/[.035] px-3 py-2.5 text-xs text-zinc-300 transition hover:border-[var(--gold)]/40 hover:bg-white/[.07]">{item.label}</button>)}</div><div className="mt-5 rounded-2xl border border-white/10 bg-white/[.025] p-4"><div className="flex items-start gap-3"><Paperclip size={17} className="mt-0.5 text-[var(--gold)]"/><div><p className="text-sm font-medium text-zinc-200">Bring your project files</p><p className="mt-1 text-xs leading-5 text-zinc-500">Upload a ZIP project archive or source files to create a durable, private workspace. Files are saved to your project, can be listed and edited, and remain available when you return. Uploads exclude secrets and generated dependency folders.</p><button type="button" onClick={() => fileRef.current?.click()} className="mt-3 rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-200 hover:bg-white/5">Upload files</button>{workUploading && <p className="mt-2 text-xs text-[var(--gold)]">Saving project files…</p>}{workProject && <div className="mt-3 rounded-lg bg-white/[.04] p-3"><p className="text-xs font-semibold text-zinc-200">{workProject.name}</p><p className="mt-1 text-[11px] text-zinc-500">{workManifest ? `${workManifest.files.length} files · ${(workManifest.totalBytes / 1024 / 1024).toFixed(2)} MB · revision ${workManifest.revision}` : "Workspace created"}</p><a href={`/api/workspaces/${encodeURIComponent(workProject.id)}/source?download=1`} className="mt-2 inline-block text-[11px] font-semibold text-[var(--gold)] underline underline-offset-4">Download project ZIP</a><div className="mt-3 border-t border-white/10 pt-3"><p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">GitHub Actions runtime</p><div className="flex flex-wrap gap-2">{([ ["Inspect", "inspect"], ["Install", "install"], ["Test", "test"], ["Typecheck", "typecheck"], ["Lint", "lint"], ["Build", "build"], ["Git status", "git_status"], ["Git diff", "git_diff"] ] as const).map(([label, operation]) => <button key={operation} type="button" disabled={Boolean(workspaceRuntimeBusy) || !workManifest?.files.length} onClick={() => void runWorkspaceOperation(operation)} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:border-[var(--gold)]/40 disabled:opacity-40">{workspaceRuntimeBusy === operation ? "Running…" : label}</button>)}</div><p className="mt-2 text-[10px] leading-4 text-zinc-500">Runs bounded operations on a fresh GitHub-hosted runner. Jobs are queued; this is not an always-on terminal or live preview server.</p>{workspaceRuntimeResult && <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3"><p className={`text-xs font-semibold ${workspaceRuntimeResult.ok ? "text-emerald-400" : "text-amber-400"}`}>{workspaceRuntimeResult.operation} · {workspaceRuntimeResult.status === "queued" ? "Queued" : workspaceRuntimeResult.ok ? "Completed" : `Failed (${workspaceRuntimeResult.exit_code ?? "unknown"})`}</p>{workspaceRuntimeResult.message && <p className="mt-1 text-[11px] leading-4 text-zinc-400">{workspaceRuntimeResult.message}</p>}{workspaceRuntimeResult.job_id && <p className="mt-1 break-all text-[10px] text-zinc-500">Job ID: {workspaceRuntimeResult.job_id}</p>}{(workspaceRuntimeResult.stdout || workspaceRuntimeResult.stderr) && <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-4 text-zinc-400">{[workspaceRuntimeResult.stdout, workspaceRuntimeResult.stderr].filter(Boolean).join("\n")}</pre>}</div>}</div><div className="mt-2 max-h-36 overflow-auto text-[11px] text-zinc-400">{workManifest?.files.slice(0, 40).map(file => <button key={file.path} type="button" disabled={file.kind !== "text" || workspaceFileBusy} onClick={() => void openWorkspaceFile(file.path)} className="block w-full truncate rounded px-1 py-1 text-left hover:bg-white/[.06] disabled:opacity-50">{file.kind === "text" ? "▤ " : "◇ "}{file.path}</button>)}</div>{editingWorkspaceFile && <div className="mt-3 border-t border-white/10 pt-3"><div className="mb-2 flex items-center justify-between gap-2"><p className="truncate text-xs font-semibold text-zinc-200">{editingWorkspaceFile}</p><button type="button" onClick={() => setEditingWorkspaceFile("")} className="text-xs text-zinc-500">Close</button></div><textarea value={workspaceFileContent} onChange={event => setWorkspaceFileContent(event.target.value)} spellCheck={false} className="min-h-48 w-full resize-y rounded-lg border border-white/10 bg-black/30 p-3 font-mono text-[11px] leading-5 text-zinc-200 outline-none focus:border-[var(--gold)]"/><button type="button" disabled={workspaceFileBusy} onClick={() => void saveWorkspaceFile()} className="mt-2 rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-semibold text-black disabled:opacity-50">{workspaceFileBusy ? "Saving…" : "Save file"}</button></div>}</div>}</div></div></div><p className="mt-4 text-[11px] text-zinc-600"><Link href="/engineering" className="text-zinc-400 underline underline-offset-4 hover:text-white">Open Engineering workflow</Link> if you specifically want the dedicated engineering pipeline.</p></div>}
                 </div>
@@ -2203,7 +2203,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
               <b>BRAM</b>
               {platformCredits !== null && <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] text-zinc-400" aria-live="polite">{platformCredits} platform credits</span>}
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Close Coda">
+            <button onClick={() => setOpen(false)} aria-label="Close Bram">
               <X size={18} />
             </button>
           </header>
