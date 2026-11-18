@@ -32,5 +32,5 @@ test('Leo UI consumes server-sent deltas and supports cancellation for streamed 
   assert.match(widget, /streamedText \+= event\.text/);
   assert.match(widget, /function stopGeneration\(\)/);
   assert.match(widget, /chatAbortController\.current\?\.abort\(\)/);
-  assert.match(widget, /Coda is thinking/);
+  assert.match(widget, /Bram is thinking/);
 });
