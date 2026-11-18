@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
       assistant_response_endpoint: '/api/voice',
       audio_response: 'json-base64',
       automatic_turn_detection: { enabled: true, silence_ms: 1200, max_utterance_ms: 25000 },
-      orchestration: 'shared-braverton-assistant',
+      orchestration: 'shared-leo-chat',
     }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     console.error('Leo voice session setup failed:', error instanceof Error ? error.message : 'unknown error');
