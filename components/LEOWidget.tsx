@@ -1302,7 +1302,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
 
   async function startHandsFreeVoiceLoop() {
     voiceLoopActive.current = true;
-    setVoiceStatus("Listening · speak naturally; Bram replies automatically");
+    setVoiceStatus("Listening");
     await captureHandsFreeVoiceTurn();
   }
 
