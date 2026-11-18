@@ -42,6 +42,7 @@ test('Bram build uses the authenticated customer GitHub App installation and nev
   const source = await read('app/api/build-deploy/route.ts');
   assert.match(source, /getCustomerGitHubAuth\(ctx\.user\.id\)/);
   assert.match(source, /getGitHubAppInstallationTokenForId\(installationId\)/);
+  assert.match(source, /githubAuth\.accountType === 'Organization'/);
   assert.match(source, /getCustomerProviderToken\(ctx\.user\.id, 'vercel'\)/);
   assert.match(source, /\.eq\('user_id', userId\)/);
   assert.doesNotMatch(source, /return provider === 'github' \? process\.env\.GITHUB_TOKEN/);
