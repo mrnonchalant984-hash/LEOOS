@@ -8,6 +8,7 @@ import { enforceLeoCodeDailyQuota } from '@/lib/leocode-entitlement';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 110;
 
 function event(controller: ReadableStreamDefaultController<Uint8Array>, value: Record<string, unknown>) {
   controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`));
@@ -55,13 +56,14 @@ export async function POST(req: NextRequest) {
   const abortController = new AbortController();
   if (req.signal.aborted) abortController.abort(req.signal.reason);
   else req.signal.addEventListener('abort', () => abortController.abort(req.signal.reason), { once: true });
+  const generationSignal = AbortSignal.any([abortController.signal, AbortSignal.timeout(100_000)]);
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       event(controller, { type: 'start', requestId: randomUUID() });
       void (async () => {
         try {
-          const result = await generateTextStream({ model, messages, signal: abortController.signal, temperature: 0.7, maxOutputTokens: 1200 }, chunk => {
+          const result = await generateTextStream({ model, messages, signal: generationSignal, temperature: 0.7, maxOutputTokens: 1200 }, chunk => {
             if (!abortController.signal.aborted) event(controller, { type: 'delta', text: chunk });
           });
           if (abortController.signal.aborted) return;
@@ -74,7 +76,7 @@ export async function POST(req: NextRequest) {
           event(controller, { type: 'done', usage: result.usage, model: `${result.provider}/${result.model}` });
         } catch (error) {
           if (!abortController.signal.aborted) {
-            const message = error instanceof ModelProviderError ? error.message : 'Leo could not complete the streamed response.';
+            const message = error instanceof ModelProviderError ? error.message : 'Bram could not complete the streamed response.';
             event(controller, { type: 'error', error: message });
           }
         } finally {
