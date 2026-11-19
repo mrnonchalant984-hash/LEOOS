@@ -25,6 +25,6 @@ run('extension_compile', extension, 'npm', ['run', 'compile']);
 }
 
 const summary = { mode: 'leocode-local-runtime-preflight', checks, passed: checks.filter(x => x.ok).length, failed: checks.filter(x => !x.ok).length,
-  note: 'Manifest checks do not prove live VS Code activation, AHP handshake, authentication, Gemini execution, MCP consent, OS sandboxing, or native Agents-window registration. Those require the interactive acceptance steps in docs/PRODUCTION-VERIFICATION-RUNBOOK.md.' };
+  note: 'Manifest checks do not prove live VS Code model-provider activation, Developer API authentication and billing, inline-completion behavior, interactive workspace edits, MCP consent, OS sandboxing, or marketplace packaging. Those require interactive staging acceptance tests.' };
 console.log(JSON.stringify(summary, null, 2));
 if (checks.some(x => !x.ok)) process.exitCode = 1;
