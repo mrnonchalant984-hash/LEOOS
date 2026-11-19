@@ -185,11 +185,13 @@ test('legacy local models fail closed and Bram realtime voice uses a constrained
   const meetingRealtimeRoute = await readFile(new URL('../app/api/meetings/[id]/realtime-session/route.ts', import.meta.url), 'utf8');
   assert.match(localRoute, /LOCAL_MODEL_DISABLED/);
   assert.doesNotMatch(localRoute, /createTextResponse|LEO_LOCAL_MODEL_URL/);
-  assert.match(realtimeRoute, /gemini_turn_based/);
+  assert.match(realtimeRoute, /mode: 'gemini_live'/);
   assert.match(realtimeRoute, /enforceUserRateLimit/);
-  assert.match(realtimeRoute, /shared-leo-chat/);
-  assert.doesNotMatch(realtimeRoute, /authTokens\.create|liveConnectConstraints|gemini_live/);
-  assert.doesNotMatch(realtimeRoute, /getOpenAI|clientSecrets\.create|api\.openai\.com/);
+  assert.match(realtimeRoute, /getLeoSystemPrompt/);
+  assert.match(realtimeRoute, /authTokens\.create/);
+  assert.match(realtimeRoute, /liveConnectConstraints/);
+  assert.match(realtimeRoute, /transport: 'gemini-live-ephemeral-token'/);
+  assert.doesNotMatch(realtimeRoute, /getOpenAI|clientSecrets\.create|api\.openai\.com|gemini_turn_based/);
   assert.match(meetingRealtimeRoute, /GEMINI_AUDIO_WORKFLOW_NOT_VERIFIED/);
   assert.doesNotMatch(meetingRealtimeRoute, /getOpenAI|clientSecrets\.create|api\.openai\.com/);
 });
