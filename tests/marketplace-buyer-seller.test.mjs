@@ -180,3 +180,15 @@ test('Paystack webhook authenticates raw request body with timing-safe HMAC veri
   assert.match(webhook, /timingSafeEqual\(expectedSignature, suppliedSignature\)/);
   assert.match(webhook, /verifyPaystackTransaction\(reference\)/);
 });
+
+test('seller verification, order ledgers, and payout tables do not grant client-side write privileges', () => {
+  const commerce = source('supabase/migrations/20261111100000_leox_store_commerce.sql');
+  const buying = source('supabase/migrations/20261111120000_leox_store_buying.sql');
+  const payout = source('supabase/migrations/20261112100000_leox_store_delivery_payout_push.sql');
+  assert.match(commerce, /grant select on public\.marketplace_sellers[\s\S]*to anon, authenticated/);
+  assert.match(commerce, /revoke all on public\.marketplace_sellers[\s\S]*from public, anon, authenticated/);
+  assert.match(buying, /grant select on public\.marketplace_orders, public\.marketplace_order_items, public\.marketplace_order_events, public\.marketplace_refunds to authenticated/);
+  assert.match(buying, /grant all on public\.marketplace_cart_items, public\.marketplace_orders[\s\S]*to service_role/);
+  assert.match(payout, /revoke all on public\.marketplace_order_deliveries, public\.marketplace_seller_payout_accounts[\s\S]*from public, anon, authenticated/);
+  assert.match(payout, /grant all on public\.marketplace_order_deliveries, public\.marketplace_seller_payout_accounts[\s\S]*to service_role/);
+});
