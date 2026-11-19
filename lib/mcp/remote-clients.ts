@@ -30,7 +30,7 @@ function createRemoteClient(endpoint: string, bearerToken: string | undefined, p
         redirectPolicy: 'same-origin',
         requestInit: { redirect: 'error' },
       });
-  const client = new Client({ name: 'LeonardX MCP client', version: '1.0.0' }, { capabilities: {} });
+  const client = new Client({ name: 'Bram MCP client', version: '1.0.0' }, { capabilities: {} });
   return { client, transport };
 }
 
