@@ -138,3 +138,13 @@ test('seller payout preparation serializes against dispute creation and blocks o
   assert.match(migration, /on conflict \(order_id, seller_id\) do nothing/i);
   assert.match(migration, /grant execute on function public\.prepare_marketplace_seller_payout\(uuid, uuid\) to service_role/i);
 });
+
+test('refund provider acceptance checks local state writes and webhook can reconcile cancellation_requested orders', () => {
+  const refund = source('app/api/admin/store/orders/[id]/refund/route.ts');
+  const webhook = source('app/api/payment/webhook/route.ts');
+  assert.match(refund, /refundStateError/);
+  assert.match(refund, /orderStateError/);
+  assert.match(refund, /reconciliation_required: true/);
+  assert.match(refund, /Do not submit another refund/);
+  assert.match(webhook, /\.in\('status', \['refund_pending', 'cancellation_requested'\]\)/);
+});
