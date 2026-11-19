@@ -23,7 +23,7 @@ type RemoteToolReference = {
   accessLevel: 'read' | 'write';
 };
 
-type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_calendar_list_events' } | { kind: 'bram_calendar_create_event' } | { kind: 'bram_calendar_update_event' } | { kind: 'bram_calendar_delete_event' } | { kind: 'bram_reminder_list' } | { kind: 'bram_reminder_create' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_calendar_list_events' } | { kind: 'bram_calendar_create_event' } | { kind: 'bram_calendar_update_event' } | { kind: 'bram_calendar_delete_event' } | { kind: 'bram_reminder_list' } | { kind: 'bram_reminder_create' } | { kind: 'bram_reminder_cancel' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -162,6 +162,7 @@ localTools.push(
   { name: 'bram_calendar_delete_event', description: 'Delete a calendar event owned by the signed-in user. Requires explicit cancellation/deletion intent and calendar agent approval.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } },
   { name: 'bram_reminder_list', description: 'List the signed-in user’s persistent Bram reminders and delivery history.', inputSchema: { type: 'object', properties: { limit: { type: 'integer' } }, additionalProperties: false } },
   { name: 'bram_reminder_create', description: 'Create a persistent reminder for the signed-in user. Requires explicit user intent to set a reminder. Use an ISO timestamp and an IANA timezone; recurrence frequency is once, daily, weekly, or monthly.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, scheduled_for: { type: 'string' }, timezone: { type: 'string' }, frequency: { type: 'string', enum: ['once','daily','weekly','monthly'] } }, required: ['title','scheduled_for','timezone'], additionalProperties: false } },
+  { name: 'bram_reminder_cancel', description: 'Cancel a scheduled Bram reminder owned by the signed-in user. Requires explicit cancellation intent.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } },
 );
 
 type LeoBuildToolOptions = {
@@ -343,6 +344,14 @@ export async function createUserAssistantTools(
       const { data, error } = await db.from('bram_reminders').select('id,title,body,scheduled_for,timezone,recurrence,status,next_run_at,delivered_at').eq('user_id', userId).neq('status', 'cancelled').order('next_run_at').limit(limit);
       if (error) return { text: 'Persistent reminders are not available yet. Apply the Bram productivity database migration first.', isError: true };
       return { text: JSON.stringify({ reminders: data || [], count: data?.length || 0 }) };
+    }
+    if (reference.kind === 'bram_reminder_cancel') {
+      if (!/\\b(cancel|delete|remove|stop)\\b/i.test(agentPolicy?.userMessage || options?.userMessage || '')) return { text: 'Cancelling a reminder requires explicit user intent.', isError: true };
+      const id = typeof args.id === 'string' ? args.id : '';
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return { text: 'Provide a valid reminder ID.', isError: true };
+      const { data, error } = await db.from('bram_reminders').update({ status: 'cancelled', lease_owner: null, lease_expires_at: null, updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId).in('status', ['scheduled','failed']).select('id,status').maybeSingle();
+      if (error || !data) return { text: 'Reminder was not cancelled; confirm it belongs to this account and is not currently being delivered.', isError: true };
+      return { text: JSON.stringify({ reminder: data, persisted: true }) };
     }
     if (reference.kind === 'bram_reminder_create') {
       if (!/\b(remind|reminder|alert|notify)\b/i.test(agentPolicy?.userMessage || options?.userMessage || '')) return { text: 'Creating a reminder requires an explicit reminder request.', isError: true };
