@@ -157,11 +157,11 @@ const localTools: Array<{ name: string; description: string; inputSchema: Record
 
 localTools.push(
   { name: 'bram_calendar_list_events', description: 'Read the signed-in user’s Bram calendar events for a bounded date range. Use only for explicit calendar read requests.', inputSchema: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } }, additionalProperties: false } },
-  { name: 'bram_calendar_create_event', description: 'Create a calendar event in the user’s private Bram calendar. Requires an explicit user request to schedule/create the event and the calendar agent approval flow.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' }, starts_at: { type: 'string' }, ends_at: { type: 'string' }, timezone: { type: 'string' }, location: { type: 'string' } }, required: ['title','starts_at','ends_at','timezone'], additionalProperties: false } },
+  { name: 'bram_calendar_create_event', description: 'Create a calendar event in the user’s private Bram calendar. Requires an explicit user request to schedule/create the event and the calendar agent approval flow.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' }, starts_at: { type: 'string' }, ends_at: { type: 'string' }, timezone: { type: 'string' }, location: { type: 'string' } }, required: ['title','starts_at','ends_at'], additionalProperties: false } },
   { name: 'bram_calendar_update_event', description: 'Update a calendar event owned by the signed-in user. Requires explicit user intent and calendar agent approval.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, starts_at: { type: 'string' }, ends_at: { type: 'string' }, timezone: { type: 'string' }, location: { type: 'string' } }, required: ['id','title','starts_at','ends_at','timezone'], additionalProperties: false } },
   { name: 'bram_calendar_delete_event', description: 'Delete a calendar event owned by the signed-in user. Requires explicit cancellation/deletion intent and calendar agent approval.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } },
   { name: 'bram_reminder_list', description: 'List the signed-in user’s persistent Bram reminders and delivery history.', inputSchema: { type: 'object', properties: { limit: { type: 'integer' } }, additionalProperties: false } },
-  { name: 'bram_reminder_create', description: 'Create a persistent reminder for the signed-in user. Requires explicit user intent to set a reminder. Use an ISO timestamp and an IANA timezone; recurrence frequency is once, daily, weekly, or monthly.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, scheduled_for: { type: 'string' }, timezone: { type: 'string' }, frequency: { type: 'string', enum: ['once','daily','weekly','monthly'] } }, required: ['title','scheduled_for','timezone'], additionalProperties: false } },
+  { name: 'bram_reminder_create', description: 'Create a persistent reminder for the signed-in user. Requires explicit user intent to set a reminder. Use an ISO timestamp and an IANA timezone; recurrence frequency is once, daily, weekly, or monthly.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, scheduled_for: { type: 'string' }, timezone: { type: 'string' }, frequency: { type: 'string', enum: ['once','daily','weekly','monthly'] } }, required: ['title','scheduled_for'], additionalProperties: false } },
   { name: 'bram_reminder_cancel', description: 'Cancel a scheduled Bram reminder owned by the signed-in user. Requires explicit cancellation intent.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } },
 );
 
@@ -190,6 +190,7 @@ export async function createUserAssistantTools(
   agentPolicy?: AgentToolPolicy,
 ): Promise<{ tools: AssistantTool[]; execute: AssistantToolExecutor }> {
   const db = adminSupabase();
+  const userTimezone = options?.request ? locationFromHeaders(options.request.headers).timezone : 'UTC';
   const references = new Map<string, ToolReference>();
   const tools: AssistantTool[] = localTools.map(tool => {
     references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
@@ -311,7 +312,7 @@ export async function createUserAssistantTools(
       const title = typeof args.title === 'string' ? args.title.trim() : '';
       const start = typeof args.starts_at === 'string' ? new Date(args.starts_at) : null;
       const end = typeof args.ends_at === 'string' ? new Date(args.ends_at) : null;
-      const timezone = typeof args.timezone === 'string' ? args.timezone : '';
+      const timezone = typeof args.timezone === 'string' ? args.timezone : userTimezone;
       try { new Intl.DateTimeFormat('en', { timeZone: timezone }).format(new Date()); } catch { return { text: 'Provide a valid IANA timezone.', isError: true }; }
       if (!title || title.length > 180 || !start || !end || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) return { text: 'Provide a title and valid start/end timestamps.', isError: true };
       const { data, error } = await db.from('bram_calendar_events').insert({ user_id: userId, title, description: typeof args.description === 'string' ? args.description.slice(0,4000) : '', starts_at: start.toISOString(), ends_at: end.toISOString(), timezone, location: typeof args.location === 'string' ? args.location.slice(0,500) : '', source: 'bram', status: 'confirmed' }).select('id,title,starts_at,ends_at,timezone').single();
@@ -324,7 +325,7 @@ export async function createUserAssistantTools(
       const title = typeof args.title === 'string' ? args.title.trim() : '';
       const start = typeof args.starts_at === 'string' ? new Date(args.starts_at) : null;
       const end = typeof args.ends_at === 'string' ? new Date(args.ends_at) : null;
-      const timezone = typeof args.timezone === 'string' ? args.timezone : '';
+      const timezone = typeof args.timezone === 'string' ? args.timezone : userTimezone;
       try { new Intl.DateTimeFormat('en', { timeZone: timezone }).format(new Date()); } catch { return { text: 'Provide a valid IANA timezone.', isError: true }; }
       if (!/^[0-9a-f-]{36}$/i.test(id) || !title || !start || !end || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) return { text: 'Provide a valid event ID, title and time range.', isError: true };
       const { data, error } = await db.from('bram_calendar_events').update({ title, description: typeof args.description === 'string' ? args.description.slice(0,4000) : '', starts_at: start.toISOString(), ends_at: end.toISOString(), timezone, location: typeof args.location === 'string' ? args.location.slice(0,500) : '', updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId).select('id,title,starts_at,ends_at,timezone').maybeSingle();
@@ -357,7 +358,7 @@ export async function createUserAssistantTools(
       if (!/\b(remind|reminder|alert|notify)\b/i.test(agentPolicy?.userMessage || options?.userMessage || '')) return { text: 'Creating a reminder requires an explicit reminder request.', isError: true };
       const title = typeof args.title === 'string' ? args.title.trim() : '';
       const scheduled = typeof args.scheduled_for === 'string' ? new Date(args.scheduled_for) : null;
-      const timezone = typeof args.timezone === 'string' ? args.timezone : '';
+      const timezone = typeof args.timezone === 'string' ? args.timezone : userTimezone;
       const frequency = ['once','daily','weekly','monthly'].includes(String(args.frequency)) ? String(args.frequency) : 'once';
       try { new Intl.DateTimeFormat('en', { timeZone: timezone }).format(new Date()); } catch { return { text: 'Provide a valid IANA timezone.', isError: true }; }
       if (!title || title.length > 180 || !scheduled || !Number.isFinite(scheduled.getTime()) || scheduled.getTime() <= Date.now()) return { text: 'Provide a title and a future ISO-8601 timestamp.', isError: true };
