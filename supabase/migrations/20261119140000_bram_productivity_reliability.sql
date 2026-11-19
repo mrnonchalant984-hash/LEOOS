@@ -1,3 +1,8 @@
+-- Supabase Cron provides sub-daily scheduling on the Hobby Vercel project.
+create extension if not exists pg_cron with schema pg_catalog;
+create schema if not exists extensions;
+create extension if not exists pg_net with schema extensions;
+
 -- Bram productivity: persistent reminders, calendar events and reliable queue recovery.
 -- Additive, owner-scoped schema. Delivery is driven by the authenticated Vercel cron worker.
 
@@ -211,3 +216,47 @@ grant all on public.bram_reminders to service_role;
 grant all on public.bram_reminder_deliveries to service_role;
 grant all on public.bram_calendar_events to service_role;
 grant select,insert,update,delete on public.workflows,public.workflow_runs,public.workflow_jobs to service_role;
+
+-- Register production worker schedules but keep them disabled until the application
+-- code is deployed. The bearer token is stored only in Supabase Vault.
+do $bram_cron$
+begin
+  if not exists (select 1 from cron.job where jobname = 'bram-reminder-delivery') then
+    perform cron.schedule(
+      'bram-reminder-delivery',
+      '*/5 * * * *',
+      $bram_job$
+        select net.http_post(
+          url := 'https://leoos-omega.vercel.app/api/cron/bram-productivity',
+          headers := jsonb_build_object(
+            'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'bram_scheduler_secret'),
+            'Content-Type', 'application/json'
+          ),
+          body := '{}'::jsonb,
+          timeout_milliseconds := 15000
+        );
+      $bram_job$
+    );
+  end if;
+  if not exists (select 1 from cron.job where jobname = 'bram-workflow-worker') then
+    perform cron.schedule(
+      'bram-workflow-worker',
+      '*/5 * * * *',
+      $bram_job$
+        select net.http_post(
+          url := 'https://leoos-omega.vercel.app/api/internal/workflow-worker',
+          headers := jsonb_build_object(
+            'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'bram_scheduler_secret'),
+            'Content-Type', 'application/json'
+          ),
+          body := '{"limit":5}'::jsonb,
+          timeout_milliseconds := 15000
+        );
+      $bram_job$
+    );
+  end if;
+end;
+$bram_cron$;
+
+update cron.job set active = false
+where jobname in ('bram-reminder-delivery','bram-workflow-worker');
