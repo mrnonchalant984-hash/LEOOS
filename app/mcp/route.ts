@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
               limit: plan.limits.monthlyBuilds,
             },
             model_generation: 'performed by the connected MCP client; no Braverton model or image-generation credits are used',
-            uses_leonardx_ai_credits: false,\n            bram_credits_used: false,
+            uses_leonardx_ai_credits: false,\n            bram_model_provider_called: false,\n            bram_credits_used: false,\n            bram_credits_used: false,
             hosting_trial: 'starts after a successful deployment is verified live',
             note: 'The connected Claude, ChatGPT, or other MCP client provides model inference. Braverton charges one monthly build allowance only after a successful live deployment.',
           },
