@@ -227,6 +227,10 @@
       {
         "command": "leocode.toggleInlineCompletions",
         "title": "Bram Code: Toggle Inline Completions"
+      },
+      {
+        "command": "leocode.runHostedWorkspace",
+        "title": "Bram Code: Run Hosted Workspace Check"
       }
     ],
     "languageModelChatProviders": [
