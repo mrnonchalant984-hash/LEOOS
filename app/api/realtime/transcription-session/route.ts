@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Modality } from '@google/genai';
 import { getProfile } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
         liveConnectConstraints: {
           model: `models/${model}`,
           config: {
-            responseModalities: ['TEXT'],
+            responseModalities: [Modality.TEXT],
             inputAudioTranscription: {},
             systemInstruction: 'Transcribe the user audio accurately. Return only the words spoken. Do not answer, summarize, or add commentary.',
           },
