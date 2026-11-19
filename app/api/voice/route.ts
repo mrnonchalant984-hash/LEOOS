@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
         const write = history.length || (await db.from('chats_v2').select('id').eq('id', sessionId).eq('user_id', ctx.user.id).maybeSingle()).data
           ? await db.from('chats_v2').update({ messages: updated, updated_at: new Date().toISOString() }).eq('id', sessionId).eq('user_id', ctx.user.id)
           : await db.from('chats_v2').insert({ id: sessionId, user_id: ctx.user.id, title: transcript.slice(0, 60), messages: updated, updated_at: new Date().toISOString() });
-        if (write.error) throw new Error('Leo replied, but the conversation could not be saved.');
+        if (write.error) throw new Error('Bram replied, but the conversation could not be saved.');
       }
     }
     const speechText = turnMode ? assistantReply : transcript;
