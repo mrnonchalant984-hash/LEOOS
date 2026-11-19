@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
       let history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
       if (/^[0-9a-f-]{36}$/i.test(sessionId)) {
         const { data: chat, error: chatError } = await db.from('chats_v2').select('user_id,messages').eq('id', sessionId).maybeSingle();
-        if (chatError) throw new Error('Leo conversation history is temporarily unavailable.');
+        if (chatError) throw new Error('Bram conversation history is temporarily unavailable.');
         if (chat && chat.user_id !== ctx.user.id) return NextResponse.json({ error: 'Chat not found.' }, { status: 404 });
         history = Array.isArray(chat?.messages) ? chat.messages.filter((item: any) => (item?.role === 'user' || item?.role === 'assistant') && typeof item?.content === 'string').slice(-16) : [];
       }
