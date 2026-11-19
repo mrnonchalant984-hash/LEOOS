@@ -28,10 +28,10 @@ test('review findings can be opened and safe fixes require preview, approval, an
   assert.match(centre, /showTextDocument/);
 });
 
-test('LeoCode registers file, selection, workspace and Git review plus specialist orchestration', () => {
+test('Bram Code registers file, selection, workspace and Git review without an agent command surface', () => {
   const manifest = JSON.parse(read('package.json'));
   const commands = new Set(manifest.contributes.commands.map(command => command.command));
-  for (const command of ['leocode.reviewFile', 'leocode.reviewSelection', 'leocode.reviewWorkspace', 'leocode.reviewGitChanges', 'leocode.coordinateAgents', 'leocode.runTests', 'leocode.inspectGit']) {
+  for (const command of ['leocode.reviewFile', 'leocode.reviewSelection', 'leocode.reviewWorkspace', 'leocode.reviewGitChanges', 'leocode.runTests', 'leocode.inspectGit']) {
     assert.ok(commands.has(command), `missing ${command}`);
   }
   const extension = read('src', 'extension.ts');
