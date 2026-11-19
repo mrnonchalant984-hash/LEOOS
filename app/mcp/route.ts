@@ -651,10 +651,21 @@ export async function POST(request: NextRequest) {
       },
       async getAgentExecutionStatus(userId: string, runId: string) {
         const { data, error } = await db.from('agent_runs')
-          .select('id,agent_id,task,status,result,error,created_at,started_at,completed_at')
+          .select('id,agent_id,task,status,result,error,created_at,started_at,completed_at,metadata')
           .eq('id', runId).eq('user_id', userId).maybeSingle();
         if (error || !data) return { data: null, error: error || 'Agent execution not found.' };
-        return { data: { ...data, error: data.error ? 'Agent execution failed. Review provider availability and retry if appropriate.' : null }, error: null };
+        const metadata = data.metadata && typeof data.metadata === 'object' ? data.metadata as Record<string, unknown> : {};
+        const execution = metadata.execution && typeof metadata.execution === 'object' ? metadata.execution : null;
+        return {
+          data: {
+            id: data.id, agent_id: data.agent_id, task: data.task, status: data.status,
+            result: data.result,
+            error: data.error ? 'Agent execution failed. Review provider availability and retry if appropriate.' : null,
+            created_at: data.created_at, started_at: data.started_at, completed_at: data.completed_at,
+            execution,
+          },
+          error: null,
+        };
       },
       async cancelAgentExecution(userId: string, runId: string) {
         const { data, error } = await db.rpc('cancel_queued_agent_run', { p_run_id: runId, p_user_id: userId });
