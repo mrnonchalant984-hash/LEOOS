@@ -166,6 +166,7 @@ export async function runAgent(
     available = await createUserAssistantTools(meta.userId, options, {
       agentId: agent.id,
       allowMcpRead: agentHasMcpReadCapability(agent),
+      userMessage: task,
     });
   }
   const tools = getAgentAvailableTools(agent, available.tools, task);
