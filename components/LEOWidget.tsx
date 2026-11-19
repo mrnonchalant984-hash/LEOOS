@@ -196,6 +196,8 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     [voiceLocked, setVoiceLocked] = useState(false),
     [voiceFallbackMode, setVoiceFallbackMode] = useState(false);
   const [platformCredits, setPlatformCredits] = useState<number | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [liveAssistantCaption, setLiveAssistantCaption] = useState("");
   const [buildProgress, setBuildProgress] = useState<BuildProgressState | null>(null);
   const [trackBuildProgress, setTrackBuildProgress] = useState(false);
   const [buildTrackingSince, setBuildTrackingSince] = useState("");
