@@ -2342,7 +2342,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
               {composer}
             </div></div>}
             </div>
-            {workspaceMode === "work" && workProject && <BramWorkspacePreview projectId={workProject.id} projectName={workProject.name} />}
+            {workspaceMode === "work" && workProject && <BramWorkspacePreview projectId={workProject.id} projectName={workProject.name} onComment={(comment) => { setInput(current => current ? `${current}\n\nPreview feedback: ${comment}` : `Please apply this preview feedback to the current project: ${comment}`); }} />}
             </div>
             {voiceOpen && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xl">
