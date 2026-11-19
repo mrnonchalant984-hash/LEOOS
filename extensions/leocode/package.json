@@ -43,7 +43,8 @@
     "onCommand:leocode.inspectGit",
     "onCommand:leocode.configureModel",
     "onCommand:leocode.toggleInlineCompletions",
-    "onCommand:leocode.runHostedWorkspace"
+    "onCommand:leocode.runHostedWorkspace",
+    "onCommand:leocode.editSelection"
   ],
   "contributes": {
     "languageModelTools": [
@@ -224,6 +225,10 @@
       {
         "command": "leocode.runHostedWorkspace",
         "title": "Bram Code: Run Hosted Workspace Check"
+      },
+      {
+        "command": "leocode.editSelection",
+        "title": "Bram Code: Edit Selected Code"
       }
     ],
     "languageModelChatProviders": [
