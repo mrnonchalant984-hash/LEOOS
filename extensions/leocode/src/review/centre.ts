@@ -21,7 +21,7 @@ export class CodeReviewCentre {
       this.panel.onDidDispose(() => { this.panel = undefined; this.report = undefined; });
       this.panel.webview.onDidReceiveMessage(message => void this.handleMessage(message));
     }
-    this.panel.title = `LeoCode · Review (${report.findings.length})`;
+    this.panel.title = `Bram Code · Review (${report.findings.length})`;
     this.panel.webview.html = this.render(report);
     this.panel.reveal(vscode.ViewColumn.Beside);
   }
