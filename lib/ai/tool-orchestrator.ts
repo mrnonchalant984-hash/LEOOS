@@ -344,9 +344,12 @@ export async function createUserAssistantTools(
     }
     if (reference.kind === 'bram_reminder_list') {
       const limit = Math.max(1, Math.min(50, Number.isInteger(args.limit) ? Number(args.limit) : 20));
-      const { data, error } = await db.from('bram_reminders').select('id,title,body,scheduled_for,timezone,recurrence,status,next_run_at,delivered_at').eq('user_id', userId).neq('status', 'cancelled').order('next_run_at').limit(limit);
-      if (error) return { text: 'Persistent reminders are not available yet. Apply the Bram productivity database migration first.', isError: true };
-      return { text: JSON.stringify({ reminders: data || [], count: data?.length || 0 }) };
+      const [reminders, deliveries] = await Promise.all([
+        db.from('bram_reminders').select('id,title,body,scheduled_for,timezone,recurrence,status,next_run_at,delivered_at,last_delivery_error').eq('user_id', userId).neq('status', 'cancelled').order('next_run_at').limit(limit),
+        db.from('bram_reminder_deliveries').select('reminder_id,scheduled_for,channel,status,attempt_count,delivered_at,error_code').eq('user_id', userId).order('created_at', { ascending: false }).limit(100),
+      ]);
+      if (reminders.error || deliveries.error) return { text: 'Persistent reminders or their delivery history are not available. Verify the Bram productivity migration and retry.', isError: true };
+      return { text: JSON.stringify({ reminders: reminders.data || [], deliveries: deliveries.data || [], count: reminders.data?.length || 0 }) };
     }
     if (reference.kind === 'bram_reminder_cancel') {
       if (!/\b(cancel|delete|remove|stop)\b/i.test(agentPolicy?.userMessage || options?.userMessage || '')) return { text: 'Cancelling a reminder requires explicit user intent.', isError: true };
