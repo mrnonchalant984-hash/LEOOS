@@ -53,6 +53,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { LucideIcon } from "lucide-react";
 import { CodaAvatar } from "@/components/CodaAvatar";
+import { BramWorkspacePreview } from "@/components/BramWorkspacePreview";
 
 type BuildProgressState = { status: string; step: string; message: string; liveUrl?: string | null; events?: Array<{ id: string; message: string; status: string; created_at: string }> };
 type ProjectBuilderAction = {
@@ -2304,6 +2305,8 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
               <a href="/account" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300"><UserCircle size={14}/> Account</a>
               <a href="/pricing" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300"><CreditCard size={14}/> Upgrade</a>
             </div>
+            <div className={workspaceMode === "work" && workProject ? "flex min-h-0 flex-1 flex-col lg:flex-row" : "flex min-h-0 flex-1 flex-col"}>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div ref={chatScrollRef} onScroll={(event) => {
               const element = event.currentTarget;
               const atBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 120;
@@ -2338,6 +2341,9 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
               {videoStatus && <div className="mb-2 text-xs text-zinc-400" role="status" aria-live="polite"><p>{videoStatus}</p>{activeVideoJobId && !loading && <button type="button" onClick={refreshVideoStatus} className="mt-2 rounded-lg border border-white/10 px-3 py-2 text-white">Check status</button>}</div>}
               {composer}
             </div></div>}
+            </div>
+            {workspaceMode === "work" && workProject && <BramWorkspacePreview projectId={workProject.id} projectName={workProject.name} />}
+            </div>
             {voiceOpen && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xl">
                 <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#101011] p-6 text-center shadow-2xl">
