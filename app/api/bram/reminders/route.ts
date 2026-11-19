@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile } from '@/lib/auth';
+import { enforceUserRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 const TZ_PATTERN = /^[A-Za-z_+-]+(?:\/[A-Za-z0-9_+.-]+)*$/;
@@ -19,6 +20,8 @@ function parseRecurrence(value: unknown) {
 export async function GET(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in required.' }, { status: 401 });
+  const limited = await enforceUserRateLimit(ctx.user.id, 'bram-reminders-get', 60, 60);
+  if (limited) return limited;
   const db = adminSupabase();
   const [reminders, deliveries] = await Promise.all([
     db.from('bram_reminders').select('id,title,body,scheduled_for,timezone,recurrence,status,next_run_at,delivered_at,created_at').eq('user_id', ctx.user.id).neq('status', 'cancelled').order('next_run_at', { ascending: true }).limit(100),
@@ -31,6 +34,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in required.' }, { status: 401 });
+  const limited = await enforceUserRateLimit(ctx.user.id, 'bram-reminders-post', 20, 3600);
+  if (limited) return limited;
   const body = await req.json().catch(() => null);
   const title = typeof body?.title === 'string' ? body.title.trim() : '';
   const description = typeof body?.body === 'string' ? body.body.trim() : '';
@@ -52,6 +57,8 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in required.' }, { status: 401 });
+  const limited = await enforceUserRateLimit(ctx.user.id, 'bram-reminders-patch', 20, 3600);
+  if (limited) return limited;
   const body = await req.json().catch(() => null);
   const id = typeof body?.id === 'string' ? body.id : '';
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'A valid reminder ID is required.' }, { status: 400 });
