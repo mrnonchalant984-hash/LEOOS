@@ -10,6 +10,15 @@ as $$
 begin
   perform 1 from public.marketplace_orders where id = new.order_id for update;
   if not found then raise exception 'marketplace order not found'; end if;
+  -- The transfer request is sent immediately after payout reservation. Prevent
+  -- a dispute from being inserted in the small interval before Paystack accepts
+  -- the transfer; the payout worker and dispute trigger serialize on the order.
+  if exists (
+    select 1 from public.marketplace_seller_payouts
+    where order_id = new.order_id and status = 'initiating'
+  ) then
+    raise exception 'seller payout initiation already in progress';
+  end if;
   return new;
 end;
 $$;
