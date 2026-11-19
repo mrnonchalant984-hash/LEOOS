@@ -208,8 +208,8 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     [voiceFallbackMode, setVoiceFallbackMode] = useState(false);
   const [platformCredits, setPlatformCredits] = useState<number | null>(null);
   const [activityLabel, setActivityLabel] = useState("Thinking");
-  const [projectResources, setProjectResources] = useState<BramProjectResource[]>([]);
-  const [projectChecklist, setProjectChecklist] = useState<{ title: string; items: BramChecklistItem[] } | null>(null);
+  const [projectResources, setProjectResources] = useState<{ projectId: string; items: BramProjectResource[] } | null>(null);
+  const [projectChecklist, setProjectChecklist] = useState<{ projectId: string; checklist: { title: string; items: BramChecklistItem[] } | null } | null>(null);
   const [workspaceCollectionBusy, setWorkspaceCollectionBusy] = useState(false);
   const [workspaceCollectionError, setWorkspaceCollectionError] = useState("");
   const [savingResourceUrl, setSavingResourceUrl] = useState("");
@@ -282,11 +282,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
   const hour = new Date().getHours();
   const timeGreeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   useEffect(() => {
-    if (!workProject?.id) {
-      setProjectResources([]);
-      setProjectChecklist(null);
-      return;
-    }
+    if (!workProject?.id) return;
     let cancelled = false;
     setWorkspaceCollectionBusy(true);
     setWorkspaceCollectionError("");
@@ -299,8 +295,14 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || "Project collections could not be loaded.");
         if (!cancelled) {
-          setProjectResources(Array.isArray(data.resources) ? data.resources : []);
-          setProjectChecklist(data.checklist ? { title: data.checklist.title || "Implementation checklist", items: Array.isArray(data.checklist.items) ? data.checklist.items : [] } : null);
+          setProjectResources({ projectId: workProject.id, items: Array.isArray(data.resources) ? data.resources : [] });
+          setProjectChecklist({
+            projectId: workProject.id,
+            checklist: data.checklist ? {
+              title: data.checklist.title || "Implementation checklist",
+              items: Array.isArray(data.checklist.items) ? data.checklist.items : [],
+            } : null,
+          });
         }
       } catch (cause) {
         if (!cancelled) setWorkspaceCollectionError(cause instanceof Error ? cause.message : "Project collections could not be loaded.");
@@ -549,7 +551,9 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Checklist state could not be saved.");
-      setProjectChecklist({ title: data.checklist.title, items: data.checklist.items });
+      setProjectChecklist(current => current?.projectId === workProject.id
+        ? { projectId: workProject.id, checklist: { title: data.checklist.title, items: data.checklist.items } }
+        : current);
     } catch (cause) {
       setWorkspaceCollectionError(cause instanceof Error ? cause.message : "Checklist state could not be saved.");
     } finally { setWorkspaceCollectionBusy(false); }
@@ -567,7 +571,9 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Research source could not be saved.");
-      setProjectResources(current => [data.resource as BramProjectResource, ...current.filter(item => item.url !== citation.url)].slice(0, 100));
+      setProjectResources(current => current?.projectId === workProject.id
+        ? { projectId: workProject.id, items: [data.resource as BramProjectResource, ...current.items.filter(item => item.url !== citation.url)].slice(0, 100) }
+        : current);
     } catch (cause) {
       setWorkspaceCollectionError(cause instanceof Error ? cause.message : "Research source could not be saved.");
     } finally { setSavingResourceUrl(""); }
@@ -2057,10 +2063,10 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         </div>
       </section>
       {workProject && <section className="rounded-xl border border-white/10 bg-white/[.025] p-3">
-        <div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold text-zinc-200">Project resources · {workProject.name}</p><span className="text-[10px] text-zinc-500">{projectResources.length} saved</span></div>
+        <div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold text-zinc-200">Project resources · {workProject.name}</p><span className="text-[10px] text-zinc-500">{activeProjectResources.length} saved</span></div>
         {workspaceCollectionBusy && <p className="mt-2 text-[11px] text-zinc-500">Syncing project collections…</p>}
         {workspaceCollectionError && <p role="alert" className="mt-2 text-[11px] text-amber-300">{workspaceCollectionError}</p>}
-        {projectResources.length > 0 ? <ul className="mt-2 space-y-1.5">{projectResources.slice(0, 8).map(resource => <li key={resource.id} className="flex min-w-0 items-center justify-between gap-2 text-[11px]"><a href={resource.url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-sky-300 underline underline-offset-2">{resource.title}</a><span className="shrink-0 text-zinc-600">{resource.source_type}</span></li>)}</ul> : <p className="mt-2 text-[11px] text-zinc-500">Research sources can be saved here from Bram&apos;s responses.</p>}
+        {activeProjectResources.length > 0 ? <ul className="mt-2 space-y-1.5">{activeProjectResources.slice(0, 8).map(resource => <li key={resource.id} className="flex min-w-0 items-center justify-between gap-2 text-[11px]"><a href={resource.url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-sky-300 underline underline-offset-2">{resource.title}</a><span className="shrink-0 text-zinc-600">{resource.source_type}</span></li>)}</ul> : <p className="mt-2 text-[11px] text-zinc-500">Research sources can be saved here from Bram&apos;s responses.</p>}
       </section>}
       {messages.map((m, i) => (
         <div
@@ -2091,15 +2097,15 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           ))}
           {m.citations?.length ? <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Web sources</p>
-            <ul className="space-y-2">{m.citations.map((citation, citationIndex) => <li key={`${citation.url}-${citationIndex}`} className="flex flex-wrap items-center justify-between gap-2"><a href={citation.url} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all text-xs text-sky-300 underline decoration-sky-300/30 underline-offset-2 hover:text-sky-200">{citation.title || citation.url}</a>{workProject && <button type="button" disabled={savingResourceUrl === citation.url || projectResources.some(item => item.url === citation.url)} onClick={() => void saveProjectResource(citation)} className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 disabled:opacity-50">{projectResources.some(item => item.url === citation.url) ? "Saved" : savingResourceUrl === citation.url ? "Saving…" : "Save to project"}</button>}</li>)}</ul>
+            <ul className="space-y-2">{m.citations.map((citation, citationIndex) => <li key={`${citation.url}-${citationIndex}`} className="flex flex-wrap items-center justify-between gap-2"><a href={citation.url} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all text-xs text-sky-300 underline decoration-sky-300/30 underline-offset-2 hover:text-sky-200">{citation.title || citation.url}</a>{workProject && <button type="button" disabled={savingResourceUrl === citation.url || activeProjectResources.some(item => item.url === citation.url)} onClick={() => void saveProjectResource(citation)} className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 disabled:opacity-50">{activeProjectResources.some(item => item.url === citation.url) ? "Saved" : savingResourceUrl === citation.url ? "Saving…" : "Save to project"}</button>}</li>)}</ul>
           </div> : null}
           {m.role === "assistant" && /(^|\n)\s*[-*]\s+\[[ xX]\]\s+/.test(m.content) && <section className="mt-3 rounded-xl border border-[var(--gold)]/20 bg-black/25 p-3">
-            <div className="mb-2 flex items-center justify-between gap-2"><p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--gold)]">Architecture checklist</p><span className="text-[10px] text-zinc-500">{workProject ? (projectChecklist?.items.filter(item => item.completed).length || 0) : 0}/{extractBramChecklist(m.content).length} complete</span></div>
+            <div className="mb-2 flex items-center justify-between gap-2"><p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--gold)]">Architecture checklist</p><span className="text-[10px] text-zinc-500">{workProject ? (activeProjectChecklist?.items.filter(item => item.completed).length || 0) : 0}/{extractBramChecklist(m.content).length} complete</span></div>
             {extractBramChecklist(m.content).map((item, itemIndex) => {
-              const saved = projectChecklist?.items.find(existing => existing.id === item.id || existing.text === item.text);
+              const saved = activeProjectChecklist?.items.find(existing => existing.id === item.id || existing.text === item.text);
               const checked = saved?.completed ?? item.completed;
               return <label key={item.id} className="flex items-start gap-2 py-1.5 text-xs leading-5 text-zinc-300"><input type="checkbox" className="mt-1 accent-[var(--gold)]" checked={checked} disabled={!workProject || workspaceCollectionBusy} onChange={event => {
-                const parsed = extractBramChecklist(m.content).map((entry, index) => ({ ...entry, completed: index === itemIndex ? event.target.checked : (projectChecklist?.items.find(existing => existing.id === entry.id || existing.text === entry.text)?.completed ?? entry.completed) }));
+                const parsed = extractBramChecklist(m.content).map((entry, index) => ({ ...entry, completed: index === itemIndex ? event.target.checked : (activeProjectChecklist?.items.find(existing => existing.id === entry.id || existing.text === entry.text)?.completed ?? entry.completed) }));
                 void saveProjectChecklist("Architecture checklist", parsed);
               }}/><span>{item.text}</span></label>;
             })}
@@ -2205,6 +2211,9 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       )}
     </div>
   );
+  const activeProjectResources = projectResources?.projectId === workProject?.id ? projectResources.items : [];
+  const activeProjectChecklist = projectChecklist?.projectId === workProject?.id ? projectChecklist.checklist : null;
+
   if (full)
     return (
       <>
