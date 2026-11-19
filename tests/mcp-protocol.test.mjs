@@ -179,11 +179,11 @@ test('MCP write tools require the write scope and explicit confirmation input', 
     const bramChat = tools.find(tool => tool.name === 'bram_chat');
     assert.deepEqual(tools.map(tool => tool.name).sort(), [
       'advance_engineering_workflow',
+      'approve_agent_execution',
       'bram_chat',
       'bram_external_assist',
       'bram_external_assist_complete',
       'bram_get_execution_status',
-      'approve_agent_execution',
       'build_and_deploy_project',
       'build_android_calculator',
       'cancel_agent_execution',
