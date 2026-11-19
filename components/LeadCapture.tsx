@@ -93,7 +93,8 @@ export function LeadCapture({
 
   return (
     <form onSubmit={submit} className="mt-3 space-y-2 rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-3">
-      <div className="text-sm font-semibold text-yellow-300">Want Leonard to help with your project?</div>
+      <div className="text-sm font-semibold text-yellow-300">Want Braverton to follow up on your project?</div>
+      <p className="text-[11px] leading-5 text-zinc-400">When you send this form, your project details and the short context from this chat will be shared with Braverton so the team can follow up.</p>
       <Input placeholder="Name" value={v.name} onChange={e => setV({ ...v, name: e.target.value })} required minLength={2} maxLength={120} disabled={leadSaved} />
       <Input placeholder="Service" value={v.service} onChange={e => setV({ ...v, service: e.target.value })} required minLength={2} maxLength={500} disabled={leadSaved} />
       <Input placeholder="Budget" value={v.budget} onChange={e => setV({ ...v, budget: e.target.value })} required maxLength={160} disabled={leadSaved} />
