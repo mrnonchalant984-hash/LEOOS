@@ -195,7 +195,7 @@ export async function createUserAssistantTools(
   const userTimezone = agentPolicy?.timezone || (options?.request ? locationFromHeaders(options.request.headers).timezone : 'UTC');
   const references = new Map<string, ToolReference>();
   const tools: AssistantTool[] = localTools.map(tool => {
-    references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
+    references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] } as ToolReference);
     return tool;
   });
   if (options?.allowAgentExecution) {
@@ -212,7 +212,7 @@ export async function createUserAssistantTools(
     if (options.allowDeployment && options.allowBrowserGame) buildTools.push({ name: 'publish_browser_game', description: 'Publish an owned browser-game project through the connected GitHub and Vercel accounts. Available only for an explicit publish/deploy request in the user message; the server rechecks ownership, game type, connected credentials, file safety, and verified deployment state.', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, confirm: { type: 'boolean', const: true } }, required: ['project_id', 'confirm'], additionalProperties: false } });
     for (const tool of buildTools) {
       tools.push(tool as AssistantTool);
-      references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
+      references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] } as ToolReference);
     }
   }
 
@@ -237,7 +237,7 @@ export async function createUserAssistantTools(
     );
     for (const tool of repositoryTools) {
       tools.push(tool as AssistantTool);
-      references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
+      references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] } as ToolReference);
     }
   }
 
