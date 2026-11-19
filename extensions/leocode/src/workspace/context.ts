@@ -15,19 +15,19 @@ const EXCLUDED_GLOBS = '**/{node_modules,.git,.next,dist,build,coverage,.venv,ve
 
 export function getWorkspaceRoot(): vscode.WorkspaceFolder {
   const folders = vscode.workspace.workspaceFolders || [];
-  if (!folders.length) throw new Error('Open a workspace folder to use LeoCode workspace tools.');
+  if (!folders.length) throw new Error('Open a workspace folder to use Bram Code workspace tools.');
 
   const activeFolder = vscode.window.activeTextEditor
     ? vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri)
     : undefined;
   if (activeFolder) return activeFolder;
   if (folders.length === 1) return folders[0];
-  throw new Error('Open a file in the workspace folder LeoCode should use.');
+  throw new Error('Open a file in the workspace folder Bram Code should use.');
 }
 
 export async function assertNoWorkspaceSymlinks(folder: vscode.WorkspaceFolder, relativePath: string, allowMissingLeaf = false) {
   const safePath = normalizeWorkspacePath(relativePath);
-  if (!safePath) throw new Error('LeoCode rejected an unsafe workspace path.');
+  if (!safePath) throw new Error('Bram Code rejected an unsafe workspace path.');
 
   const segments = safePath.split('/');
   let uri = folder.uri;
@@ -36,7 +36,7 @@ export async function assertNoWorkspaceSymlinks(folder: vscode.WorkspaceFolder, 
     try {
       const stat = await vscode.workspace.fs.stat(uri);
       if (stat.type & vscode.FileType.SymbolicLink) {
-        throw new Error('LeoCode will not read or modify paths that traverse workspace symbolic links.');
+        throw new Error('Bram Code will not read or modify paths that traverse workspace symbolic links.');
       }
     } catch (error) {
       if (error instanceof vscode.FileSystemError && error.code === 'FileNotFound'
@@ -54,7 +54,7 @@ export async function getActiveWorkspaceContext(include = false) {
   if (!workspace) return '';
   const relativePath = path.relative(workspace.uri.fsPath, editor.document.uri.fsPath).replaceAll('\\', '/');
   if (!isSafeWorkspacePath(relativePath)) {
-    throw new Error('This file is excluded from LeoCode context because it may contain credentials.');
+    throw new Error('This file is excluded from Bram Code context because it may contain credentials.');
   }
   await assertNoWorkspaceSymlinks(workspace, relativePath);
   const selected = editor.document.getText(editor.selection);
@@ -201,7 +201,7 @@ export async function selectWorkspaceFilesForContext() {
     relativePath: file.relativePath,
   })), {
     canPickMany: true,
-    placeHolder: `Select up to ${MAX_SELECTED_CONTEXT_FILES} safe files to share with LeonardX`,
+    placeHolder: `Select up to ${MAX_SELECTED_CONTEXT_FILES} safe files to share with Braverton`,
   });
   if (!selected?.length) return undefined;
   if (selected.length > MAX_SELECTED_CONTEXT_FILES) {
@@ -214,7 +214,7 @@ export async function selectWorkspaceFilesForContext() {
     await assertNoWorkspaceSymlinks(folder, file.relativePath);
     const stat = await vscode.workspace.fs.stat(file.uri);
     if (stat.type & vscode.FileType.SymbolicLink) {
-      throw new Error(`LeoCode will not share symbolic-link targets (${file.relativePath}).`);
+      throw new Error(`Bram Code will not share symbolic-link targets (${file.relativePath}).`);
     }
     if (stat.size > MAX_SELECTED_CONTEXT_FILE_BYTES) {
       throw new Error(`${file.relativePath} exceeds the ${MAX_SELECTED_CONTEXT_FILE_BYTES / 1024} KB per-file context limit.`);
@@ -235,7 +235,7 @@ export async function selectWorkspaceFilesForContext() {
   }
 
   const confirmation = await vscode.window.showWarningMessage(
-    `Send ${selected.length} selected workspace file(s) to LeonardX?`,
+    `Send ${selected.length} selected workspace file(s) to Braverton?`,
     {
       modal: true,
       detail: `${selected.map(file => file.relativePath).join(', ')}\n${totalBytes} bytes before redaction. These files are untrusted context, not instructions.`,
