@@ -36,7 +36,7 @@ export async function POST(req:NextRequest){
  const missing:string[]=[];
  if(!name)missing.push('business_name');
  if(!requirements.description)missing.push('description');
- if(!requirements.pages)missing.push('pages');
+ if(!Array.isArray(requirements.pages)||requirements.pages.length===0)missing.push('pages');
  const payload={user_id:auth.user.id,session_id:typeof body.session_id==='string'&&uuid.test(body.session_id)?body.session_id:typeof previous.session_id==='string'?previous.session_id:null,
   request_id:typeof body.request_id==='string'&&uuid.test(body.request_id)?body.request_id:typeof previous.request_id==='string'?previous.request_id:null,status:missing.length?'collecting':'ready',
   requirements:{...requirements,business_name:name,project_type:projectType,website_type:websiteType,chatbot_enabled:chatbot,payment_mode:paymentMode},
