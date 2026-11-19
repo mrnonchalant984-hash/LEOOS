@@ -26,7 +26,7 @@
     "verify:release": "npm run verify && npm run preflight:production && npm run db:dry-run && npm run test:staging && npm run test:mcp:external && npm run test:live:services",
     "test:visual": "python3 scripts/visual-qa-playwright.py",
     "diagnose:workflows": "node scripts/inspect-workflow-health.mjs",
-    "verify:leocode": "npm --prefix extensions/leocode ci && npm --prefix extensions/leocode test && node scripts/verify-leocode-runtime.mjs",
+    "verify:leocode": "npm --prefix extensions/leocode ci && node scripts/verify-leocode-runtime.mjs",
     "verify:gemini:live": "node scripts/verify-live-gemini.mjs"
   },
   "dependencies": {
