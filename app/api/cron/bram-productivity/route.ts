@@ -40,7 +40,7 @@ function nextOccurrence(from: Date, frequency: string, timezone: string): Date |
   return zonedLocalToUtc({ ...p, year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() }, timezone);
 }
 function authorized(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
+  const secret = process.env.BRAM_SCHEDULER_SECRET || process.env.CRON_SECRET;
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
   return Boolean(secret && secret.length >= 32 && token && token === secret);
 }
