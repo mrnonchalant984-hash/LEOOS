@@ -36,6 +36,8 @@ export async function POST(request: NextRequest) {
     ...(typeof continuation.project_id === 'string' && /^[0-9a-f-]{36}$/i.test(continuation.project_id) ? { project_id: continuation.project_id } : {}),
     ...(continuation.request_type === 'repair' ? { request_type: 'repair' } : {}),
     ...(continuation.work_mode === true ? { work_mode: true } : {}),
+    ...(continuation.mode === 'normal' || continuation.mode === 'deep' || continuation.mode === 'tools' ? { mode: continuation.mode } : {}),
+    ...(typeof continuation.tool_name === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(continuation.tool_name) ? { tool_name: continuation.tool_name } : {}),
   } : {};
   const state = randomBytes(32).toString('base64url');
   const stateHash = createHash('sha256').update(state).digest('hex');
