@@ -52,6 +52,18 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('leocode.configureModel', async () => {
       const current = await context.secrets.get('leocode.developer-api-key');
+      if (!current) {
+        const action = await vscode.window.showQuickPick([
+          { label: 'Open Braverton API keys', description: 'Create a Developer API key with write scope' },
+          { label: 'Enter an existing API key', description: 'Paste a key already created in your Braverton account' },
+        ], { placeHolder: 'Connect Bram Code to your Braverton Developer account' });
+        if (!action) return;
+        if (action.label === 'Open Braverton API keys') {
+          await vscode.env.openExternal(vscode.Uri.parse(`${api.baseUrl}/api-keys`));
+          void vscode.window.showInformationMessage('Create a Braverton Developer API key with write scope, then run Bram Code: Configure Braverton API again.');
+          return;
+        }
+      }
       const key = await vscode.window.showInputBox({
         prompt: 'Braverton Developer API key (requires an active Developer API plan and write scope)',
         password: true,
