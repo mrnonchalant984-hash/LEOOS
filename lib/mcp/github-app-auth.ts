@@ -110,9 +110,9 @@ export async function getGitHubAppInstallationToken(
         Accept: 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
         'Content-Type': 'application/json',
-        'User-Agent': 'LeonardX-MCP',
+        'User-Agent': 'Braverton-MCP',
       },
-      body: JSON.stringify({ repositories: [target.repository] }),
+      body: JSON.stringify({ repository_names: [target.repository] }),
       signal: AbortSignal.timeout(15_000),
     });
   } catch {
