@@ -33,4 +33,5 @@ test('Bram Code uses Braverton Developer API billing and not Copilot inference',
   assert.match(extension, /registerLanguageModelChatProvider\('braverton-bram-code'/);
   assert.match(extension, /leocode\.configureModel/);
   assert.equal(manifest.contributes.languageModelChatProviders[0].vendor, 'braverton-bram-code');
+  assert.ok(manifest.contributes.menus['editor/context'].some(item => item.command === 'leocode.editSelection'));
 });
