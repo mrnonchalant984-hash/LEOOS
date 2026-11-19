@@ -29,6 +29,14 @@ export class LeonardXApi {
     return this.origin;
   }
 
+  async getDeveloperApiKey() {
+    return this.secrets.get('leocode.developer-api-key');
+  }
+
+  async clearDeveloperApiKey() {
+    await this.secrets.delete('leocode.developer-api-key');
+  }
+
   async getAccessTokenForAgentHost() {
     return this.accessToken();
   }
