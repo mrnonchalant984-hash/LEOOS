@@ -820,7 +820,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: e.message }, { status: e.statusCode });
     }
     return NextResponse.json(
-      { error: "Leo could not complete this request. Please try again." },
+      { error: "Bram could not complete this request. Please try again." },
       { status: 500 },
     );
   }
