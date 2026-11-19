@@ -74,7 +74,7 @@ test('Streamable HTTP MCP server initializes, lists tools, and calls a harmless 
   const transport = new StreamableHTTPClientTransport(new URL('https://mcp.test/mcp'), {
     fetch: async (input, init) => handleUserMcpRequest(new Request(input, init), 'authenticated-user', [MCP_READ_SCOPE], createReader()),
   });
-  const client = new Client({ name: 'leonardx-protocol-test', version: '1.0.0' }, { capabilities: {} });
+  const client = new Client({ name: 'bram-protocol-test', version: '1.0.0' }, { capabilities: {} });
   try {
     await client.connect(transport);
     const { tools } = await client.listTools();
@@ -132,7 +132,7 @@ test('MCP project status lookup returns only the authenticated user-owned projec
   const transport = new StreamableHTTPClientTransport(new URL('https://mcp.test/mcp'), {
     fetch: async (input, init) => handleUserMcpRequest(new Request(input, init), 'authenticated-user', [MCP_READ_SCOPE, MCP_WRITE_SCOPE], createReader()),
   });
-  const client = new Client({ name: 'leonardx-protocol-test', version: '1.0.0' }, { capabilities: {} });
+  const client = new Client({ name: 'bram-protocol-test', version: '1.0.0' }, { capabilities: {} });
   try {
     await client.connect(transport);
     const result = await client.callTool({ name: 'get_project_status', arguments: { project_id: project.id } });
