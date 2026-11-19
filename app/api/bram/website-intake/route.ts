@@ -56,10 +56,11 @@ export async function POST(req:NextRequest){
  const result=await response.json().catch(()=>({}));
  if(!response.ok)return json({error:typeof result.error==='string'?result.error:'Project creation failed.',intake:{id:saved.id,status:'ready'}},response.status);
  const project=result.project as Record<string,unknown>|undefined;
- if(!project?.id)return json({error:'Project creation returned no project identifier.',intake:{id:saved.id,status:'ready'}},502);
+ const projectId=typeof project?.id==='string'?project.id:'';
+ if(!uuid.test(projectId))return json({error:'Project creation returned no valid project identifier.',intake:{id:saved.id,status:'ready'}},502);
  const {error:updateError}=await db.from('bram_website_intakes').update({
-  website_project_id:project.id,status:'created',missing_requirements:[],updated_at:new Date().toISOString()
+  website_project_id:projectId,status:'created',missing_requirements:[],updated_at:new Date().toISOString()
  }).eq('id',saved.id).eq('user_id',auth.user.id);
  if(updateError)return json({error:'Project was created but intake status could not be updated.',project},503);
- return json({intake:{id:saved.id,status:'created',website_project_id:project.id},project,created:true},201);
+ return json({intake:{id:saved.id,status:'created',website_project_id:projectId},project,created:true},201);
 }
