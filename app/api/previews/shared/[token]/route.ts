@@ -8,7 +8,7 @@ export async function GET(_req:NextRequest,{params}:Ctx){
  if(!/^[A-Za-z0-9_-]{40,60}$/.test(token)) return NextResponse.json({error:'Share not found.'},{status:404});
  const hash=createHash('sha256').update(token).digest('hex');
  const db=adminSupabase();
- const {data:share,error}=await db.from('bram_preview_shares').select('id,project_id,title,preview_url,allow_comments,expires_at,status,created_at')
+ const {data:share,error}=await db.from('bram_preview_shares').select('id,user_id,project_id,title,preview_url,allow_comments,expires_at,status,created_at')
   .eq('share_token_hash',hash).eq('status','active').maybeSingle();
  if(error) return NextResponse.json({error:'Share service unavailable.'},{status:503});
  if(!share || (share.expires_at && new Date(share.expires_at)<=new Date())) return NextResponse.json({error:'This share link has expired or been revoked.'},{status:404});
