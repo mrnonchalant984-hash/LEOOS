@@ -9,7 +9,7 @@ if (!existsSync(pkgPath)) throw new Error('extensions/leocode/package.json is mi
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
 const checks = [];
 const add = (name, ok, detail) => checks.push({ name, ok, detail });
-add('extension_manifest', pkg.engines?.vscode && pkg.main === './out/extension.js' && Array.isArray(pkg.contributes?.chatAgents), 'VS Code engine, entrypoint, and native chat-agent contribution');
+add('extension_manifest', pkg.engines?.vscode && pkg.main === './out/extension.js' && Array.isArray(pkg.contributes?.languageModelChatProviders) && pkg.contributes.languageModelChatProviders.some(provider => provider.vendor === 'braverton-bram-code'), 'VS Code engine, entrypoint, and standalone Bram Code model provider contribution');
 add('compiled_entrypoint', existsSync(path.join(extension, 'out', 'extension.js')), 'Compile the extension before packaging or launching Extension Development Host');
 add('lockfile', existsSync(path.join(extension, 'package-lock.json')), 'Deterministic extension dependency lockfile');
 
@@ -18,8 +18,8 @@ function run(name, cwd, command, args) {
   const ok = result.status === 0;
   add(name, ok, ok ? 'passed' : `exit=${result.status ?? 'signal'}; ${result.error?.message || ''}`);
 }
-if (process.env.LEOCODE_RUN_COMPILE === 'true') run('extension_compile', extension, 'npm', ['run', 'compile']);
-if (process.env.LEOCODE_RUN_TESTS === 'true') {
+run('extension_compile', extension, 'npm', ['run', 'compile']);
+{
   const testFiles = readdirSync(path.join(extension, 'test')).filter(name => name.endsWith('.test.cjs')).map(name => path.join('test', name));
   run('extension_tests', extension, process.execPath, ['--test', ...testFiles]);
 }
