@@ -285,11 +285,12 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
   useEffect(() => {
     if (!workProject?.id) return;
     let cancelled = false;
-    setWorkspaceCollectionBusy(true);
-    setWorkspaceCollectionError("");
     void (async () => {
       try {
         const accessToken = await token();
+        if (cancelled) return;
+        setWorkspaceCollectionBusy(true);
+        setWorkspaceCollectionError("");
         const response = await fetch(`/api/bram/workspace?project_id=${encodeURIComponent(workProject.id)}`, {
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}, cache: "no-store",
         });
