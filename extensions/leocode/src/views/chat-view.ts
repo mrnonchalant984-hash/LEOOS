@@ -41,7 +41,7 @@ class ProposedContentProvider implements vscode.TextDocumentContentProvider {
   }
 }
 
-export class LeoChatView implements vscode.WebviewViewProvider {
+export class BramCodeChatView implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private pendingPrompt: string | undefined;
   private readonly diffScheme = 'leocode-proposal';
