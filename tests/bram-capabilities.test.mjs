@@ -17,4 +17,6 @@ test('Bram reports independent service states instead of a single backend-connec
   }
   assert.match(route, /'available' \| 'partial' \| 'unavailable' \| 'not_connected'/);
   assert.match(route, /Individual tools still require approval/);
+  assert.match(route, /const databaseAvailable = \[projects, websites, chats, research, mcp, integrations\]\.some\(value => value !== null\)/);
+  assert.match(route, /Database connectivity could not be verified/);
 });
