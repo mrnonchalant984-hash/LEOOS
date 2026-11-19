@@ -78,13 +78,13 @@ test('proposal snapshots reject changed, replaced, and unexpectedly created file
   }), true);
 });
 
-test('the LeoCode chat view is registered as a retained activity-bar webview', () => {
+test('the Bram Code workspace view is registered as a retained activity-bar webview', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf8'));
   assert.equal(manifest.publisher, 'leonardx');
   assert.equal(`${manifest.publisher}.${manifest.name}`, 'leonardx.leocode');
   assert.deepEqual(manifest.contributes.views.leocode.find(view => view.id === 'leocode.chat'), {
     id: 'leocode.chat',
-    name: 'Leo Chat',
+    name: 'Bram Code',
     type: 'webview',
   });
   const extension = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
