@@ -70,7 +70,7 @@ async function executeWorkflowStep(
       if (toolCalls.some(call => Boolean(call && typeof call === 'object' && (call as { success?: unknown }).success === false))) {
         throw new Error('workflow_tool_execution_failed');
       }
-      const actionNeedsTool = /\\b(send|submit|publish|deploy|commit|push|book|cancel|delete|schedule (?:a|an|the) (?:meeting|event|reminder)|create (?:a|an|the) (?:reminder|calendar event|repository|project|file)|update (?:the|my) (?:calendar|event|reminder)|add (?:a|an|the) (?:calendar event|reminder))\\b/i.test(plan.task);
+      const actionNeedsTool = /\b(send|submit|publish|deploy|commit|push|book|cancel|delete|schedule (?:a|an|the) (?:meeting|event|reminder)|create (?:a|an|the) (?:reminder|calendar event|repository|project|file)|update (?:the|my) (?:calendar|event|reminder)|add (?:a|an|the) (?:calendar event|reminder))\b/i.test(plan.task);
       if (actionNeedsTool && toolCalls.length === 0) throw new Error('workflow_action_unverified');
       stepOutputs.push(`${agent.name}: ${payload.result}`);
       console.info(JSON.stringify({ event: 'workflow.agent_step_completed', run_id: runId, user_id: userId, agent_id: agent.id, duration_ms: Date.now() - startedAt }));
