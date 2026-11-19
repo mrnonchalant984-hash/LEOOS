@@ -48,4 +48,6 @@ test('Workflow scheduler supports daily and weekly timezone-aware schedules and 
   assert.match(migration, /trigger_config->>'type' in \('interval','daily','weekly'\)/);
   assert.match(worker, /Math\.min\(5, request\.limit\)/);
   assert.match(worker, /status: 'cancelled', lease_owner: null/);
+  assert.match(worker, /workflow_action_unverified/);
+  assert.match(worker, /workflow_tool_execution_failed/);
 });
