@@ -36,17 +36,8 @@ test('Bram Code registers file, selection, workspace and Git review without an a
   }
   const extension = read('src', 'extension.ts');
   assert.match(extension, /reviewCentre\.show\(await reviewFile\(\)\)/);
-  assert.match(extension, /coordinateSpecialists\(api, output\)/);
-});
-
-test('specialist coordination uses existing registry, collects real responses and gates delegation on approval', () => {
-  const source = read('src', 'review', 'orchestration.ts');
-  assert.match(source, /\/api\/agents/);
-  assert.match(source, /agent_id: 'leo-manager'/);
-  assert.match(source, /available\.has\(item\.agent_id\)/);
-  assert.match(source, /showWarningMessage/);
-  assert.match(source, /\/api\/agents\/run/);
-  assert.match(source, /results\.push/);
+  assert.doesNotMatch(extension, /coordinateSpecialists/);
+  assert.doesNotMatch(extension, /registerCommand\('leocode\.runAgent'/);
 });
 
 test('terminal execution captures VS Code shell output after exact-command approval', () => {
