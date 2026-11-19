@@ -35,11 +35,12 @@ The workspace view and extension host provide:
 - Local workspace search and project inventory.
 - Multi-file code proposals with VS Code diff previews, explicit approval before applying, and stale-file checks.
 - Code explanation, code generation, test generation and review prompts.
+- **Bram Code: Edit Selected Code**: send a selected, safe code region to the metered Developer API, inspect a VS Code diff, and explicitly approve before the extension writes the replacement.
 - A local Code Review Centre for files, selections, workspace inventory and Git changes.
 - User-approved test/lint/typecheck/build operations where a configured hosted workspace is available.
 - Braverton-connected MCP discovery and approved tool calls through the existing server authorization boundary.
 
-The model-picker provider itself is not an autonomous agent. It currently has tool calling disabled. File proposals and review/apply operations remain separate extension-host features and require user confirmation.
+The model-picker provider itself is not an autonomous agent. It currently has tool calling disabled. File proposals and review/apply operations remain separate extension-host features and require user confirmation. The selected-code edit command is a single user-initiated request, not an autonomous agent loop.
 
 ## Security and privacy
 
