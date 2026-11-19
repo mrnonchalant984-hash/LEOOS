@@ -156,3 +156,27 @@ test('Paystack provider-managed seller splits pass each seller delivery fee thro
   assert.match(checkout, /gross - platformCommission \+ sellerDeliveryFee/);
   assert.match(checkout, /subaccounts\.reduce\(\(sum, item\) => sum \+ item\.share, 0\) > Number\(order\.total_kobo\)/);
 });
+
+test('checkout and payment confirmation enforce buyer ownership, amount, currency, metadata, and idempotent stock transitions', () => {
+  const checkout = source('app/api/store/checkout/route.ts');
+  const verify = source('app/api/store/orders/verify/route.ts');
+  const migration = source('supabase/migrations/20261111120000_leox_store_buying.sql');
+  assert.match(checkout, /STORE_CHECKOUT_ENABLED !== 'true'/);
+  assert.match(checkout, /STORE_PAYOUTS_ENABLED !== 'true'/);
+  assert.match(verify, /order\.buyer_id !== user\.id/);
+  assert.match(verify, /Number\(tx\.amount\) !== Number\(order\.total_kobo\)/);
+  assert.match(verify, /currency\)\.toUpperCase\(\) !== 'NGN'/);
+  assert.match(verify, /metadata\.order_id !== order\.id/);
+  assert.match(migration, /for update of p/);
+  assert.match(migration, /p\.stock_quantity - p\.reserved_quantity < c\.quantity/);
+  assert.match(migration, /if \(v_order\.status = 'paid'\) then return false/);
+  assert.match(migration, /late_payment_review_required/);
+});
+
+test('Paystack webhook authenticates raw request body with timing-safe HMAC verification', () => {
+  const webhook = source('app/api/payment/webhook/route.ts');
+  assert.match(webhook, /x-paystack-signature/);
+  assert.match(webhook, /createHmac\('sha512', secret\)\.update\(body\)/);
+  assert.match(webhook, /timingSafeEqual\(expectedSignature, suppliedSignature\)/);
+  assert.match(webhook, /verifyPaystackTransaction\(reference\)/);
+});
