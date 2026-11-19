@@ -3,7 +3,7 @@
   "publisher": "leonardx",
   "displayName": "Bram Code by Braverton",
   "description": "Independent Braverton AI coding model for VS Code Chat, with account-based API billing and workspace-aware coding tools.",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "license": "MIT",
   "engines": {
     "vscode": "^1.109.0"
