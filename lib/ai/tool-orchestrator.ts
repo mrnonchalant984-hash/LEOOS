@@ -346,7 +346,7 @@ export async function createUserAssistantTools(
       return { text: JSON.stringify({ reminders: data || [], count: data?.length || 0 }) };
     }
     if (reference.kind === 'bram_reminder_cancel') {
-      if (!/\\b(cancel|delete|remove|stop)\\b/i.test(agentPolicy?.userMessage || options?.userMessage || '')) return { text: 'Cancelling a reminder requires explicit user intent.', isError: true };
+      if (!/\b(cancel|delete|remove|stop)\b/i.test(agentPolicy?.userMessage || options?.userMessage || '')) return { text: 'Cancelling a reminder requires explicit user intent.', isError: true };
       const id = typeof args.id === 'string' ? args.id : '';
       if (!/^[0-9a-f-]{36}$/i.test(id)) return { text: 'Provide a valid reminder ID.', isError: true };
       const { data, error } = await db.from('bram_reminders').update({ status: 'cancelled', lease_owner: null, lease_expires_at: null, updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId).in('status', ['scheduled','failed']).select('id,status').maybeSingle();
