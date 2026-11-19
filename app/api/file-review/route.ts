@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
         const filename = file.name.replace(/\\/g, '/').split('/').pop() || 'uploaded-source';
         if (!sourceExtensions.test(filename) && !specialSourceNames.has(filename.toLowerCase())) return NextResponse.json({ error: 'Unsupported source file. Upload a supported code/configuration file or a ZIP project archive.' }, { status: 415 });
         text = bytes.toString('utf8').slice(0, 30000);
-        if (text.includes('\\u0000')) return NextResponse.json({ error: 'Binary files cannot be reviewed as source code.' }, { status: 415 });
+        if (text.includes('\u0000')) return NextResponse.json({ error: 'Binary files cannot be reviewed as source code.' }, { status: 415 });
         text = `--- SOURCE FILE: ${filename} ---\n${text}`;
       }
       parts.push({ text: `${prompt}\n\n${text}` });
