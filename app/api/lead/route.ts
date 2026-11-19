@@ -9,6 +9,9 @@ export async function POST(req: NextRequest) {
     if (!req.headers.get('content-type')?.toLowerCase().includes('application/json')) {
       return NextResponse.json({ error: 'Send lead details as JSON.' }, { status: 415 });
     }
+    if (Number(req.headers.get('content-length') || 0) > 12_288) {
+      return NextResponse.json({ error: 'Lead details are too large.' }, { status: 413 });
+    }
     const limited = await enforceIpRateLimit(req, 'public-lead', 5, 3600);
     if (limited) return limited;
 
