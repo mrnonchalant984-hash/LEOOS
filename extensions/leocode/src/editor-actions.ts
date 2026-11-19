@@ -10,7 +10,7 @@ type MessagesResponse = {
 
 function extractReplacement(response: MessagesResponse) {
   const text = (response.content || []).filter(part => part.type === 'text').map(part => part.text || '').join('').trim();
-  const fenced = text.match(/^\`\`\`(?:[a-zA-Z0-9_+.-]+)?\\s*\\n([\\s\\S]*?)\\n\`\`\`$/);
+  const fenced = text.match(/^```(?:[a-zA-Z0-9_+.-]+)?\s*\n([\s\S]*?)\n```$/);
   return fenced ? fenced[1] : text;
 }
 
@@ -26,7 +26,7 @@ export async function editSelectedCodeWithBram(
   if (document.uri.scheme !== 'file') throw new Error('Bram Code can edit only saved local workspace files.');
   const workspace = vscode.workspace.getWorkspaceFolder(document.uri);
   if (!workspace) throw new Error('Open the file inside a trusted workspace folder first.');
-  const relativePath = vscode.workspace.asRelativePath(document.uri, false).replaceAll('\\\\', '/');
+  const relativePath = vscode.workspace.asRelativePath(document.uri, false).replaceAll('\\', '/');
   if (!isSafeWorkspacePath(relativePath)) throw new Error('This path is excluded from Bram Code context because it may contain credentials.');
   await assertNoWorkspaceSymlinks(workspace, relativePath);
 
