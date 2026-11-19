@@ -305,7 +305,7 @@ export async function createUserAssistantTools(
       const from = typeof args.from === 'string' && Number.isFinite(Date.parse(args.from)) ? new Date(args.from).toISOString() : new Date(Date.now() - 7 * 86400000).toISOString();
       const to = typeof args.to === 'string' && Number.isFinite(Date.parse(args.to)) ? new Date(args.to).toISOString() : new Date(Date.now() + 90 * 86400000).toISOString();
       if (new Date(to) <= new Date(from) || new Date(to).getTime() - new Date(from).getTime() > 366 * 86400000) return { text: 'Choose a valid calendar range of no more than one year.', isError: true };
-      const { data, error } = await db.from('bram_calendar_events').select('id,title,description,starts_at,ends_at,timezone,location,status,source').eq('user_id', userId).eq('status', 'confirmed').gte('starts_at', from).lt('starts_at', to).order('starts_at').limit(200);
+      const { data, error } = await db.from('bram_calendar_events').select('id,title,description,starts_at,ends_at,timezone,location,status,source').eq('user_id', userId).eq('status', 'confirmed').lt('starts_at', to).gt('ends_at', from).order('starts_at').limit(200);
       if (error) return { text: 'Bram calendar is not available yet. Apply the Bram productivity database migration first.', isError: true };
       return { text: JSON.stringify({ events: data || [], count: data?.length || 0, timezone_context: 'Timestamps are ISO-8601 instants; render them in each event timezone.' }) };
     }
