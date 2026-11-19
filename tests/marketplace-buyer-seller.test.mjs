@@ -127,3 +127,14 @@ test('web push is user-opt-in, VAPID-configured, and prunes expired subscription
   assert.match(notifications, /statusCode === 404 \|\| statusCode === 410/);
   assert.match(serviceWorker, /showNotification/);
 });
+
+test('seller payout preparation serializes against dispute creation and blocks open or reviewing disputes', () => {
+  const migration = source('supabase/migrations/20261119110000_leox_store_payout_dispute_guard.sql');
+  assert.match(migration, /before insert or update of order_id, status/i);
+  assert.match(migration, /for update/i);
+  assert.match(migration, /status in \('open', 'reviewing'\)/i);
+  assert.match(migration, /order has an open dispute/i);
+  assert.match(migration, /select status[\s\S]*from public\.marketplace_orders[\s\S]*for update/i);
+  assert.match(migration, /on conflict \(order_id, seller_id\) do nothing/i);
+  assert.match(migration, /grant execute on function public\.prepare_marketplace_seller_payout\(uuid, uuid\) to service_role/i);
+});
