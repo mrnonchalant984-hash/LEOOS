@@ -6,8 +6,8 @@ import { sealConnectionConfig } from '@/lib/integrations/customer-connections';
 
 export const runtime = 'nodejs';
 
-function redirect(request: NextRequest, status: string) {
-  const target = new URL('/integrations', request.nextUrl.origin);
+function redirect(request: NextRequest, status: string, returnTo = '/integrations') {
+  const target = new URL(returnTo === '/app' ? '/app' : '/integrations', request.nextUrl.origin);
   target.searchParams.set('oauth', status);
   target.searchParams.set('provider', 'github');
   return NextResponse.redirect(target, { status: 303 });
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       last_error_code: null,
     }, { onConflict: 'user_id,provider,label' });
     if (saveError) return redirect(request, 'github_app_save_failed');
-    return redirect(request, 'connected');
+    return redirect(request, 'connected', stateRow.metadata?.return_to === '/app' ? '/app' : '/integrations');
   } catch {
     return redirect(request, 'github_app_verification_failed');
   }
