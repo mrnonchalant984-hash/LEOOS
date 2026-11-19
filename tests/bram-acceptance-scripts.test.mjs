@@ -11,7 +11,7 @@ test('Bram acceptance suite refuses production hosts and requires an exact stagi
   assert.match(acceptance, /BRAM_E2E_EXPECTED_HOST/);
   assert.match(acceptance, /origin\.hostname !== expectedHost/);
   assert.match(acceptance, /Refusing to run destructive acceptance tests against a production hostname/);
-  assert.match(acceptance, /endsWith\('-mrnonchalant984-hash\\.vercel\\.app'\)/);
+  assert.match(acceptance, /endsWith\('-mrnonchalant984-hash\.vercel\.app'\)/);
   assert.match(acceptance, /finally/);
 });
 
