@@ -220,9 +220,13 @@ grant select,insert,update,delete on public.workflows,public.workflow_runs,publi
 -- Register production worker schedules but keep them disabled until the application
 -- code is deployed. The bearer token is stored only in Supabase Vault.
 do $bram_cron$
+declare
+  reminder_job_id bigint;
+  workflow_job_id bigint;
 begin
-  if not exists (select 1 from cron.job where jobname = 'bram-reminder-delivery') then
-    perform cron.schedule(
+  select jobid into reminder_job_id from cron.job where jobname = 'bram-reminder-delivery' limit 1;
+  if reminder_job_id is null then
+    reminder_job_id := cron.schedule(
       'bram-reminder-delivery',
       '*/5 * * * *',
       $bram_job$
@@ -238,8 +242,11 @@ begin
       $bram_job$
     );
   end if;
-  if not exists (select 1 from cron.job where jobname = 'bram-workflow-worker') then
-    perform cron.schedule(
+  perform cron.alter_job(job_id := reminder_job_id, active := false);
+
+  select jobid into workflow_job_id from cron.job where jobname = 'bram-workflow-worker' limit 1;
+  if workflow_job_id is null then
+    workflow_job_id := cron.schedule(
       'bram-workflow-worker',
       '*/5 * * * *',
       $bram_job$
@@ -255,8 +262,6 @@ begin
       $bram_job$
     );
   end if;
+  perform cron.alter_job(job_id := workflow_job_id, active := false);
 end;
 $bram_cron$;
-
-update cron.job set active = false
-where jobname in ('bram-reminder-delivery','bram-workflow-worker');
