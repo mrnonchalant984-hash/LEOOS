@@ -54,7 +54,11 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
 }
 
 export function getAgentAvailableTools(agent: AgentDefinition, tools: AssistantTool[], task = '') {
-  return tools.filter(tool => allowedTool(agent, tool.name, task));
+  const repositoryTask = /(?:github\.com\/|\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\b)/i.test(task);
+  return tools.filter(tool => {
+    if (repositoryTask && ['get_project_files', 'list_projects', 'get_project_status'].includes(tool.name)) return false;
+    return allowedTool(agent, tool.name, task);
+  });
 }
 
 function safeExecutionErrorCode(error: unknown) {
@@ -98,6 +102,8 @@ export function classifyAgents(message: string, owner: boolean, allowedAgentIds?
     if (agent && (!agent.ownerOnly || owner) && (owner || allowedAgentIds?.includes(id))) picks.push(id);
   };
   if (/research|latest|current|compare|sources|news/.test(text)) add('research');
+  const sourceReviewIntent = /review|audit|inspect|analy[sz]e/.test(text) && /code|source|project|website|repo|repository|file|application|app|python|javascript|typescript/.test(text);
+  if (sourceReviewIntent) add('code-review');
   if (/code|bug|debug|error|typescript|next\.js|react|python|program/.test(text)) {
     add(/bug|error|debug/.test(text) ? 'debugging' : 'developer');
   }
