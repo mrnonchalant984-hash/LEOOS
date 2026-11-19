@@ -36,7 +36,7 @@ const rawDefs = ([
 ['content','Content Agent','Content creation','creative','Create accurate content for approved channels.',false,[],['read','write'],false],
 ['copywriting','Copywriting Agent','Marketing copy','creative','Write concise conversion-focused copy without fabricated claims.',false,[],['read','write'],false],
 ['knowledge','Knowledge Agent','Knowledge retrieval','knowledge','Retrieve relevant LEO knowledge and identify conflicts.',true,['knowledge_read'],['read'],false],
-['training','Training Agent','Train Leo knowledge','knowledge','Use the existing Admin Train Leo system. Changes require owner authorization.',true,['knowledge_write'],['read','write','sensitive'],true],
+['training','Training Agent','Train Bram knowledge','knowledge','Use the existing Admin Train Bram system. Changes require owner authorization.',true,['knowledge_write'],['read','write','sensitive'],true],
 ['document','Document Agent','Document analysis','knowledge','Analyze authorized uploaded documents.',true,['file_read'],['read'],false],
 ['tutor','Tutor Agent','Education support','knowledge','Teach and explain clearly without fabricating facts.',false,[],['read'],false],
 ['writing','Writing Agent','Writing assistance','knowledge','Draft and revise supplied text.',false,[],['read','write'],false],
