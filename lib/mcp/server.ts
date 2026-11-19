@@ -101,7 +101,7 @@ export type McpProjectReader = {
 };
 
 export function createUserMcpServer(userId: string, scopes: string[], projects: McpProjectReader) {
-  const server = new McpServer({ name: 'LeonardX', version: '1.0.0' }, {
+  const server = new McpServer({ name: 'Braverton', version: '1.0.0' }, {
     maxToolInputElements: 2048,
   });
   const writeAccess = scopes.includes('mcp:write');
