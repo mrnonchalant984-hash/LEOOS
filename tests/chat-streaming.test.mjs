@@ -34,5 +34,6 @@ test('Leo UI consumes server-sent deltas and supports cancellation for streamed 
   assert.match(widget, /response stream ended before completion/);
   assert.match(widget, /function stopGeneration\(\)/);
   assert.match(widget, /chatAbortController\.current\?\.abort\(\)/);
-  assert.match(widget, /Bram is thinking/);
+  assert.match(widget, /const \\[activityLabel, setActivityLabel\\] = useState\\("Thinking"\\)/);
+  assert.match(widget, /setActivityLabel\\("Thinking"\\)/);
 });
