@@ -27,16 +27,36 @@ export async function POST(request: NextRequest) {
   const label = typeof body.label === 'string' && body.label.trim()
     ? body.label.trim().slice(0, 100)
     : 'Braverton GitHub App';
+  const continuation = body.continuation && typeof body.continuation === 'object' && !Array.isArray(body.continuation)
+    ? body.continuation as Record<string, unknown> : {};
+  const sessionId = typeof continuation.session_id === 'string' && /^[0-9a-f-]{36}$/i.test(continuation.session_id) ? continuation.session_id : null;
+  const resumeMessage = typeof continuation.message === 'string' ? continuation.message.trim().slice(0, 20000) : '';
+  const safeContinuation = sessionId && resumeMessage ? {
+    session_id: sessionId, message: resumeMessage,
+    ...(typeof continuation.project_id === 'string' && /^[0-9a-f-]{36}$/i.test(continuation.project_id) ? { project_id: continuation.project_id } : {}),
+    ...(continuation.request_type === 'repair' ? { request_type: 'repair' } : {}),
+    ...(continuation.work_mode === true ? { work_mode: true } : {}),
+  } : {};
   const state = randomBytes(32).toString('base64url');
-  const { error } = await adminSupabase().from('integration_oauth_states').insert({
-    state_hash: createHash('sha256').update(state).digest('hex'),
-    user_id: ctx.user.id,
-    provider: 'github',
-    label,
-    expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
-    metadata: { auth_method: 'github_app_installation' },
+  const stateHash = createHash('sha256').update(state).digest('hex');
+  const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+  const db = adminSupabase();
+  const { error } = await db.from('integration_oauth_states').insert({
+    state_hash: stateHash, user_id: ctx.user.id, provider: 'github', label,
+    expires_at: expiresAt, metadata: { auth_method: 'github_app_installation' },
   });
   if (error) return NextResponse.json({ error: 'Could not create a secure GitHub installation state. Apply the integration OAuth migrations and retry.' }, { status: 503 });
+  if (Object.keys(safeContinuation).length) {
+    const { error: resumeError } = await db.from('bram_oauth_resumptions').insert({
+      user_id: ctx.user.id, provider: 'github', state_hash: stateHash,
+      session_id: sessionId, request_id: typeof continuation.request_id === 'string' && /^[0-9a-f-]{36}$/i.test(continuation.request_id) ? continuation.request_id : null,
+      continuation: safeContinuation, status: 'pending', expires_at: expiresAt,
+    });
+    if (resumeError) {
+      await db.from('integration_oauth_states').delete().eq('state_hash', stateHash).eq('user_id', ctx.user.id);
+      return NextResponse.json({ error: 'The OAuth continuation could not be saved. Retry without interrupting the current chat request.' }, { status: 503 });
+    }
+  }
 
   const authorizationUrl = new URL(`https://github.com/apps/${slug}/installations/new`);
   authorizationUrl.searchParams.set('state', state);
