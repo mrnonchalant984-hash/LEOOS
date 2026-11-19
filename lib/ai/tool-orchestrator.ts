@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { adminSupabase, isPlatformOwner } from '@/lib/auth';
+import { locationFromHeaders } from '@/lib/client-context';
 import { decryptMcpCredential } from '@/lib/mcp/outbound-security';
 import { callMcpTool } from '@/lib/mcp/remote-clients';
 import { validateMcpToolArguments } from '@/lib/mcp/tool-arguments';
