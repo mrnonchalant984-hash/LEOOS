@@ -16,6 +16,6 @@ export async function GET(_req:NextRequest,{params}:Ctx){
  const {data:comments,error:ce}=await db.from('bram_preview_comments').select('id,body,anchor,status,created_at')
   .eq('share_id',share.id).in('status',['open','queued','applied']).order('created_at',{ascending:true}).limit(100);
  if(ce) return NextResponse.json({error:'Preview comments are unavailable.'},{status:503});
- return NextResponse.json({share:{id:share.id,title:share.title,preview_url:share.preview_url,allow_comments:share.allow_comments,expires_at:share.expires_at},comments:comments||[]},
+ return NextResponse.json({share:{id:share.id,project_id:share.project_id,title:share.title,preview_url:share.preview_url,allow_comments:share.allow_comments,expires_at:share.expires_at},comments:comments||[]},
  {headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 }
