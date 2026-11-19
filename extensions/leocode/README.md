@@ -50,3 +50,8 @@ Bram Code is published by the verified `leonardx` publisher. In VS Code, open Ex
 After installation, select the Bram Code icon in the Activity Bar, open **Leo Chat**, and choose **Connect** to sign in to your Braverton account.
 
 To use the native VS Code agent, open Chat, open the agent picker, and select **Bram Code**. If the extension was updated while VS Code was open, run **Developer: Reload Window** first.
+
+
+## Bram Code inline completions
+
+Bram Code can also provide inline editor suggestions (the ghost-text suggestions accepted with Tab). Enable them with **Bram Code: Toggle Inline Completions** or set `leocode.inlineCompletions.enabled` to `true`. Inline requests are opt-in, throttled, and sent to the Braverton Developer API using the API key in VS Code SecretStorage. They consume the account's metered API credits. Secret-like files such as `.env`, private keys and service-account credential files are excluded from inline context.
