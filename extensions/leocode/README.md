@@ -4,33 +4,33 @@ Bram Code contributes an independent Braverton language-model provider to the VS
 
 ## Current functionality
 
-- Connect an existing LeonardX account using the platform's sign-in API. The password is requested only for the sign-in operation; access and refresh tokens are held in VS Code `SecretStorage`.
-- Open Leo chat inside VS Code and use the authenticated `/api/chat` endpoint.
+- Connect an existing Braverton account using the platform's sign-in API. The password is requested only for the sign-in operation; access and refresh tokens are held in VS Code `SecretStorage`.
+- Open Bram chat inside VS Code and use the authenticated `/api/chat` endpoint.
 - Opt in to sharing the active file/selection or select up to five safe workspace files; context reads have file-count and byte limits, exclude credential/build/dependency paths, and redact common secret assignments.
 - Search workspace text locally and choose which bounded snippets and project metadata to share.
 - Request multi-file changes as complete file proposals, review each in VS Code diffs, and apply them only after explicit confirmation and a stale-file check.
 - Request grounded Google Search explicitly; citations are included only when returned in Gemini grounding metadata.
 - Use the existing server-side MCP/tool path only when the user explicitly selects tool mode in chat.
-- Discover and call LeonardX-authorized MCP tools through VS Code's language-model tool API; the backend remains the authorization boundary.
+- Discover and call Braverton-authorized MCP tools through VS Code's language-model tool API; the backend remains the authorization boundary.
 - Discover and run only specialist agents returned for the signed-in account; the existing agent API still enforces plan access and approvals.
 - Explain selected code, request code, generate tests, and preview/apply extracted code proposals after confirmation.
 - Run a local Code Review Centre against the current file, selection, workspace, or Git staged/unstaged changes. Findings include severity, category, evidence, line locations, confidence, classification, and verification state.
 - Open review findings at their source location. The only built-in automatic correction is a narrow trailing-whitespace cleanup; it always opens a diff, requires explicit approval, and checks that the source has not changed. Other findings receive recommendations rather than speculative automatic edits.
 - Discover package scripts and common Python/Rust/Go test commands, then execute the exact selected command only after approval. Supported VS Code shell integration captures actual output and exit status.
 - Inspect current Git branch, staged/unstaged changes, and merge-conflict counts through the built-in Git extension.
-- Ask the existing LeonardX Leo Manager to plan and run up to four available specialist agents. The extension requests approval before delegation, uses the existing `/api/agents` registry and `/api/agents/run` endpoint, and records the actual returned results in the LeoCode output channel.
-- Run a command typed by the user in a VS Code terminal only after confirming the exact command. LeoCode does not execute model-generated commands and does not capture terminal output.
-- Start an experimental local AHP host for the active workspace. It binds only to loopback, uses a fresh random connection token, and routes model requests through the authenticated LeonardX Gemini proxy. Stop the host with the LeoCode stop command or by closing the extension host.
+- Ask the existing Braverton Leo Manager to plan and run up to four available specialist agents. The extension requests approval before delegation, uses the existing `/api/agents` registry and `/api/agents/run` endpoint, and records the actual returned results in the Bram Code output channel.
+- Run a command typed by the user in a VS Code terminal only after confirming the exact command. Bram Code does not execute model-generated commands and does not capture terminal output.
+- Start an experimental local AHP host for the active workspace. It binds only to loopback, uses a fresh random connection token, and routes model requests through the authenticated Braverton Gemini proxy. Stop the host with the Bram Code stop command or by closing the extension host.
 - Inspect workspace structure without automatically uploading file contents.
 - Read account usage from the authenticated dashboard endpoint.
 
-The model picker uses only configured text models advertised by the LeonardX server and currently supports Gemini. Auto delegates to the server's Gemini-first default. Other model families are deliberately excluded unless the backend advertises and implements them. No provider credentials are included in the extension. The existing webview chat transport still uses the platform chat API and is not claimed to stream tokens. The contributed native VS Code custom-agent manifest is a separate native chat surface; local review and execution commands are implemented in the extension host.
+The model picker uses only configured text models advertised by the Braverton server and currently supports Gemini. Auto delegates to the server's Gemini-first default. Other model families are deliberately excluded unless the backend advertises and implements them. No provider credentials are included in the extension. The existing webview chat transport still uses the platform chat API and is not claimed to stream tokens. The contributed native VS Code custom-agent manifest is a separate native chat surface; local review and execution commands are implemented in the extension host.
 
-Founders Early Access accounts share a server-enforced limit of 40 Leo chat and sandbox requests per rolling 24-hour window. The entitlement and usage counter are checked by LeonardX; the extension does not store or enforce the quota locally.
+Founders Early Access accounts share a server-enforced limit of 40 Bram chat and sandbox requests per rolling 24-hour window. The entitlement and usage counter are checked by Braverton; the extension does not store or enforce the quota locally.
 
-Workspace context is not sent automatically in chat. Use the context controls to select files/snippets, or opt in to the active editor/selection. Review the listed context before sending. Secret filtering and redaction are best-effort safeguards, not a guarantee that every sensitive value is detected. File edits are proposals only; LeoCode does not yet rename or delete workspace files and does not run an autonomous local edit/test loop. Specialist-agent runs operate through LeonardX's account-scoped server tools, not directly on the local workspace. The terminal command is entered by the user, shown in a confirmation dialog, and then executed in a visible VS Code terminal.
+Workspace context is not sent automatically in chat. Use the context controls to select files/snippets, or opt in to the active editor/selection. Review the listed context before sending. Secret filtering and redaction are best-effort safeguards, not a guarantee that every sensitive value is detected. File edits are proposals only; Bram Code does not yet rename or delete workspace files and does not run an autonomous local edit/test loop. Specialist-agent runs operate through Braverton's account-scoped server tools, not directly on the local workspace. The terminal command is entered by the user, shown in a confirmation dialog, and then executed in a visible VS Code terminal.
 
-The extension's MCP tools currently discover and call LeonardX-connected MCP servers through LeonardX endpoints. Direct connections to arbitrary third-party MCP servers and Git publishing from the extension are not implemented. MCP discovery and calls remain routed through LeonardX authorization. Leo Manager delegation is implemented as a bounded server-side orchestration flow; local workspace operations remain inside the VS Code extension host.
+The extension's MCP tools currently discover and call Braverton-connected MCP servers through Braverton endpoints. Direct connections to arbitrary third-party MCP servers and Git publishing from the extension are not implemented. MCP discovery and calls remain routed through Braverton authorization. Leo Manager delegation is implemented as a bounded server-side orchestration flow; local workspace operations remain inside the VS Code extension host.
 
 The local AHP host is experimental and is not registered as a harness in VS Code's dedicated Agents window. Specialist-agent discovery, MCP tools, browser tools, and shared `chats_v2` history are not yet exposed through AHP. File writes and shell actions require approval; shell execution is not an operating-system sandbox.
 
@@ -39,14 +39,14 @@ The local AHP host is experimental and is not registered as a harness in VS Code
 1. Install the dependencies in this directory with `npm install`.
 2. Run `npm run compile`.
 3. Open this folder in VS Code and press F5 to launch the Extension Development Host.
-4. Open the LeoCode activity-bar view and connect an existing LeonardX account.
+4. Open the Bram Code activity-bar view and connect an existing Braverton account.
 
 The default server origin is `https://leoos-omega.vercel.app`. A local development origin can be configured through `leocode.baseUrl`; non-local HTTP origins are rejected.
 
 ## Install from the Marketplace
 
-LeoCode is published by the verified `leonardx` publisher. In VS Code, open Extensions (`Ctrl+Shift+X`), search for **LeoCode by LeonardX**, and install it. You can also install it from a terminal with `code --install-extension leonardx.leocode`.
+Bram Code is published by the verified `leonardx` publisher. In VS Code, open Extensions (`Ctrl+Shift+X`), search for **Bram Code by Braverton**, and install it. You can also install it from a terminal with `code --install-extension leonardx.leocode`.
 
-After installation, select the LeoCode icon in the Activity Bar, open **Leo Chat**, and choose **Connect** to sign in to your LeonardX account.
+After installation, select the Bram Code icon in the Activity Bar, open **Leo Chat**, and choose **Connect** to sign in to your Braverton account.
 
-To use the native VS Code agent, open Chat, open the agent picker, and select **LeoCode**. If the extension was updated while VS Code was open, run **Developer: Reload Window** first.
+To use the native VS Code agent, open Chat, open the agent picker, and select **Bram Code**. If the extension was updated while VS Code was open, run **Developer: Reload Window** first.
