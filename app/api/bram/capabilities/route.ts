@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
     Promise.all((['website', 'web_app', 'saas'] as ProjectType[]).map(async type => [type, await getAccountBuilderAvailability(type, auth.user.id)] as const)),
   ]);
 
+  const databaseAvailable = [projects, websites, chats, research, mcp, integrations].some(value => value !== null);
   const verified = new Set((integrations || []).filter(row => row.status === 'verified').map(row => row.provider));
   const mcpStatus: CapabilityStatus = mcp === null ? 'unavailable' : mcp > 0 ? 'available' : 'not_connected';
   const githubStatus: CapabilityStatus = integrations === null ? 'unavailable' : verified.has('github') ? 'available' : 'not_connected';
@@ -48,7 +49,9 @@ export async function GET(req: NextRequest) {
 
   const capabilities: Record<string, Capability> = {
     authentication: { status: 'available', detail: 'This request is authenticated as the signed-in account.' },
-    database: { status: 'available', detail: 'Authenticated server-side database access is responding.' },
+    database: databaseAvailable
+      ? { status: 'available', detail: 'At least one authenticated account-scoped database query succeeded.' }
+      : { status: 'unavailable', detail: 'Database connectivity could not be verified because all account-scoped checks failed.' },
     profile: { status: 'available', detail: 'The signed-in profile was resolved.' },
     project_workspaces: projects === null ? { status: 'unavailable', detail: 'Project workspace storage could not be checked.' } : { status: 'available', detail: 'Account-owned project workspaces can be queried.', count: projects, actions: ['list', 'create', 'read'] },
     website_projects: websites === null ? { status: 'unavailable', detail: 'Website project storage could not be checked.' } : { status: 'available', detail: 'Account-owned website projects can be queried.', count: websites, actions: ['list', 'create', 'read'] },
