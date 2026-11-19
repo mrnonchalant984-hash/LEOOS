@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile } from '@/lib/auth';
+import { enforceUserRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 function validTimezone(value: unknown): value is string {
@@ -21,6 +22,8 @@ function eventInput(body: Record<string, unknown>) {
 export async function GET(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in required.' }, { status: 401 });
+  const limited = await enforceUserRateLimit(ctx.user.id, 'bram-calendar-get', 60, 60);
+  if (limited) return limited;
   const from = req.nextUrl.searchParams.get('from');
   const to = req.nextUrl.searchParams.get('to');
   const now = new Date();
@@ -37,6 +40,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in required.' }, { status: 401 });
+  const limited = await enforceUserRateLimit(ctx.user.id, 'bram-calendar-post', 30, 3600);
+  if (limited) return limited;
   const body = await req.json().catch(() => null);
   const event = body && typeof body === 'object' ? eventInput(body) : null;
   if (!event) return NextResponse.json({ error: 'Provide a title, valid start/end timestamps, and IANA timezone.' }, { status: 400 });
@@ -49,6 +54,8 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in required.' }, { status: 401 });
+  const limited = await enforceUserRateLimit(ctx.user.id, 'bram-calendar-patch', 30, 3600);
+  if (limited) return limited;
   const body = await req.json().catch(() => null);
   const id = typeof body?.id === 'string' ? body.id : '';
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'A valid event ID is required.' }, { status: 400 });
@@ -63,6 +70,8 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const ctx = await getProfile(req);
   if (!ctx) return NextResponse.json({ error: 'Sign in required.' }, { status: 401 });
+  const limited = await enforceUserRateLimit(ctx.user.id, 'bram-calendar-delete', 30, 3600);
+  if (limited) return limited;
   const id = req.nextUrl.searchParams.get('id') || '';
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'A valid event ID is required.' }, { status: 400 });
   const { data, error } = await adminSupabase().from('bram_calendar_events').delete().eq('id', id).eq('user_id', ctx.user.id).select('id').maybeSingle();
