@@ -12,7 +12,7 @@ test('Bram source review accepts web and backend language files and bounded proj
 });
 
 test('Bram reminders persist per user, enforce RLS, and expose lease-based delivery retries', async () => {
-  const migration = await readFile(new URL('../supabase/migrations/20261119140000_bram_productivity_reliability.sql', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../supabase/migrations/20261119131013_bram_productivity_reliability.sql', import.meta.url), 'utf8');
   const api = await readFile(new URL('../app/api/bram/reminders/route.ts', import.meta.url), 'utf8');
   const worker = await readFile(new URL('../app/api/cron/bram-productivity/route.ts', import.meta.url), 'utf8');
   for (const token of ['bram_reminders','bram_reminder_deliveries','enable row level security','auth.uid()','claim_due_bram_reminders','for update skip locked','service_role']) assert.ok(migration.toLowerCase().includes(token.toLowerCase()), `missing ${token}`);
@@ -40,7 +40,7 @@ test('Workflow scheduler supports daily and weekly timezone-aware schedules and 
   const updateRoute = await readFile(new URL('../app/api/workflows/[id]/route.ts', import.meta.url), 'utf8');
   const helper = await readFile(new URL('../lib/workflow-schedule.ts', import.meta.url), 'utf8');
   const worker = await readFile(new URL('../app/api/internal/workflow-worker/route.ts', import.meta.url), 'utf8');
-  const migration = await readFile(new URL('../supabase/migrations/20261119140000_bram_productivity_reliability.sql', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../supabase/migrations/20261119131013_bram_productivity_reliability.sql', import.meta.url), 'utf8');
   assert.match(createRoute, /'daily', 'weekly'/);
   assert.match(updateRoute, /'daily','weekly'/);
   assert.match(helper, /Intl\.DateTimeFormat/);
