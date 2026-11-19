@@ -1323,7 +1323,9 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     const liveConfig = {
       responseModalities: [Modality.AUDIO],
       speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: session.voice || "Kore" } } },
-      systemInstruction: LIVE_VOICE_SYSTEM_INSTRUCTION,
+      inputAudioTranscription: {},
+      outputAudioTranscription: {},
+      sessionResumption: {},
     };
     liveSessionActive.current = true;
     const connected = await ai.live.connect({
@@ -1400,9 +1402,9 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     setVoiceLocked(true);
     setVoiceStatus("Listening");
     liveSessionTimer.current = window.setTimeout(() => {
-      setError("This live voice session reached its five-minute limit. Start a new call to continue.");
+      setError("This live voice session reached its time limit. Start a new call to continue.");
       endVoiceChat();
-    }, 5 * 60 * 1000);
+    }, 9 * 60 * 1000);
   }
   async function startVoiceChat() {
     if (voiceOpen) {
@@ -1421,7 +1423,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           "Content-Type": "application/json",
           ...(t ? { Authorization: `Bearer ${t}` } : {}),
         },
-        body: JSON.stringify({ voice }),
+        body: JSON.stringify({ voice, session_id: sidRef.current }),
       });
       const session = await r.json();
       if (!r.ok) throw new Error(session.error || "Unable to start voice chat");
