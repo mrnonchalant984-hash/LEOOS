@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         const entries = Object.entries(zip.files).filter(([name, entry]) => {
           const normalized = name.replace(/\\/g, '/');
           const basename = normalized.split('/').pop()?.toLowerCase() || '';
-          return !entry.dir && !normalized.startsWith('/') && !/^[A-Za-z]:\\//.test(normalized) && !normalized.split('/').includes('..') &&
+          return !entry.dir && !normalized.startsWith('/') && !/^[A-Za-z]:\//.test(normalized) && !normalized.split('/').includes('..') &&
             (sourceExtensions.test(normalized) || specialSourceNames.has(basename)) &&
             !/(?:^|\/)(?:node_modules|\.git|\.next|dist|build|coverage|vendor)\//i.test(normalized);
         }).slice(0, 40);
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
           const declaredSize = Number((entry as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize || 0);
           if (!Number.isFinite(declaredSize) || declaredSize < 1 || declaredSize > 20_000 || total + declaredSize > 180_000) continue;
           const source = await entry.async('string');
-          if (source.includes('\\u0000')) continue;
+          if (source.includes('\u0000')) continue;
           const clipped = source.slice(0, 12_000);
           total += Buffer.byteLength(clipped);
           if (total > 180_000) break;
