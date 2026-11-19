@@ -191,7 +191,7 @@ export async function reviewSelection(): Promise<ReviewReport> {
   const workspace = vscode.workspace.getWorkspaceFolder(editor.document.uri);
   if (!workspace) throw new Error('The selected code is outside the active workspace.');
   const filePath = vscode.workspace.asRelativePath(editor.document.uri, false);
-  if (!isSafeWorkspacePath(filePath)) throw new Error('This file is excluded from LeoCode review.');
+  if (!isSafeWorkspacePath(filePath)) throw new Error('This file is excluded from Bram Code review.');
   await assertNoWorkspaceSymlinks(workspace, filePath);
   const findings: ReviewFinding[] = [];
   const selectionText = editor.document.getText(editor.selection);
