@@ -10,16 +10,16 @@ const {
 
 const extensionRoot = path.resolve(__dirname, '..');
 
-test('LeoCode is contributed as a selectable VS Code custom agent', () => {
+test('Bram Code is contributed as an independent selectable VS Code model provider', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf8'));
-  const agentPath = manifest.contributes.chatAgents[0].path;
-  const agent = fs.readFileSync(path.join(extensionRoot, agentPath.replace('./', '')), 'utf8');
+  const provider = manifest.contributes.languageModelChatProviders.find(item => item.vendor === 'braverton-bram-code');
 
   assert.equal(manifest.publisher, 'leonardx');
-  assert.equal(manifest.engines.vscode, '^1.106.0');
-  assert.match(agent, /^---\s*\nname: LeoCode/m);
-  assert.match(agent, /tools: \['\*'\]/);
-  assert.match(agent, /VS Code's native agent tools/);
+  assert.equal(manifest.displayName, 'Bram Code by Braverton');
+  assert.equal(manifest.engines.vscode, '^1.109.0');
+  assert.equal(provider.displayName, 'Bram Code');
+  assert.equal(provider.managementCommand, 'leocode.configureModel');
+  assert.equal(manifest.contributes.chatAgents, undefined);
   assert.deepEqual(
     manifest.contributes.languageModelTools.map(tool => tool.name),
     ['leocode_list_mcp_tools', 'leocode_call_mcp_tool'],
