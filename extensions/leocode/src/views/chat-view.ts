@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { LeonardXApi, LeonardXSessionError } from '../api/client';
+import { BravertonApi, BravertonSessionError } from '../api/client';
 import { isProposalStale, parseFileProposals } from './proposals';
 import { getConfiguredTextModels } from './chat-state';
 import { isSafeWorkspacePath, normalizeWorkspacePath } from '../workspace/policy';
@@ -48,7 +48,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    private readonly api: LeonardXApi,
+    private readonly api: BravertonApi,
     private readonly context: vscode.ExtensionContext,
     private readonly proposalProvider: ProposedContentProvider,
   ) {}
@@ -60,7 +60,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
     view.webview.onDidReceiveMessage(message => void this.onMessage(message).catch(error => {
       void view.webview.postMessage({
         type: 'status',
-        text: error instanceof Error ? error.message : 'LeoCode could not complete this action.',
+        text: error instanceof Error ? error.message : 'Bram Code could not complete this action.',
         retry: false,
       });
     }));
@@ -136,7 +136,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
     if (input.type === 'signOut') {
       await this.api.signOut();
       await this.view?.webview.postMessage({ type: 'connection', state: 'disconnected' });
-      await this.view?.webview.postMessage({ type: 'status', text: 'Signed out of LeonardX on this device.', retry: false });
+      await this.view?.webview.postMessage({ type: 'status', text: 'Signed out of Braverton on this device.', retry: false });
     }
   }
 
@@ -144,7 +144,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
     await this.view?.webview.postMessage({ type: 'connection', state: 'checking' });
     try {
       const identity = await this.api.request<{ user?: { id?: string } }>('/api/auth/profile');
-      if (!identity.user?.id) throw new Error('LeonardX did not return an authenticated account.');
+      if (!identity.user?.id) throw new Error('Braverton did not return an authenticated account.');
       await this.view?.webview.postMessage({ type: 'connection', state: 'connected' });
       await this.view?.webview.postMessage({ type: 'clearStatus' });
 
@@ -155,7 +155,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
       ]);
       const failures: string[] = [];
       const sessionError = [historyResult, modelsResult].find(result =>
-        result.status === 'rejected' && result.reason instanceof LeonardXSessionError,
+        result.status === 'rejected' && result.reason instanceof BravertonSessionError,
       );
       if (sessionError?.status === 'rejected') {
         await this.view?.webview.postMessage({ type: 'connection', state: 'disconnected' });
@@ -183,7 +183,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
         if (!models.length) {
           failures.push(typeof catalog.error === 'string'
             ? catalog.error
-            : 'No configured text models are available from this LeonardX server.');
+            : 'No configured text models are available from this Braverton server.');
         }
       } else {
         failures.push(`The model list could not be loaded: ${this.errorMessage(modelsResult.reason)}`);
@@ -191,7 +191,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
 
       if (failures.length) await this.view?.webview.postMessage({ type: 'status', text: failures.join('\n'), retry: true });
     } catch (error) {
-      if (error instanceof LeonardXSessionError) {
+      if (error instanceof BravertonSessionError) {
         await this.view?.webview.postMessage({ type: 'connection', state: 'disconnected' });
         await this.view?.webview.postMessage({ type: 'status', text: error.message, retry: true });
         return;
@@ -199,7 +199,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
       await this.view?.webview.postMessage({ type: 'connection', state: 'unknown' });
       await this.view?.webview.postMessage({
         type: 'status',
-        text: `Could not verify the LeonardX connection: ${this.errorMessage(error)}`,
+        text: `Could not verify the Braverton connection: ${this.errorMessage(error)}`,
         retry: true,
       });
     }
@@ -222,7 +222,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
       const activeContext = await getActiveWorkspaceContext(includeActiveContext);
       const context = `${activeContext}${selectedWorkspaceContext ? `\n\n${selectedWorkspaceContext}` : ''}`;
       const workspaceChangeProtocol = /\b(?:create|edit|modify|refactor|implement|fix|add|update|change|remove|delete|rename)\b/i.test(prompt)
-        ? '\n\n[LeoCode workspace change protocol: You cannot write local files or execute commands directly. If a local file change is requested, inspect only supplied workspace context and propose complete file contents using one or more sections formatted exactly as "### File: relative/path" followed by a fenced code block. Return at most five files. Never claim the files were changed; LeoCode will show reviewable diffs and requires explicit user approval before applying them. Do not propose edits to excluded or credential files.]'
+        ? '\n\n[Bram Code workspace change protocol: You cannot write local files or execute commands directly. If a local file change is requested, inspect only supplied workspace context and propose complete file contents using one or more sections formatted exactly as "### File: relative/path" followed by a fenced code block. Return at most five files. Never claim the files were changed; Bram Code will show reviewable diffs and requires explicit user approval before applying them. Do not propose edits to excluded or credential files.]'
         : '';
       const result = await this.api.request<{
         reply?: string;
@@ -241,7 +241,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
         ).slice(0, 8)
         : [];
       if (webSearch && mode === 'normal' && !citations.length) {
-        throw new Error('The LeonardX server did not return verifiable Gemini Search citations. No search-grounded response is available; retry or turn off Web Search.');
+        throw new Error('The Braverton server did not return verifiable Gemini Search citations. No search-grounded response is available; retry or turn off Web Search.');
       }
       await this.view?.webview.postMessage({ type: 'connection', state: 'connected' });
       await this.view?.webview.postMessage({ type: 'clearStatus' });
@@ -256,7 +256,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Leo could not complete this request.';
-      if (error instanceof LeonardXSessionError) {
+      if (error instanceof BravertonSessionError) {
         await this.view?.webview.postMessage({ type: 'connection', state: 'disconnected' });
       }
       await this.view?.webview.postMessage({ type: 'error', text: message, retry: false });
@@ -269,7 +269,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
     const identity = userId
       ? { user: { id: userId } }
       : await this.api.request<{ user?: { id?: string } }>('/api/auth/profile');
-    if (!identity.user?.id) throw new Error('LeonardX did not return an authenticated account.');
+    if (!identity.user?.id) throw new Error('Braverton did not return an authenticated account.');
     const stateKey = `leocode.chat-session.${identity.user.id}`;
     let session = this.context.globalState.get<string>(stateKey);
     if (!session) {
@@ -280,7 +280,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
   }
 
   private errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : 'LeonardX returned an unexpected error.';
+    return error instanceof Error ? error.message : 'Braverton returned an unexpected error.';
   }
 
   private async searchWorkspace() {
@@ -373,9 +373,9 @@ export class LeoChatView implements vscode.WebviewViewProvider {
 
   private async previewFile(target: vscode.Uri, contents: string, title: string, isNewFile: boolean) {
     const folder = vscode.workspace.getWorkspaceFolder(target);
-    if (!folder) throw new Error('LeoCode only previews files inside an open workspace.');
+    if (!folder) throw new Error('Bram Code only previews files inside an open workspace.');
     const relativePath = path.relative(folder.uri.fsPath, target.fsPath).replaceAll('\\', '/');
-    if (!isSafeWorkspacePath(relativePath)) throw new Error('LeoCode rejected a sensitive or out-of-workspace proposal path.');
+    if (!isSafeWorkspacePath(relativePath)) throw new Error('Bram Code rejected a sensitive or out-of-workspace proposal path.');
     await assertNoWorkspaceSymlinks(folder, relativePath, isNewFile);
     let version: number | undefined;
     let originalContents = '';
@@ -392,9 +392,9 @@ export class LeoChatView implements vscode.WebviewViewProvider {
     this.proposalProvider.set(proposedUri, contents);
     pendingEdits.push({ uri: target, folder, relativePath, version, originalContents, contents, title, isNewFile });
     const proposed = await vscode.workspace.openTextDocument(proposedUri);
-    await vscode.commands.executeCommand('vscode.diff', originalUri, proposed.uri, `LeoCode proposal: ${title}`);
+    await vscode.commands.executeCommand('vscode.diff', originalUri, proposed.uri, `Bram Code proposal: ${title}`);
     void vscode.window.showInformationMessage(
-      `${isNewFile ? 'Review new file' : 'Review edit'}: ${title}. Apply reviewed changes only with “LeoCode: Apply Generated Code”.`,
+      `${isNewFile ? 'Review new file' : 'Review edit'}: ${title}. Apply reviewed changes only with “Bram Code: Apply Generated Code”.`,
     );
   }
 
@@ -428,7 +428,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
 <style nonce="${nonce}">
 body{padding:10px;color:var(--vscode-foreground);font:13px var(--vscode-font-family)}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.brand{font-weight:700;color:#e3c35b}button,select,textarea{font:inherit;color:var(--vscode-input-foreground);background:var(--vscode-input-background);border:1px solid var(--vscode-input-border);border-radius:5px;padding:8px}button{cursor:pointer}button:disabled{opacity:.55;cursor:default}#messages{display:flex;flex-direction:column;gap:10px;overflow:auto;max-height:calc(100vh - 250px)}.msg{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--vscode-panel-border);border-radius:8px;padding:10px}.user{border-color:#b89a3d}.error{color:var(--vscode-errorForeground)}.hint{color:var(--vscode-descriptionForeground);font-size:11px}form{display:flex;flex-direction:column;gap:8px;margin-top:12px}textarea{resize:vertical;min-height:70px;width:calc(100% - 18px)}footer,.controls{display:flex;justify-content:space-between;gap:8px;align-items:center}#status{padding:8px;border-left:3px solid var(--vscode-editorWarning-foreground);margin:8px 0;white-space:pre-wrap}.hidden{display:none!important}
 </style></head><body>
-<header><span class="brand">LeoCode</span><span id="connection" class="hint">Checking LeonardX connection…</span><button id="connect" class="hidden" type="button">Connect</button><button id="signout" class="hidden" type="button">Sign out</button></header>
+<header><span class="brand">Bram Code</span><span id="connection" class="hint">Checking Braverton connection…</span><button id="connect" class="hidden" type="button">Connect</button><button id="signout" class="hidden" type="button">Sign out</button></header>
 <div class="controls"><button id="searchFiles" type="button">Search workspace</button><button id="addFiles" type="button">Add files to context</button><span class="hint">Nothing from the workspace is sent unless you select it or opt in below.</span></div>
 <div id="contextStatus" class="hint hidden" aria-live="polite"></div>
 <div id="status" class="hidden" role="status" aria-live="polite"></div><div id="messages" role="log" aria-live="polite"></div><form id="form"><textarea id="prompt" maxlength="12000" placeholder="Ask about code, request a focused change, or ask a question…" required></textarea>
@@ -444,7 +444,7 @@ document.getElementById('signout').addEventListener('click',()=>vscode.postMessa
 document.getElementById('searchFiles').addEventListener('click',()=>vscode.postMessage({type:'workspaceSearch'}));
 document.getElementById('addFiles').addEventListener('click',()=>vscode.postMessage({type:'selectWorkspaceContext'}));
 function showStatus(text,retry){status.replaceChildren();const message=document.createElement('span');message.textContent=text;status.appendChild(message);if(retry){const button=document.createElement('button');button.textContent='Retry';button.addEventListener('click',()=>vscode.postMessage({type:'retry'}));status.appendChild(button)}status.classList.remove('hidden')}
-window.addEventListener('message',event=>{const data=event.data||{};if(data.type==='history'){log.replaceChildren();for(const item of data.messages||[])add(item.role==='user'?'user':'assistant',item.content||'');if(!data.messages||!data.messages.length)add('assistant','Ready. Select files or search the workspace to add relevant context.','hint')}if(data.type==='models'){modelSelect.replaceChildren();const auto=document.createElement('option');auto.value='auto';auto.textContent='Auto (server default)';modelSelect.appendChild(auto);for(const model of data.models||[]){if(typeof model.id!=='string'||typeof model.name!=='string'||typeof model.model!=='string'||typeof model.provider!=='string')continue;const option=document.createElement('option');option.value=model.id;option.textContent=(model.provider==='google'?'Gemini':model.provider)+' · '+model.model+' ('+model.name+')';modelSelect.appendChild(option)}}if(data.type==='connection'){const state=document.getElementById('connection');state.textContent=data.state==='connected'?'Connected to LeonardX':data.state==='disconnected'?'Disconnected from LeonardX':data.state==='checking'?'Checking LeonardX connection…':'Connection status unavailable';document.getElementById('connect').classList.toggle('hidden',data.state!=='disconnected');document.getElementById('signout').classList.toggle('hidden',data.state!=='connected')}if(data.type==='clearStatus'){status.classList.add('hidden')}if(data.type==='status')showStatus(data.text,Boolean(data.retry));if(data.type==='reply')add('assistant',data.text);if(data.type==='error')showStatus(data.text,Boolean(data.retry));if(data.type==='busy')send.disabled=Boolean(data.value);if(data.type==='workspaceContext'){attachedWorkspaceContext=typeof data.text==='string'?data.text:'';contextStatus.textContent='Attached for next request: '+(data.summary||'selected workspace content')+'; review your prompt before sending.';contextStatus.classList.remove('hidden');if(typeof data.prompt==='string')prompt.value=data.prompt}if(data.type==='prompt'){prompt.value=data.text;form.requestSubmit()}});
+window.addEventListener('message',event=>{const data=event.data||{};if(data.type==='history'){log.replaceChildren();for(const item of data.messages||[])add(item.role==='user'?'user':'assistant',item.content||'');if(!data.messages||!data.messages.length)add('assistant','Ready. Select files or search the workspace to add relevant context.','hint')}if(data.type==='models'){modelSelect.replaceChildren();const auto=document.createElement('option');auto.value='auto';auto.textContent='Auto (server default)';modelSelect.appendChild(auto);for(const model of data.models||[]){if(typeof model.id!=='string'||typeof model.name!=='string'||typeof model.model!=='string'||typeof model.provider!=='string')continue;const option=document.createElement('option');option.value=model.id;option.textContent=(model.provider==='google'?'Gemini':model.provider)+' · '+model.model+' ('+model.name+')';modelSelect.appendChild(option)}}if(data.type==='connection'){const state=document.getElementById('connection');state.textContent=data.state==='connected'?'Connected to Braverton':data.state==='disconnected'?'Disconnected from Braverton':data.state==='checking'?'Checking Braverton connection…':'Connection status unavailable';document.getElementById('connect').classList.toggle('hidden',data.state!=='disconnected');document.getElementById('signout').classList.toggle('hidden',data.state!=='connected')}if(data.type==='clearStatus'){status.classList.add('hidden')}if(data.type==='status')showStatus(data.text,Boolean(data.retry));if(data.type==='reply')add('assistant',data.text);if(data.type==='error')showStatus(data.text,Boolean(data.retry));if(data.type==='busy')send.disabled=Boolean(data.value);if(data.type==='workspaceContext'){attachedWorkspaceContext=typeof data.text==='string'?data.text:'';contextStatus.textContent='Attached for next request: '+(data.summary||'selected workspace content')+'; review your prompt before sending.';contextStatus.classList.remove('hidden');if(typeof data.prompt==='string')prompt.value=data.prompt}if(data.type==='prompt'){prompt.value=data.text;form.requestSubmit()}});
 vscode.postMessage({type:'ready'});
 </script></body></html>`;
   }
@@ -489,7 +489,7 @@ export async function applyPendingEdit() {
     documents.set(proposal.uri.toString(), await ensureFresh(proposal));
   }
   const confirmation = await vscode.window.showWarningMessage(
-    `Apply ${proposalSet.length} reviewed LeoCode file change(s)?`,
+    `Apply ${proposalSet.length} reviewed Bram Code file change(s)?`,
     {
       modal: true,
       detail: `${proposalSet.map(proposal => `${proposal.isNewFile ? 'Create' : 'Edit'} ${proposal.relativePath}`).join('\n')}\nEvery target will be checked again before writing. New files are never used to overwrite an existing file.`,
