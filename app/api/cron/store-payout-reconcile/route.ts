@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
   const db = adminSupabase();
   const cutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
   const { data: payouts, error } = await db.from('marketplace_seller_payouts')
-    .select('id,reference,status,created_at')
+    .select('id,reference,status,created_at,net_kobo,recipient_code')
     .in('status', ['initiating', 'unknown', 'pending'])
     .lt('created_at', cutoff)
     .order('created_at', { ascending: true })
@@ -39,7 +39,9 @@ export async function POST(request: NextRequest) {
         signal: AbortSignal.timeout(10_000),
       });
       const result = await response.json().catch(() => null);
-      if (!response.ok || result?.status !== true || !result?.data || result.data.reference !== payout.reference) {
+      if (!response.ok || result?.status !== true || !result?.data || result.data.reference !== payout.reference
+        || Number(result.data.amount) !== Number(payout.net_kobo) || String(result.data.currency).toUpperCase() !== 'NGN'
+        || result.data.recipient?.recipient_code !== payout.recipient_code) {
         inconclusive += 1;
         continue;
       }
