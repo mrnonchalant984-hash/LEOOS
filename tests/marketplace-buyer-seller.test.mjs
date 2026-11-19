@@ -148,3 +148,11 @@ test('refund provider acceptance checks local state writes and webhook can recon
   assert.match(refund, /do not submit another refund/i);
   assert.match(webhook, /\.in\('status', \['refund_pending', 'cancellation_requested'\]\)/);
 });
+
+test('Paystack provider-managed seller splits pass each seller delivery fee through after item commission', () => {
+  const checkout = source('app/api/store/checkout/route.ts');
+  assert.match(checkout, /marketplace_order_deliveries/);
+  assert.match(checkout, /deliveryBySeller/);
+  assert.match(checkout, /gross - platformCommission \+ sellerDeliveryFee/);
+  assert.match(checkout, /subaccounts\.reduce\(\(sum, item\) => sum \+ item\.share, 0\) > Number\(order\.total_kobo\)/);
+});
