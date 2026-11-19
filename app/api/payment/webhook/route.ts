@@ -227,7 +227,7 @@ export async function POST(req: NextRequest) {
       }
       const payoutStatus = eventName === 'transfer.success' ? 'paid' : eventName === 'transfer.failed' ? 'failed' : 'reversed';
       if (payout.status === payoutStatus) return NextResponse.json({ received: true, idempotent: true });
-      const allowedStatuses = eventName === 'transfer.reversed' ? ['initiating', 'pending', 'paid'] : ['initiating', 'pending'];
+      const allowedStatuses = eventName === 'transfer.reversed' ? ['initiating', 'pending', 'unknown', 'paid'] : ['initiating', 'pending', 'unknown'];
       const { data: updatedPayout, error: payoutUpdateError } = await db.from('marketplace_seller_payouts')
         .update({
           status: payoutStatus,
@@ -326,7 +326,7 @@ export async function POST(req: NextRequest) {
           const { error: refundUpdateError } = await db.from('marketplace_refunds').update({ status: refundStatus, updated_at: new Date().toISOString() }).eq('id', marketplaceRefund.id).neq('status', refundStatus);
           if (refundUpdateError) throw refundUpdateError;
           if (refundStatus === 'processed') {
-            const { error: orderUpdateError } = await db.from('marketplace_orders').update({ status: 'refunded', updated_at: new Date().toISOString() }).eq('id', marketplaceRefund.order_id).eq('status', 'refund_pending');
+            const { error: orderUpdateError } = await db.from('marketplace_orders').update({ status: 'refunded', updated_at: new Date().toISOString() }).eq('id', marketplaceRefund.order_id).in('status', ['refund_pending', 'cancellation_requested']);
             if (orderUpdateError) throw orderUpdateError;
             await db.from('marketplace_order_events').insert({ order_id: marketplaceRefund.order_id, event_type: 'refund_processed' });
           }
