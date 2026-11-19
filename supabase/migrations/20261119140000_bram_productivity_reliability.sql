@@ -132,3 +132,71 @@ create index if not exists workflow_runs_workflow_created_idx
 create index if not exists workflow_jobs_lease_expiry_idx
   on public.workflow_jobs(lease_expires_at)
   where status='leased';
+
+-- Extend the existing durable scheduler to timezone-aware daily and weekly triggers.
+create or replace function public.enqueue_due_workflows(p_limit integer default 10)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  w record;
+  run_id uuid;
+  inserted_count integer := 0;
+  interval_minutes integer;
+  scan_time timestamptz := now();
+  tz text;
+  local_time time;
+  local_date date;
+  weekday integer;
+  days_ahead integer;
+  next_local timestamp without time zone;
+begin
+  if p_limit < 1 or p_limit > 50 then raise exception 'invalid schedule scan limit'; end if;
+  for w in
+    select id,user_id,trigger_config,next_run_at from public.workflows
+    where status = 'active'
+      and trigger_config->>'type' in ('interval','daily','weekly')
+      and next_run_at is not null and next_run_at <= scan_time
+    order by next_run_at,created_at
+    limit p_limit for update skip locked
+  loop
+    insert into public.workflow_runs(workflow_id,user_id,status,input)
+      values (w.id,w.user_id,'queued',jsonb_build_object('trigger',w.trigger_config->>'type','scheduled_at',w.next_run_at))
+      returning id into run_id;
+
+    if w.trigger_config->>'type' = 'interval' then
+      if coalesce(w.trigger_config->>'every_minutes','') ~ '^[0-9]{1,4}$' then
+        interval_minutes := greatest(15, least(1440, (w.trigger_config->>'every_minutes')::integer));
+      else
+        interval_minutes := 60;
+      end if;
+      update public.workflows set next_run_at = scan_time + make_interval(mins => interval_minutes), updated_at = scan_time where id = w.id;
+    else
+      tz := coalesce(w.trigger_config->>'timezone','UTC');
+      if not exists(select 1 from pg_timezone_names where name = tz) then tz := 'UTC'; end if;
+      if coalesce(w.trigger_config->>'time','') ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' then
+        local_time := (w.trigger_config->>'time')::time;
+      else
+        local_time := time '09:00';
+      end if;
+      local_date := (scan_time at time zone tz)::date;
+      next_local := local_date + local_time;
+      if w.trigger_config->>'type' = 'daily' then
+        if next_local at time zone tz <= scan_time then next_local := next_local + interval '1 day'; end if;
+      else
+        if coalesce(w.trigger_config->>'weekday','') ~ '^[0-6]$' then
+          weekday := (w.trigger_config->>'weekday')::integer;
+        else
+          weekday := 1;
+        end if;
+        days_ahead := (weekday - extract(dow from local_date)::integer + 7) % 7;
+        next_local := (local_date + days_ahead) + local_time;
+        if next_local at time zone tz <= scan_time then next_local := next_local + interval '7 days'; end if;
+      end if;
+      update public.workflows set next_run_at = next_local at time zone tz, updated_at = scan_time where id = w.id;
+    end if;
+    inserted_count := inserted_count + 1;
+  end loop;
+  return inserted_count;
+end;
+$$;
+revoke all on function public.enqueue_due_workflows(integer) from public,anon,authenticated;
+grant execute on function public.enqueue_due_workflows(integer) to service_role;
