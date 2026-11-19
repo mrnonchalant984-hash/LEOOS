@@ -88,7 +88,7 @@ test('seller commission is 5 percent and payout waits for buyer-confirmed delive
   assert.match(accountApi, /transferrecipient/);
   assert.match(transferHelper, /api\.paystack\.co\/transfer/);
   assert.match(buyerOrders, /prepare_marketplace_seller_payout/);
-  assert.match(source('app/api/payment/webhook/route.ts'), /const allowedStatuses = eventName === 'transfer\\.reversed' \\? \\['initiating', 'pending', 'unknown', 'paid'\\]/);
+  assert.match(source('app/api/payment/webhook/route.ts'), /const allowedStatuses = eventName === 'transfer\.reversed' \? \['initiating', 'pending', 'unknown', 'paid'\]/);
   assert.match(source('app/store/seller/seller-payout-settings.tsx'), /5% commission/);
 });
 
