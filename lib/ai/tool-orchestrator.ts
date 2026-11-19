@@ -180,6 +180,7 @@ type LeoBuildToolOptions = {
 type AgentToolPolicy = {
   agentId: string;
   allowMcpRead: boolean;
+  userMessage?: string;
 };
 
 export async function createUserAssistantTools(
@@ -305,7 +306,7 @@ export async function createUserAssistantTools(
       return { text: JSON.stringify({ events: data || [], count: data?.length || 0, timezone_context: 'Timestamps are ISO-8601 instants; render them in each event timezone.' }) };
     }
     if (reference.kind === 'bram_calendar_create_event') {
-      if (agentPolicy?.agentId !== 'calendar' || !/\b(schedule|create|add|book|put)\b/i.test(options?.userMessage || '')) return { text: 'Calendar event creation requires an explicit scheduling request through the Calendar Agent.', isError: true };
+      if (agentPolicy?.agentId !== 'calendar' || !/\b(schedule|create|add|book|put)\b/i.test(agentPolicy?.userMessage || options?.userMessage || '')) return { text: 'Calendar event creation requires an explicit scheduling request through the Calendar Agent.', isError: true };
       const title = typeof args.title === 'string' ? args.title.trim() : '';
       const start = typeof args.starts_at === 'string' ? new Date(args.starts_at) : null;
       const end = typeof args.ends_at === 'string' ? new Date(args.ends_at) : null;
@@ -317,7 +318,7 @@ export async function createUserAssistantTools(
       return { text: JSON.stringify({ event: data, persisted: true }) };
     }
     if (reference.kind === 'bram_calendar_update_event') {
-      if (agentPolicy?.agentId !== 'calendar' || !/\b(update|edit|move|reschedule)\b/i.test(options?.userMessage || '')) return { text: 'Calendar updates require explicit user intent through the Calendar Agent.', isError: true };
+      if (agentPolicy?.agentId !== 'calendar' || !/\b(update|edit|move|reschedule)\b/i.test(agentPolicy?.userMessage || options?.userMessage || '')) return { text: 'Calendar updates require explicit user intent through the Calendar Agent.', isError: true };
       const id = typeof args.id === 'string' ? args.id : '';
       const title = typeof args.title === 'string' ? args.title.trim() : '';
       const start = typeof args.starts_at === 'string' ? new Date(args.starts_at) : null;
@@ -330,7 +331,7 @@ export async function createUserAssistantTools(
       return { text: JSON.stringify({ event: data, persisted: true }) };
     }
     if (reference.kind === 'bram_calendar_delete_event') {
-      if (agentPolicy?.agentId !== 'calendar' || !/\b(cancel|delete|remove)\b/i.test(options?.userMessage || '')) return { text: 'Calendar deletion requires explicit cancellation intent through the Calendar Agent.', isError: true };
+      if (agentPolicy?.agentId !== 'calendar' || !/\b(cancel|delete|remove)\b/i.test(agentPolicy?.userMessage || options?.userMessage || '')) return { text: 'Calendar deletion requires explicit cancellation intent through the Calendar Agent.', isError: true };
       const id = typeof args.id === 'string' ? args.id : '';
       if (!/^[0-9a-f-]{36}$/i.test(id)) return { text: 'Provide a valid event ID.', isError: true };
       const { data, error } = await db.from('bram_calendar_events').delete().eq('id', id).eq('user_id', userId).select('id').maybeSingle();
@@ -344,7 +345,7 @@ export async function createUserAssistantTools(
       return { text: JSON.stringify({ reminders: data || [], count: data?.length || 0 }) };
     }
     if (reference.kind === 'bram_reminder_create') {
-      if (!/\b(remind|reminder|alert|notify)\b/i.test(options?.userMessage || '')) return { text: 'Creating a reminder requires an explicit reminder request.', isError: true };
+      if (!/\b(remind|reminder|alert|notify)\b/i.test(agentPolicy?.userMessage || options?.userMessage || '')) return { text: 'Creating a reminder requires an explicit reminder request.', isError: true };
       const title = typeof args.title === 'string' ? args.title.trim() : '';
       const scheduled = typeof args.scheduled_for === 'string' ? new Date(args.scheduled_for) : null;
       const timezone = typeof args.timezone === 'string' ? args.timezone : '';
