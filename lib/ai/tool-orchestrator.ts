@@ -166,6 +166,7 @@ type LeoBuildToolOptions = {
   allowRemoteWrites?: boolean;
   allowBrowserGame?: boolean;
   allowAgentExecution?: boolean;
+  sessionId?: string;
 };
 
 type AgentToolPolicy = {
@@ -565,5 +566,26 @@ export async function createUserAssistantTools(
     if (auditError) return { text: 'The remote tool returned, but its audit entry could not be saved.', isError: true };
     return { text: result.text, isError: result.isError };
   };
-  return { tools, execute };
+  const executeWithLifecycle: AssistantToolExecutor = async (name, args, signal) => {
+    const requestId = randomUUID();
+    const sessionId = options?.sessionId;
+    const persist = async (eventType: 'started' | 'completed' | 'failed', status: 'running' | 'succeeded' | 'failed', isError = false) => {
+      if (!sessionId || !/^[0-9a-f-]{36}$/i.test(sessionId)) return;
+      const { error } = await db.from('bram_tool_events').insert({
+        user_id: userId, session_id: sessionId, request_id: requestId,
+        tool_name: name.slice(0, 120), event_type: eventType, status, is_error: isError,
+      });
+      if (error) console.warn('Bram tool lifecycle event could not be persisted', { tool: name, eventType });
+    };
+    await persist('started', 'running');
+    try {
+      const result = await execute(name, args, signal);
+      await persist(result.isError ? 'failed' : 'completed', result.isError ? 'failed' : 'succeeded', Boolean(result.isError));
+      return result;
+    } catch (error) {
+      await persist('failed', 'failed', true);
+      throw error;
+    }
+  };
+  return { tools, execute: executeWithLifecycle };
 }

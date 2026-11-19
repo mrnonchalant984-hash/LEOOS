@@ -1,18 +1,26 @@
-# LeonardX GitHub App authentication for owner MCP website operations
+# Braverton GitHub App authentication
 
-This upgrade adds GitHub App JWT authentication and short-lived installation tokens to the existing `inspect_main_website` and `update_main_website` MCP tools. It does not replace the app's GitHub user integrations for other account-specific operations.
+The GitHub App supports two separate installation contexts:
+
+- The platform-owned installation used by owner-only main-website MCP operations.
+- Customer-owned installations used by Bram's website builder. Each customer's installation ID and GitHub account identity are stored inside that customer's encrypted `user_integrations` record. Bram mints a short-lived installation token at build time; it does not use a shared platform GitHub token for customer repository creation.
+
+The customer installation callback is `/api/integrations/github-app/callback`. Configure this exact route as the GitHub App's **Setup URL**. The app slug is configured as `GITHUB_APP_SLUG`.
 
 ## GitHub App setup
 
 1. Open GitHub Developer Settings and select the GitHub App used by LeonardX (or create one if none exists).
 2. Set **Repository permissions** to:
    - **Contents: Read and write**
+   - **Repository creation: Read and write** (the narrow permission for creating repositories; do not request broad Administration write solely for repository creation)
    - **Metadata: Read-only** (required by GitHub)
 3. Save the permission changes. If GitHub prompts for installation permission approval, approve them.
-4. Install the App on the account that owns the configured main website repository. Select **Only select repositories** and select `LEOOS` in `mrnonchalant984-hash` (or the exact repository configured in `LEO_MAIN_WEBSITE_REPOSITORY`). Creating an App does not install it or grant repository access.
-5. Copy the numeric **App ID** from the App's General settings. Do not use the OAuth Client ID.
-6. Generate/download a private key for that App. Store it only as a server-side secret.
-7. Find the numeric **installation ID** for the installation that includes the target repository. Do not use the App ID or OAuth Client ID in this field.
+4. Configure the App's **Setup URL** as `https://YOUR-BRAVERTON-HOST/api/integrations/github-app/callback`. This is where GitHub returns the installation ID and one-time state after installation.
+5. Install the App on the account that owns the configured main website repository. Select **Only select repositories** and select `LEOOS` in `mrnonchalant984-hash` (or the exact repository configured in `LEO_MAIN_WEBSITE_REPOSITORY`). Customers will separately install the same App from Braverton Integrations on their own GitHub account.
+6. Copy the numeric **App ID** from the App's General settings. Do not use the OAuth Client ID.
+7. Copy the App **slug** from its GitHub URL.
+8. Generate/download a private key for that App. Store it only as a server-side secret.
+9. Find the numeric **installation ID** for the platform-owned installation that includes the target repository. Do not use the App ID or OAuth Client ID in this field.
 
 The application requests an installation token scoped to the configured repository name, uses a short-lived App JWT to obtain it, and caches the installation token only until five minutes before its expiration. No credential or token is logged. App authentication failures are sanitized and do not fall back to a user token.
 
@@ -22,6 +30,7 @@ Set these in local `.env.local` or the Vercel project's **Settings → Environme
 
 ```dotenv
 GITHUB_APP_ID=123456
+GITHUB_APP_SLUG=braverton
 GITHUB_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 GITHUB_APP_INSTALLATION_ID=12345678
 ```
@@ -35,7 +44,7 @@ LEO_MAIN_WEBSITE_REPOSITORY=mrnonchalant984-hash/LEOOS
 LEO_MAIN_WEBSITE_VERCEL_PROJECT_ID=leoos
 ```
 
-The App replaces only the GitHub token for the owner-only main website MCP tools. The existing verified owner Vercel integration is still required by these MCP handlers; setting `VERCEL_TOKEN` alone does not replace that verified integration. Other account-specific GitHub connections remain unchanged.
+The platform installation continues to serve owner-only main-website MCP operations. Customer installations are independent: Bram reads the installation ID from the authenticated customer's encrypted integration record and obtains a short-lived token for that installation. Customer website builds require a verified customer GitHub App installation and a verified customer Vercel integration. Legacy GitHub OAuth remains available temporarily for existing customers, but it is not the recommended connection method.
 
 ## Safety guarantees retained
 
@@ -47,7 +56,9 @@ The App replaces only the GitHub token for the owner-only main website MCP tools
 
 ## Files changed by this upgrade
 
-- `lib/mcp/github-app-auth.ts` — new JWT, installation-token exchange, safe cache, configuration validation, and verified-user-token fallback resolver.
+- `lib/mcp/github-app-auth.ts` — App JWT, platform and customer installation-token exchange, safe cache, and configuration validation.
+- `app/api/integrations/github-app/start/route.ts` and `callback/route.ts` — authenticated, expiring, single-use customer installation flow and verified account/permission persistence.
+- `app/api/build-deploy/route.ts` — customer-specific installation tokens, no platform GitHub-token fallback for customer builds, and stale-authorization diagnostics.
 - `lib/mcp/main-website.ts` — uses the App installation token for existing inspect and push operations when the App is configured.
 - `app/mcp/route.ts` — owner-only status/write handlers use App mode without requiring a stored GitHub user token, while retaining verified Vercel integration and fallback behavior.
 - `.env.example` — documents the three server-side App variables and required permissions.

@@ -5,6 +5,7 @@ import {
   createGitHubAppJwt,
   getGitHubAppConfigurationMode,
   getGitHubAppInstallationToken,
+  getGitHubAppInstallationTokenForId,
   getMainWebsiteGitHubToken,
 } from '../lib/mcp/github-app-auth.ts';
 
@@ -123,4 +124,27 @@ test('verified user GitHub integration remains the fallback only when no App set
   await assert.rejects(getMainWebsiteGitHubToken({
     owner: 'mrnonchalant984-hash', repository: 'LEOOS', fallbackToken: 'verified-user-token', options: { env: { GITHUB_APP_ID: '123' } },
   }), /partially configured/);
+});
+
+test('customer installation token exchange uses the stored installation ID and caches the short-lived token', async () => {
+  const { privateKey } = testKeyPair();
+  const now = Date.parse('2026-11-18T12:00:00Z');
+  const env = { GITHUB_APP_ID: '902399', GITHUB_APP_PRIVATE_KEY: privateKey };
+  let calls = 0;
+  const fetcher = async (url, init) => {
+    calls += 1;
+    assert.equal(url, 'https://api.github.com/app/installations/9912345/access_tokens');
+    assert.equal(init.method, 'POST');
+    assert.equal(init.body, undefined);
+    assert.match(init.headers.Authorization, /^Bearer /);
+    return new Response(JSON.stringify({
+      token: 'ghs_customer_installation_token',
+      expires_at: new Date(now + 60 * 60_000).toISOString(),
+    }), { status: 201 });
+  };
+  const options = { env, now: () => now, fetcher };
+  assert.equal(await getGitHubAppInstallationTokenForId('9912345', options), 'ghs_customer_installation_token');
+  assert.equal(await getGitHubAppInstallationTokenForId('9912345', options), 'ghs_customer_installation_token');
+  assert.equal(calls, 1);
+  await assert.rejects(getGitHubAppInstallationTokenForId('../bad', options), /installation ID is invalid/);
 });

@@ -53,6 +53,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { LucideIcon } from "lucide-react";
 import { CodaAvatar } from "@/components/CodaAvatar";
+import { BramWorkspacePreview } from "@/components/BramWorkspacePreview";
 
 type BuildProgressState = { status: string; step: string; message: string; liveUrl?: string | null; events?: Array<{ id: string; message: string; status: string; created_at: string }> };
 type ProjectBuilderAction = {
@@ -109,6 +110,17 @@ type GeminiLiveSession = Awaited<ReturnType<GoogleGenAI["live"]["connect"]>>;
 const OFFLINE_DRAFT_KEY = "leo_offline_chat_draft_v1";
 const CHAT_DOCUMENT_EXTENSIONS = /\.(pdf|docx|pptx|xlsx|txt|md|csv|json)$/i;
 const PDF_MIME_TYPE = "application/pdf";
+
+type BramChecklistItem = { id: string; text: string; completed: boolean };
+type BramProjectResource = { id: string; title: string; url: string; publisher?: string | null; description?: string | null; source_type: string; created_at: string };
+type BramToolActivity = { id: number; tool_name: string; event_type: string; status: string; is_error: boolean; created_at: string };
+
+function extractBramChecklist(content: string): BramChecklistItem[] {
+  return content.split(/\r?\n/).flatMap((line, index) => {
+    const match = /^\s*[-*]\s+\[([ xX])\]\s+(.+?)\s*$/.exec(line);
+    return match ? [{ id: `task-${index}`, text: match[2].trim(), completed: match[1].toLowerCase() === 'x' }] : [];
+  }).slice(0, 200);
+}
 
 function isCurrentResearchRequest(message: string) {
   return /\b(search (the )?web|web search|look (it )?up online|google (it|search)|find (current|recent|latest|today'?s?) (news|information|price|updates?)|browse (the )?web|research (this|the|online)|sources? and citations?|latest|current|currently|today|tonight|this week|this month|recent|right now|as of \d{4}|202[5-9]|news|price|pricing today|availability|release notes|newly released|updated recently)\b/i.test(message);
@@ -196,6 +208,17 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     [voiceLocked, setVoiceLocked] = useState(false),
     [voiceFallbackMode, setVoiceFallbackMode] = useState(false);
   const [platformCredits, setPlatformCredits] = useState<number | null>(null);
+  const [activityLabel, setActivityLabel] = useState("Thinking");
+  const [projectResources, setProjectResources] = useState<{ projectId: string; items: BramProjectResource[] } | null>(null);
+  const [projectChecklist, setProjectChecklist] = useState<{ projectId: string; checklist: { title: string; items: BramChecklistItem[] } | null } | null>(null);
+  const [workspaceCollectionBusy, setWorkspaceCollectionBusy] = useState(false);
+  const [workspaceCollectionError, setWorkspaceCollectionError] = useState("");
+  const [savingResourceUrl, setSavingResourceUrl] = useState("");
+  const [localLocation, setLocalLocation] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
+  const [locationPermissionStatus, setLocationPermissionStatus] = useState<"not_requested" | "requesting" | "granted" | "denied" | "unavailable">("not_requested");
+  const [localContextEnabled, setLocalContextEnabled] = useState(true);
+  const [toolActivityEvents, setToolActivityEvents] = useState<BramToolActivity[]>([]);
+  const [toolActivitySince, setToolActivitySince] = useState("");
   const [buildProgress, setBuildProgress] = useState<BuildProgressState | null>(null);
   const [trackBuildProgress, setTrackBuildProgress] = useState(false);
   const [buildTrackingSince, setBuildTrackingSince] = useState("");
@@ -259,6 +282,66 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
   }, [initialProjectId, initialProjectName]);
   const hour = new Date().getHours();
   const timeGreeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  useEffect(() => {
+    if (!workProject?.id) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const accessToken = await token();
+        if (cancelled) return;
+        setWorkspaceCollectionBusy(true);
+        setWorkspaceCollectionError("");
+        const response = await fetch(`/api/bram/workspace?project_id=${encodeURIComponent(workProject.id)}`, {
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}, cache: "no-store",
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Project collections could not be loaded.");
+        if (!cancelled) {
+          setProjectResources({ projectId: workProject.id, items: Array.isArray(data.resources) ? data.resources : [] });
+          setProjectChecklist({
+            projectId: workProject.id,
+            checklist: data.checklist ? {
+              title: data.checklist.title || "Implementation checklist",
+              items: Array.isArray(data.checklist.items) ? data.checklist.items : [],
+            } : null,
+          });
+        }
+      } catch (cause) {
+        if (!cancelled) setWorkspaceCollectionError(cause instanceof Error ? cause.message : "Project collections could not be loaded.");
+      } finally { if (!cancelled) setWorkspaceCollectionBusy(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [workProject?.id]);
+
+  useEffect(() => {
+    if (!loading) return;
+    let cancelled = false;
+    let cursor = 0;
+    const poll = async () => {
+      try {
+        const accessToken = await token();
+        const response = await fetch(`/api/bram/activity?session_id=${encodeURIComponent(sidRef.current)}&after=${cursor}&since=${encodeURIComponent(toolActivitySince)}`, {
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}, cache: "no-store",
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        const events = Array.isArray(data.events) ? data.events as BramToolActivity[] : [];
+        if (cancelled || !events.length) return;
+        cursor = Math.max(cursor, ...events.map(event => Number(event.id) || 0));
+        setToolActivityEvents(current => [...current, ...events].slice(-30));
+        const latest = events[events.length - 1];
+        if (latest.event_type === "started") {
+          const name = latest.tool_name.toLowerCase();
+          setActivityLabel(/github|repository/.test(name) ? "Connecting GitHub" : /web|research|search|browser/.test(name) ? "Web searched" : /project|save_project/.test(name) ? "Creating project" : /read|document|file/.test(name) ? "Reading document" : /build|test/.test(name) ? "Running tests" : "Using connected tool");
+        } else if (latest.event_type === "completed") setActivityLabel("Preparing response");
+        else if (latest.event_type === "failed") setActivityLabel("Checking tool error");
+      } catch { /* Activity polling is supplemental; the chat request remains authoritative. */ }
+    };
+    void poll();
+    const timer = window.setInterval(() => { void poll(); }, 1000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [loading, toolActivitySince]);
+
   useEffect(() => {
     const updateNetworkState = () => setNetworkOnline(navigator.onLine);
     updateNetworkState();
@@ -458,6 +541,59 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       ? (await s.auth.getSession()).data.session?.access_token || ""
       : "";
   }
+  async function saveProjectChecklist(title: string, items: BramChecklistItem[]) {
+    if (!workProject?.id) return;
+    setWorkspaceCollectionBusy(true);
+    setWorkspaceCollectionError("");
+    try {
+      const accessToken = await token();
+      const response = await fetch("/api/bram/workspace", {
+        method: "PUT", headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+        body: JSON.stringify({ project_id: workProject.id, title, items }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Checklist state could not be saved.");
+      setProjectChecklist(current => current?.projectId === workProject.id
+        ? { projectId: workProject.id, checklist: { title: data.checklist.title, items: data.checklist.items } }
+        : current);
+    } catch (cause) {
+      setWorkspaceCollectionError(cause instanceof Error ? cause.message : "Checklist state could not be saved.");
+    } finally { setWorkspaceCollectionBusy(false); }
+  }
+
+  async function saveProjectResource(citation: ChatCitation) {
+    if (!workProject?.id) return;
+    setSavingResourceUrl(citation.url);
+    setWorkspaceCollectionError("");
+    try {
+      const accessToken = await token();
+      const response = await fetch("/api/bram/workspace", {
+        method: "POST", headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+        body: JSON.stringify({ project_id: workProject.id, title: citation.title || citation.url, url: citation.url, source_type: "research" }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Research source could not be saved.");
+      setProjectResources(current => current?.projectId === workProject.id
+        ? { projectId: workProject.id, items: [data.resource as BramProjectResource, ...current.items.filter(item => item.url !== citation.url)].slice(0, 100) }
+        : current);
+    } catch (cause) {
+      setWorkspaceCollectionError(cause instanceof Error ? cause.message : "Research source could not be saved.");
+    } finally { setSavingResourceUrl(""); }
+  }
+
+  async function requestBrowserLocation() {
+    if (!navigator.geolocation) { setLocationPermissionStatus("unavailable"); return; }
+    setLocationPermissionStatus("requesting");
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        setLocalLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy });
+        setLocationPermissionStatus("granted");
+      },
+      error => setLocationPermissionStatus(error.code === error.PERMISSION_DENIED ? "denied" : "unavailable"),
+      { enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 },
+    );
+  }
+
 
   async function openSavedChat(chat: ChatHistoryItem) {
     sidRef.current = chat.id;
@@ -696,6 +832,9 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       /^(start|go ahead|proceed|continue|do it|build it|create it|deploy|publish|launch|put it live)[.!\s]*$/i.test(next);
     const buildIntent = !negatesBuild && (directBuildRequest || buildContinuation);
     if (buildIntent) { setBuildTrackingSince(new Date().toISOString()); setBuildProgress({ status: 'preparing', step: 'Preparing your build request', message: 'Bram is preparing the project and will show persisted build events here.' }); setTrackBuildProgress(true); }
+    setActivityLabel("Thinking");
+    setToolActivityEvents([]);
+    setToolActivitySince(new Date().toISOString());
     setLoading(true);
     setError("");
     try {
@@ -711,7 +850,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           method: "POST",
           signal: aborter.signal,
           headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
-          body: JSON.stringify({ session_id: sidRef.current, message: next, ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}) }),
+          body: JSON.stringify({ session_id: sidRef.current, message: next, ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}), local_context: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", local_datetime: new Date().toString(), ...(localContextEnabled && localLocation ? { location: localLocation } : {}) } }),
         });
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}));
@@ -754,7 +893,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         const r = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
-          body: JSON.stringify({ session_id: sidRef.current, message: next, work_mode: workspaceMode === "work", ...(workspaceMode === "work" && workProject ? { project_id: workProject.id } : {}), mode: effectiveMode, request_id: crypto.randomUUID(), ...(attachedTool ? { tool_name: attachedTool.name } : {}), ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}), ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}), ...(forceWebSearch ? { web_search: true } : {}), ...(attachedDocuments.length ? { document_asset_ids: attachedDocuments.map(document => document.assetId) } : {}), ...(attachedImages.length ? { image_asset_ids: attachedImages.map(image => image.assetId) } : {}) }),
+          body: JSON.stringify({ session_id: sidRef.current, message: next, work_mode: workspaceMode === "work", ...(workspaceMode === "work" && workProject ? { project_id: workProject.id } : {}), mode: effectiveMode, request_id: crypto.randomUUID(), ...(attachedTool ? { tool_name: attachedTool.name } : {}), ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}), ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}), ...(forceWebSearch ? { web_search: true } : {}), ...(attachedDocuments.length ? { document_asset_ids: attachedDocuments.map(document => document.assetId) } : {}), ...(attachedImages.length ? { image_asset_ids: attachedImages.map(image => image.assetId) } : {}), local_context: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", local_datetime: new Date().toString(), ...(localContextEnabled && localLocation ? { location: localLocation } : {}) } }),
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || "Bram is unavailable");
@@ -1527,6 +1666,8 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     setMuted((v) => !v);
     setVoiceStatus(!muted ? "Muted" : "Listening");
   }
+  const activeProjectResources = projectResources && workProject && projectResources.projectId === workProject.id ? projectResources.items : [];
+  const activeProjectChecklist = projectChecklist && workProject && projectChecklist.projectId === workProject.id ? projectChecklist.checklist : null;
   const inputs = (
     <>
       <input
@@ -1911,6 +2052,26 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
 
   const messagesView = (
     <div className="mx-auto w-full max-w-[760px] space-y-5">
+      <section className="rounded-xl border border-white/10 bg-white/[.025] p-3" aria-label="Bram local context permissions">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><p className="text-xs font-semibold text-zinc-200">Local context</p><p className="mt-1 text-[11px] text-zinc-500">Date, time and timezone are shared with Bram for this request. GPS is optional.</p></div>
+          <button type="button" onClick={() => void requestBrowserLocation()} disabled={locationPermissionStatus === "requesting"} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300 hover:border-[var(--gold)]/50 disabled:opacity-50">{locationPermissionStatus === "requesting" ? "Requesting permission…" : locationPermissionStatus === "granted" ? "Refresh GPS permission" : "Allow location"}</button>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] text-zinc-500">
+          <span>{Intl.DateTimeFormat().resolvedOptions().timeZone || "Local timezone"} · {new Date().toLocaleString()}</span>
+          <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={localContextEnabled} onChange={event => setLocalContextEnabled(event.target.checked)} /> Include approved location</label>
+          {locationPermissionStatus === "granted" && <span className="text-emerald-400">GPS permission granted</span>}
+          {locationPermissionStatus === "denied" && <span className="text-amber-400">Location permission denied by browser</span>}
+          {locationPermissionStatus === "unavailable" && <span className="text-amber-400">Location unavailable on this device</span>}
+          {localLocation && <button type="button" onClick={() => { setLocalLocation(null); setLocationPermissionStatus("not_requested"); }} className="underline underline-offset-2">Clear location</button>}
+        </div>
+      </section>
+      {workProject && <section className="rounded-xl border border-white/10 bg-white/[.025] p-3">
+        <div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold text-zinc-200">Project resources · {workProject.name}</p><span className="text-[10px] text-zinc-500">{activeProjectResources.length} saved</span></div>
+        {workspaceCollectionBusy && <p className="mt-2 text-[11px] text-zinc-500">Syncing project collections…</p>}
+        {workspaceCollectionError && <p role="alert" className="mt-2 text-[11px] text-amber-300">{workspaceCollectionError}</p>}
+        {activeProjectResources.length > 0 ? <ul className="mt-2 space-y-1.5">{activeProjectResources.slice(0, 8).map(resource => <li key={resource.id} className="flex min-w-0 items-center justify-between gap-2 text-[11px]"><a href={resource.url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-sky-300 underline underline-offset-2">{resource.title}</a><span className="shrink-0 text-zinc-600">{resource.source_type}</span></li>)}</ul> : <p className="mt-2 text-[11px] text-zinc-500">Research sources can be saved here from Bram&apos;s responses.</p>}
+      </section>}
       {messages.map((m, i) => (
         <div
           key={i}
@@ -1940,8 +2101,21 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           ))}
           {m.citations?.length ? <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Web sources</p>
-            <ul className="space-y-1.5">{m.citations.map((citation, citationIndex) => <li key={`${citation.url}-${citationIndex}`}><a href={citation.url} target="_blank" rel="noopener noreferrer" className="break-all text-xs text-sky-300 underline decoration-sky-300/30 underline-offset-2 hover:text-sky-200">{citation.title || citation.url}</a></li>)}</ul>
+            <ul className="space-y-2">{m.citations.map((citation, citationIndex) => <li key={`${citation.url}-${citationIndex}`} className="flex flex-wrap items-center justify-between gap-2"><a href={citation.url} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all text-xs text-sky-300 underline decoration-sky-300/30 underline-offset-2 hover:text-sky-200">{citation.title || citation.url}</a>{workProject && <button type="button" disabled={savingResourceUrl === citation.url || activeProjectResources.some(item => item.url === citation.url)} onClick={() => void saveProjectResource(citation)} className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[10px] text-zinc-300 disabled:opacity-50">{activeProjectResources.some(item => item.url === citation.url) ? "Saved" : savingResourceUrl === citation.url ? "Saving…" : "Save to project"}</button>}</li>)}</ul>
           </div> : null}
+          {m.role === "assistant" && /(^|\n)\s*[-*]\s+\[[ xX]\]\s+/.test(m.content) && <section className="mt-3 rounded-xl border border-[var(--gold)]/20 bg-black/25 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2"><p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--gold)]">Architecture checklist</p><span className="text-[10px] text-zinc-500">{workProject ? (activeProjectChecklist?.items.filter(item => item.completed).length || 0) : 0}/{extractBramChecklist(m.content).length} complete</span></div>
+            {extractBramChecklist(m.content).map((item, itemIndex) => {
+              const saved = activeProjectChecklist?.items.find(existing => existing.id === item.id || existing.text === item.text);
+              const checked = saved?.completed ?? item.completed;
+              return <label key={item.id} className="flex items-start gap-2 py-1.5 text-xs leading-5 text-zinc-300"><input type="checkbox" className="mt-1 accent-[var(--gold)]" checked={checked} disabled={!workProject || workspaceCollectionBusy} onChange={event => {
+                const parsed = extractBramChecklist(m.content).map((entry, index) => ({ ...entry, completed: index === itemIndex ? event.target.checked : (activeProjectChecklist?.items.find(existing => existing.id === entry.id || existing.text === entry.text)?.completed ?? entry.completed) }));
+                void saveProjectChecklist("Architecture checklist", parsed);
+              }}/><span>{item.text}</span></label>;
+            })}
+            {!workProject && <p className="mt-2 text-[10px] text-zinc-500">Open a project workspace to save checklist progress.</p>}
+            {workProject && <p className="mt-2 text-[10px] text-zinc-600">Changes save to this project workspace.</p>}
+          </section>}
           {m.role === "assistant" && m.content.trim() && /\b(?:create|make|generate|export|download|save|provide|give me)\b.{0,60}\b(?:pdf|docx|word document|document file)\b|\b(?:pdf|docx)\b.{0,40}\b(?:file|download|export)\b/i.test(messages.slice(0, i).reverse().find(item => item.role === "user")?.content || "") && <div className="mt-3 flex flex-wrap gap-2" aria-label="Requested document exports">
             {(["pdf", "docx", "txt"] as const).map(format => {
               const operation = `${i}-${format}`;
@@ -2001,10 +2175,24 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           {trackBuildProgress && <p className="mt-2 text-[10px] text-zinc-600">Updating from saved build events…</p>}
         </div>
       )}
+      {toolActivityEvents.length > 0 && <section className="max-w-[92%] rounded-xl border border-white/10 bg-black/25 p-3" aria-label="Confirmed tool activity">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Tool activity · confirmed events</p>
+        <ol className="space-y-1.5">{toolActivityEvents.slice(-8).map(event => <li key={event.id} className="flex items-center justify-between gap-3 text-[11px]"><span className="min-w-0 truncate text-zinc-300">{event.tool_name}</span><span className={event.status === "succeeded" ? "shrink-0 text-emerald-400" : event.status === "failed" ? "shrink-0 text-rose-400" : "shrink-0 text-amber-300"}>{event.event_type === "started" ? "Started" : event.event_type === "completed" ? "Completed" : "Failed"}</span></li>)}</ol>
+      </section>}
       {loading && (
-        <div className="flex max-w-fit items-center gap-3 rounded-3xl bg-black/40 p-3 text-sm text-zinc-400">
-          <Loader2 size={15} className="animate-spin" />
-          <span>Bram is thinking…</span>
+        <div className="flex max-w-fit items-center gap-3 rounded-3xl bg-black/40 p-3 text-sm text-zinc-400" role="status" aria-live="polite">
+          <style jsx>{`
+            @keyframes bram-thinking-dot {
+              0%, 60%, 100% { transform: translateY(0); opacity: .48; }
+              30% { transform: translateY(-4px); opacity: 1; }
+            }
+          `}</style>
+          <span className="inline-flex h-3 items-center gap-[3px]" aria-hidden="true">
+            <span className="h-1.5 w-1.5 rounded-full bg-current [animation:bram-thinking-dot_1s_ease-in-out_infinite] [animation-delay:0ms]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-current [animation:bram-thinking-dot_1s_ease-in-out_infinite] [animation-delay:140ms]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-current [animation:bram-thinking-dot_1s_ease-in-out_infinite] [animation-delay:280ms]" />
+          </span>
+          <span>{activityLabel}</span>
           {chatAbortController.current && <button type="button" onClick={stopGeneration} className="rounded-lg border border-white/10 px-2 py-1 text-xs text-zinc-300 hover:bg-white/10">Stop</button>}
         </div>
       )}
@@ -2117,6 +2305,8 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
               <a href="/account" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300"><UserCircle size={14}/> Account</a>
               <a href="/pricing" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300"><CreditCard size={14}/> Upgrade</a>
             </div>
+            <div className={workspaceMode === "work" && workProject ? "flex min-h-0 flex-1 flex-col lg:flex-row" : "flex min-h-0 flex-1 flex-col"}>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div ref={chatScrollRef} onScroll={(event) => {
               const element = event.currentTarget;
               const atBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 120;
@@ -2151,6 +2341,9 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
               {videoStatus && <div className="mb-2 text-xs text-zinc-400" role="status" aria-live="polite"><p>{videoStatus}</p>{activeVideoJobId && !loading && <button type="button" onClick={refreshVideoStatus} className="mt-2 rounded-lg border border-white/10 px-3 py-2 text-white">Check status</button>}</div>}
               {composer}
             </div></div>}
+            </div>
+            {workspaceMode === "work" && workProject && <BramWorkspacePreview projectId={workProject.id} projectName={workProject.name} />}
+            </div>
             {voiceOpen && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xl">
                 <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#101011] p-6 text-center shadow-2xl">

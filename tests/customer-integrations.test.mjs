@@ -38,12 +38,31 @@ test('domain operations use the authenticated user’s verified Vercel connectio
   assert.match(source, /method: 'DELETE'/);
 });
 
-test('build deployment prefers a verified customer-owned GitHub/Vercel credential per request', async () => {
+test('Bram build uses the authenticated customer GitHub App installation and never falls back to the platform GitHub token', async () => {
   const source = await read('app/api/build-deploy/route.ts');
-  assert.match(source, /getCustomerProviderToken\(ctx\.user\.id, 'github'\)/);
+  assert.match(source, /getCustomerGitHubAuth\(ctx\.user\.id\)/);
+  assert.match(source, /getGitHubAppInstallationTokenForId\(installationId\)/);
+  assert.match(source, /githubAuth\.accountType === 'Organization'/);
   assert.match(source, /getCustomerProviderToken\(ctx\.user\.id, 'vercel'\)/);
   assert.match(source, /\.eq\('user_id', userId\)/);
+  assert.doesNotMatch(source, /return provider === 'github' \? process\.env\.GITHUB_TOKEN/);
+  assert.match(source, /GITHUB_CONNECTION_INVALID/);
   assert.match(source, /force: false/);
+});
+
+test('customer GitHub App installation uses authenticated, expiring state and validates app identity and least-privilege permissions', async () => {
+  const start = await read('app/api/integrations/github-app/start/route.ts');
+  const callback = await read('app/api/integrations/github-app/callback/route.ts');
+  assert.match(start, /getProfile\(request\)/);
+  assert.match(start, /randomBytes\(32\)/);
+  assert.match(start, /createHash\('sha256'\)/);
+  assert.match(start, /GITHUB_APP_SLUG/);
+  assert.match(callback, /createGitHubAppJwt/);
+  assert.match(callback, /installation\.app_id/);
+  assert.match(callback, /permissions\.contents !== 'write'/);
+  assert.match(callback, /permissions\.repository_creation === 'write'/);
+  assert.match(callback, /sealConnectionConfig\(config\)/);
+  assert.match(callback, /used_at/);
 });
 
 test('customer credential storage is user-scoped, encrypted by the application, and denies direct client table access', async () => {
