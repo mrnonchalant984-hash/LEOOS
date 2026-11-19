@@ -128,14 +128,6 @@
         "title": "Bram Code: Configure Braverton API"
       },
       {
-        "command": "leocode.startAgentHost",
-        "title": "LeoCode: Start Local Agent Host"
-      },
-      {
-        "command": "leocode.stopAgentHost",
-        "title": "LeoCode: Stop Local Agent Host"
-      },
-      {
         "command": "leocode.openChat",
         "title": "LeoCode: Open Chat"
       },
@@ -214,10 +206,6 @@
       {
         "command": "leocode.inspectGit",
         "title": "LeoCode: Inspect Git Status"
-      },
-      {
-        "command": "leocode.runHostedWorkspace",
-        "title": "LeoCode: Run on Private GitHub Runtime"
       }
     ],
     "languageModelChatProviders": [
@@ -234,10 +222,7 @@
     "test": "npm run compile && node --test test/*.test.cjs",
     "package": "npm run compile && npx --yes @vscode/vsce package"
   },
-  "dependencies": {
-    "@ahpd/agent-cofold": "0.14.0",
-    "@ahpd/sdk": "0.14.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.90.0",
