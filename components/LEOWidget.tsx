@@ -1666,6 +1666,8 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     setMuted((v) => !v);
     setVoiceStatus(!muted ? "Muted" : "Listening");
   }
+  const activeProjectResources = projectResources && workProject && projectResources.projectId === workProject.id ? projectResources.items : [];
+  const activeProjectChecklist = projectChecklist && workProject && projectChecklist.projectId === workProject.id ? projectChecklist.checklist : null;
   const inputs = (
     <>
       <input
@@ -2213,9 +2215,6 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       )}
     </div>
   );
-  const activeProjectResources = projectResources?.projectId === workProject?.id ? projectResources.items : [];
-  const activeProjectChecklist = projectChecklist?.projectId === workProject?.id ? projectChecklist.checklist : null;
-
   if (full)
     return (
       <>
