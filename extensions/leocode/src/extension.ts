@@ -7,20 +7,20 @@ import { reviewFile, reviewGitChanges, reviewSelection, reviewWorkspace } from '
 import { CodeReviewCentre } from './review/centre';
 import { coordinateSpecialists } from './review/orchestration';
 import { discoverWorkspaceTests, runApprovedTerminalCommand } from './workspace/terminal';
-import { LeoAgentHost } from './ahp/host';
+import { BramCodeModelProvider } from './model-provider';
 
 let chatView: LeoChatView | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
-  const output = vscode.window.createOutputChannel('LeoCode');
+  const output = vscode.window.createOutputChannel('Bram Code');
   const api = new LeonardXApi(context.secrets);
-  const agentHost = new LeoAgentHost();
+  const modelProvider = new BramCodeModelProvider(context);
   const proposals = createProposalContentProvider();
   const reviewCentre = new CodeReviewCentre(context.extensionUri, prompt => chatView?.queuePrompt(prompt));
   context.subscriptions.push(
     output,
     vscode.workspace.registerTextDocumentContentProvider('leocode-proposal', proposals),
-    { dispose: () => { void agentHost.stop(output); } },
+    vscode.lm.registerLanguageModelChatProvider('braverton-bram-code', modelProvider),
   );
   registerLeonardXMcpTools(context, api);
   chatView = new LeoChatView(context.extensionUri, api, context, proposals);
@@ -29,7 +29,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('leocode.openChat', () => vscode.commands.executeCommand('workbench.view.extension.leocode')),
     vscode.commands.registerCommand('leocode.connect', async () => {
-      const email = await vscode.window.showInputBox({ prompt: 'LeonardX account email', ignoreFocusOut: true, validateInput: value => /\S+@\S+\.\S+/.test(value) ? null : 'Enter a valid email address.' });
+      const email = await vscode.window.showInputBox({ prompt: 'Braverton account email', ignoreFocusOut: true, validateInput: value => /\S+@\S+\.\S+/.test(value) ? null : 'Enter a valid email address.' });
       if (!email) return;
       const password = await vscode.window.showInputBox({ prompt: 'LeonardX password', password: true, ignoreFocusOut: true });
       if (!password) return;
@@ -37,7 +37,7 @@ export function activate(context: vscode.ExtensionContext) {
         const account = await api.signIn(email.trim(), password);
         await chatView?.refresh();
         const user = account.user as { email?: string } | undefined;
-        void vscode.window.showInformationMessage(`Connected to LeonardX${user?.email ? ` as ${user.email}` : ''}.`);
+        void vscode.window.showInformationMessage(`Connected to Braverton${user?.email ? ` as ${user.email}` : ''}.`);
       } catch (error) {
         void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'LeonardX sign-in failed.');
       }
@@ -50,21 +50,33 @@ export function activate(context: vscode.ExtensionContext) {
         void vscode.window.showInformationMessage('LeoCode tokens were removed from this device.');
       }
     }),
-    vscode.commands.registerCommand('leocode.startAgentHost', async () => {
+    vscode.commands.registerCommand('leocode.configureModel', async () => {
+      const current = await context.secrets.get('leocode.developer-api-key');
+      const key = await vscode.window.showInputBox({
+        prompt: 'Braverton Developer API key (requires an active Developer API plan and write scope)',
+        password: true,
+        ignoreFocusOut: true,
+        value: current ? '' : undefined,
+        placeHolder: 'leo_live_…',
+        validateInput: value => !value.trim() || /^leo_[A-Za-z0-9_-]{20,160}$/.test(value.trim())
+          ? null : 'Enter a valid Braverton API key.',
+      });
+      if (!key?.trim()) return;
       try {
-        const url = await agentHost.start(api, context, output);
-        await vscode.env.clipboard.writeText(url);
-        void vscode.window.showInformationMessage('Leo Agent Host is running on this workspace. Its one-time connection URL was copied to the clipboard.');
+        const response = await fetch(`${api.baseUrl}/api/v1/models`, {
+          headers: { Authorization: `Bearer ${key.trim()}`, Accept: 'application/json' },
+          cache: 'no-store',
+          signal: AbortSignal.timeout(15000),
+        });
+        const data = await response.json().catch(() => ({})) as { data?: unknown; error?: { message?: string } };
+        if (!response.ok || !Array.isArray(data.data)) {
+          throw new Error(data.error?.message || 'Braverton could not verify this API key.');
+        }
+        await context.secrets.store('leocode.developer-api-key', key.trim());
+        modelProvider.refresh();
+        void vscode.window.showInformationMessage('Bram Code is connected to Braverton. Select Bram Code from the VS Code model picker.');
       } catch (error) {
-        void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Leo Agent Host could not be started.');
-      }
-    }),
-    vscode.commands.registerCommand('leocode.stopAgentHost', async () => {
-      try {
-        await agentHost.stop(output);
-        void vscode.window.showInformationMessage('Leo Agent Host stopped.');
-      } catch (error) {
-        void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Leo Agent Host could not be stopped.');
+        void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Bram Code setup failed.');
       }
     }),
     vscode.commands.registerCommand('leocode.explainSelection', () => chatView?.queuePrompt('Explain this selected code in context.')),
