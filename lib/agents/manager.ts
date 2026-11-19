@@ -104,10 +104,10 @@ export function classifyAgents(message: string, owner: boolean, allowedAgentIds?
   if (/research|latest|current|compare|sources|news/.test(text)) add('research');
   const sourceReviewIntent = /review|audit|inspect|analy[sz]e/.test(text) && /code|source|project|website|repo|repository|file|application|app|python|javascript|typescript/.test(text);
   if (sourceReviewIntent) add('code-review');
-  if (/code|bug|debug|error|typescript|next\.js|react|python|program/.test(text)) {
+  if (!sourceReviewIntent && /code|bug|debug|error|typescript|next\.js|react|python|program/.test(text)) {
     add(/bug|error|debug/.test(text) ? 'debugging' : 'developer');
   }
-  if (/website|landing page|homepage|site|seo/.test(text)) add(/seo/.test(text) ? 'seo' : 'website-upgrade');
+  if (!sourceReviewIntent && /website|landing page|homepage|site|seo/.test(text)) add(/seo/.test(text) ? 'seo' : 'website-upgrade');
   if (/github|repository|repo|commit|pull request/.test(text)) add('github');
   if (/deploy|production|vercel/.test(text)) add('deployment');
   if (/database|supabase|postgres|rls|sql/.test(text)) add('database');
