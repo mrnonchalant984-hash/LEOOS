@@ -86,3 +86,14 @@ test('voice endpoints default to the dedicated Gemini 3.5 transcription and 3.8 
   assert.match(env, /^LEO_GEMINI_LIVE_MODEL=gemini-3\.8-live$/m);
   assert.match(env, /^LEO_GEMINI_TRANSCRIBE_LIVE_MODEL=gemini-3\.5-transcribe-live$/m);
 });
+
+test('dedicated Gemini Live transcription endpoint issues a constrained token without exposing the API key', async () => {
+  const liveTranscription = readFileSync(new URL('../app/api/realtime/transcription-session/route.ts', import.meta.url), 'utf8');
+  assert.match(liveTranscription, /gemini-3\.5-transcribe-live/);
+  assert.match(liveTranscription, /authTokens\.create/);
+  assert.match(liveTranscription, /liveConnectConstraints/);
+  assert.match(liveTranscription, /responseModalities: \['TEXT'\]/);
+  assert.match(liveTranscription, /inputAudioTranscription/);
+  assert.match(liveTranscription, /Cache-Control': 'private, no-store'/);
+  assert.doesNotMatch(liveTranscription, /return NextResponse\.json\(\{[^}]*key,/);
+});
