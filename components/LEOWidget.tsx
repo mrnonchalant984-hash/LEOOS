@@ -168,8 +168,8 @@ function getRemoteDeviceId() {
   } catch { return "web-device"; }
 }
 function isLeadCaptureIntent(message: string) {
-  return /\\b(?:quote|quotation|estimate|pricing|hire|work with you|contact (?:your|the) team|talk to someone|project proposal|budget)\\b/i.test(message) ||
-    /\\b(?:build|create|develop|make)\\b.{0,70}\\b(?:website|web app|web application|saas|e-commerce|marketplace|mobile app|platform)\\b/i.test(message);
+  return /\b(?:quote|quotation|estimate|pricing|hire|work with you|contact (?:your|the) team|talk to someone|project proposal|budget)\b/i.test(message) ||
+    /\b(?:build|create|develop|make)\b.{0,70}\b(?:website|web app|web application|saas|e-commerce|marketplace|mobile app|platform)\b/i.test(message);
 }
 
 export function LEOWidget({ full = false, initialSessionId = "", embedded = false, initialProjectId = "", initialProjectName = "" }: { full?: boolean; initialSessionId?: string; embedded?: boolean; initialProjectId?: string; initialProjectName?: string }) {
@@ -1918,9 +1918,10 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
   const messagesView = (
     <div className="mx-auto w-full max-w-[760px] space-y-5">
       {messages.map((m, i) => {
-        const previousUserMessage = messages.slice(0, i).reverse().find(item => item.role === "user")?.content || "";
-        const leadCaptureKey = `${i}:${previousUserMessage.slice(0, 120)}`;
-        const showLeadCapture = !full && m.role === "assistant" &&
+        const previousUserMessageIndex = messages.slice(0, i).map(item => item.role).lastIndexOf("user");
+        const previousUserMessage = previousUserMessageIndex >= 0 ? messages[previousUserMessageIndex].content : "";
+        const leadCaptureKey = `${previousUserMessageIndex}:${previousUserMessage.slice(0, 120)}`;
+        const showLeadCapture = !full && m.role === "assistant" && previousUserMessageIndex >= 0 &&
           isLeadCaptureIntent(previousUserMessage) && !completedLeadCaptures.includes(leadCaptureKey);
         const leadSummary = `User request: ${previousUserMessage}\nBram response: ${m.content}`.slice(0, 4000);
         return (
