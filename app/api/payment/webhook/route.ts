@@ -227,7 +227,7 @@ export async function POST(req: NextRequest) {
       }
       const payoutStatus = eventName === 'transfer.success' ? 'paid' : eventName === 'transfer.failed' ? 'failed' : 'reversed';
       if (payout.status === payoutStatus) return NextResponse.json({ received: true, idempotent: true });
-      const allowedStatuses = eventName === 'transfer.reversed' ? ['initiating', 'pending', 'paid'] : ['initiating', 'pending'];
+      const allowedStatuses = eventName === 'transfer.reversed' ? ['initiating', 'pending', 'unknown', 'paid'] : ['initiating', 'pending', 'unknown'];
       const { data: updatedPayout, error: payoutUpdateError } = await db.from('marketplace_seller_payouts')
         .update({
           status: payoutStatus,

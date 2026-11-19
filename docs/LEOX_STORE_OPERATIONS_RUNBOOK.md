@@ -30,3 +30,11 @@ On payment or data-access incident, pause checkout and relevant writes, preserve
 ## Monitoring to configure
 
 Alert on elevated checkout failures, webhook verification failures or backlog, database/API 5xx rates, storage authorization failures, unhandled refunds, stale paid orders, delivery issues, growing report/dispute queues, support response delays, and backup/restore failures. Assign an on-call owner and test each alert before launch.
+
+
+## Ambiguous seller payout reconciliation
+
+- Configure a scheduled POST to `/api/cron/store-payout-reconcile` with `Authorization: Bearer $CRON_SECRET`; keep the route private and do not expose the secret to the browser.
+- Apply the additive migration `20261119120000_leox_store_payout_reconciliation.sql` only after the normal environment, backup, and approval checks.
+- The worker verifies the original Paystack transfer reference and reconciles only provider-confirmed states. A missing or inconclusive provider response remains unresolved; it must not trigger a new transfer automatically.
+- Review unresolved `unknown`/`initiating` payouts in the Paystack dashboard and database before any manual retry. Never create a new reference for a retry of an ambiguous transfer.
