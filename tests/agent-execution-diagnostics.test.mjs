@@ -44,3 +44,10 @@ test('Developer Agent repository read permissions include the injected GitHub to
   assert.match(orchestrator, /github_repository_tree/);
   assert.match(orchestrator, /github_read_file/);
 });
+
+test('GitHub repository tasks do not expose Braverton project UUID file tools', async () => {
+  const manager = await readFile(new URL('../lib/agents/manager.ts', import.meta.url), 'utf8');
+  assert.match(manager, /repositoryTask = \/\(\?:github\\\\\.com/);
+  assert.match(manager, /repositoryTask && \['get_project_files', 'list_projects', 'get_project_status'\]\.includes\(tool\.name\)/);
+  assert.match(manager, /For GitHub owner\/repository identifiers or github\.com URLs, use github_repository_tree and github_read_file/);
+});
