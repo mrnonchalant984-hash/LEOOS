@@ -129,7 +129,7 @@ export async function runAgent(
   task: string,
   context: string,
   owner: boolean,
-  meta?: { runId?: string; userId?: string; request?: Request; persistAgentRun?: boolean },
+  meta?: { runId?: string; userId?: string; request?: Request; persistAgentRun?: boolean; timezone?: string },
 ) {
   const input = validateAgentInput(task, context);
   if (!input.success) throw new Error('Agent input did not match its execution schema.');
@@ -174,6 +174,7 @@ export async function runAgent(
       agentId: agent.id,
       allowMcpRead: agentHasMcpReadCapability(agent),
       userMessage: task,
+      timezone: meta.timezone,
     });
   }
   const tools = getAgentAvailableTools(agent, available.tools, task);
