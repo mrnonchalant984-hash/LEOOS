@@ -19,7 +19,7 @@ const workflowSchema = z.object({
   steps: z.array(stepSchema).max(5).default([]),
   trigger: z.enum(['manual', 'interval', 'daily', 'weekly']).default('manual'),
   everyMinutes: z.number().int().min(15).max(1440).default(60),
-  scheduleTime: z.string().regex(/^([01]\\d|2[0-3]):[0-5]\\d$/).default('09:00'),
+  scheduleTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('09:00'),
   timezone: z.string().min(1).max(80).default('UTC'),
   weekday: z.number().int().min(0).max(6).default(1),
 }).strict().superRefine((value, ctx) => {
