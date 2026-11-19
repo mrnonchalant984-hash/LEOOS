@@ -386,7 +386,10 @@ export async function createUserAssistantTools(
         github_create_file: 'commit-files',
       } as const;
       try {
-        const payload = reference.kind === 'github_create_file'\n          ? { repo: args.repo, path: args.path, branch: args.branch, message: args.message, files: [{ path: args.path, content: args.content }], confirm: args.confirm }\n          : args as Record<string, unknown>;\n        const result = await postAsUser(options.request, `/api/integrations/github/${actions[reference.kind]}`, payload as Record<string, unknown>);
+        const payload = reference.kind === 'github_create_file'
+          ? { repo: args.repo, path: args.path, branch: args.branch, message: args.message, files: [{ path: args.path, content: args.content }], confirm: args.confirm }
+          : args as Record<string, unknown>;
+        const result = await postAsUser(options.request, `/api/integrations/github/${actions[reference.kind]}`, payload as Record<string, unknown>);
         return { text: JSON.stringify(result) };
       } catch (error) {
         return { text: error instanceof Error ? error.message : 'Connected repository operation failed.', isError: true };
