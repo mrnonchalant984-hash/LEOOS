@@ -8,6 +8,7 @@ import { CodeReviewCentre } from './review/centre';
 import { coordinateSpecialists } from './review/orchestration';
 import { discoverWorkspaceTests, runApprovedTerminalCommand } from './workspace/terminal';
 import { BramCodeModelProvider } from './model-provider';
+import { BramInlineCompletionProvider } from './inline-completion';
 
 let chatView: LeoChatView | undefined;
 
@@ -15,12 +16,14 @@ export function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('Bram Code');
   const api = new LeonardXApi(context.secrets);
   const modelProvider = new BramCodeModelProvider(context);
+  const inlineCompletionProvider = new BramInlineCompletionProvider(context);
   const proposals = createProposalContentProvider();
   const reviewCentre = new CodeReviewCentre(context.extensionUri, prompt => chatView?.queuePrompt(prompt));
   context.subscriptions.push(
     output,
     vscode.workspace.registerTextDocumentContentProvider('leocode-proposal', proposals),
     vscode.lm.registerLanguageModelChatProvider('braverton-bram-code', modelProvider),
+    vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, inlineCompletionProvider),
   );
   registerLeonardXMcpTools(context, api);
   chatView = new LeoChatView(context.extensionUri, api, context, proposals);
@@ -49,6 +52,16 @@ export function activate(context: vscode.ExtensionContext) {
         await chatView?.refresh();
         void vscode.window.showInformationMessage('Bram Code credentials were removed from this device.');
       }
+    }),
+    vscode.commands.registerCommand('leocode.toggleInlineCompletions', async () => {
+      const configuration = vscode.workspace.getConfiguration('leocode');
+      const enabled = !configuration.get<boolean>('inlineCompletions.enabled', false);
+      await configuration.update('inlineCompletions.enabled', enabled, vscode.ConfigurationTarget.Global);
+      void vscode.window.showInformationMessage(
+        enabled
+          ? 'Bram Code inline completions are enabled. Suggestions use your Braverton Developer API plan.'
+          : 'Bram Code inline completions are disabled.',
+      );
     }),
     vscode.commands.registerCommand('leocode.configureModel', async () => {
       const current = await context.secrets.get('leocode.developer-api-key');
