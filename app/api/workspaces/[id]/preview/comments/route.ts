@@ -24,7 +24,7 @@ export async function POST(req:NextRequest,{params}:Ctx){
   share_id:share.id,project_id:id,user_id:share.user_id,author_user_id:auth.user.id,body:comment,anchor,status:'open'
  }).select('id,body,status,created_at').single();
  if(insertError) return NextResponse.json({error:'Comment could not be saved.'},{status:503});
- let edit={queued:false};
+ let edit: { queued: boolean; reason?: string } = { queued: false };
  // Owner-authored comments are actionable instructions; guest comments remain reviewable until owner approval.
  if(auth.user.id===share.user_id && body?.apply_to_bram===true){
   const sessionId=typeof body.session_id==='string'&&/^[0-9a-f-]{36}$/i.test(body.session_id)?body.session_id:null;
