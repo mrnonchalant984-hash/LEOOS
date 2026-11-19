@@ -101,6 +101,23 @@
           "type": "string",
           "default": "",
           "description": "Optional Braverton project UUID for project-aware features."
+        },
+        "leocode.model": {
+          "type": "string",
+          "default": "gemini-3.8-flash",
+          "description": "Braverton Developer API model used for Bram Code and inline completions."
+        },
+        "leocode.inlineCompletions.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable opt-in Bram Code inline code suggestions. Each request uses your Braverton Developer API key and is billable under your active API plan."
+        },
+        "leocode.inlineCompletions.minimumIntervalMs": {
+          "type": "number",
+          "default": 1200,
+          "minimum": 500,
+          "maximum": 10000,
+          "description": "Minimum delay between inline-completion API requests, in milliseconds."
         }
       }
     },
@@ -206,6 +223,10 @@
       {
         "command": "leocode.inspectGit",
         "title": "LeoCode: Inspect Git Status"
+      },
+      {
+        "command": "leocode.toggleInlineCompletions",
+        "title": "Bram Code: Toggle Inline Completions"
       }
     ],
     "languageModelChatProviders": [
