@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
       transport: 'gemini-live-ephemeral-token',
       transcription_model: process.env.LEO_GEMINI_TRANSCRIBE_LIVE_MODEL?.trim() || 'gemini-3.5-transcribe-live',
       transcription_endpoint: '/api/voice',
+      live_transcription_session_endpoint: '/api/realtime/transcription-session',
       speech_endpoint: '/api/speak',
       expires_at: expireTime,
       orchestration: 'server-constrained-bram-context',
