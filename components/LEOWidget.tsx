@@ -890,13 +890,29 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         }
         if (!streamedText.trim() && !aborter.signal.aborted) throw new Error("Bram returned an empty response.");
       } else {
+        const chatRequestBody = { session_id: sidRef.current, message: next, work_mode: workspaceMode === "work", ...(workspaceMode === "work" && workProject ? { project_id: workProject.id } : {}), mode: effectiveMode, request_id: crypto.randomUUID(), ...(attachedTool ? { tool_name: attachedTool.name } : {}), ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}), ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}), ...(forceWebSearch ? { web_search: true } : {}), ...(attachedDocuments.length ? { document_asset_ids: attachedDocuments.map(document => document.assetId) } : {}), ...(attachedImages.length ? { image_asset_ids: attachedImages.map(image => image.assetId) } : {}), local_context: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", local_datetime: new Date().toString(), ...(localContextEnabled && localLocation ? { location: localLocation } : {}) } };
         const r = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
-          body: JSON.stringify({ session_id: sidRef.current, message: next, work_mode: workspaceMode === "work", ...(workspaceMode === "work" && workProject ? { project_id: workProject.id } : {}), mode: effectiveMode, request_id: crypto.randomUUID(), ...(attachedTool ? { tool_name: attachedTool.name } : {}), ...(attachedAgent ? { custom_agent_id: attachedAgent.id } : {}), ...(selectedModel !== 'auto' && selectedModel !== 'unavailable' ? { model: selectedModel } : {}), ...(forceWebSearch ? { web_search: true } : {}), ...(attachedDocuments.length ? { document_asset_ids: attachedDocuments.map(document => document.assetId) } : {}), ...(attachedImages.length ? { image_asset_ids: attachedImages.map(image => image.assetId) } : {}), local_context: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", local_datetime: new Date().toString(), ...(localContextEnabled && localLocation ? { location: localLocation } : {}) } }),
+          body: JSON.stringify(chatRequestBody),
         });
         const d = await r.json();
-        if (!r.ok) throw new Error(d.error || "Bram is unavailable");
+        if (!r.ok) {
+          if (/github app|github integration|connect github|install.*github/i.test(String(d.error || ''))) {
+            try {
+              sessionStorage.setItem('bram:pending-oauth-request', JSON.stringify({
+                session_id: chatRequestBody.session_id,
+                message: chatRequestBody.message,
+                ...(typeof chatRequestBody.project_id === 'string' ? { project_id: chatRequestBody.project_id } : {}),
+                ...(chatRequestBody.work_mode ? { work_mode: true } : {}),
+                ...(chatRequestBody.mode ? { mode: chatRequestBody.mode } : {}),
+                ...(typeof chatRequestBody.tool_name === 'string' ? { tool_name: chatRequestBody.tool_name } : {}),
+                ...(typeof chatRequestBody.request_id === 'string' ? { request_id: chatRequestBody.request_id } : {}),
+              }));
+            } catch { /* The user can still reconnect and retry manually. */ }
+          }
+          throw new Error(d.error || "Bram is unavailable");
+        }
         const citations = Array.isArray(d.citations) ? d.citations.filter((item: unknown): item is ChatCitation => {
           if (!item || typeof item !== 'object' || typeof (item as ChatCitation).url !== 'string') return false;
           try {
