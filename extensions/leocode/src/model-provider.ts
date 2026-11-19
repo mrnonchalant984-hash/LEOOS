@@ -64,6 +64,8 @@ export class BramCodeModelProvider implements vscode.LanguageModelChatProvider<v
         detail: 'Braverton Developer API · usage billed to your Braverton account',
         tooltip: 'Independent Braverton model provider. Does not use GitHub Copilot for inference.',
         capabilities: { toolCalling: false, imageInput: false },
+        isBYOK: true,
+        isUserSelectable: true,
       }));
   }
 
