@@ -82,7 +82,7 @@ export default function ContactPage() {
         type: delivered ? 'success' : 'error',
         message: delivered
           ? 'Your message has been received and Braverton has been notified.'
-          : `Your message was saved, but notification delivery is not confirmed. ${deliveryError || 'Configure Web3Forms or SMTP/Resend.'}`,
+          : `Your message was saved, but notification delivery is not confirmed. ${deliveryError || 'Configure Web3Forms.'}`,
       });
       formElement.reset();
     } catch (error) {
