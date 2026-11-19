@@ -188,6 +188,10 @@ export async function runAgent(
     tool_execution_status: tools.length
       ? 'available'
       : agent.allowedTools.length ? 'unavailable' : 'not_required',
+    request_context_available: Boolean(meta?.request),
+    repository_access_enabled: repositoryAccess,
+    available_tool_names: tools.map(tool => tool.name).slice(0, 80),
+    available_tool_count: tools.length,
     tool_calls: [] as Array<{ name: string; success: boolean }>,
   };
   await persistExecution(meta, baseExecution);
