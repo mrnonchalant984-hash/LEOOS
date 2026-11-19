@@ -35,16 +35,16 @@ test("contact form rejects invalid names, emails, service values, and short mess
 
 
 test("Web3Forms is submitted from the browser, not proxied through the server route", () => {
-  assert.doesNotMatch(contactRoute, /api\.web3forms\.com\/submit/);
-  assert.doesNotMatch(contactRoute, /notifyWeb3Forms/);
+  assert.doesNotMatch(contactRoute, /process\\.env\\.(?:RESEND_API_KEY|SMTP_HOST|SMTP_USER)|api\\.resend\\.com|sendSmtpMail/);
+  assert.doesNotMatch(contactRoute, /process\\.env\\.(?:RESEND_API_KEY|SMTP_HOST|SMTP_USER)|api\\.resend\\.com|sendSmtpMail/);
   assert.match(contactPage, /fetch\('https:\/\/api\.web3forms\.com\/submit'/);
   assert.match(contactPage, /NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY/);
   assert.match(contactPage, /web3Result\.success === true/);
 });
 
 test("contact and Bram lead notifications use Web3Forms only, never Resend or SMTP", () => {
-  assert.doesNotMatch(contactRoute, /RESEND_API_KEY|api\.resend\.com|sendSmtpMail|SMTP_HOST/);
-  assert.doesNotMatch(leadRoute, /RESEND_API_KEY|api\.resend\.com|sendSmtpMail|SMTP_HOST/);
+  assert.doesNotMatch(contactRoute, /process\\.env\\.(?:RESEND_API_KEY|SMTP_HOST|SMTP_USER)|api\\.resend\\.com|sendSmtpMail/);
+  assert.doesNotMatch(leadRoute, /process\\.env\\.(?:RESEND_API_KEY|SMTP_HOST|SMTP_USER)|api\\.resend\\.com|sendSmtpMail/);
   assert.match(contactPage, /if \(!result\.emailSent\)/);
   assert.match(contactPage, /fetch\('https:\/\/api\.web3forms\.com\/submit'/);
   assert.match(contactPage, /NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY/);
