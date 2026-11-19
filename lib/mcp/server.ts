@@ -108,7 +108,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
   const getMainWebsiteStatus = projects.getMainWebsiteStatus;
   if (projects.isPlatformOwner && getMainWebsiteStatus) {
     server.registerTool('inspect_main_website', {
-      title: 'Inspect the LeonardX main website',
+      title: 'Inspect the Braverton main website',
       description: 'Read the configured main website main-branch commit, GitHub Actions and check-run results, and recent Vercel deployment states and errors. Owner-only and read-only. Requires verified owner GitHub and Vercel integrations.',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     }, async () => {
@@ -119,8 +119,8 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
   }
   if (projects.isPlatformOwner && writeAccess && projects.updateMainWebsite) {
     server.registerTool('update_main_website', {
-      title: 'Update the LeonardX main website',
-      description: 'Commit AI-generated LeonardX website source files directly to the configured GitHub main branch. The Vercel project must be verified as linked to that repository. First call inspect_main_website and use its latest main-branch SHA. This changes production source and triggers the normal GitHub/Vercel deployment; call only after the owner explicitly approves this exact change and set confirm=true. GitHub workflow, secret, environment, and credential files are blocked. Review deployment results with inspect_main_website after the commit.',
+      title: 'Update the Braverton main website',
+      description: 'Commit AI-generated Braverton website source files directly to the configured GitHub main branch. The Vercel project must be verified as linked to that repository. First call inspect_main_website and use its latest main-branch SHA. This changes production source and triggers the normal GitHub/Vercel deployment; call only after the owner explicitly approves this exact change and set confirm=true. GitHub workflow, secret, environment, and credential files are blocked. Review deployment results with inspect_main_website after the commit.',
       inputSchema: {
         expected_commit_sha: z.string().regex(/^[a-f0-9]{40}$/i),
         commit_message: z.string().trim().min(1).max(200),
@@ -173,7 +173,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
   });
   server.registerTool('list_available_agents', {
     title: 'Discover available agents',
-    description: 'List executable LeonardX agents authorized for this account, including capabilities, approval requirements, and availability. Owner-only agents and user-owned agents are filtered by the server.',
+    description: 'List executable Braverton agents authorized for this account, including capabilities, approval requirements, and availability. Owner-only agents and user-owned agents are filtered by the server.',
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async () => {
     if (!projects.listAvailableAgents) return toolError('Agent discovery is unavailable in this MCP deployment.');
@@ -220,7 +220,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
   });
   server.registerTool('get_account_plan', {
     title: 'Get my plan and usage limits',
-    description: 'Read the authenticated LeonardX account plan, project capacity, supported project types, and monthly build allowance. Does not expose AI-credit balances or call Leo AI.',
+    description: 'Read the authenticated Braverton account plan, project capacity, supported project types, and monthly build allowance. Does not expose AI-credit balances or call Bram.',
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async () => {
     const { data, error } = await projects.getAccountPlan(userId);
@@ -229,7 +229,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
   });
   server.registerTool('list_projects', {
     title: 'List my projects',
-    description: 'List the authenticated account owner’s LeonardX project names, types, statuses, and progress. This tool is read-only.',
+    description: 'List the authenticated account owner’s Braverton project names, types, statuses, and progress. This tool is read-only.',
     inputSchema: { limit: z.number().int().min(1).max(50).optional() },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ limit }) => {
@@ -338,7 +338,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
   });
   server.registerTool('get_configuration_status', {
     title: 'Get secure configuration status',
-    description: 'Read whether LeonardX catalog environment variables are configured for a target environment. Returns names and metadata only — never secret values. Prefer the secure configuration UI for credential submission.',
+    description: 'Read whether Braverton catalog environment variables are configured for a target environment. Returns names and metadata only — never secret values. Prefer the secure configuration UI for credential submission.',
     inputSchema: { target: z.enum(['development', 'preview', 'production']).optional() },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ target }) => {
@@ -360,7 +360,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
   });
   server.registerTool('get_capability_alternatives', {
     title: 'Explore budget-aware capability alternatives',
-    description: 'List free and paid alternatives for LeonardX capabilities such as contact forms, AI inference, payments, and hosting. Does not purchase services or expose credentials.',
+    description: 'List free and paid alternatives for Braverton capabilities such as contact forms, AI inference, payments, and hosting. Does not purchase services or expose credentials.',
     inputSchema: { budget: z.enum(['free', 'low', 'moderate', 'professional', 'custom']).optional() },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ budget }) => {
@@ -371,12 +371,12 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
   });
   server.registerTool('discover_application_capabilities', {
     title: 'Discover supported application generators and build adapters',
-    description: 'Read the application categories, registered starter generators, build adapters, configuration requirements, and known limitations available in this LeonardX deployment. Partial or unavailable support is reported explicitly; discovery does not create a project or claim a build is verified.',
+    description: 'Read the application categories, registered starter generators, build adapters, configuration requirements, and known limitations available in this Braverton deployment. Partial or unavailable support is reported explicitly; discovery does not create a project or claim a build is verified.',
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async () => ({ content: [{ type: 'text', text: JSON.stringify({ capabilities: getApplicationCapabilities() }) }] }));
   server.registerTool('get_android_build_capabilities', {
     title: 'Check local Android APK build readiness',
-    description: 'Read whether this LeonardX deployment has Java, Gradle, and the Android SDK needed for a real debug APK. This never claims a build succeeded and never exposes secrets.',
+    description: 'Read whether this Braverton deployment has Java, Gradle, and the Android SDK needed for a real debug APK. This never claims a build succeeded and never exposes secrets.',
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async () => {
     if (!projects.getAndroidBuildCapabilities) return toolError('Android build capability reporting is unavailable in this deployment.');
@@ -397,7 +397,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
   });
   server.registerTool('plan_engineering_workflow', {
     title: 'Plan an ordered engineering workflow',
-    description: 'Read-only orchestration planning for web, SaaS, mobile, game, API, database, testing, and deployment work. Returns applicable stages, the existing LeonardX tools that can perform each stage, provider selection, approval boundaries, and retry rules. It does not modify files, call providers, or claim that work is complete.',
+    description: 'Read-only orchestration planning for web, SaaS, mobile, game, API, database, testing, and deployment work. Returns applicable stages, the existing Braverton tools that can perform each stage, provider selection, approval boundaries, and retry rules. It does not modify files, call providers, or claim that work is complete.',
     inputSchema: {
       project_type: z.enum(['website', 'web_app', 'saas', 'mobile_app', 'game', 'api']),
       mode: z.enum(['discovery', 'autonomous']).default('autonomous'),
@@ -434,7 +434,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
   if (writeAccess) {
     server.registerTool('leo_ai_external_assist', {
       title: 'Start an external-AI Bram conversation',
-      description: 'Persists the user message and returns owned conversation history plus a task packet. The connected MCP client must reason using its own model; this tool never calls a LeonardX model provider. After reasoning and any authorized tool calls, save the final answer with leo_ai_external_assist_complete.',
+      description: 'Persists the user message and returns owned conversation history plus a task packet. The connected MCP client must reason using its own model; this tool never calls a Braverton model provider. After reasoning and any authorized tool calls, save the final answer with leo_ai_external_assist_complete.',
       inputSchema: {
         message: z.string().trim().min(1).max(12000),
         session_id: z.string().uuid().optional(),
@@ -447,11 +447,11 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
       if (!projects.leoExternalAssistStart) return toolError('Persistent external-AI conversation storage is unavailable in this MCP deployment.');
       const { data, error } = await projects.leoExternalAssistStart(userId, { message, session_id, project_id, context });
       if (error) return toolError(typeof error === 'string' ? error : 'External-AI conversation could not be started.');
-      return { content: [{ type: 'text', text: JSON.stringify({ ...(data as Record<string, unknown>), mode: 'external_ai_assisted', inference_performed_by: 'connected_mcp_client', leonardx_model_provider_called: false, leo_ai_credits_used: false, client_instructions: ['Reason using your own model; do not claim LeonardX generated this reasoning.', 'Use only authorized LeonardX MCP tools for project reads, writes, builds, tests, and deployment.', 'Verify ownership before modifying a project. Never infer ownership.', 'Report operations only after tool results verify them.', 'Do not send secrets or unrelated private data to external services.', 'Save your final response with leo_ai_external_assist_complete.'] }) }] };
+      return { content: [{ type: 'text', text: JSON.stringify({ ...(data as Record<string, unknown>), mode: 'external_ai_assisted', inference_performed_by: 'connected_mcp_client', leonardx_model_provider_called: false, leo_ai_credits_used: false, client_instructions: ['Reason using your own model; do not claim Braverton generated this reasoning.', 'Use only authorized Braverton MCP tools for project reads, writes, builds, tests, and deployment.', 'Verify ownership before modifying a project. Never infer ownership.', 'Report operations only after tool results verify them.', 'Do not send secrets or unrelated private data to external services.', 'Save your final response with leo_ai_external_assist_complete.'] }) }] };
     });
     server.registerTool('bram_external_assist', {
       title: 'Start an external-AI Bram conversation',
-      description: 'Persists the user message and returns owned conversation history plus a task packet. The connected MCP client must reason using its own model; this tool never calls a LeonardX model provider. After reasoning and any authorized tool calls, save the final answer with bram_external_assist_complete.',
+      description: 'Persists the user message and returns owned conversation history plus a task packet. The connected MCP client must reason using its own model; this tool never calls a Braverton model provider. After reasoning and any authorized tool calls, save the final answer with bram_external_assist_complete.',
       inputSchema: {
         message: z.string().trim().min(1).max(12000),
         session_id: z.string().uuid().optional(),
@@ -464,7 +464,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
       if (!projects.leoExternalAssistStart) return toolError('Persistent external-AI conversation storage is unavailable in this MCP deployment.');
       const { data, error } = await projects.leoExternalAssistStart(userId, { message, session_id, project_id, context });
       if (error) return toolError(typeof error === 'string' ? error : 'External-AI conversation could not be started.');
-      return { content: [{ type: 'text', text: JSON.stringify({ ...(data as Record<string, unknown>), mode: 'external_ai_assisted', inference_performed_by: 'connected_mcp_client', leonardx_model_provider_called: false, leo_ai_credits_used: false, client_instructions: ['Reason using your own model; do not claim LeonardX generated this reasoning.', 'Use only authorized LeonardX MCP tools for project reads, writes, builds, tests, and deployment.', 'Verify ownership before modifying a project. Never infer ownership.', 'Report operations only after tool results verify them.', 'Do not send secrets or unrelated private data to external services.', 'Save your final response with bram_external_assist_complete.'] }) }] };
+      return { content: [{ type: 'text', text: JSON.stringify({ ...(data as Record<string, unknown>), mode: 'external_ai_assisted', inference_performed_by: 'connected_mcp_client', leonardx_model_provider_called: false, leo_ai_credits_used: false, client_instructions: ['Reason using your own model; do not claim Braverton generated this reasoning.', 'Use only authorized Braverton MCP tools for project reads, writes, builds, tests, and deployment.', 'Verify ownership before modifying a project. Never infer ownership.', 'Report operations only after tool results verify them.', 'Do not send secrets or unrelated private data to external services.', 'Save your final response with bram_external_assist_complete.'] }) }] };
     });
     server.registerTool('leo_ai_external_assist_complete', {
       title: 'Save an external-AI Bram response',
@@ -528,7 +528,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     });
     server.registerTool('invoke_agent', {
       title: 'Invoke an authorized agent',
-      description: 'Run an enabled, account-authorized LeonardX specialist. Queued runs use the existing durable worker; owner-created text agents use only the configured LLM and no tools. Image/video generation and approval-gated agents must use their dedicated authorized flows. Requires confirmation and an idempotency key.',
+      description: 'Run an enabled, account-authorized Braverton specialist. Queued runs use the existing durable worker; owner-created text agents use only the configured LLM and no tools. Image/video generation and approval-gated agents must use their dedicated authorized flows. Requires confirmation and an idempotency key.',
       inputSchema: {
         agent_id: z.string().trim().min(1).max(96),
         task: z.string().trim().min(1).max(8000),
@@ -617,7 +617,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     }
     server.registerTool('build_android_calculator', {
       title: 'Create and build the Android calculator APK',
-        description: 'Create a functional Java calculator project and enqueue a durable Android debug build. A separately scheduled, authenticated worker runs Gradle, validates and stores the APK privately, then status reports its owner-authorized download URL and SHA-256. Requires the Android worker, toolchain, private Supabase storage, and migration configured on the LeonardX server. Reuse idempotency_key for retries. Requires explicit user approval and confirm=true.',
+        description: 'Create a functional Java calculator project and enqueue a durable Android debug build. A separately scheduled, authenticated worker runs Gradle, validates and stores the APK privately, then status reports its owner-authorized download URL and SHA-256. Requires the Android worker, toolchain, private Supabase storage, and migration configured on the Braverton server. Reuse idempotency_key for retries. Requires explicit user approval and confirm=true.',
       inputSchema: {
         idempotency_key: z.string().uuid(),
         confirm: z.literal(true).describe('Set true only after the user explicitly approves creating a project and starting an Android build.'),
@@ -647,7 +647,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
 
     server.registerTool('create_engineering_workflow', {
       title: 'Create a durable engineering workflow',
-      description: 'Persist an ordered LeonardX engineering workflow for the authenticated account. This creates state only; it does not edit files, apply migrations, spend provider credits, or deploy. Requires explicit user approval and confirm=true.',
+      description: 'Persist an ordered Braverton engineering workflow for the authenticated account. This creates state only; it does not edit files, apply migrations, spend provider credits, or deploy. Requires explicit user approval and confirm=true.',
       inputSchema: {
         title: z.string().trim().min(2).max(160),
         project_id: z.string().uuid().optional(),
@@ -738,7 +738,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
 
     server.registerTool('retry_cloud_build', {
       title: 'Retry a failed Expo build safely',
-      description: 'Retry a failed Expo EAS build only when LeonardX can verify the previous provider job is no longer active. Creates a new idempotent build request and preserves the original job for audit. Requires explicit approval and confirm=true.',
+      description: 'Retry a failed Expo EAS build only when Braverton can verify the previous provider job is no longer active. Creates a new idempotent build request and preserves the original job for audit. Requires explicit approval and confirm=true.',
       inputSchema: {
         provider: z.literal('expo-eas'),
         job_id: z.string().uuid(),
@@ -754,7 +754,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
 
     server.registerTool('create_project', {
       title: 'Create a plan-authorized project',
-      description: 'Create a typed project workspace under the authenticated account, including mobile_app Expo/React Native and game starters. The requested project_type is preserved; a mobile app is never created as web_app. Enforces project-type and project-count limits. Requires approval and confirm=true. Does not call Leo AI or use its credits.',
+      description: 'Create a typed project workspace under the authenticated account, including mobile_app Expo/React Native and game starters. The requested project_type is preserved; a mobile app is never created as web_app. Enforces project-type and project-count limits. Requires approval and confirm=true. Does not call Bram or use its credits.',
       inputSchema: {
         name: z.string().trim().min(2).max(120),
         project_type: z.enum(['website', 'web_app', 'saas', 'mobile_app', 'game']),
@@ -784,7 +784,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
 
     server.registerTool('save_project_files', {
       title: 'Save AI-generated project files',
-      description: 'Save source files supplied by the connected AI into an owned LeonardX project workspace. The connected client AI should generate the code and pass it here; this tool does not call Leo AI or consume Leo AI credits. Requires user approval and confirm=true. File paths and size are validated.',
+      description: 'Save source files supplied by the connected AI into an owned Braverton project workspace. The connected client AI should generate the code and pass it here; this tool does not call Bram or consume Bram credits. Requires user approval and confirm=true. File paths and size are validated.',
       inputSchema: {
         project_id: z.string().uuid(),
         files: z.record(z.string(), z.string()),
@@ -799,7 +799,7 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
 
   server.registerTool('build_and_deploy_project', {
       title: 'Build and deploy supplied project code',
-    description: 'Deploy code files generated by the connected AI model to LeonardX’s configured GitHub/Vercel infrastructure. Does not invoke Leo AI or consume Leo AI credits. Enforces LeonardX project-type access and monthly build limits. Deployment starts the existing free hosting trial; the site may be suspended after it expires unless renewed through the account flow. No payment or renewal is performed by this tool. Deployment is a production change: call only after explicit user approval and set confirm=true. Reuse the same idempotency_key when retrying an uncertain request; use a new key only after checking the earlier job status. Without a key, identical project requests are deduplicated by request content. Return the liveUrl only after the tool confirms success; it must be the verified, publicly reachable main project domain. Never substitute a Vercel deployment-specific preview URL. If no public main domain is verified, report the tool error instead of inventing or returning a fallback link.',
+    description: 'Deploy code files generated by the connected AI model to Braverton’s configured GitHub/Vercel infrastructure. Does not invoke Bram or consume Bram credits. Enforces Braverton project-type access and monthly build limits. Deployment starts the existing free hosting trial; the site may be suspended after it expires unless renewed through the account flow. No payment or renewal is performed by this tool. Deployment is a production change: call only after explicit user approval and set confirm=true. Reuse the same idempotency_key when retrying an uncertain request; use a new key only after checking the earlier job status. Without a key, identical project requests are deduplicated by request content. Return the liveUrl only after the tool confirms success; it must be the verified, publicly reachable main project domain. Never substitute a Vercel deployment-specific preview URL. If no public main domain is verified, report the tool error instead of inventing or returning a fallback link.',
       inputSchema: {
         project_id: z.string().uuid(),
         brief: z.string().trim().min(1).max(6000),
