@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
   if (process.env.WORKFLOW_WORKER_ENABLED !== 'true') return NextResponse.json({ error: 'Workflow worker is disabled.' }, { status: 503 });
   if (!authorized(req)) return NextResponse.json({ error: 'Unauthorized worker.' }, { status: 401 });
   const request = await req.json().catch(() => ({}));
-  const limit = Number.isInteger(request?.limit) ? Math.max(1, Math.min(1, request.limit)) : 1;
+  const limit = Number.isInteger(request?.limit) ? Math.max(1, Math.min(5, request.limit)) : 5;
   const workerId = `workflow-worker-${randomUUID()}`;
   const db = adminSupabase();
   const { error: scheduleError } = await db.rpc('enqueue_due_workflows', { p_limit: 10 });
@@ -232,6 +232,9 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       const code = error instanceof Error && /^[a-z_]{3,64}$/.test(error.message) ? error.message : 'workflow_execution_failed';
       if (code === 'workflow_cancelled') {
+        await db.from('workflow_jobs').update({
+          status: 'cancelled', lease_owner: null, lease_expires_at: null, updated_at: new Date().toISOString(),
+        }).eq('id', job.id).eq('lease_owner', workerId);
         results.push({ run_id: runId, status: 'cancelled' });
         continue;
       }
