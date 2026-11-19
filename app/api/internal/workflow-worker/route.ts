@@ -59,8 +59,20 @@ async function executeWorkflowStep(
   for (const agent of plan.agents) {
     const startedAt = Date.now();
     try {
-      const output = await runAgent(agent, plan.task, context, owner, { runId, userId, timezone });
-      stepOutputs.push(`${agent.name}: ${output}`);
+      const rawOutput = await runAgent(agent, plan.task, context, owner, { runId, userId, timezone });
+      let payload: { status?: unknown; result?: unknown; execution?: { tool_calls?: unknown[] } };
+      try { payload = JSON.parse(rawOutput) as typeof payload; }
+      catch { throw new Error('workflow_agent_output_invalid'); }
+      if (payload.status !== 'completed' || typeof payload.result !== 'string' || !payload.result.trim()) {
+        throw new Error('workflow_agent_output_invalid');
+      }
+      const toolCalls = Array.isArray(payload.execution?.tool_calls) ? payload.execution.tool_calls : [];
+      if (toolCalls.some(call => Boolean(call && typeof call === 'object' && (call as { success?: unknown }).success === false))) {
+        throw new Error('workflow_tool_execution_failed');
+      }
+      const actionNeedsTool = /\\b(send|submit|publish|deploy|commit|push|book|cancel|delete|schedule (?:a|an|the) (?:meeting|event|reminder)|create (?:a|an|the) (?:reminder|calendar event|repository|project|file)|update (?:the|my) (?:calendar|event|reminder)|add (?:a|an|the) (?:calendar event|reminder))\\b/i.test(plan.task);
+      if (actionNeedsTool && toolCalls.length === 0) throw new Error('workflow_action_unverified');
+      stepOutputs.push(`${agent.name}: ${payload.result}`);
       console.info(JSON.stringify({ event: 'workflow.agent_step_completed', run_id: runId, user_id: userId, agent_id: agent.id, duration_ms: Date.now() - startedAt }));
     } catch (error) {
       console.warn(JSON.stringify({ event: 'workflow.agent_step_failed', run_id: runId, user_id: userId, agent_id: agent.id, duration_ms: Date.now() - startedAt, error_name: error instanceof Error ? error.name : 'unknown' }));
