@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   if (end <= start || end.getTime() - start.getTime() > 366 * 86400000) return NextResponse.json({ error: 'Calendar range must be positive and no longer than one year.' }, { status: 400 });
   const { data, error } = await adminSupabase().from('bram_calendar_events')
     .select('id,title,description,starts_at,ends_at,timezone,location,status,source,created_at,updated_at')
-    .eq('user_id', ctx.user.id).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString())
+    .eq('user_id', ctx.user.id).lt('starts_at', end.toISOString()).gt('ends_at', start.toISOString())
     .order('starts_at', { ascending: true }).limit(500);
   if (error) return NextResponse.json({ error: 'Calendar events are temporarily unavailable.' }, { status: 503 });
   return NextResponse.json({ events: data || [] }, { headers: { 'Cache-Control': 'private, no-store' } });
