@@ -193,3 +193,9 @@ test('seller verification, order ledgers, and payout tables do not grant client-
   assert.match(payout, /revoke all on public\.marketplace_order_deliveries, public\.marketplace_seller_payout_accounts[\s\S]*from public, anon, authenticated/);
   assert.match(payout, /grant all on public\.marketplace_order_deliveries, public\.marketplace_seller_payout_accounts[\s\S]*to service_role/);
 });
+
+test('uncertain Paystack transfer network outcomes stay non-retryable and reconcile as pending', () => {
+  const transfer = source('lib/store-payouts.ts');
+  assert.match(transfer, /catch \{[\s\S]*Transfer outcome is uncertain[\s\S]*status: 'pending'[\s\S]*eq\('status', 'initiating'\)/);
+  assert.match(transfer, /Reconcile with Paystack before retrying/);
+});
