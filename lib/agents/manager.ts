@@ -15,7 +15,7 @@ export { getAgent };
 
 const TOOL_CAPABILITIES = new Set([
   ...MCP_AGENT_CAPABILITIES, 'database_write', 'deployment', 'devops', 'file_read',
-  'file_write', 'github_write', 'image_generation', 'project_read',
+  'file_write', 'github_write', 'image_generation', 'project_read', 'calendar_write', 'reminder_read', 'reminder_write',
   'website_builder', 'web_search',
 ]);
 
@@ -39,6 +39,13 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   if (toolName === 'github_commit_files') {
     return permissions.has('github_write') && EXPLICIT_COMMIT_REQUEST.test(task);
   }
+  if (toolName === 'bram_calendar_list_events') return agent.id === 'calendar' && permissions.has('calendar_read');
+  if (toolName === 'bram_calendar_create_event') return agent.id === 'calendar' && permissions.has('calendar_write') && /\b(schedule|create|add|book|put)\b/i.test(task);
+  if (toolName === 'bram_calendar_update_event') return agent.id === 'calendar' && permissions.has('calendar_write') && /\b(update|edit|move|reschedule)\b/i.test(task);
+  if (toolName === 'bram_calendar_delete_event') return agent.id === 'calendar' && permissions.has('calendar_write') && /\b(cancel|delete|remove)\b/i.test(task);
+  if (toolName === 'bram_reminder_list') return agent.id === 'personal-assistant' && permissions.has('reminder_read');
+  if (toolName === 'bram_reminder_create') return agent.id === 'personal-assistant' && permissions.has('reminder_write') && /\b(remind|reminder|alert|notify)\b/i.test(task);
+  if (toolName === 'bram_reminder_cancel') return agent.id === 'personal-assistant' && permissions.has('reminder_write') && /\b(cancel|delete|remove|stop)\b/i.test(task);
   if (toolName === 'generate_brand_image') {
     return agent.id === 'branding' && permissions.has('image_generation') && EXPLICIT_IMAGE_REQUEST.test(task);
   }
@@ -47,7 +54,11 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
 }
 
 export function getAgentAvailableTools(agent: AgentDefinition, tools: AssistantTool[], task = '') {
-  return tools.filter(tool => allowedTool(agent, tool.name, task));
+  const repositoryTask = /(?:github\.com\/|\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\b)/i.test(task);
+  return tools.filter(tool => {
+    if (repositoryTask && ['get_project_files', 'list_projects', 'get_project_status'].includes(tool.name)) return false;
+    return allowedTool(agent, tool.name, task);
+  });
 }
 
 function safeExecutionErrorCode(error: unknown) {
@@ -91,10 +102,12 @@ export function classifyAgents(message: string, owner: boolean, allowedAgentIds?
     if (agent && (!agent.ownerOnly || owner) && (owner || allowedAgentIds?.includes(id))) picks.push(id);
   };
   if (/research|latest|current|compare|sources|news/.test(text)) add('research');
-  if (/code|bug|debug|error|typescript|next\.js|react|python|program/.test(text)) {
+  const sourceReviewIntent = /review|audit|inspect|analy[sz]e/.test(text) && /code|source|project|website|repo|repository|file|application|app|python|javascript|typescript/.test(text);
+  if (sourceReviewIntent) add('code-review');
+  if (!sourceReviewIntent && /code|bug|debug|error|typescript|next\.js|react|python|program/.test(text)) {
     add(/bug|error|debug/.test(text) ? 'debugging' : 'developer');
   }
-  if (/website|landing page|homepage|site|seo/.test(text)) add(/seo/.test(text) ? 'seo' : 'website-upgrade');
+  if (!sourceReviewIntent && /website|landing page|homepage|site|seo/.test(text)) add(/seo/.test(text) ? 'seo' : 'website-upgrade');
   if (/github|repository|repo|commit|pull request/.test(text)) add('github');
   if (/deploy|production|vercel/.test(text)) add('deployment');
   if (/database|supabase|postgres|rls|sql/.test(text)) add('database');
@@ -102,6 +115,8 @@ export function classifyAgents(message: string, owner: boolean, allowedAgentIds?
   if (/test|testing|qa/.test(text)) add('qa');
   if (/image|picture|photo|generate an image/.test(text)) add('image');
   if (/video|storyboard|cinematic/.test(text)) add('video');
+  if (/calendar|appointment|meeting|schedule an event/.test(text)) add('calendar');
+  if (/remind|reminder|daily update|personal schedule/.test(text)) add('personal-assistant');
   if (/email|mail/.test(text)) add('email');
   if (/buy|purchase|shopping|cart|checkout/.test(text)) add('shopping');
   if (/memory|remember|forget/.test(text)) add('memory');
@@ -114,7 +129,7 @@ export async function runAgent(
   task: string,
   context: string,
   owner: boolean,
-  meta?: { runId?: string; userId?: string; request?: Request; persistAgentRun?: boolean },
+  meta?: { runId?: string; userId?: string; request?: Request; persistAgentRun?: boolean; timezone?: string },
 ) {
   const input = validateAgentInput(task, context);
   if (!input.success) throw new Error('Agent input did not match its execution schema.');
@@ -158,6 +173,8 @@ export async function runAgent(
     available = await createUserAssistantTools(meta.userId, options, {
       agentId: agent.id,
       allowMcpRead: agentHasMcpReadCapability(agent),
+      userMessage: task,
+      timezone: meta.timezone,
     });
   }
   const tools = getAgentAvailableTools(agent, available.tools, task);

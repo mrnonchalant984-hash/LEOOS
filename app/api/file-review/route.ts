@@ -18,23 +18,50 @@ export async function POST(req: NextRequest) {
     const fd = await req.formData();
     const file = fd.get('file');
     if (!(file instanceof File)) return NextResponse.json({ error: 'File required' }, { status: 400 });
+    if (file.size < 1 || file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Review files must be between 1 byte and 10 MB.' }, { status: 413 });
+    }
     const bytes = Buffer.from(await file.arrayBuffer());
     const client = new GoogleGenAI({ apiKey: key });
-    let prompt = 'Review this uploaded project file. Give exactly 3 practical improvements focused on code quality, UX/conversion, and production readiness.';
+    const specialSourceNames = new Set(['dockerfile','makefile','procfile','gemfile','pipfile','requirements.txt','cargo.toml','go.mod','go.sum']);
+    const sourceExtensions = /\.(?:html?|css|scss|sass|less|js|jsx|mjs|cjs|ts|tsx|mts|cts|vue|svelte|astro|py|pyi|ipynb|go|rs|java|kt|kts|swift|rb|php|sql|sh|bash|zsh|ps1|bat|cmd|c|h|cc|cpp|hpp|cs|fs|fsx|scala|clj|ex|exs|erl|hrl|dart|lua|r|jl|pl|pm|groovy|gradle|xml|json|jsonc|yaml|yml|toml|ini|cfg|conf|dockerfile|tf|hcl|md|mdx|txt|csv)$/i;
+    let prompt = 'Perform a source-level code review of the supplied file(s). Identify concrete defects and cite exact file paths and line numbers where possible. Assess language-specific correctness, runtime behavior, security, data validation, error handling, performance, maintainability, tests and production readiness. Separate confirmed defects from risks and recommendations. Do not invent code that is not present. If the input is a website project, review its source files and configuration, not only rendered HTML. If the project contains Python or other backend languages, inspect those too. Return a concise prioritized report with severity, evidence, impact and recommended fix.';
     const parts: Array<Record<string, unknown>> = [];
     if (file.type.startsWith('image/')) {
-      prompt = 'Review this website/design image. Give exactly 3 practical improvements covering hierarchy, UX/conversion, and visual quality.';
+      prompt = 'Review this website/design image. Give practical improvements covering hierarchy, UX, accessibility and visual quality.';
       parts.push({ inlineData: { mimeType: file.type, data: bytes.toString('base64') } });
     } else {
       let text = '';
       if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-        text = (await pdf(bytes)).text.slice(0, 15000);
+        text = (await pdf(bytes)).text.slice(0, 30000);
       } else if (file.name.toLowerCase().endsWith('.zip')) {
         const zip = await JSZip.loadAsync(bytes);
-        for (const name of Object.keys(zip.files).filter(name => /\.(tsx?|jsx?|css|json|md|html)$/.test(name)).slice(0, 30)) {
-          text += `\n--- ${name} ---\n${(await zip.file(name)?.async('string') || '').slice(0, 3000)}`;
+        const entries = Object.entries(zip.files).filter(([name, entry]) => {
+          const normalized = name.replace(/\\/g, '/');
+          const basename = normalized.split('/').pop()?.toLowerCase() || '';
+          return !entry.dir && !normalized.startsWith('/') && !/^[A-Za-z]:\//.test(normalized) && !normalized.split('/').includes('..') &&
+            (sourceExtensions.test(normalized) || specialSourceNames.has(basename)) &&
+            !/(?:^|\/)(?:node_modules|\.git|\.next|dist|build|coverage|vendor)\//i.test(normalized);
+        }).slice(0, 40);
+        let total = 0;
+        for (const [name, entry] of entries) {
+          const declaredSize = Number((entry as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize || 0);
+          if (!Number.isFinite(declaredSize) || declaredSize < 1 || declaredSize > 20_000 || total + declaredSize > 180_000) continue;
+          const source = await entry.async('string');
+          if (source.includes('\u0000')) continue;
+          const clipped = source.slice(0, 12_000);
+          total += Buffer.byteLength(clipped);
+          if (total > 180_000) break;
+          text += `\n--- SOURCE FILE: ${name} ---\n${clipped}`;
         }
-      } else text = bytes.toString('utf8').slice(0, 15000);
+        if (!text) return NextResponse.json({ error: 'The ZIP contains no supported, readable source files within the review limits.' }, { status: 415 });
+      } else {
+        const filename = file.name.replace(/\\/g, '/').split('/').pop() || 'uploaded-source';
+        if (!sourceExtensions.test(filename) && !specialSourceNames.has(filename.toLowerCase())) return NextResponse.json({ error: 'Unsupported source file. Upload a supported code/configuration file or a ZIP project archive.' }, { status: 415 });
+        text = bytes.toString('utf8').slice(0, 30000);
+        if (text.includes('\u0000')) return NextResponse.json({ error: 'Binary files cannot be reviewed as source code.' }, { status: 415 });
+        text = `--- SOURCE FILE: ${filename} ---\n${text}`;
+      }
       parts.push({ text: `${prompt}\n\n${text}` });
     }
     if (!parts.length || file.type.startsWith('image/')) parts.push({ text: prompt });

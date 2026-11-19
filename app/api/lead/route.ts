@@ -1,61 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { sendSmtpMail } from '@/lib/smtp';
+import { enforceIpRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
-type LeadPayload = { name: string; service: string; budget: string; phone: string; chat_summary?: string };
-
-async function notifyByEmail(data: LeadPayload): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const destination = process.env.CONTACT_EMAIL || process.env.OWNER_EMAIL;
-  // Email notification is optional; the lead is stored independently below.
-  if (!destination) return false;
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.SMTP_FROM) {
-    try { return await sendSmtpMail({ to: destination, from: process.env.SMTP_FROM, subject: `New lead: ${data.name}`, text: `New LeonardX lead\n\nName: ${data.name}\nService: ${data.service}\nBudget: ${data.budget}\nPhone: ${data.phone}${data.chat_summary ? `\n\nChat summary: ${data.chat_summary}` : ''}\n\nFollow up with the client.` }); } catch { return false; }
-  }
-  if (!apiKey) return false;
-  const from = process.env.CONTACT_FROM_EMAIL || 'LeonardX <onboarding@resend.dev>';
-  try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from,
-        to: [destination],
-        subject: `New lead: ${data.name}`,
-        text: `New LeonardX lead\n\nName: ${data.name}\nService: ${data.service}\nBudget: ${data.budget}\nPhone: ${data.phone}${data.chat_summary ? `\n\nChat summary: ${data.chat_summary}` : ''}\n\nFollow up with the client.`,
-      }),
-      signal: AbortSignal.timeout(8_000),
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const name = String(body.name || '').trim().slice(0, 160);
-    const service = String(body.service || '').trim().slice(0, 500);
-    const budget = String(body.budget || '').trim().slice(0, 160);
-    const phone = String(body.phone || body.whatsapp || '').trim().slice(0, 80);
-    const chatSummary = typeof body.chat_summary === 'string' ? body.chat_summary.trim().slice(0, 4000) : '';
-    if (!name || !service || !budget || !phone) {
-      return NextResponse.json({ error: 'Please complete all lead fields.' }, { status: 400 });
+    if (!req.headers.get('content-type')?.toLowerCase().includes('application/json')) {
+      return NextResponse.json({ error: 'Send lead details as JSON.' }, { status: 415 });
     }
+    if (Number(req.headers.get('content-length') || 0) > 12_288) {
+      return NextResponse.json({ error: 'Lead details are too large.' }, { status: 413 });
+    }
+    const limited = await enforceIpRateLimit(req, 'public-lead', 5, 3600);
+    if (limited) return limited;
 
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Send a valid lead submission.' }, { status: 400 });
+    }
+    const input = body as Record<string, unknown>;
+    // Honeypot field: bots that fill it are rejected without storing or notifying.
+    if (typeof input.website === 'string' && input.website.trim()) {
+      return NextResponse.json({ ok: true }, { status: 200 });
+    }
+    const name = typeof input.name === 'string' ? input.name.trim() : '';
+    const service = typeof input.service === 'string' ? input.service.trim() : '';
+    const budget = typeof input.budget === 'string' ? input.budget.trim() : '';
+    const phone = typeof input.phone === 'string' ? input.phone.trim() : '';
+    const chatSummary = typeof input.chat_summary === 'string' ? input.chat_summary.trim() : '';
+
+    if (name.length < 2 || name.length > 120 || service.length < 2 || service.length > 500 ||
+        budget.length < 1 || budget.length > 160 || phone.length < 5 || phone.length > 80 ||
+        chatSummary.length > 4000) {
+      return NextResponse.json({ error: 'Please complete the lead fields with valid details.' }, { status: 400 });
+    }
     if (!supabase) {
       return NextResponse.json({ error: 'Lead storage is unavailable. Configure Supabase before accepting leads.' }, { status: 503 });
     }
-    const { error } = await supabase.from('leads').insert({ name, service, budget, whatsapp: phone, chat_summary: chatSummary });
+
+    const { error } = await supabase.from('leads').insert({
+      name, service, budget, whatsapp: phone, chat_summary: chatSummary,
+    });
     if (error) {
+      console.error('Lead could not be saved.');
       return NextResponse.json({ error: 'The lead could not be saved. Please retry.' }, { status: 503 });
     }
 
-    const emailSent = await notifyByEmail({ name, service, budget, phone, chat_summary: chatSummary });
-    return NextResponse.json({ ok: true, saved: true, emailSent, notification: emailSent ? 'sent' : 'optional_email_not_configured' }, { status: 201 });
+    // The browser sends the owner notification through Web3Forms. Do not use
+    // Resend or SMTP: Web3Forms free submissions must originate in the browser.
+    return NextResponse.json({
+      ok: true,
+      saved: true,
+      emailSent: false,
+      web3FormsClientRequired: true,
+      notification: 'web3forms_client_delivery_required',
+    }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
   } catch {
     return NextResponse.json({ error: 'Lead capture failed. Please retry.' }, { status: 400 });
   }

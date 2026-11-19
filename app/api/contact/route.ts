@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { validateContactSubmission } from '@/lib/contact-form';
 import { enforceIpRateLimit } from '@/lib/rate-limit';
-import { sendSmtpMail } from '@/lib/smtp';
 
 export const runtime = 'nodejs';
 
@@ -28,71 +27,6 @@ async function readBoundedBody(request: NextRequest, maxBytes: number) {
     }
   } finally {
     reader.releaseLock();
-  }
-}
-
-async function notifyContact(data: {
-  name: string;
-  email: string;
-  service: string;
-  message: string;
-}): Promise<boolean> {
-  const destination = process.env.CONTACT_EMAIL || process.env.OWNER_EMAIL;
-  if (!destination) return false;
-  const text = [
-    'New LeonardX contact message',
-    '',
-    `Name: ${data.name}`,
-    `Email: ${data.email}`,
-    `Service: ${data.service}`,
-    '',
-    'Message:',
-    data.message,
-  ].join('\n');
-
-  const smtpPassword = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
-  const smtpFrom = process.env.SMTP_FROM || process.env.SMTP_FORM || process.env.CONTACT_FROM_EMAIL;
-  const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && smtpPassword && smtpFrom);
-  if (smtpConfigured) {
-    try {
-      if (await sendSmtpMail({
-        to: destination,
-        from: smtpFrom,
-        subject: `New LeonardX contact: ${data.name}`,
-        text,
-      })) return true;
-    } catch {
-      console.error('Contact email SMTP delivery failed.');
-    }
-  }
-
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.CONTACT_FROM_EMAIL;
-  if (!apiKey || !from) return false;
-  try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from,
-        to: [destination],
-        reply_to: data.email,
-        subject: `New LeonardX contact: ${data.name}`,
-        text,
-      }),
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!response.ok) {
-      console.error(`Contact email Resend delivery failed with status ${response.status}.`);
-      return false;
-    }
-    return true;
-  } catch {
-    console.error('Contact email Resend delivery failed.');
-    return false;
   }
 }
 
@@ -139,13 +73,15 @@ export async function POST(request: NextRequest) {
       }, { status: 503 });
     }
 
-    const emailSent = await notifyContact({ name, email, service, message });
+    // Email delivery is intentionally handled by the browser using Web3Forms.
+    // Its free endpoint rejects server-originated requests unless the server IP
+    // is allowlisted. Never silently fall back to Resend or SMTP.
     return NextResponse.json({
       ok: true,
       saved: true,
-      emailSent,
-      web3FormsClientRequired: !emailSent,
-      notification: emailSent ? 'sent' : 'client_web3forms_or_manual_followup_required',
+      emailSent: false,
+      web3FormsClientRequired: true,
+      notification: 'web3forms_client_delivery_required',
     }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
   } catch {
     return NextResponse.json({

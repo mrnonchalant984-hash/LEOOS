@@ -53,13 +53,26 @@ async function executeWorkflowStep(
   owner: boolean,
   runId: string,
   userId: string,
+  timezone: string,
 ) {
   const stepOutputs: string[] = [];
   for (const agent of plan.agents) {
     const startedAt = Date.now();
     try {
-      const output = await runAgent(agent, plan.task, context, owner, { runId, userId });
-      stepOutputs.push(`${agent.name}: ${output}`);
+      const rawOutput = await runAgent(agent, plan.task, context, owner, { runId, userId, timezone });
+      let payload: { status?: unknown; result?: unknown; execution?: { tool_calls?: unknown[] } };
+      try { payload = JSON.parse(rawOutput) as typeof payload; }
+      catch { throw new Error('workflow_agent_output_invalid'); }
+      if (payload.status !== 'completed' || typeof payload.result !== 'string' || !payload.result.trim()) {
+        throw new Error('workflow_agent_output_invalid');
+      }
+      const toolCalls = Array.isArray(payload.execution?.tool_calls) ? payload.execution.tool_calls : [];
+      if (toolCalls.some(call => Boolean(call && typeof call === 'object' && (call as { success?: unknown }).success === false))) {
+        throw new Error('workflow_tool_execution_failed');
+      }
+      const actionNeedsTool = /\b(send|submit|publish|deploy|commit|push|book|cancel|delete|schedule (?:a|an|the) (?:meeting|event|reminder)|create (?:a|an|the) (?:reminder|calendar event|repository|project|file)|update (?:the|my) (?:calendar|event|reminder)|add (?:a|an|the) (?:calendar event|reminder))\b/i.test(plan.task);
+      if (actionNeedsTool && toolCalls.length === 0) throw new Error('workflow_action_unverified');
+      stepOutputs.push(`${agent.name}: ${payload.result}`);
       console.info(JSON.stringify({ event: 'workflow.agent_step_completed', run_id: runId, user_id: userId, agent_id: agent.id, duration_ms: Date.now() - startedAt }));
     } catch (error) {
       console.warn(JSON.stringify({ event: 'workflow.agent_step_failed', run_id: runId, user_id: userId, agent_id: agent.id, duration_ms: Date.now() - startedAt, error_name: error instanceof Error ? error.name : 'unknown' }));
@@ -70,7 +83,7 @@ async function executeWorkflowStep(
 }
 
 function authorized(req: NextRequest) {
-  const configuredSecrets = [process.env.WORKFLOW_WORKER_SECRET, process.env.CRON_SECRET].filter((value): value is string => Boolean(value && value.length >= 32));
+  const configuredSecrets = [process.env.WORKFLOW_WORKER_SECRET, process.env.BRAM_SCHEDULER_SECRET, process.env.CRON_SECRET].filter((value): value is string => Boolean(value && value.length >= 32));
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
   if (!configuredSecrets.length || !token) return false;
   const supplied = createHmac('sha256', token).update('leonardx-workflow-worker').digest();
@@ -82,7 +95,7 @@ export async function POST(req: NextRequest) {
   if (process.env.WORKFLOW_WORKER_ENABLED !== 'true') return NextResponse.json({ error: 'Workflow worker is disabled.' }, { status: 503 });
   if (!authorized(req)) return NextResponse.json({ error: 'Unauthorized worker.' }, { status: 401 });
   const request = await req.json().catch(() => ({}));
-  const limit = Number.isInteger(request?.limit) ? Math.max(1, Math.min(1, request.limit)) : 1;
+  const limit = Number.isInteger(request?.limit) ? Math.max(1, Math.min(5, request.limit)) : 5;
   const workerId = `workflow-worker-${randomUUID()}`;
   const db = adminSupabase();
   const { error: scheduleError } = await db.rpc('enqueue_due_workflows', { p_limit: 10 });
@@ -99,13 +112,14 @@ export async function POST(req: NextRequest) {
       if (runError || !run) throw new Error('run_not_found');
       if (run.status === 'cancelled') throw new Error('workflow_cancelled');
       if (!['queued', 'running'].includes(run.status)) throw new Error('workflow_run_unavailable');
-      const { data: workflow, error: workflowError } = await db.from('workflows').select('id,user_id,status,definition').eq('id', run.workflow_id).eq('user_id', run.user_id).maybeSingle();
+      const { data: workflow, error: workflowError } = await db.from('workflows').select('id,user_id,status,definition,trigger_config').eq('id', run.workflow_id).eq('user_id', run.user_id).maybeSingle();
       if (workflowError || !workflow || workflow.status === 'paused' || workflow.status === 'archived') throw new Error('workflow_unavailable');
       const { data: profile } = await db.from('profiles').select('role,email').eq('id', run.user_id).maybeSingle();
       const owner = isPlatformOwner(profile);
       const plan = await getEffectiveUserPlan(run.user_id, owner);
       if (!canUseManualAgents(plan.key, owner)) throw new Error('plan_entitlement_denied');
       const allowed = getAllowedAgentIds(plan.key, owner);
+      const workflowTimezone = typeof (workflow.trigger_config as { timezone?: unknown } | null)?.timezone === 'string' ? String((workflow.trigger_config as { timezone: string }).timezone) : 'UTC';
       const rawSteps = (workflow.definition as { steps?: unknown[] } | null)?.steps;
       if (!Array.isArray(rawSteps) || rawSteps.length < 1 || rawSteps.length > 5) throw new Error('invalid_workflow_definition');
       let steps: WorkflowDependencyStep[];
@@ -191,7 +205,7 @@ export async function POST(req: NextRequest) {
         }
 
         const batchResults = await Promise.allSettled(
-          batch.map(plan => executeWorkflowStep(plan, context, owner, runId, run.user_id)),
+          batch.map(plan => executeWorkflowStep(plan, context, owner, runId, run.user_id, workflowTimezone)),
         );
         const { data: postBatchRun, error: postBatchStatusError } = await db.from('workflow_runs')
           .select('status').eq('id', runId).eq('user_id', run.user_id).maybeSingle();
@@ -232,6 +246,9 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       const code = error instanceof Error && /^[a-z_]{3,64}$/.test(error.message) ? error.message : 'workflow_execution_failed';
       if (code === 'workflow_cancelled') {
+        await db.from('workflow_jobs').update({
+          status: 'cancelled', lease_owner: null, lease_expires_at: null, updated_at: new Date().toISOString(),
+        }).eq('id', job.id).eq('lease_owner', workerId);
         results.push({ run_id: runId, status: 'cancelled' });
         continue;
       }

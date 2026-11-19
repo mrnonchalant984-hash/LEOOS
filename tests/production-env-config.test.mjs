@@ -19,11 +19,15 @@ test('CI uses placeholders instead of production credentials', () => {
   assert.doesNotMatch(ci, /\$\{\{\s*secrets\.(PAYSTACK_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY|GEMINI_API_KEY)\s*\}\}/);
 });
 
-test('lead capture treats Resend as optional after successful database persistence', () => {
+test('Bram lead capture persists once and sends the owner notification through Web3Forms', () => {
   const route = read('app/api/lead/route.ts');
-  assert.match(route, /if \(!destination\) return false/);
-  assert.match(route, /sendSmtpMail/);
-  assert.match(route, /if \(!apiKey\) return false/);
-  assert.match(route, /saved: true, emailSent, notification:/);
-  assert.doesNotMatch(route, /if\(!emailSent\)return NextResponse\.json\(\{error:'Lead saved, but email notification is not configured yet\.'/);
+  const capture = read('components/LeadCapture.tsx');
+  assert.match(route, /saved: true/);
+  assert.match(route, /enforceIpRateLimit/);
+  assert.doesNotMatch(route, /process\.env\.(?:RESEND_API_KEY|SMTP_HOST|SMTP_USER)|api\.resend\.com|sendSmtpMail/);
+  assert.match(capture, /api\.web3forms\.com\/submit/);
+  assert.match(capture, /NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY/);
+  assert.match(capture, /New Braverton lead captured by Bram/);
+  assert.match(capture, /leadSaved/);
+  assert.match(capture, /web3Result\.success !== true/);
 });
