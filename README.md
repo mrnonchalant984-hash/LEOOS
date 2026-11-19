@@ -178,7 +178,7 @@ Server configuration:
 - `LEO_GEMINI_AUDIO_MODEL` for recorded-audio transcription (defaults to `gemini-3.5-transcribe`).
 - `LEO_GEMINI_TTS_MODEL` for standalone speech generation (defaults to `gemini-3.8-flash-tts`).
 - `LEO_GEMINI_LIVE_MODEL` for low-latency bidirectional Bram voice (defaults to `gemini-3.8-live`); the authenticated session endpoint issues a short-lived, single-use constrained token.
-- `LEO_GEMINI_TRANSCRIBE_LIVE_MODEL` records the dedicated streaming transcription model ID for a future standalone transcription stream; Bram Live already supports input transcription in its session configuration.
+- `LEO_GEMINI_TRANSCRIBE_LIVE_MODEL` configures the dedicated streaming transcription model, exposed through authenticated `POST /api/realtime/transcription-session`.
 
 The voice session is handled by Braverton's authenticated server-side session and voice endpoints. Automatic speech detection keeps the conversation flowing without manual per-turn controls.
 
