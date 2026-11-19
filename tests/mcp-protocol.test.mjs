@@ -411,3 +411,15 @@ test('OAuth scope parser accepts only read and optional write permissions', () =
   assert.deepEqual(parseRequestedMcpScopes('mcp:read'), ['mcp:read']);
   assert.equal(parseRequestedMcpScopes(''), null);
 });
+
+test('Braverton MCP advertises Bram names and keeps legacy Leo AI aliases', async () => {
+  const { createUserMcpServer } = await import('../lib/mcp/server.ts');
+  const server = createUserMcpServer('authenticated-user', [MCP_READ_SCOPE, MCP_WRITE_SCOPE], createReader());
+  const names = server._registeredTools ? Object.keys(server._registeredTools) : [];
+  for (const name of ['bram_chat', 'bram_get_execution_status', 'bram_external_assist', 'bram_external_assist_complete']) {
+    assert.ok(names.includes(name), `missing current MCP tool: ${name}`);
+  }
+  for (const name of ['leo_ai_chat', 'leo_ai_get_execution_status', 'leo_ai_external_assist', 'leo_ai_external_assist_complete']) {
+    assert.ok(names.includes(name), `missing legacy MCP compatibility tool: ${name}`);
+  }
+});
