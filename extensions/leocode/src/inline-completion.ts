@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { assertNoWorkspaceSymlinks } from './workspace/context';
+import { isSafeWorkspacePath, redactWorkspaceText } from './workspace/policy';
 
 type MessagesResponse = {
   content?: Array<{ type?: string; text?: string }>;
@@ -36,8 +38,8 @@ export class BramInlineCompletionProvider implements vscode.InlineCompletionItem
 
     const startLine = Math.max(0, position.line - 80);
     const endLine = Math.min(document.lineCount - 1, position.line + 24);
-    const prefix = document.getText(new vscode.Range(startLine, 0, position.line, position.character)).slice(-6000);
-    const suffix = document.getText(new vscode.Range(position, new vscode.Position(endLine, document.lineAt(endLine).text.length))).slice(0, 1600);
+    const prefix = redactWorkspaceText(document.getText(new vscode.Range(startLine, 0, position.line, position.character))).slice(-6000);
+    const suffix = redactWorkspaceText(document.getText(new vscode.Range(position, new vscode.Position(endLine, document.lineAt(endLine).text.length)))).slice(0, 1600);
     if (!prefix.trim()) {
       this.inFlight.delete(requestKey);
       return [];
@@ -64,7 +66,7 @@ export class BramInlineCompletionProvider implements vscode.InlineCompletionItem
           max_tokens: 256,
           messages: [
             { role: 'system', content: 'You are Bram Code inline completion. Continue the code exactly at the cursor. Return only the code to insert, with no Markdown fences, explanation, repeated prefix, or surrounding suffix. Keep the change small and syntactically consistent.' },
-            { role: 'user', content: `Language: ${document.languageId}\nFile: ${document.fileName.split(/[\\\\/]/).pop()}\n\nCode before cursor:\n${prefix}\n\nCode after cursor (do not repeat):\n${suffix}` },
+            { role: 'user', content: `Language: ${document.languageId}\nFile: ${relativePath}\n\nCode before cursor:\n${prefix}\n\nCode after cursor (do not repeat):\n${suffix}` },
           ],
         }),
         cache: 'no-store',
