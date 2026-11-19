@@ -50,7 +50,7 @@ export function getAgentAvailableTools(agent: AgentDefinition, tools: AssistantT
   // A GitHub owner/repository slug is not a Braverton project UUID. When the
   // task names a repository, hide project-file tools so the model cannot
   // accidentally send a repo slug to get_project_files.
-  const repositoryTask = /(?:github\\.com\\/|\\b[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+\\b)/i.test(task);
+  const repositoryTask = /(?:github\.com\/|\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\b)/i.test(task);
   return tools.filter(tool => {
     if (repositoryTask && ['get_project_files', 'list_projects', 'get_project_status'].includes(tool.name)) return false;
     return allowedTool(agent, tool.name, task);
