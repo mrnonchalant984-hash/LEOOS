@@ -47,7 +47,7 @@ const rawDefs = ([
 ['calendar','Calendar Agent','Calendar operations','productivity','Manage authorized calendar data only when an integration is connected.',true,['calendar_read','calendar_write'],['read','write'],true],
 ['notes','Notes Agent','Notes','productivity','Manage authorized notes.',true,['notes_read','notes_write'],['read','write'],false],
 ['file-manager','File Manager Agent','Files','productivity','Manage authorized files only.',true,['file_read','file_write'],['read','write'],true],
-['memory','Memory Agent','Persistent Leo memory','productivity','Manage user-approved persistent memory and privacy.',true,['memory_read','memory_write'],['read','write'],false],
+['memory','Memory Agent','Persistent Bram memory','productivity','Manage user-approved persistent memory and privacy.',true,['memory_read','memory_write'],['read','write'],false],
 ['customer-support','Customer Support Agent','Customer support','business','Answer using approved knowledge and account context.',true,['knowledge_read'],['read'],false],
 ['sales','Sales Agent','Sales support','business','Support sales workflows using verified pricing and product data.',true,['knowledge_read'],['read'],false],
 ['lead','Lead Agent','Lead analysis','business','Analyze authorized leads and prioritize them.',true,['database_read'],['read','write'],false],
