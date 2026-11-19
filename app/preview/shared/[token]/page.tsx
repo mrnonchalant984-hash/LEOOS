@@ -1,19 +1,21 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {useParams} from 'next/navigation';
+import {createBrowserClient} from '@supabase/ssr';
 type Comment={id:string;body:string;status:string;created_at:string};
 type Payload={share:{id:string;project_id:string;title:string;preview_url:string;allow_comments:boolean;can_apply:boolean;expires_at:string|null};comments:Comment[]};
+async function accessToken(){const supabase=createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);const {data}=await supabase.auth.getSession();return data.session?.access_token||'';}
 export default function SharedPreviewPage(){
  const params=useParams<{token:string}>(),token=params.token;
  const [data,setData]=useState<Payload|null>(null),[error,setError]=useState(''),[comment,setComment]=useState(''),[busy,setBusy]=useState(false),[applying,setApplying]=useState('');
- async function load(){const r=await fetch('/api/previews/shared/'+encodeURIComponent(token),{cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'Preview unavailable');setData(j);}
+ async function load(){const bearer=await accessToken();const r=await fetch('/api/previews/shared/'+encodeURIComponent(token),{headers:bearer?{Authorization:'Bearer '+bearer}:{},cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'Preview unavailable');setData(j);}
  useEffect(()=>{void load().catch(e=>setError(e.message));},[token]);
  async function submit(){if(!data||!comment.trim()||busy)return;setBusy(true);setError('');try{
   const r=await fetch('/api/previews/shared/'+encodeURIComponent(token)+'/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:comment})});
   const j=await r.json();if(!r.ok)throw new Error(j.error||'Comment could not be submitted');setComment('');await load();
  }catch(e){setError(e instanceof Error?e.message:'Comment failed');}finally{setBusy(false);}}
  async function applyFeedback(id:string){if(applying)return;setApplying(id);setError('');try{
-  const r=await fetch('/api/previews/shared/'+encodeURIComponent(token)+'/comments/'+encodeURIComponent(id)+'/apply',{method:'POST',headers:{'Content-Type':'application/json'}});
+  const bearer=await accessToken();const r=await fetch('/api/previews/shared/'+encodeURIComponent(token)+'/comments/'+encodeURIComponent(id)+'/apply',{method:'POST',headers:{'Content-Type':'application/json',...(bearer?{Authorization:'Bearer '+bearer}:{})}});
   const j=await r.json();if(!r.ok)throw new Error(j.error||'Bram could not apply feedback');await load();
  }catch(e){setError(e instanceof Error?e.message:'Bram edit failed');}finally{setApplying('');}}
  if(error&&!data)return <main className="min-h-screen grid place-items-center bg-slate-950 text-white"><p>{error}</p></main>;
