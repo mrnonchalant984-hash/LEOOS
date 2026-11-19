@@ -209,3 +209,61 @@ export async function getGitHubAppInstallationTokenForId(
   installationTokenCache.set(cacheKey, { token: result.token, expiresAtMs });
   return result.token;
 }
+
+
+/**
+ * Mint a short-lived installation token for a customer-owned Braverton GitHub
+ * App installation. Unlike the platform-owner helper above, this deliberately
+ * does not read GITHUB_APP_INSTALLATION_ID and never falls back to a user PAT.
+ * The installation ID must come from the authenticated user's verified,
+ * encrypted user_integrations record.
+ */
+export async function getCustomerGitHubAppInstallationToken(
+  installationId: string,
+  options: GitHubAppTokenOptions = {},
+): Promise<string> {
+  const env = options.env || process.env;
+  const appId = env.GITHUB_APP_ID?.trim() || '';
+  const privateKey = env.GITHUB_APP_PRIVATE_KEY?.trim() || '';
+  if (!/^\d{1,20}$/.test(appId) || !privateKey) {
+    throw new Error('The Braverton GitHub App is not configured. Set its server-side App ID and private key.');
+  }
+  if (!/^\d{1,20}$/.test(installationId)) {
+    throw new Error('The connected GitHub App installation is invalid. Reconnect GitHub.');
+  }
+  const now = options.now || Date.now;
+  const fetcher = options.fetcher || fetch;
+  const cacheKey = `customer:${appId}:${installationId}`;
+  const cached = installationTokenCache.get(cacheKey);
+  if (cached && cached.expiresAtMs - TOKEN_REFRESH_SKEW_MS > now()) return cached.token;
+
+  const jwt = createGitHubAppJwt(appId, privateKey, now());
+  let response: Response;
+  try {
+    response = await fetcher(`${GITHUB_API}/app/installations/${encodeURIComponent(installationId)}/access_tokens`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+        'User-Agent': 'Braverton-MCP',
+      },
+      body: JSON.stringify({}),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw new Error('Could not reach GitHub to authorize the connected Braverton installation.');
+  }
+  if (!response.ok) throw new Error(sanitizedGitHubAuthError(response.status));
+  const payload = await response.json().catch(() => null) as { token?: unknown; expires_at?: unknown } | null;
+  if (!payload || typeof payload.token !== 'string' || !payload.token || typeof payload.expires_at !== 'string') {
+    throw new Error('GitHub returned an incomplete customer installation-token response.');
+  }
+  const expiresAtMs = Date.parse(payload.expires_at);
+  if (!Number.isFinite(expiresAtMs) || expiresAtMs <= now() + TOKEN_REFRESH_SKEW_MS) {
+    throw new Error('GitHub returned a customer installation token that is expired or too close to expiration.');
+  }
+  installationTokenCache.set(cacheKey, { token: payload.token, expiresAtMs });
+  return payload.token;
+}
