@@ -160,6 +160,17 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
     if (error) return toolError(typeof error === 'string' ? error : 'Bram request status could not be loaded.');
     return { content: [{ type: 'text', text: JSON.stringify(data) }] };
   });
+  server.registerTool('bram_get_execution_status', {
+    title: 'Get Bram request status',
+    description: 'Read the status of a Bram request owned by the authenticated user. Completed responses are returned only to that same user.',
+    inputSchema: { request_id: z.string().uuid() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ request_id }) => {
+    if (!projects.leoAiGetExecutionStatus) return toolError('Bram request status is unavailable in this MCP deployment.');
+    const { data, error } = await projects.leoAiGetExecutionStatus(userId, request_id);
+    if (error) return toolError(typeof error === 'string' ? error : 'Bram request status could not be loaded.');
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+  });
   server.registerTool('list_available_agents', {
     title: 'Discover available agents',
     description: 'List executable LeonardX agents authorized for this account, including capabilities, approval requirements, and availability. Owner-only agents and user-owned agents are filtered by the server.',
@@ -438,6 +449,23 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
       if (error) return toolError(typeof error === 'string' ? error : 'External-AI conversation could not be started.');
       return { content: [{ type: 'text', text: JSON.stringify({ ...(data as Record<string, unknown>), mode: 'external_ai_assisted', inference_performed_by: 'connected_mcp_client', leonardx_model_provider_called: false, leo_ai_credits_used: false, client_instructions: ['Reason using your own model; do not claim LeonardX generated this reasoning.', 'Use only authorized LeonardX MCP tools for project reads, writes, builds, tests, and deployment.', 'Verify ownership before modifying a project. Never infer ownership.', 'Report operations only after tool results verify them.', 'Do not send secrets or unrelated private data to external services.', 'Save your final response with leo_ai_external_assist_complete.'] }) }] };
     });
+    server.registerTool('bram_external_assist', {
+      title: 'Start an external-AI Bram conversation',
+      description: 'Persists the user message and returns owned conversation history plus a task packet. The connected MCP client must reason using its own model; this tool never calls a LeonardX model provider. After reasoning and any authorized tool calls, save the final answer with bram_external_assist_complete.',
+      inputSchema: {
+        message: z.string().trim().min(1).max(12000),
+        session_id: z.string().uuid().optional(),
+        project_id: z.string().uuid().optional(),
+        context: z.string().max(12000).optional().describe('Non-secret task context that the connected model is authorized to see.'),
+        confirm: z.literal(true).describe('Set true only after the user explicitly approves saving this message to conversation history.'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    }, async ({ message, session_id, project_id, context }) => {
+      if (!projects.leoExternalAssistStart) return toolError('Persistent external-AI conversation storage is unavailable in this MCP deployment.');
+      const { data, error } = await projects.leoExternalAssistStart(userId, { message, session_id, project_id, context });
+      if (error) return toolError(typeof error === 'string' ? error : 'External-AI conversation could not be started.');
+      return { content: [{ type: 'text', text: JSON.stringify({ ...(data as Record<string, unknown>), mode: 'external_ai_assisted', inference_performed_by: 'connected_mcp_client', leonardx_model_provider_called: false, leo_ai_credits_used: false, client_instructions: ['Reason using your own model; do not claim LeonardX generated this reasoning.', 'Use only authorized LeonardX MCP tools for project reads, writes, builds, tests, and deployment.', 'Verify ownership before modifying a project. Never infer ownership.', 'Report operations only after tool results verify them.', 'Do not send secrets or unrelated private data to external services.', 'Save your final response with bram_external_assist_complete.'] }) }] };
+    });
     server.registerTool('leo_ai_external_assist_complete', {
       title: 'Save an external-AI Bram response',
       description: 'Persists the connected client model’s actual final response to the same user-owned conversation. This records the supplied text; it does not verify which model generated it and does not call any model provider.',
@@ -449,7 +477,37 @@ export function createUserMcpServer(userId: string, scopes: string[], projects: 
       if (error) return toolError(typeof error === 'string' ? error : 'External-AI response could not be saved.');
       return { content: [{ type: 'text', text: JSON.stringify(data) }] };
     });
+    server.registerTool('bram_external_assist_complete', {
+      title: 'Save an external-AI Bram response',
+      description: 'Persists the connected client model’s actual final response to the same user-owned conversation. This records the supplied text; it does not verify which model generated it and does not call any model provider.',
+      inputSchema: { session_id: z.string().uuid(), assistant_response: z.string().trim().min(1).max(12000), confirm: z.literal(true).describe('Set true only after the user explicitly approves saving this response to conversation history.') },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    }, async ({ session_id, assistant_response }) => {
+      if (!projects.leoExternalAssistComplete) return toolError('Persistent external-AI conversation storage is unavailable in this MCP deployment.');
+      const { data, error } = await projects.leoExternalAssistComplete(userId, { session_id, assistant_response });
+      if (error) return toolError(typeof error === 'string' ? error : 'External-AI response could not be saved.');
+      return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+    });
     server.registerTool('leo_ai_chat', {
+      title: 'Chat with Bram',
+      description: 'Send a real request to Bram’s configured Braverton model router. Conversation history is scoped to this authenticated user. This provider call may incur platform/provider cost; supply confirm=true and reuse the idempotency key for uncertain retries. The connected client model is not used for this operation.',
+      inputSchema: {
+        message: z.string().trim().min(1).max(12000),
+        session_id: z.string().uuid().optional(),
+        project_id: z.string().uuid().optional(),
+        model: z.string().trim().min(1).max(160).optional().describe('Optional primary model/preset from list_ai_providers.'),
+        fallback_model: z.string().trim().min(1).max(160).optional().describe('Optional explicit fallback model. Used only after rate-limit, transient server, or network errors; never after authentication or request errors.'),
+        idempotency_key: z.string().uuid(),
+        confirm: z.literal(true),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    }, async ({ message, session_id, project_id, model, fallback_model, idempotency_key }) => {
+      if (!projects.leoAiChat) return toolError('Bram is unavailable in this MCP deployment.');
+      const { data, error } = await projects.leoAiChat(userId, { message, session_id, project_id, model, fallback_model, idempotency_key });
+      if (error) return toolError(typeof error === 'string' ? error : 'Bram could not complete the request.');
+      return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+    });
+    server.registerTool('bram_chat', {
       title: 'Chat with Bram',
       description: 'Send a real request to Bram’s configured Braverton model router. Conversation history is scoped to this authenticated user. This provider call may incur platform/provider cost; supply confirm=true and reuse the idempotency key for uncertain retries. The connected client model is not used for this operation.',
       inputSchema: {
