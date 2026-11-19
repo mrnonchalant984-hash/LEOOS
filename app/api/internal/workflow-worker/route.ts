@@ -70,7 +70,7 @@ async function executeWorkflowStep(
 }
 
 function authorized(req: NextRequest) {
-  const configuredSecrets = [process.env.WORKFLOW_WORKER_SECRET, process.env.CRON_SECRET].filter((value): value is string => Boolean(value && value.length >= 32));
+  const configuredSecrets = [process.env.WORKFLOW_WORKER_SECRET, process.env.BRAM_SCHEDULER_SECRET, process.env.CRON_SECRET].filter((value): value is string => Boolean(value && value.length >= 32));
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
   if (!configuredSecrets.length || !token) return false;
   const supplied = createHmac('sha256', token).update('leonardx-workflow-worker').digest();
