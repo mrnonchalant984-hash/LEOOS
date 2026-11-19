@@ -18,7 +18,9 @@ test('Bram Code uses Braverton Developer API billing and not Copilot inference',
   assert.match(provider, /toolCalling: false/);
   assert.match(inline, /\/api\/v1\/messages/);
   assert.match(inline, /inlineCompletions.enabled/);
-  assert.match(inline, /SECRET_FILE/);
+  assert.match(inline, /isSafeWorkspacePath/);
+  assert.match(inline, /redactWorkspaceText/);
+  assert.match(inline, /assertNoWorkspaceSymlinks/);
   assert.match(extension, /registerInlineCompletionItemProvider/);
   assert.match(extension, /leocode.toggleInlineCompletions/);
   assert.match(extension, /registerLanguageModelChatProvider\('braverton-bram-code'/);
