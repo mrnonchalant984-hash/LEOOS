@@ -26,6 +26,7 @@ import { requestsImageGeneration } from '@/lib/ai/chat-image-intent';
 import { generateAndPersistImage } from '@/lib/generation/images';
 import { inspectImageUpload, MAX_STUDIO_IMAGE_BYTES } from '@/lib/generation/image-input';
 import { getWorkspaceManifest, readWorkspaceTextFile } from '@/lib/workspace-source';
+import { recordBramExecutionEvent } from '@/lib/bram/execution-events';
 export const runtime = "nodejs";
 export const maxDuration = 110;
 const PROJECT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
