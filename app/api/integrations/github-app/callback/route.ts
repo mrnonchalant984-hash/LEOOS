@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { adminSupabase } from '@/lib/auth';
+import { adminSupabase, getProfile } from '@/lib/auth';
+import { POST as resumeBramChat } from '@/app/api/chat/route';
 import { createGitHubAppJwt } from '@/lib/mcp/github-app-auth';
 import { sealConnectionConfig } from '@/lib/integrations/customer-connections';
 
@@ -126,6 +127,46 @@ export async function GET(request: NextRequest) {
       last_error_code: null,
     }, { onConflict: 'user_id,provider,label' });
     if (saveError) return redirect(request, 'github_app_save_failed');
+
+    const { data: resumeRow } = await db.from('bram_oauth_resumptions')
+      .select('id,user_id,session_id,request_id,continuation')
+      .eq('state_hash', stateHash).eq('user_id', stateRow.user_id)
+      .eq('status', 'pending').gt('expires_at', new Date().toISOString()).maybeSingle();
+    if (resumeRow) {
+      await db.from('bram_oauth_resumptions').update({ status: 'verified', verified_at: new Date().toISOString() })
+        .eq('id', resumeRow.id).eq('user_id', stateRow.user_id).eq('status', 'pending');
+      const currentUser = await getProfile(request).catch(() => null);
+      const continuation = resumeRow.continuation && typeof resumeRow.continuation === 'object'
+        ? resumeRow.continuation as Record<string, unknown> : {};
+      if (currentUser?.user.id === stateRow.user_id
+        && typeof continuation.session_id === 'string'
+        && typeof continuation.message === 'string'
+        && continuation.message.length > 0) {
+        try {
+          const chatRequest = new NextRequest(new URL('/api/chat', request.url), {
+            method: 'POST',
+            headers: request.headers,
+            body: JSON.stringify({
+              ...continuation,
+              request_id: resumeRow.request_id || undefined,
+            }),
+          });
+          const resumed = await resumeBramChat(chatRequest);
+          if (resumed.ok) {
+            await db.from('bram_oauth_resumptions').update({ status: 'resumed', resumed_at: new Date().toISOString() })
+              .eq('id', resumeRow.id).eq('user_id', stateRow.user_id);
+            return redirect(request, 'connected_request_resumed');
+          }
+          await db.from('bram_oauth_resumptions').update({ status: 'failed' })
+            .eq('id', resumeRow.id).eq('user_id', stateRow.user_id);
+          return redirect(request, 'connected_request_resume_failed');
+        } catch {
+          await db.from('bram_oauth_resumptions').update({ status: 'failed' })
+            .eq('id', resumeRow.id).eq('user_id', stateRow.user_id);
+          return redirect(request, 'connected_request_resume_failed');
+        }
+      }
+    }
     return redirect(request, 'connected');
   } catch {
     return redirect(request, 'github_app_verification_failed');
