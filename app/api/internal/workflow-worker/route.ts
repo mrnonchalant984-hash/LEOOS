@@ -53,12 +53,13 @@ async function executeWorkflowStep(
   owner: boolean,
   runId: string,
   userId: string,
+  timezone: string,
 ) {
   const stepOutputs: string[] = [];
   for (const agent of plan.agents) {
     const startedAt = Date.now();
     try {
-      const output = await runAgent(agent, plan.task, context, owner, { runId, userId });
+      const output = await runAgent(agent, plan.task, context, owner, { runId, userId, timezone });
       stepOutputs.push(`${agent.name}: ${output}`);
       console.info(JSON.stringify({ event: 'workflow.agent_step_completed', run_id: runId, user_id: userId, agent_id: agent.id, duration_ms: Date.now() - startedAt }));
     } catch (error) {
@@ -99,13 +100,14 @@ export async function POST(req: NextRequest) {
       if (runError || !run) throw new Error('run_not_found');
       if (run.status === 'cancelled') throw new Error('workflow_cancelled');
       if (!['queued', 'running'].includes(run.status)) throw new Error('workflow_run_unavailable');
-      const { data: workflow, error: workflowError } = await db.from('workflows').select('id,user_id,status,definition').eq('id', run.workflow_id).eq('user_id', run.user_id).maybeSingle();
+      const { data: workflow, error: workflowError } = await db.from('workflows').select('id,user_id,status,definition,trigger_config').eq('id', run.workflow_id).eq('user_id', run.user_id).maybeSingle();
       if (workflowError || !workflow || workflow.status === 'paused' || workflow.status === 'archived') throw new Error('workflow_unavailable');
       const { data: profile } = await db.from('profiles').select('role,email').eq('id', run.user_id).maybeSingle();
       const owner = isPlatformOwner(profile);
       const plan = await getEffectiveUserPlan(run.user_id, owner);
       if (!canUseManualAgents(plan.key, owner)) throw new Error('plan_entitlement_denied');
       const allowed = getAllowedAgentIds(plan.key, owner);
+      const workflowTimezone = typeof (workflow.trigger_config as { timezone?: unknown } | null)?.timezone === 'string' ? String((workflow.trigger_config as { timezone: string }).timezone) : 'UTC';
       const rawSteps = (workflow.definition as { steps?: unknown[] } | null)?.steps;
       if (!Array.isArray(rawSteps) || rawSteps.length < 1 || rawSteps.length > 5) throw new Error('invalid_workflow_definition');
       let steps: WorkflowDependencyStep[];
@@ -191,7 +193,7 @@ export async function POST(req: NextRequest) {
         }
 
         const batchResults = await Promise.allSettled(
-          batch.map(plan => executeWorkflowStep(plan, context, owner, runId, run.user_id)),
+          batch.map(plan => executeWorkflowStep(plan, context, owner, runId, run.user_id, workflowTimezone)),
         );
         const { data: postBatchRun, error: postBatchStatusError } = await db.from('workflow_runs')
           .select('status').eq('id', runId).eq('user_id', run.user_id).maybeSingle();
