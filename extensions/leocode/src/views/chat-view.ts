@@ -233,7 +233,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, message: `${prompt}${workspaceChangeProtocol}${context}`, mode, model, web_search: webSearch }),
       });
-      const reply = typeof result.reply === 'string' ? result.reply : 'Leo returned no response.';
+      const reply = typeof result.reply === 'string' ? result.reply : 'Bram Code returned no response.';
       const citations = Array.isArray(result.citations)
         ? result.citations.filter((citation): citation is { title?: string; url: string } =>
           Boolean(citation && typeof citation === 'object'
@@ -251,11 +251,11 @@ export class LeoChatView implements vscode.WebviewViewProvider {
       await this.view?.webview.postMessage({ type: 'reply', text: displayedReply });
       await this.showFileProposals(reply);
       if (/```[^\n]*\n[\s\S]+?```/.test(reply)) {
-        const action = await vscode.window.showInformationMessage('Leo returned a code block.', 'Preview code diff');
+        const action = await vscode.window.showInformationMessage('Bram Code returned a code block.', 'Preview code diff');
         if (action) await this.previewLastCode(reply);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Leo could not complete this request.';
+      const message = error instanceof Error ? error.message : 'Bram Code could not complete this request.';
       if (error instanceof BravertonSessionError) {
         await this.view?.webview.postMessage({ type: 'connection', state: 'disconnected' });
       }
@@ -302,7 +302,7 @@ export class LeoChatView implements vscode.WebviewViewProvider {
       result,
     })), {
       canPickMany: true,
-      placeHolder: `Select up to 10 snippets to send to Leo. ${search.scanned} files scanned${search.truncated ? '; search was bounded' : ''}.`,
+      placeHolder: `Select up to 10 snippets to send to Bram Code. ${search.scanned} files scanned${search.truncated ? '; search was bounded' : ''}.`,
       matchOnDescription: true,
     });
     if (!selected?.length) return;
