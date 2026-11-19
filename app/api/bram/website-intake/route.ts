@@ -18,20 +18,27 @@ export async function POST(req:NextRequest){
  if(!body)return json({error:'Invalid JSON body.'},400);
  const intakeId=typeof body.id==='string'?body.id:'';
  if(intakeId&&!uuid.test(intakeId))return json({error:'Invalid intake ID.'},400);
- const name=typeof body.business_name==='string'?body.business_name.trim().slice(0,160):'';
- const projectType=['website','web_app','saas'].includes(String(body.project_type))?String(body.project_type):'website';
- const websiteType=typeof body.website_type==='string'?body.website_type:'landing';
- const chatbot=typeof body.chatbot_enabled==='boolean'?body.chatbot_enabled:false;
- const paymentMode=body.payment_mode==='automatic_paystack'?'automatic_paystack':'manual_email';
- const requirements=body.requirements&&typeof body.requirements==='object'&&!Array.isArray(body.requirements)?body.requirements as Record<string,unknown>:{};
+ const db=adminSupabase();
+ let previous:Record<string,unknown>={};
+ if(intakeId&&body.create_project===true){
+  const {data,error}=await db.from('bram_website_intakes').select('requirements,session_id,request_id').eq('id',intakeId).eq('user_id',auth.user.id).maybeSingle();
+  if(error)return json({error:'Saved website intake could not be loaded.'},503);
+  if(!data)return json({error:'Website intake not found.'},404);
+  previous=data.requirements&&typeof data.requirements==='object'&&!Array.isArray(data.requirements)?data.requirements as Record<string,unknown>:{};
+ }
+ const name=(typeof body.business_name==='string'?body.business_name:previous.business_name||'').toString().trim().slice(0,160);
+ const projectType=['website','web_app','saas'].includes(String(body.project_type||previous.project_type))?String(body.project_type||previous.project_type):'website';
+ const websiteType=typeof body.website_type==='string'?body.website_type:String(previous.website_type||'landing');
+ const chatbot=typeof body.chatbot_enabled==='boolean'?body.chatbot_enabled:previous.chatbot_enabled===true;
+ const paymentMode=(body.payment_mode||previous.payment_mode)==='automatic_paystack'?'automatic_paystack':'manual_email';
+ const requirements=body.requirements&&typeof body.requirements==='object'&&!Array.isArray(body.requirements)?body.requirements as Record<string,unknown>:previous;
  if(JSON.stringify(requirements).length>12000)return json({error:'Requirements exceed the 12 KB limit.'},400);
  const missing:string[]=[];
  if(!name)missing.push('business_name');
  if(!requirements.description)missing.push('description');
  if(!requirements.pages)missing.push('pages');
- const db=adminSupabase();
- const payload={user_id:auth.user.id,session_id:typeof body.session_id==='string'&&uuid.test(body.session_id)?body.session_id:null,
-  request_id:typeof body.request_id==='string'&&uuid.test(body.request_id)?body.request_id:null,status:missing.length?'collecting':'ready',
+ const payload={user_id:auth.user.id,session_id:typeof body.session_id==='string'&&uuid.test(body.session_id)?body.session_id:typeof previous.session_id==='string'?previous.session_id:null,
+  request_id:typeof body.request_id==='string'&&uuid.test(body.request_id)?body.request_id:typeof previous.request_id==='string'?previous.request_id:null,status:missing.length?'collecting':'ready',
   requirements:{...requirements,business_name:name,project_type:projectType,website_type:websiteType,chatbot_enabled:chatbot,payment_mode:paymentMode},
   missing_requirements:missing,updated_at:new Date().toISOString()};
  let saved:any,error:any;
