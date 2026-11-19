@@ -200,3 +200,14 @@ end;
 $$;
 revoke all on function public.enqueue_due_workflows(integer) from public,anon,authenticated;
 grant execute on function public.enqueue_due_workflows(integer) to service_role;
+
+-- Browser clients can only read their own reminders and delivery history.
+-- All reminder writes and worker claims go through authenticated server routes/service_role.
+drop policy if exists bram_reminders_owner_insert on public.bram_reminders;
+drop policy if exists bram_reminders_owner_update on public.bram_reminders;
+revoke insert,update,delete on public.bram_reminders from authenticated;
+grant select on public.bram_reminders to authenticated;
+grant all on public.bram_reminders to service_role;
+grant all on public.bram_reminder_deliveries to service_role;
+grant all on public.bram_calendar_events to service_role;
+grant select,insert,update,delete on public.workflows,public.workflow_runs,public.workflow_jobs to service_role;
