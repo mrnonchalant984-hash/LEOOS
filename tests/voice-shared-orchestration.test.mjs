@@ -38,7 +38,7 @@ test('voice UI no longer displays the obsolete Gemini quota and five-minute disc
 
 
 test('Leo voice uses the Gemini TTS model compatible with the configured generateContent audio response shape', () => {
-  assert.match(voice, /LEO_GEMINI_TTS_MODEL\?\.trim\(\) \|\| 'gemini-2\.5-flash-preview-tts'/);
+  assert.match(voice, /LEO_GEMINI_TTS_MODEL\?\.trim\(\) \|\| 'gemini-3\.8-flash-tts'/);
   assert.match(voice, /responseModalities: \['AUDIO'\]/);
   assert.match(voice, /speechConfig:/);
 });
@@ -71,4 +71,14 @@ test('Bram voice chat automatically detects speech pauses, displays both transcr
   assert.match(widget, /playback\.onended/);
   assert.match(widget, /speak naturally; Bram replies automatically/);
   assert.doesNotMatch(widget, /Stop speaking/);
+});
+
+test('voice endpoints default to the dedicated Gemini 3.5 transcription and 3.8 TTS models', async () => {
+  const speak = readFileSync(new URL('../app/api/speak/route.ts', import.meta.url), 'utf8');
+  const env = readFileSync(new URL('../.env.example', import.meta.url), 'utf8');
+  assert.match(voice, /LEO_GEMINI_AUDIO_MODEL\?\.trim\(\) \|\| 'gemini-3\.5-transcribe'/);
+  assert.match(voice, /LEO_GEMINI_TTS_MODEL\?\.trim\(\) \|\| 'gemini-3\.8-flash-tts'/);
+  assert.match(speak, /LEO_GEMINI_TTS_MODEL\?\.trim\(\) \|\| 'gemini-3\.8-flash-tts'/);
+  assert.match(env, /^LEO_GEMINI_LIVE_MODEL=gemini-3\.8-live$/m);
+  assert.match(env, /^LEO_GEMINI_TRANSCRIBE_LIVE_MODEL=gemini-3\.5-transcribe-live$/m);
 });
