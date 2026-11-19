@@ -22,12 +22,16 @@ test('voice uses the existing account-scoped tool executor and supports agent ex
   assert.match(tools, /postAsUser\(options\.request, '\/api\/agents\/run'/);
 });
 
-test('browser voice sessions do not mint a direct Gemini Live token that bypasses shared orchestration', () => {
-  assert.match(session, /mode: 'gemini_turn_based'/);
-  assert.match(session, /shared-leo-chat/);
+test('browser voice sessions receive a constrained short-lived Gemini Live token', () => {
+  assert.match(session, /mode: 'gemini_live'/);
   assert.match(session, /assistant: 'Bram'/);
-  assert.match(session, /transcription_endpoint: '\/api\/voice'/);
-  assert.doesNotMatch(session, /authTokens\.create/);
+  assert.match(session, /authTokens\.create/);
+  assert.match(session, /liveConnectConstraints/);
+  assert.match(session, /models\/\$\{model\}/);
+  assert.match(session, /inputAudioTranscription/);
+  assert.match(session, /outputAudioTranscription/);
+  assert.match(session, /getLeoSystemPrompt\(\)/);
+  assert.match(session, /leo_memories/);
 });
 
 test('voice UI no longer displays the obsolete Gemini quota and five-minute disclaimer', () => {
