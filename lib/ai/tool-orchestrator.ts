@@ -23,7 +23,7 @@ type RemoteToolReference = {
   accessLevel: 'read' | 'write';
 };
 
-type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_calendar_list_events' } | { kind: 'bram_calendar_create_event' } | { kind: 'bram_calendar_update_event' } | { kind: 'bram_calendar_delete_event' } | { kind: 'bram_reminder_list' } | { kind: 'bram_reminder_create' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -155,6 +155,15 @@ const localTools: Array<{ name: string; description: string; inputSchema: Record
   },
 ];
 
+localTools.push(
+  { name: 'bram_calendar_list_events', description: 'Read the signed-in user’s Bram calendar events for a bounded date range. Use only for explicit calendar read requests.', inputSchema: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } }, additionalProperties: false } },
+  { name: 'bram_calendar_create_event', description: 'Create a calendar event in the user’s private Bram calendar. Requires an explicit user request to schedule/create the event and the calendar agent approval flow.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' }, starts_at: { type: 'string' }, ends_at: { type: 'string' }, timezone: { type: 'string' }, location: { type: 'string' } }, required: ['title','starts_at','ends_at','timezone'], additionalProperties: false } },
+  { name: 'bram_calendar_update_event', description: 'Update a calendar event owned by the signed-in user. Requires explicit user intent and calendar agent approval.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, starts_at: { type: 'string' }, ends_at: { type: 'string' }, timezone: { type: 'string' }, location: { type: 'string' } }, required: ['id','title','starts_at','ends_at','timezone'], additionalProperties: false } },
+  { name: 'bram_calendar_delete_event', description: 'Delete a calendar event owned by the signed-in user. Requires explicit cancellation/deletion intent and calendar agent approval.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } },
+  { name: 'bram_reminder_list', description: 'List the signed-in user’s persistent Bram reminders and delivery history.', inputSchema: { type: 'object', properties: { limit: { type: 'integer' } }, additionalProperties: false } },
+  { name: 'bram_reminder_create', description: 'Create a persistent reminder for the signed-in user. Requires explicit user intent to set a reminder. Use an ISO timestamp and an IANA timezone; recurrence frequency is once, daily, weekly, or monthly.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, scheduled_for: { type: 'string' }, timezone: { type: 'string' }, frequency: { type: 'string', enum: ['once','daily','weekly','monthly'] } }, required: ['title','scheduled_for','timezone'], additionalProperties: false } },
+);
+
 type LeoBuildToolOptions = {
   request: Request;
   userMessage: string;
@@ -285,6 +294,66 @@ export async function createUserAssistantTools(
       } catch (error) {
         return { text: error instanceof Error ? error.message : 'The specialist agent could not be started.', isError: true };
       }
+    }
+
+    if (reference.kind === 'bram_calendar_list_events') {
+      const from = typeof args.from === 'string' && Number.isFinite(Date.parse(args.from)) ? new Date(args.from).toISOString() : new Date(Date.now() - 7 * 86400000).toISOString();
+      const to = typeof args.to === 'string' && Number.isFinite(Date.parse(args.to)) ? new Date(args.to).toISOString() : new Date(Date.now() + 90 * 86400000).toISOString();
+      if (new Date(to) <= new Date(from) || new Date(to).getTime() - new Date(from).getTime() > 366 * 86400000) return { text: 'Choose a valid calendar range of no more than one year.', isError: true };
+      const { data, error } = await db.from('bram_calendar_events').select('id,title,description,starts_at,ends_at,timezone,location,status,source').eq('user_id', userId).eq('status', 'confirmed').gte('starts_at', from).lt('starts_at', to).order('starts_at').limit(200);
+      if (error) return { text: 'Bram calendar is not available yet. Apply the Bram productivity database migration first.', isError: true };
+      return { text: JSON.stringify({ events: data || [], count: data?.length || 0, timezone_context: 'Timestamps are ISO-8601 instants; render them in each event timezone.' }) };
+    }
+    if (reference.kind === 'bram_calendar_create_event') {
+      if (agentPolicy?.agentId !== 'calendar' || !/\b(schedule|create|add|book|put)\b/i.test(options?.userMessage || '')) return { text: 'Calendar event creation requires an explicit scheduling request through the Calendar Agent.', isError: true };
+      const title = typeof args.title === 'string' ? args.title.trim() : '';
+      const start = typeof args.starts_at === 'string' ? new Date(args.starts_at) : null;
+      const end = typeof args.ends_at === 'string' ? new Date(args.ends_at) : null;
+      const timezone = typeof args.timezone === 'string' ? args.timezone : '';
+      try { new Intl.DateTimeFormat('en', { timeZone: timezone }).format(new Date()); } catch { return { text: 'Provide a valid IANA timezone.', isError: true }; }
+      if (!title || title.length > 180 || !start || !end || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) return { text: 'Provide a title and valid start/end timestamps.', isError: true };
+      const { data, error } = await db.from('bram_calendar_events').insert({ user_id: userId, title, description: typeof args.description === 'string' ? args.description.slice(0,4000) : '', starts_at: start.toISOString(), ends_at: end.toISOString(), timezone, location: typeof args.location === 'string' ? args.location.slice(0,500) : '', source: 'bram', status: 'confirmed' }).select('id,title,starts_at,ends_at,timezone').single();
+      if (error || !data) return { text: 'Calendar event was not saved. Verify the Bram productivity migration and retry.', isError: true };
+      return { text: JSON.stringify({ event: data, persisted: true }) };
+    }
+    if (reference.kind === 'bram_calendar_update_event') {
+      if (agentPolicy?.agentId !== 'calendar' || !/\b(update|edit|move|reschedule)\b/i.test(options?.userMessage || '')) return { text: 'Calendar updates require explicit user intent through the Calendar Agent.', isError: true };
+      const id = typeof args.id === 'string' ? args.id : '';
+      const title = typeof args.title === 'string' ? args.title.trim() : '';
+      const start = typeof args.starts_at === 'string' ? new Date(args.starts_at) : null;
+      const end = typeof args.ends_at === 'string' ? new Date(args.ends_at) : null;
+      const timezone = typeof args.timezone === 'string' ? args.timezone : '';
+      try { new Intl.DateTimeFormat('en', { timeZone: timezone }).format(new Date()); } catch { return { text: 'Provide a valid IANA timezone.', isError: true }; }
+      if (!/^[0-9a-f-]{36}$/i.test(id) || !title || !start || !end || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) return { text: 'Provide a valid event ID, title and time range.', isError: true };
+      const { data, error } = await db.from('bram_calendar_events').update({ title, description: typeof args.description === 'string' ? args.description.slice(0,4000) : '', starts_at: start.toISOString(), ends_at: end.toISOString(), timezone, location: typeof args.location === 'string' ? args.location.slice(0,500) : '', updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId).select('id,title,starts_at,ends_at,timezone').maybeSingle();
+      if (error || !data) return { text: 'Calendar event was not updated; confirm that it belongs to this account.', isError: true };
+      return { text: JSON.stringify({ event: data, persisted: true }) };
+    }
+    if (reference.kind === 'bram_calendar_delete_event') {
+      if (agentPolicy?.agentId !== 'calendar' || !/\b(cancel|delete|remove)\b/i.test(options?.userMessage || '')) return { text: 'Calendar deletion requires explicit cancellation intent through the Calendar Agent.', isError: true };
+      const id = typeof args.id === 'string' ? args.id : '';
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return { text: 'Provide a valid event ID.', isError: true };
+      const { data, error } = await db.from('bram_calendar_events').delete().eq('id', id).eq('user_id', userId).select('id').maybeSingle();
+      if (error || !data) return { text: 'Calendar event was not deleted; confirm that it belongs to this account.', isError: true };
+      return { text: JSON.stringify({ deleted: true, id }) };
+    }
+    if (reference.kind === 'bram_reminder_list') {
+      const limit = Math.max(1, Math.min(50, Number.isInteger(args.limit) ? Number(args.limit) : 20));
+      const { data, error } = await db.from('bram_reminders').select('id,title,body,scheduled_for,timezone,recurrence,status,next_run_at,delivered_at').eq('user_id', userId).neq('status', 'cancelled').order('next_run_at').limit(limit);
+      if (error) return { text: 'Persistent reminders are not available yet. Apply the Bram productivity database migration first.', isError: true };
+      return { text: JSON.stringify({ reminders: data || [], count: data?.length || 0 }) };
+    }
+    if (reference.kind === 'bram_reminder_create') {
+      if (!/\b(remind|reminder|alert|notify)\b/i.test(options?.userMessage || '')) return { text: 'Creating a reminder requires an explicit reminder request.', isError: true };
+      const title = typeof args.title === 'string' ? args.title.trim() : '';
+      const scheduled = typeof args.scheduled_for === 'string' ? new Date(args.scheduled_for) : null;
+      const timezone = typeof args.timezone === 'string' ? args.timezone : '';
+      const frequency = ['once','daily','weekly','monthly'].includes(String(args.frequency)) ? String(args.frequency) : 'once';
+      try { new Intl.DateTimeFormat('en', { timeZone: timezone }).format(new Date()); } catch { return { text: 'Provide a valid IANA timezone.', isError: true }; }
+      if (!title || title.length > 180 || !scheduled || !Number.isFinite(scheduled.getTime()) || scheduled.getTime() <= Date.now()) return { text: 'Provide a title and a future ISO-8601 timestamp.', isError: true };
+      const { data, error } = await db.from('bram_reminders').insert({ user_id: userId, title, body: typeof args.body === 'string' ? args.body.slice(0,4000) : '', scheduled_for: scheduled.toISOString(), timezone, recurrence: { frequency }, next_run_at: scheduled.toISOString(), status: 'scheduled' }).select('id,title,scheduled_for,timezone,recurrence,status').single();
+      if (error || !data) return { text: 'Reminder was not saved. Verify the Bram productivity migration and retry.', isError: true };
+      return { text: JSON.stringify({ reminder: data, persisted: true }) };
     }
     if (reference.kind === 'get_project_files') {
       const projectId = typeof args.project_id === 'string' ? args.project_id : '';
