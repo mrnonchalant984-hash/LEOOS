@@ -20,7 +20,7 @@ export class LeonardXApi {
     const base = new URL(configured);
     const localHttp = base.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname);
     if (base.protocol !== 'https:' && !localHttp) {
-      throw new Error('LeoCode requires HTTPS for non-local LeonardX servers.');
+      throw new Error('Bram Code requires HTTPS for non-local Braverton servers.');
     }
     this.origin = base.origin;
   }
@@ -50,7 +50,7 @@ export class LeonardXApi {
     });
     const data = await response.json().catch(() => ({})) as { error?: string; session?: Session };
     if (!response.ok || !data.session?.access_token || !data.session.refresh_token) {
-      throw new Error(data.error || 'LeonardX sign-in failed.');
+      throw new Error(data.error || 'Braverton sign-in failed.');
     }
     await this.storeSession(data.session);
     return this.request('/api/auth/profile');
@@ -68,7 +68,7 @@ export class LeonardXApi {
   }
 
   async request<T = Record<string, unknown>>(path: string, init: RequestInit = {}): Promise<T> {
-    if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Invalid LeonardX API path.');
+    if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Invalid Braverton API path.');
     let token = await this.accessToken();
     let response = await this.send(path, token, init);
     if (response.status === 401) {
@@ -78,7 +78,7 @@ export class LeonardXApi {
     const data = await response.json().catch(() => ({})) as { error?: string };
     if (response.status === 401) {
       await this.signOut();
-      throw new LeonardXSessionError('Your LeonardX session expired. Connect your account again.');
+      throw new LeonardXSessionError('Your Braverton session expired. Connect your account again.');
     }
     if (!response.ok) throw new Error(data.error || `LeonardX request failed (${response.status}).`);
     return data as T;
