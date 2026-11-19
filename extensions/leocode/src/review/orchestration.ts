@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { LeonardXApi } from '../api/client';
+import { BravertonApi } from '../api/client';
 import { getWorkspaceAgentContext } from '../workspace/context';
 
 type AgentInfo = { id: string; name: string; description?: string };
@@ -28,11 +28,11 @@ function fallbackDelegations(task: string): Delegation[] {
   return ids.map(agent_id => ({ agent_id, subtask: `${task}\nFocus only on your specialist area. Return evidence, recommendations and limitations. Do not claim local edits or tests.` }));
 }
 
-export async function coordinateSpecialists(api: LeonardXApi, output: vscode.OutputChannel) {
-  const task = await vscode.window.showInputBox({ prompt: 'Describe the engineering task for Leo Manager', ignoreFocusOut: true, validateInput: value => value.trim() && value.trim().length <= 2_500 ? null : 'Enter an engineering task of at most 2,500 characters.' });
+export async function coordinateSpecialists(api: BravertonApi, output: vscode.OutputChannel) {
+  const task = await vscode.window.showInputBox({ prompt: 'Describe the engineering task for Bram Code', ignoreFocusOut: true, validateInput: value => value.trim() && value.trim().length <= 2_500 ? null : 'Enter an engineering task of at most 2,500 characters.' });
   if (!task) return;
   const sharing = await vscode.window.showWarningMessage(
-    'Share bounded workspace context with LeonardX specialist agents?',
+    'Share bounded workspace context with Braverton specialist agents?',
     { modal: true, detail: 'Only safe project paths and selected project metadata are included. Source files are not automatically shared.' },
     'Share workspace summary', 'No workspace context',
   );
@@ -44,10 +44,10 @@ export async function coordinateSpecialists(api: LeonardXApi, output: vscode.Out
       ? [{ id: agent.id, name: agent.name, description: typeof agent.description === 'string' ? agent.description : undefined }] : [],
   );
   const available = new Map(agents.map(agent => [agent.id, agent]));
-  if (!available.has('leo-manager')) throw new Error('Leo Manager is not available to this account.');
+  if (!available.has('leo-manager')) throw new Error('Bram Code is not available to this account.');
 
   const planResponse = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: 'Leo Manager is planning specialist work', cancellable: false },
+    { location: vscode.ProgressLocation.Notification, title: 'Bram Code is planning specialist work', cancellable: false },
     () => api.request<Record<string, unknown>>('/api/agents/run', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -62,10 +62,10 @@ export async function coordinateSpecialists(api: LeonardXApi, output: vscode.Out
   let delegations = parseDelegations(planText);
   if (!delegations.length) delegations = fallbackDelegations(task);
   delegations = delegations.filter(item => available.has(item.agent_id) && item.agent_id !== 'leo-manager');
-  if (!delegations.length) throw new Error('Leo Manager did not select any available specialist agents.');
+  if (!delegations.length) throw new Error('Bram Code did not select any available specialist agents.');
 
   const approval = await vscode.window.showWarningMessage(
-    `Leo Manager proposes ${delegations.length} specialist run(s).`,
+    `Bram Code proposes ${delegations.length} specialist run(s).`,
     { modal: true, detail: delegations.map(item => `${available.get(item.agent_id)?.name}: ${item.subtask.slice(0, 220)}`).join('\n\n') },
     'Run specialists',
   );
@@ -73,7 +73,7 @@ export async function coordinateSpecialists(api: LeonardXApi, output: vscode.Out
 
   const results: Array<{ name: string; status: string; result: string }> = [];
   await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: 'LeonardX specialists are working', cancellable: false },
+    { location: vscode.ProgressLocation.Notification, title: 'Braverton specialists are working', cancellable: false },
     async progress => {
       for (const delegation of delegations) {
         const agent = available.get(delegation.agent_id)!;
@@ -93,7 +93,7 @@ export async function coordinateSpecialists(api: LeonardXApi, output: vscode.Out
   );
 
   const evidenceBundle = results.map(result => `SPECIALIST: ${result.name}\nSTATUS: ${result.status}\nRESULT: ${result.result.slice(0, 4_000)}`).join('\n\n');
-  let synthesis = 'Leo Manager synthesis was unavailable; the raw specialist responses are shown below.';
+  let synthesis = 'Bram Code synthesis was unavailable; the raw specialist responses are shown below.';
   let synthesisStatus = 'not_run';
   try {
     const synthesisResponse = await api.request<Record<string, unknown>>('/api/agents/run', {
@@ -109,11 +109,11 @@ export async function coordinateSpecialists(api: LeonardXApi, output: vscode.Out
     synthesisStatus = typeof synthesisResponse.status === 'string' ? synthesisResponse.status : 'unknown';
   } catch (error) {
     synthesisStatus = 'failed';
-    synthesis = `Leo Manager synthesis failed: ${error instanceof Error ? error.message : 'unknown error'}`;
+    synthesis = `Bram Code synthesis failed: ${error instanceof Error ? error.message : 'unknown error'}`;
   }
 
   output.clear();
-  output.appendLine('Leo Manager · Specialist coordination');
+  output.appendLine('Bram Code · Specialist coordination');
   output.appendLine(`Task: ${task.trim()}`);
   output.appendLine(`Plan: ${planText.slice(0, 5_000)}`);
   output.appendLine(`\n## Consolidated report — ${synthesisStatus}`);
