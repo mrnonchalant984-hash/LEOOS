@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Modality } from '@google/genai';
 import { getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from '@/lib/leo-system-prompt';
 import { adminSupabase, getProfile } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
         liveConnectConstraints: {
           model: `models/${model}`,
           config: {
-            responseModalities: ['AUDIO'],
+            responseModalities: [Modality.AUDIO],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
             systemInstruction,
             inputAudioTranscription: {},
