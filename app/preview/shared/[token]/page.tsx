@@ -9,6 +9,8 @@ export default function SharedPreviewPage(){
  const params=useParams<{token:string}>(),token=params.token;
  const [data,setData]=useState<Payload|null>(null),[error,setError]=useState(''),[comment,setComment]=useState(''),[busy,setBusy]=useState(false),[applying,setApplying]=useState('');
  async function load(){const bearer=await accessToken();const r=await fetch('/api/previews/shared/'+encodeURIComponent(token),{headers:bearer?{Authorization:'Bearer '+bearer}:{},cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'Preview unavailable');setData(j);}
+ // This effect starts an async network read; state updates happen after the fetch resolves.
+ // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
  useEffect(()=>{void load().catch(e=>setError(e.message));},[token]);
  async function submit(){if(!data||!comment.trim()||busy)return;setBusy(true);setError('');try{
   const r=await fetch('/api/previews/shared/'+encodeURIComponent(token)+'/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:comment})});
