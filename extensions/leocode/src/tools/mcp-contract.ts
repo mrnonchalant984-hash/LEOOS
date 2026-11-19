@@ -1,17 +1,17 @@
-export type LeonardXMcpTool = {
+export type BravertonMcpTool = {
   name: string;
   description?: string;
   inputSchema?: object;
   approved: boolean;
 };
 
-export type LeonardXMcpServer = {
+export type BravertonMcpServer = {
   id: string;
   name: string;
-  tools: LeonardXMcpTool[];
+  tools: BravertonMcpTool[];
 };
 
-export type LeonardXMcpCallInput = {
+export type BravertonMcpCallInput = {
   serverId: string;
   toolName: string;
   arguments: Record<string, unknown>;
@@ -23,18 +23,18 @@ function isRecord(value: unknown): value is UnknownRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function parseLeonardXMcpServers(value: unknown): LeonardXMcpServer[] {
+export function parseBravertonMcpServers(value: unknown): BravertonMcpServer[] {
   if (!isRecord(value) || !Array.isArray(value.servers)) {
-    throw new Error('LeonardX returned an invalid MCP server catalog.');
+    throw new Error('Braverton returned an invalid MCP server catalog.');
   }
 
-  return value.servers.flatMap((server): LeonardXMcpServer[] => {
+  return value.servers.flatMap((server): BravertonMcpServer[] => {
     if (!isRecord(server) || server.enabled !== true || typeof server.id !== 'string'
       || !/^[0-9a-f-]{36}$/i.test(server.id) || typeof server.name !== 'string') {
       return [];
     }
 
-    const tools = Array.isArray(server.tools) ? server.tools.flatMap((tool): LeonardXMcpTool[] => {
+    const tools = Array.isArray(server.tools) ? server.tools.flatMap((tool): BravertonMcpTool[] => {
       if (!isRecord(tool) || typeof tool.name !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(tool.name)) {
         return [];
       }
@@ -50,11 +50,11 @@ export function parseLeonardXMcpServers(value: unknown): LeonardXMcpServer[] {
   });
 }
 
-export function parseLeonardXMcpCallInput(value: unknown): LeonardXMcpCallInput {
+export function parseBravertonMcpCallInput(value: unknown): BravertonMcpCallInput {
   if (!isRecord(value) || typeof value.serverId !== 'string' || !/^[0-9a-f-]{36}$/i.test(value.serverId)
     || typeof value.toolName !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(value.toolName)
     || !isRecord(value.arguments)) {
-    throw new Error('Provide a valid LeonardX MCP server, tool name, and arguments object.');
+    throw new Error('Provide a valid Braverton MCP server, tool name, and arguments object.');
   }
 
   const serialized = JSON.stringify(value.arguments);
@@ -65,8 +65,8 @@ export function parseLeonardXMcpCallInput(value: unknown): LeonardXMcpCallInput 
   return { serverId: value.serverId, toolName: value.toolName, arguments: value.arguments };
 }
 
-export function findApprovedLeonardXMcpTool(
-  servers: readonly LeonardXMcpServer[],
+export function findApprovedBravertonMcpTool(
+  servers: readonly BravertonMcpServer[],
   serverId: string,
   toolName: string,
 ) {
