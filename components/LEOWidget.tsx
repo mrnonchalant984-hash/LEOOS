@@ -53,6 +53,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { LucideIcon } from "lucide-react";
 import { CodaAvatar } from "@/components/CodaAvatar";
+import { LeadCapture } from "@/components/LeadCapture";
 
 type BuildProgressState = { status: string; step: string; message: string; liveUrl?: string | null; events?: Array<{ id: string; message: string; status: string; created_at: string }> };
 type ProjectBuilderAction = {
@@ -166,6 +167,10 @@ function getRemoteDeviceId() {
     return id;
   } catch { return "web-device"; }
 }
+function isLeadCaptureIntent(message: string) {
+  return /\\b(?:quote|quotation|estimate|pricing|hire|work with you|contact (?:your|the) team|talk to someone|project proposal|budget)\\b/i.test(message) ||
+    /\\b(?:build|create|develop|make)\\b.{0,70}\\b(?:website|web app|web application|saas|e-commerce|marketplace|mobile app|platform)\\b/i.test(message);
+}
 
 export function LEOWidget({ full = false, initialSessionId = "", embedded = false, initialProjectId = "", initialProjectName = "" }: { full?: boolean; initialSessionId?: string; embedded?: boolean; initialProjectId?: string; initialProjectName?: string }) {
   const [open, setOpen] = useState(full),
@@ -196,6 +201,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     [voiceLocked, setVoiceLocked] = useState(false),
     [voiceFallbackMode, setVoiceFallbackMode] = useState(false);
   const [platformCredits, setPlatformCredits] = useState<number | null>(null);
+  const [completedLeadCaptures, setCompletedLeadCaptures] = useState<string[]>([]);
   const [buildProgress, setBuildProgress] = useState<BuildProgressState | null>(null);
   const [trackBuildProgress, setTrackBuildProgress] = useState(false);
   const [buildTrackingSince, setBuildTrackingSince] = useState("");
@@ -1911,7 +1917,13 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
 
   const messagesView = (
     <div className="mx-auto w-full max-w-[760px] space-y-5">
-      {messages.map((m, i) => (
+      {messages.map((m, i) => {
+        const previousUserMessage = messages.slice(0, i).reverse().find(item => item.role === "user")?.content || "";
+        const leadCaptureKey = `${i}:${previousUserMessage.slice(0, 120)}`;
+        const showLeadCapture = !full && m.role === "assistant" &&
+          isLeadCaptureIntent(previousUserMessage) && !completedLeadCaptures.includes(leadCaptureKey);
+        const leadSummary = `User request: ${previousUserMessage}\nBram response: ${m.content}`.slice(0, 4000);
+        return (
         <div
           key={i}
           className={
@@ -1924,6 +1936,12 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           <div className="whitespace-pre-wrap text-sm leading-6">
             {m.content}
           </div>
+          {showLeadCapture && (
+            <LeadCapture
+              chatSummary={leadSummary}
+              onDone={() => setCompletedLeadCaptures(current => [...current, leadCaptureKey])}
+            />
+          )}
           {m.images?.map(image => <a key={image.assetId} href={image.previewUrl} target="_blank" rel="noreferrer" className="mt-3 block">
             <Image src={image.previewUrl} alt={image.fileName || 'Uploaded image'} width={960} height={720} unoptimized className="max-h-72 max-w-full rounded-xl border border-white/10 object-contain" />
           </a>)}
@@ -1990,7 +2008,8 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           )}
           {m.assetId && !m.image && <a href={`/api/media/${encodeURIComponent(m.assetId)}?download=1`} className="mt-2 inline-block text-xs text-[var(--gold)] underline">Download saved private asset</a>}
         </div>
-      ))}
+        );
+      })}
       {buildProgress && (
         <div className="max-w-[92%] rounded-2xl border border-[var(--gold)]/25 bg-black/35 p-3 text-sm" role="status" aria-live="polite">
           <div className="flex items-center gap-2 font-semibold text-[var(--gold)]"><Rocket size={15} /> Build progress · {buildProgress.status.replaceAll('_', ' ')}</div>
