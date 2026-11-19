@@ -65,16 +65,22 @@ export async function POST(request: NextRequest) {
   try {
     let split: { type: 'flat'; bearer_type: 'account'; subaccounts: { subaccount: string; share: number }[] } | undefined;
     if (process.env.STORE_PAYSTACK_SPLIT_ENABLED === 'true') {
-      const { data: orderItems, error: itemError } = await db.from('marketplace_order_items').select('seller_id,line_total_kobo').eq('order_id', orderId);
-      if (itemError || !orderItems?.length) throw new Error('Order split data could not be verified.');
+      const [{ data: orderItems, error: itemError }, { data: deliveryRows, error: deliveryError }] = await Promise.all([
+        db.from('marketplace_order_items').select('seller_id,line_total_kobo').eq('order_id', orderId),
+        db.from('marketplace_order_deliveries').select('seller_id,fee_kobo').eq('order_id', orderId),
+      ]);
+      if (itemError || deliveryError || !orderItems?.length) throw new Error('Order split data could not be verified.');
       const grossBySeller = new Map<string, number>();
       for (const item of orderItems) grossBySeller.set(item.seller_id, (grossBySeller.get(item.seller_id) ?? 0) + Number(item.line_total_kobo));
+      const deliveryBySeller = new Map<string, number>();
+      for (const delivery of deliveryRows ?? []) deliveryBySeller.set(delivery.seller_id, (deliveryBySeller.get(delivery.seller_id) ?? 0) + Number(delivery.fee_kobo));
       const accountBySeller = new Map((payoutAccounts ?? []).map(account => [account.seller_id, account.subaccount_code]));
       const subaccounts = [...grossBySeller.entries()].map(([sellerId, gross]) => {
         const subaccount = accountBySeller.get(sellerId);
         if (!subaccount) throw new Error('A seller split account is missing.');
         const platformCommission = Math.round(gross * 500 / 10_000);
-        return { subaccount, share: gross - platformCommission };
+        const sellerDeliveryFee = deliveryBySeller.get(sellerId) ?? 0;
+        return { subaccount, share: gross - platformCommission + sellerDeliveryFee };
       });
       if (subaccounts.some(item => !Number.isSafeInteger(item.share) || item.share <= 0) || subaccounts.reduce((sum, item) => sum + item.share, 0) > Number(order.total_kobo)) throw new Error('Marketplace split shares are invalid.');
       split = { type: 'flat', bearer_type: 'account', subaccounts };
