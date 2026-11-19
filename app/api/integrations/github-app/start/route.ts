@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
   const label = typeof body.label === 'string' && body.label.trim()
     ? body.label.trim().slice(0, 100)
     : 'Braverton GitHub App';
+  const requestedReturnTo = typeof body.return_to === 'string' ? body.return_to : '';
+  const returnTo = requestedReturnTo === '/app' ? '/app' : '/integrations';
   const state = randomBytes(32).toString('base64url');
   const { error } = await adminSupabase().from('integration_oauth_states').insert({
     state_hash: createHash('sha256').update(state).digest('hex'),
@@ -34,7 +36,7 @@ export async function POST(request: NextRequest) {
     provider: 'github',
     label,
     expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
-    metadata: { auth_method: 'github_app_installation' },
+    metadata: { auth_method: 'github_app_installation', return_to: returnTo },
   });
   if (error) return NextResponse.json({ error: 'Could not create a secure GitHub installation state. Apply the integration OAuth migrations and retry.' }, { status: 503 });
 
