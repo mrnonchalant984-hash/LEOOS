@@ -2,14 +2,14 @@ import * as vscode from 'vscode';
 
 type Session = { access_token: string; refresh_token: string };
 
-export class LeonardXSessionError extends Error {
+export class BravertonSessionError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'LeonardXSessionError';
+    this.name = 'BravertonSessionError';
   }
 }
 
-export class LeonardXApi {
+export class BravertonApi {
   private readonly origin: string;
   private refreshInFlight: Promise<string> | undefined;
   private sessionGeneration = 0;
@@ -78,9 +78,9 @@ export class LeonardXApi {
     const data = await response.json().catch(() => ({})) as { error?: string };
     if (response.status === 401) {
       await this.signOut();
-      throw new LeonardXSessionError('Your Braverton session expired. Connect your account again.');
+      throw new BravertonSessionError('Your Braverton session expired. Connect your account again.');
     }
-    if (!response.ok) throw new Error(data.error || `LeonardX request failed (${response.status}).`);
+    if (!response.ok) throw new Error(data.error || `Braverton request failed (${response.status}).`);
     return data as T;
   }
 
@@ -98,7 +98,7 @@ export class LeonardXApi {
 
   private async accessToken() {
     const token = await this.secrets.get('leocode.access-token');
-    if (!token) throw new LeonardXSessionError('Connect a LeonardX account to use LeoCode.');
+    if (!token) throw new BravertonSessionError('Connect a Braverton account to use Bram Code.');
     const expiresAt = this.jwtExpiry(token);
     if (!expiresAt || expiresAt <= Date.now() + 60_000) return this.refreshSession(false);
     return token;
@@ -112,7 +112,7 @@ export class LeonardXApi {
       const refreshToken = await this.secrets.get('leocode.refresh-token');
       if (!refreshToken || (!force && accessToken && this.jwtExpiry(accessToken)! > Date.now() + 60_000)) {
         if (accessToken) return accessToken;
-        throw new LeonardXSessionError('Connect a LeonardX account to use LeoCode.');
+        throw new BravertonSessionError('Connect a Braverton account to use Bram Code.');
       }
       const response = await fetch(`${this.origin}/api/auth/session`, {
         method: 'POST',
@@ -123,13 +123,13 @@ export class LeonardXApi {
       const data = await response.json().catch(() => ({})) as { error?: string; session?: Session };
       if (response.status === 401 || response.status === 403) {
         await this.signOut();
-        throw new LeonardXSessionError(data.error || 'LeonardX session expired. Connect your account again.');
+        throw new BravertonSessionError(data.error || 'Braverton session expired. Connect your account again.');
       }
-      if (!response.ok) throw new Error(data.error || `LeonardX session refresh failed (${response.status}).`);
-      if (!data.session?.access_token || !data.session.refresh_token) throw new Error('LeonardX returned an invalid session refresh response.');
+      if (!response.ok) throw new Error(data.error || `Braverton session refresh failed (${response.status}).`);
+      if (!data.session?.access_token || !data.session.refresh_token) throw new Error('Braverton returned an invalid session refresh response.');
       const currentRefreshToken = await this.secrets.get('leocode.refresh-token');
       if (generation !== this.sessionGeneration || currentRefreshToken !== refreshToken) {
-        throw new LeonardXSessionError('Your LeonardX session changed while refreshing. Sign in again.');
+        throw new BravertonSessionError('Your Braverton session changed while refreshing. Sign in again.');
       }
       await this.storeSession(data.session);
       return data.session.access_token;
@@ -156,7 +156,7 @@ export class LeonardXApi {
             this.secrets.delete('leocode.refresh-token'),
           ]);
         }
-        throw new LeonardXSessionError('Your LeonardX session changed while it was being saved. Sign in again.');
+        throw new BravertonSessionError('Your Braverton session changed while it was being saved. Sign in again.');
       }
     });
   }
