@@ -31,7 +31,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('leocode.connect', async () => {
       const email = await vscode.window.showInputBox({ prompt: 'Braverton account email', ignoreFocusOut: true, validateInput: value => /\S+@\S+\.\S+/.test(value) ? null : 'Enter a valid email address.' });
       if (!email) return;
-      const password = await vscode.window.showInputBox({ prompt: 'LeonardX password', password: true, ignoreFocusOut: true });
+      const password = await vscode.window.showInputBox({ prompt: 'Braverton password', password: true, ignoreFocusOut: true });
       if (!password) return;
       try {
         const account = await api.signIn(email.trim(), password);
@@ -39,15 +39,15 @@ export function activate(context: vscode.ExtensionContext) {
         const user = account.user as { email?: string } | undefined;
         void vscode.window.showInformationMessage(`Connected to Braverton${user?.email ? ` as ${user.email}` : ''}.`);
       } catch (error) {
-        void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'LeonardX sign-in failed.');
+        void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Braverton sign-in failed.');
       }
     }),
     vscode.commands.registerCommand('leocode.signOut', async () => {
-      const confirmation = await vscode.window.showWarningMessage('Sign out LeoCode on this device?', { modal: true }, 'Sign out');
+      const confirmation = await vscode.window.showWarningMessage('Sign out Bram Code on this device?', { modal: true }, 'Sign out');
       if (confirmation === 'Sign out') {
         await api.signOut();
         await chatView?.refresh();
-        void vscode.window.showInformationMessage('LeoCode tokens were removed from this device.');
+        void vscode.window.showInformationMessage('Bram Code credentials were removed from this device.');
       }
     }),
     vscode.commands.registerCommand('leocode.configureModel', async () => {
@@ -115,14 +115,14 @@ export function activate(context: vscode.ExtensionContext) {
         const agents = (catalog.agents || []).filter((agent): agent is { id: string; name: string; description?: string } =>
           typeof agent.id === 'string' && typeof agent.name === 'string');
         if (!agents.length) {
-          void vscode.window.showInformationMessage('No specialist agents are available for this account.');
+          void vscode.window.showInformationMessage('No specialist coding tools are available for this account.');
           return;
         }
         const selected = await vscode.window.showQuickPick(agents.map(agent => ({
           label: agent.name,
           description: typeof agent.description === 'string' ? agent.description : undefined,
           agentId: agent.id,
-        })), { placeHolder: 'Choose an agent available to your LeonardX account' });
+        })), { placeHolder: 'Choose an agent available to your Braverton account' });
         if (!selected) return;
         const task = await vscode.window.showInputBox({ prompt: `Task for ${selected.label}`, ignoreFocusOut: true, validateInput: value => value.trim() ? null : 'Enter a task.' });
         if (!task) return;
