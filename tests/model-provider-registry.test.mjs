@@ -178,7 +178,7 @@ test('central execution registry contains no direct alternative-provider SDK pat
   assert.doesNotMatch(legacyAdapter, /from ['\"]openai['\"]|new OpenAI|chat\.completions|responses\.create/);
 });
 
-test('legacy local models fail closed and realtime voice uses the shared server-side chat route', async () => {
+test('legacy local models fail closed and Bram realtime voice uses a constrained Gemini Live session', async () => {
   const { readFile } = await import('node:fs/promises');
   const localRoute = await readFile(new URL('../app/api/offline/chat/route.ts', import.meta.url), 'utf8');
   const realtimeRoute = await readFile(new URL('../app/api/realtime/session/route.ts', import.meta.url), 'utf8');
