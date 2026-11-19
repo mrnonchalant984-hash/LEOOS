@@ -134,6 +134,7 @@ test('seller payout preparation serializes against dispute creation and blocks o
   assert.match(migration, /for update/i);
   assert.match(migration, /status in \('open', 'reviewing'\)/i);
   assert.match(migration, /order has an open dispute/i);
+  assert.match(migration, /status = 'initiating'[\s\S]*seller payout initiation already in progress/i);
   assert.match(migration, /select status[\s\S]*from public\.marketplace_orders[\s\S]*for update/i);
   assert.match(migration, /on conflict \(order_id, seller_id\) do nothing/i);
   assert.match(migration, /grant execute on function public\.prepare_marketplace_seller_payout\(uuid, uuid\) to service_role/i);
