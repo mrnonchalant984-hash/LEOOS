@@ -1,11 +1,10 @@
 import * as vscode from 'vscode';
 import { LeonardXApi } from './api/client';
 import { applyPendingEdit, createProposalContentProvider, LeoChatView } from './views/chat-view';
-import { analyzeWorkspace, getActiveWorkspaceContext } from './workspace/context';
+import { analyzeWorkspace } from './workspace/context';
 import { registerLeonardXMcpTools } from './tools/mcp-tools';
 import { reviewFile, reviewGitChanges, reviewSelection, reviewWorkspace } from './review/engine';
 import { CodeReviewCentre } from './review/centre';
-import { coordinateSpecialists } from './review/orchestration';
 import { discoverWorkspaceTests, runApprovedTerminalCommand } from './workspace/terminal';
 import { BramCodeModelProvider } from './model-provider';
 import { BramInlineCompletionProvider } from './inline-completion';
@@ -114,7 +113,7 @@ export function activate(context: vscode.ExtensionContext) {
       catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Selection review failed.'); }
     }),
     vscode.commands.registerCommand('leocode.reviewWorkspace', async () => {
-      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'LeoCode is reviewing the workspace', cancellable: false }, async () => {
+      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Bram Code is reviewing the workspace', cancellable: false }, async () => {
         try { reviewCentre.show(await reviewWorkspace()); }
         catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Workspace review failed.'); }
       });
@@ -124,72 +123,12 @@ export function activate(context: vscode.ExtensionContext) {
       catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Git change review failed.'); }
     }),
     vscode.commands.registerCommand('leocode.openReviewCentre', () => vscode.commands.executeCommand('leocode.reviewWorkspace')),
-    vscode.commands.registerCommand('leocode.coordinateAgents', async () => {
-      try { await coordinateSpecialists(api, output); }
-      catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Specialist coordination failed.'); }
-    }),
     vscode.commands.registerCommand('leocode.fixSelection', () => chatView?.queuePrompt('Suggest a corrected version of the selected code. Explain the issue briefly and return a fenced code block for review.')),
     vscode.commands.registerCommand('leocode.generateCode', async () => {
       const request = await vscode.window.showInputBox({ prompt: 'Describe the code to generate', ignoreFocusOut: true });
       if (request) chatView?.queuePrompt(`${request}\nReturn a fenced code block suitable for a local diff preview.`);
     }),
     vscode.commands.registerCommand('leocode.generateTests', () => chatView?.queuePrompt('Generate focused tests for the active code. Return a fenced code block; do not modify files directly.')),
-    vscode.commands.registerCommand('leocode.runAgent', async () => {
-      try {
-        const catalog = await api.request<{ agents?: Array<{ id?: unknown; name?: unknown; description?: unknown }> }>('/api/agents');
-        const agents = (catalog.agents || []).filter((agent): agent is { id: string; name: string; description?: string } =>
-          typeof agent.id === 'string' && typeof agent.name === 'string');
-        if (!agents.length) {
-          void vscode.window.showInformationMessage('No specialist coding tools are available for this account.');
-          return;
-        }
-        const selected = await vscode.window.showQuickPick(agents.map(agent => ({
-          label: agent.name,
-          description: typeof agent.description === 'string' ? agent.description : undefined,
-          agentId: agent.id,
-        })), { placeHolder: 'Choose an agent available to your Braverton account' });
-        if (!selected) return;
-        const task = await vscode.window.showInputBox({ prompt: `Task for ${selected.label}`, ignoreFocusOut: true, validateInput: value => value.trim() ? null : 'Enter a task.' });
-        if (!task) return;
-        const editor = vscode.window.activeTextEditor;
-        const workspaceContext = await getActiveWorkspaceContext(Boolean(editor));
-        if (workspaceContext) {
-          const relativePath = editor ? vscode.workspace.asRelativePath(editor.document.uri, false) : 'active file';
-          const approval = await vscode.window.showWarningMessage(
-            `Send the active file context to ${selected.label}?`,
-            {
-              modal: true,
-              detail: `${relativePath}\n${workspaceContext.length} characters after redaction. Review the file before sharing; workspace text is untrusted context.`,
-            },
-            'Send context',
-          );
-          if (approval !== 'Send context') return;
-        }
-        const result = await api.request<Record<string, unknown>>('/api/agents/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agent_id: selected.agentId, task: task.trim().slice(0, 12_000), context: workspaceContext }),
-        });
-        output.clear();
-        output.appendLine(`${selected.label} — ${typeof result.status === 'string' ? result.status : 'unknown status'}`);
-        output.appendLine(JSON.stringify({
-          approval_required: result.approval_required === true,
-          tool_execution_status: typeof result.tool_execution_status === 'string' ? result.tool_execution_status : undefined,
-          tool_calls: Array.isArray(result.tool_calls)
-            ? result.tool_calls.flatMap(call => {
-              if (!call || typeof call !== 'object') return [];
-              const entry = call as { name?: unknown; success?: unknown };
-              return typeof entry.name === 'string' && typeof entry.success === 'boolean'
-                ? [{ name: entry.name, success: entry.success }]
-                : [];
-            })
-            : [],
-        }, null, 2));
-        output.show(true);
-      } catch (error) {
-        void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'The specialist agent could not run.');
-      }
-    }),
     vscode.commands.registerCommand('leocode.analyzeWorkspace', async () => {
       try {
         const summary = await analyzeWorkspace();
@@ -208,15 +147,15 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('leocode.runHostedWorkspace', async () => {
       const projectId = vscode.workspace.getConfiguration('leocode').get<string>('projectId', '').trim();
       if (!/^[0-9a-f-]{36}$/i.test(projectId)) {
-        void vscode.window.showWarningMessage('Set leocode.projectId to a LeonardX project UUID with a saved private workspace first.');
+        void vscode.window.showWarningMessage('Set leocode.projectId to a Braverton project UUID with a saved private workspace first.');
         return;
       }
-      const operation = await vscode.window.showQuickPick(['inspect', 'test', 'typecheck', 'lint', 'build'], { placeHolder: 'Choose a bounded LeoCode runtime operation' });
+      const operation = await vscode.window.showQuickPick(['inspect', 'test', 'typecheck', 'lint', 'build'], { placeHolder: 'Choose a bounded Bram Code runtime operation' });
       if (!operation) return;
-      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `LeoCode: queueing ${operation} on GitHub Actions`, cancellable: false }, async () => {
+      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Bram Code: queueing ${operation} on GitHub Actions`, cancellable: false }, async () => {
         try {
           const queued = await api.request<{ job_id: string; status: string }>(`/api/leocode/sandbox`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: projectId, operation }) });
-          output.clear(); output.appendLine(`LeoCode hosted runtime · ${operation}`); output.appendLine(`Job: ${queued.job_id}`); output.appendLine(`Status: ${queued.status}`);
+          output.clear(); output.appendLine(`Bram Code hosted runtime · ${operation}`); output.appendLine(`Job: ${queued.job_id}`); output.appendLine(`Status: ${queued.status}`);
           for (let attempt = 0; attempt < 45; attempt += 1) {
             await new Promise(resolve => setTimeout(resolve, 2000));
             const status = await api.request<{ job: { status: string; result?: { stdout?: string; stderr?: string; exit_code?: number }; error?: string } }>(`/api/runtime/jobs/${encodeURIComponent(queued.job_id)}`);
