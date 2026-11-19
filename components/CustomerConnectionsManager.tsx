@@ -40,6 +40,7 @@ export function CustomerConnectionsManager() {
   void fetchConnections().then(items=>{if(!cancelled){setConnections(items);setError('');}}).catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:'Connections could not be loaded.');}).finally(()=>{if(!cancelled)setLoading(false);});
   const params=new URLSearchParams(window.location.search);
   const oauth=params.get('oauth');
+  if(oauth==='connected_request_resumed'||oauth==='connected_request_resume_failed'||oauth==='connected') { try { sessionStorage.removeItem('bram:pending-oauth-request'); } catch {} }
   const providerName=params.get('provider');
   let frame:number|undefined;
   if(oauth){
