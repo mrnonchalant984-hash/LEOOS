@@ -169,7 +169,7 @@ test('checkout and payment confirmation enforce buyer ownership, amount, currenc
   assert.match(verify, /metadata\.order_id !== order\.id/);
   assert.match(migration, /for update of p/);
   assert.match(migration, /p\.stock_quantity - p\.reserved_quantity < c\.quantity/);
-  assert.match(migration, /if \(v_order\.status = 'paid'\) then return false/);
+  assert.match(migration, /if v_order\.status = 'paid' then return false/);
   assert.match(migration, /late_payment_review_required/);
 });
 
