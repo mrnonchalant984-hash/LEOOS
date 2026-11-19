@@ -258,18 +258,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Chat not found" }, { status: 404 });
       existingChat = Boolean(data);
       if (PROJECT_ID_RE.test(session_id)) {
-        const { error: eventError } = await db.from('bram_execution_events').insert({
-          user_id: ctx.user.id,
-          session_id,
-          request_id: PROJECT_ID_RE.test(requestId) ? requestId : executionId,
-          execution_id: executionId,
+        await recordBramExecutionEvent({
+          userId: ctx.user.id,
+          sessionId: session_id,
+          requestId: PROJECT_ID_RE.test(requestId) ? requestId : executionId,
+          executionId,
           phase: 'chat_request',
-          event_type: 'started',
+          eventType: 'started',
           status: 'running',
           message: 'Bram accepted the authenticated chat request.',
           metadata: { mode, project_id: typeof project_id === 'string' && PROJECT_ID_RE.test(project_id) ? project_id : null },
-        });
-        if (eventError) console.warn('Bram execution start event could not be persisted.');
+        }).catch(() => console.warn('Bram execution start event could not be persisted.'));
       }
       history = (data?.messages || []) as Array<{
         role: "user" | "assistant";
@@ -861,18 +860,17 @@ export async function POST(req: NextRequest) {
       if (write.error) throw write.error;
     }
     if (ctx && db && PROJECT_ID_RE.test(session_id)) {
-      const { error: eventError } = await db.from('bram_execution_events').insert({
-        user_id: ctx.user.id,
-        session_id,
-        request_id: PROJECT_ID_RE.test(requestId) ? requestId : executionId,
-        execution_id: executionId,
+      await recordBramExecutionEvent({
+        userId: ctx.user.id,
+        sessionId: session_id,
+        requestId: PROJECT_ID_RE.test(requestId) ? requestId : executionId,
+        executionId,
         phase: 'chat_request',
-        event_type: 'completed',
+        eventType: 'completed',
         status: 'succeeded',
         message: 'Bram completed the request and saved the chat response.',
         metadata: { mode, project_id: typeof project_id === 'string' && PROJECT_ID_RE.test(project_id) ? project_id : null },
-      });
-      if (eventError) console.warn('Bram execution completion event could not be persisted.');
+      }).catch(() => console.warn('Bram execution completion event could not be persisted.'));
     }
     return NextResponse.json({
       reply: history.length === 0 && !/^(hello|hi|hey|welcome back|good morning|good afternoon|good evening)\b/i.test(reply.trim())
