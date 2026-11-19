@@ -8,6 +8,7 @@ import { CodeReviewCentre } from './review/centre';
 import { discoverWorkspaceTests, runApprovedTerminalCommand } from './workspace/terminal';
 import { BramCodeModelProvider } from './model-provider';
 import { BramInlineCompletionProvider } from './inline-completion';
+import { editSelectedCodeWithBram } from './editor-actions';
 
 let chatView: BramCodeChatView | undefined;
 
@@ -50,6 +51,13 @@ export function activate(context: vscode.ExtensionContext) {
         await api.signOut();
         await chatView?.refresh();
         void vscode.window.showInformationMessage('Bram Code credentials were removed from this device.');
+      }
+    }),
+    vscode.commands.registerCommand('leocode.editSelection', async () => {
+      try {
+        await editSelectedCodeWithBram(context, api);
+      } catch (error) {
+        void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Bram Code could not prepare this edit.');
       }
     }),
     vscode.commands.registerCommand('leocode.toggleInlineCompletions', async () => {
