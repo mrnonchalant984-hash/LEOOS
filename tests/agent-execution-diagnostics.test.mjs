@@ -32,3 +32,26 @@ test('agent status MCP response exposes safe persisted execution diagnostics', a
   assert.match(mcp, /select\('id,agent_id,task,status,result,error,created_at,started_at,completed_at,metadata'\)/);
   assert.match(mcp, /execution,\s*\n/);
 });
+
+test('Developer Agent permissions retain injected GitHub repository tools', async () => {
+  const { getAgentAvailableTools } = await import('../lib/agents/manager.ts');
+  const agent = {
+    id: 'developer',
+    allowedTools: ['repository_read', 'file_read'],
+    ownerOnly: false,
+  };
+  const injected = [
+    { name: 'github_repository_tree' },
+    { name: 'github_read_file' },
+    { name: 'github_commit_status' },
+    { name: 'github_commit_files' },
+    { name: 'get_project_files' },
+  ];
+  const available = getAgentAvailableTools(agent, injected, 'inspect the repository');
+  assert.deepEqual(available.map(tool => tool.name), [
+    'github_repository_tree',
+    'github_read_file',
+    'github_commit_status',
+    'get_project_files',
+  ]);
+});
