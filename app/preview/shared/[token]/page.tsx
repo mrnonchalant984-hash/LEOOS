@@ -2,14 +2,14 @@
 import {useEffect,useState} from 'react';
 import {useParams} from 'next/navigation';
 type Comment={id:string;body:string;status:string;created_at:string};
-type Payload={share:{id:string;title:string;preview_url:string;allow_comments:boolean;expires_at:string|null};comments:Comment[]};
+type Payload={share:{id:string;project_id:string;title:string;preview_url:string;allow_comments:boolean;expires_at:string|null};comments:Comment[]};
 export default function SharedPreviewPage(){
  const params=useParams<{token:string}>(),token=params.token;
  const [data,setData]=useState<Payload|null>(null),[error,setError]=useState(''),[comment,setComment]=useState(''),[busy,setBusy]=useState(false);
  async function load(){const r=await fetch('/api/previews/shared/'+encodeURIComponent(token),{cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'Preview unavailable');setData(j);}
  useEffect(()=>{void load().catch(e=>setError(e.message));},[token]);
  async function submit(){if(!data||!comment.trim()||busy)return;setBusy(true);setError('');try{
-  const r=await fetch('/api/workspaces/'+encodeURIComponent(data.share.id? '' : '')+'/preview/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({share_token:token,body:comment})});
+  const r=await fetch('/api/previews/shared/'+encodeURIComponent(token)+'/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:comment})});
   const j=await r.json();if(!r.ok)throw new Error(j.error||'Comment could not be submitted');setComment('');await load();
  }catch(e){setError(e instanceof Error?e.message:'Comment failed');}finally{setBusy(false);}}
  if(error&&!data)return <main className="min-h-screen grid place-items-center bg-slate-950 text-white"><p>{error}</p></main>;
