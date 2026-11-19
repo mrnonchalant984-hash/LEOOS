@@ -45,6 +45,7 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   if (toolName === 'bram_calendar_delete_event') return agent.id === 'calendar' && permissions.has('calendar_write') && /\\b(cancel|delete|remove)\\b/i.test(task);
   if (toolName === 'bram_reminder_list') return agent.id === 'personal-assistant' && permissions.has('reminder_read');
   if (toolName === 'bram_reminder_create') return agent.id === 'personal-assistant' && permissions.has('reminder_write') && /\\b(remind|reminder|alert|notify)\\b/i.test(task);
+  if (toolName === 'bram_reminder_cancel') return agent.id === 'personal-assistant' && permissions.has('reminder_write') && /\\b(cancel|delete|remove|stop)\\b/i.test(task);
   if (toolName === 'generate_brand_image') {
     return agent.id === 'branding' && permissions.has('image_generation') && EXPLICIT_IMAGE_REQUEST.test(task);
   }
