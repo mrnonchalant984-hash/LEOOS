@@ -34,3 +34,34 @@ export async function recordBramExecutionEvent(input: BramExecutionEventInput): 
   });
   if (error) throw new Error('Bram execution event could not be persisted.');
 }
+
+export type BramWorkerEventInput = {
+  userId: string;
+  projectId: string;
+  jobId: string;
+  workerId: string;
+  workerType: 'cloudflare_preview' | 'build' | 'agent';
+  eventType: 'claimed' | 'started' | 'progress' | 'completed' | 'failed' | 'lease_lost';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  message?: string;
+  metadata?: Record<string, unknown>;
+};
+
+/** Persist a real background-worker lifecycle event with the same service-owned event boundary. */
+export async function recordBramWorkerEvent(input: BramWorkerEventInput): Promise<void> {
+  if (![input.userId, input.projectId, input.jobId].every(value => /^[0-9a-f-]{36}$/i.test(value))) {
+    throw new Error('Invalid Bram worker event identity.');
+  }
+  const { error } = await adminSupabase().from('bram_worker_events').insert({
+    user_id: input.userId,
+    project_id: input.projectId,
+    job_id: input.jobId,
+    worker_id: input.workerId.slice(0, 120),
+    worker_type: input.workerType,
+    event_type: input.eventType,
+    status: input.status,
+    message: (input.message || '').slice(0, 1000),
+    metadata: input.metadata || {},
+  });
+  if (error) throw new Error('Bram worker event could not be persisted.');
+}
