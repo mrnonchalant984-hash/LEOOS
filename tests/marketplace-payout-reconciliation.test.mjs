@@ -26,5 +26,5 @@ test('payout schema permits explicit unknown state for ambiguous provider outcom
 });
 
 test('Paystack transfer webhooks can resolve an ambiguous payout state', () => {
-  assert.match(webhook, /\['initiating', 'pending', 'paid'\]/);
+  assert.match(webhook, /\['initiating', 'pending', 'unknown', 'paid'\]/);
 });
