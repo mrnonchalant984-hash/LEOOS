@@ -13,9 +13,13 @@ test('Bram uses three horizontally aligned animated thinking dots', () => {
 
 test('Bram shows contextual activity labels instead of a fixed working label', () => {
   assert.match(source, /const \[activityLabel, setActivityLabel\] = useState\("Thinking"\)/);
-  assert.match(source, /forceWebSearch \|\| isCurrentResearchRequest\(next\) \? "Web searched"/);
+  assert.match(source, /if \(latest\.event_type === "started"\)/);
+  assert.match(source, /latest\.event_type === "completed"/);
+  assert.match(source, /latest\.event_type === "failed"/);
+  assert.match(source, /Connecting GitHub/);
+  assert.match(source, /Web searched/);
   assert.match(source, /buildIntent \? "Creating project"/);
-  assert.match(source, /attachedDocuments\.length \|\| attachedImages\.length \? "Reading document"/);
+  assert.match(source, /setActivityLabel\("Thinking"\)/);
   assert.match(source, /<span>\{activityLabel\}<\/span>/);
   assert.doesNotMatch(source, /Bram is working/);
   assert.doesNotMatch(source, /Bram is thinking…/);
