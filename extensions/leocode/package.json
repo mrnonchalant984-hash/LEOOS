@@ -1,22 +1,23 @@
 {
   "name": "leocode",
   "publisher": "leonardx",
-  "displayName": "LeoCode by LeonardX",
-  "description": "Workspace-aware AI coding assistance from your LeonardX account.",
+  "displayName": "Bram Code by Braverton",
+  "description": "Independent Braverton AI coding model for VS Code Chat, with account-based API billing and workspace-aware coding tools.",
   "version": "0.1.2",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.106.0"
+    "vscode": "^1.109.0"
   },
   "categories": [
     "Other",
     "Programming Languages"
   ],
   "keywords": [
-    "LeoCode",
-    "LeonardX",
-    "Leo AI",
-    "AI coding assistant"
+    "Bram Code",
+    "Bram",
+    "Braverton",
+    "AI coding model",
+    "VS Code model provider"
   ],
   "icon": "media/icon.png",
   "main": "./out/extension.js",
@@ -44,11 +45,6 @@
     "onCommand:leocode.inspectGit"
   ],
   "contributes": {
-    "chatAgents": [
-      {
-        "path": "./agents/leocode-native.agent.md"
-      }
-    ],
     "languageModelTools": [
       {
         "name": "leocode_list_mcp_tools",
@@ -94,17 +90,17 @@
       }
     ],
     "configuration": {
-      "title": "LeoCode",
+      "title": "Bram Code",
       "properties": {
         "leocode.baseUrl": {
           "type": "string",
           "default": "https://leoos-omega.vercel.app",
-          "description": "LeonardX server origin. Use HTTPS except for local development."
+          "description": "Braverton server origin. HTTPS is required except for local development."
         },
         "leocode.projectId": {
           "type": "string",
           "default": "",
-          "description": "LeonardX project UUID whose saved private workspace LeoCode should execute on a temporary GitHub-hosted runner."
+          "description": "Optional Braverton project UUID for project-aware features."
         }
       }
     },
@@ -112,7 +108,7 @@
       "activitybar": [
         {
           "id": "leocode",
-          "title": "LeoCode",
+          "title": "Bram Code",
           "icon": "media/icon.svg"
         }
       ]
@@ -121,12 +117,16 @@
       "leocode": [
         {
           "id": "leocode.chat",
-          "name": "Leo Chat",
+          "name": "Bram Code",
           "type": "webview"
         }
       ]
     },
     "commands": [
+      {
+        "command": "leocode.configureModel",
+        "title": "Bram Code: Configure Braverton API"
+      },
       {
         "command": "leocode.startAgentHost",
         "title": "LeoCode: Start Local Agent Host"
@@ -219,11 +219,20 @@
         "command": "leocode.runHostedWorkspace",
         "title": "LeoCode: Run on Private GitHub Runtime"
       }
+    ],
+    "languageModelChatProviders": [
+      {
+        "vendor": "braverton-bram-code",
+        "displayName": "Bram Code",
+        "managementCommand": "leocode.configureModel"
+      }
     ]
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test test/*.test.cjs",
+    "package": "npm run compile && npx --yes @vscode/vsce package"
   },
   "dependencies": {
     "@ahpd/agent-cofold": "0.14.0",
