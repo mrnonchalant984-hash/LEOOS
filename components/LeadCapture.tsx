@@ -53,7 +53,7 @@ export function LeadCapture({
         `Budget: ${v.budget}`,
         `Phone: ${v.phone}`,
         chatSummary ? `\nBram conversation summary:\n${chatSummary.slice(0, 4000)}` : '',
-      ].filter(Boolean).join('\\n');
+      ].filter(Boolean).join('\n');
 
       let web3Result: { success?: boolean; message?: string } = {};
       let web3Response: Response;
