@@ -43,11 +43,25 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
 
   useEffect(() => {
     let active = true;
-    void refresh().catch(cause => {
-      if (active) setError(cause instanceof Error ? cause.message : 'Preview status could not be loaded.');
-    });
+    void (async () => {
+      try {
+        const accessToken = await getAccessToken();
+        const response = await fetch(`/api/workspaces/${encodeURIComponent(projectId)}/preview`, {
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+          cache: 'no-store',
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Preview status could not be loaded.');
+        if (active) {
+          setPreview(data.preview || null);
+          setError('');
+        }
+      } catch (cause) {
+        if (active) setError(cause instanceof Error ? cause.message : 'Preview status could not be loaded.');
+      }
+    })();
     return () => { active = false; };
-  }, [refresh]);
+  }, [projectId]);
 
   useEffect(() => {
     if (preview?.status !== 'queued' && preview?.status !== 'running') return;
