@@ -251,7 +251,7 @@ export const LEONARDX_ENV_CATALOG: EnvVariableDefinition[] = [
   },
   {
     name: 'MCP_PUBLIC_URL',
-    purpose: 'Public HTTPS origin for the LeonardX MCP OAuth resource.',
+    purpose: 'Public HTTPS origin for the Bram MCP OAuth resource.',
     required: false,
     service: 'mcp',
     public: false,
