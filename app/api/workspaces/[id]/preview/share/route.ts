@@ -16,7 +16,7 @@ export async function POST(req:NextRequest,{params}:C){
  ]);
  if(!project)return NextResponse.json({error:'Workspace not found.'},{status:404});
  if(previewError)return NextResponse.json({error:'Preview state could not be checked.'},{status:503});
- if(!preview||preview.status!=='completed'||typeof preview.deployment_url!=='string'||!preview.deployment_url.startsWith('https://'))return NextResponse.json({error:'A completed HTTPS preview is required before sharing.'},{status:409});
+ if(!preview||preview.status!=='deployed'||typeof preview.deployment_url!=='string'||!preview.deployment_url.startsWith('https://'))return NextResponse.json({error:'A completed HTTPS preview is required before sharing.'},{status:409});
  const token=randomBytes(32).toString('base64url'),expiresAt=new Date(Date.now()+hours*3600000).toISOString();
  const {error}=await db.from('bram_preview_shares').insert({project_id:id,owner_user_id:auth.user.id,token_hash:createHash('sha256').update(token).digest('hex'),preview_url:preview.deployment_url,expires_at:expiresAt});
  if(error)return NextResponse.json({error:'Preview sharing is unavailable. Apply the Bram collaboration migration.'},{status:503});
