@@ -424,7 +424,7 @@ test('OAuth scope parser accepts only read and optional write permissions', () =
 
 test('Braverton MCP advertises Bram names and keeps legacy Leo AI aliases', async () => {
   const source = await readFile(new URL('../lib/mcp/server.ts', import.meta.url), 'utf8');
-  assert.match(source, /new McpServer\(\{ name: 'Braverton'/);
+  assert.match(source, /new McpServer\(\{ name: 'Bram'/);
   for (const name of ['bram_chat', 'bram_get_execution_status', 'bram_external_assist', 'bram_external_assist_complete']) {
     assert.match(source, new RegExp(`registerTool\\('${name}'`));
   }
