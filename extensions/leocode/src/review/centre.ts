@@ -15,7 +15,7 @@ export class CodeReviewCentre {
     this.report = report;
     if (!this.panel) {
       this.panel = vscode.window.createWebviewPanel(
-        'leocode.reviewCentre', 'LeoCode · Code Review Centre', vscode.ViewColumn.Beside,
+        'leocode.reviewCentre', 'Bram Code · Code Review Centre', vscode.ViewColumn.Beside,
         { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [this.extensionUri] },
       );
       this.panel.onDidDispose(() => { this.panel = undefined; this.report = undefined; });
@@ -67,7 +67,7 @@ export class CodeReviewCentre {
 
   private async previewAndApplySafeFix(finding: ReviewFinding) {
     if (!finding.safeFix) {
-      void vscode.window.showInformationMessage('This finding has no safe automatic fix. Ask LeoCode for a suggested correction and review it manually.');
+      void vscode.window.showInformationMessage('This finding has no safe automatic fix. Ask Bram Code for a suggested correction and review it manually.');
       return;
     }
     const folder = vscode.workspace.workspaceFolders?.[0];
@@ -84,7 +84,7 @@ export class CodeReviewCentre {
     lines[lineIndex] = finding.safeFix.replacementLine;
     const after = lines.join(document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n');
     const preview = await vscode.workspace.openTextDocument({ language: document.languageId, content: after });
-    await vscode.commands.executeCommand('vscode.diff', uri, preview.uri, `LeoCode proposed fix · ${finding.filePath}`);
+    await vscode.commands.executeCommand('vscode.diff', uri, preview.uri, `Bram Code proposed fix · ${finding.filePath}`);
     const approval = await vscode.window.showWarningMessage(
       `Apply the reviewed formatting fix to ${finding.filePath}:${finding.safeFix.line}?`,
       { modal: true, detail: 'The current file contents will be checked again before applying this single-line change.' },
