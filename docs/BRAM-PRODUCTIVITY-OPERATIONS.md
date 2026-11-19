@@ -68,3 +68,32 @@ The database scheduler computes the next occurrence in the configured timezone, 
 ## Acceptance boundary
 
 The database migration and scheduler registration can be verified before release. Actual reminder delivery, calendar CRUD through Bram, and scheduled AI workflow execution require the application code to be deployed. The cron jobs remain inactive until that release gate is completed.
+
+
+## Safe acceptance verification
+
+The CI suite checks source-level contracts, but live provider delivery and authenticated user flows must be tested against an isolated preview/staging deployment.
+
+### Web3Forms delivery check
+
+Set `WEB3FORMS_ACCESS_KEY` (or the existing `NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY`) and `WEB3FORMS_TEST_SENDER_EMAIL` in the local staging shell. Then run:
+
+```bash
+WEB3FORMS_TEST_CONFIRM=SEND npm run verify:web3forms
+```
+
+This sends one clearly labelled test notification to the destination configured in the Web3Forms dashboard. The script does not print the access key. Check the destination inbox as well as the provider's `success: true` response. Run this only when you intend to send a test email.
+
+### Authenticated Bram acceptance suite
+
+Use a dedicated staging/preview deployment and a dedicated test account. Set `BRAM_E2E_BASE_URL`, `BRAM_E2E_EXPECTED_HOST`, `BRAM_E2E_SESSION_COOKIE`, and `BRAM_E2E_ALLOW_NON_PRODUCTION=1`, then run:
+
+```bash
+npm run test:bram:acceptance
+```
+
+The suite refuses the known production hostname and requires an exact host match. It creates a temporary reminder and calendar event, verifies reminder list/cancel and calendar CRUD, executes one authenticated source review, and cleans up temporary records. Source review is rate-limited, so run this suite sparingly (one run per test account/day is recommended).
+
+### Current environment gap
+
+A Vercel Preview environment-variable listing returned no preview variables for the productivity branch. Do not run authenticated tests until preview has isolated Supabase/Gemini credentials and a dedicated test account. Never point the acceptance suite at production.
