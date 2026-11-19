@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
       const { data: memories, error: memoryError } = await db.from('leo_memories')
         .select('memory').eq('user_id', ctx.user.id).eq('active', true)
         .is('project_id', null).order('updated_at', { ascending: false }).limit(20);
-      if (memoryError) throw new Error('Leo memory is temporarily unavailable.');
+      if (memoryError) throw new Error('Bram memory is temporarily unavailable.');
       if (memories?.length) memoryContext = `\nUser-approved persistent memories:\n${memories.map((item: { memory: string }) => `- ${item.memory}`).join('\n')}`;
       let knowledgeContext = '';
       try { knowledgeContext = formatKnowledgeContext(await retrieveLeoKnowledge(transcript, 4)); } catch { /* RAG is supplementary. */ }
