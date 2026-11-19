@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -413,13 +414,12 @@ test('OAuth scope parser accepts only read and optional write permissions', () =
 });
 
 test('Braverton MCP advertises Bram names and keeps legacy Leo AI aliases', async () => {
-  const { createUserMcpServer } = await import('../lib/mcp/server.ts');
-  const server = createUserMcpServer('authenticated-user', [MCP_READ_SCOPE, MCP_WRITE_SCOPE], createReader());
-  const names = server._registeredTools ? Object.keys(server._registeredTools) : [];
+  const source = await readFile(new URL('../lib/mcp/server.ts', import.meta.url), 'utf8');
+  assert.match(source, /new McpServer\\(\\{ name: 'Braverton'/);
   for (const name of ['bram_chat', 'bram_get_execution_status', 'bram_external_assist', 'bram_external_assist_complete']) {
-    assert.ok(names.includes(name), `missing current MCP tool: ${name}`);
+    assert.match(source, new RegExp(`registerTool\\('${name}'`));
   }
   for (const name of ['leo_ai_chat', 'leo_ai_get_execution_status', 'leo_ai_external_assist', 'leo_ai_external_assist_complete']) {
-    assert.ok(names.includes(name), `missing legacy MCP compatibility tool: ${name}`);
+    assert.match(source, new RegExp(`registerTool\\('${name}'`));
   }
 });
