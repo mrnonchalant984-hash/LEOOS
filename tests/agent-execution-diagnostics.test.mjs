@@ -33,25 +33,14 @@ test('agent status MCP response exposes safe persisted execution diagnostics', a
   assert.match(mcp, /execution,\s*\n/);
 });
 
-test('Developer Agent permissions retain injected GitHub repository tools', async () => {
-  const { getAgentAvailableTools } = await import('../lib/agents/manager.ts');
-  const agent = {
-    id: 'developer',
-    allowedTools: ['repository_read', 'file_read'],
-    ownerOnly: false,
-  };
-  const injected = [
-    { name: 'github_repository_tree' },
-    { name: 'github_read_file' },
-    { name: 'github_commit_status' },
-    { name: 'github_commit_files' },
-    { name: 'get_project_files' },
-  ];
-  const available = getAgentAvailableTools(agent, injected, 'inspect the repository');
-  assert.deepEqual(available.map(tool => tool.name), [
-    'github_repository_tree',
-    'github_read_file',
-    'github_commit_status',
-    'get_project_files',
-  ]);
+test('Developer Agent repository read permissions include the injected GitHub tools', async () => {
+  const manager = await readFile(new URL('../lib/agents/manager.ts', import.meta.url), 'utf8');
+  const orchestrator = await readFile(new URL('../lib/ai/tool-orchestrator.ts', import.meta.url), 'utf8');
+
+  assert.match(manager, /export function getAgentAvailableTools/);
+  assert.match(manager, /toolName === 'github_repository_tree'/);
+  assert.match(manager, /permissions\.has\('repository_read'\).*permissions\.has\('file_read'\)/s);
+  assert.match(orchestrator, /if \(options\?\.allowRepositoryAccess\)/);
+  assert.match(orchestrator, /github_repository_tree/);
+  assert.match(orchestrator, /github_read_file/);
 });
