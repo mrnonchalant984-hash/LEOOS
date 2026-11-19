@@ -15,7 +15,7 @@ export { getAgent };
 
 const TOOL_CAPABILITIES = new Set([
   ...MCP_AGENT_CAPABILITIES, 'database_write', 'deployment', 'devops', 'file_read',
-  'file_write', 'github_write', 'image_generation', 'project_read',
+  'file_write', 'github_write', 'image_generation', 'project_read', 'calendar_write', 'reminder_read', 'reminder_write',
   'website_builder', 'web_search',
 ]);
 
@@ -39,6 +39,12 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   if (toolName === 'github_commit_files') {
     return permissions.has('github_write') && EXPLICIT_COMMIT_REQUEST.test(task);
   }
+  if (toolName === 'bram_calendar_list_events') return agent.id === 'calendar' && permissions.has('calendar_read');
+  if (toolName === 'bram_calendar_create_event') return agent.id === 'calendar' && permissions.has('calendar_write') && /\\b(schedule|create|add|book|put)\\b/i.test(task);
+  if (toolName === 'bram_calendar_update_event') return agent.id === 'calendar' && permissions.has('calendar_write') && /\\b(update|edit|move|reschedule)\\b/i.test(task);
+  if (toolName === 'bram_calendar_delete_event') return agent.id === 'calendar' && permissions.has('calendar_write') && /\\b(cancel|delete|remove)\\b/i.test(task);
+  if (toolName === 'bram_reminder_list') return agent.id === 'personal-assistant' && permissions.has('reminder_read');
+  if (toolName === 'bram_reminder_create') return agent.id === 'personal-assistant' && permissions.has('reminder_write') && /\\b(remind|reminder|alert|notify)\\b/i.test(task);
   if (toolName === 'generate_brand_image') {
     return agent.id === 'branding' && permissions.has('image_generation') && EXPLICIT_IMAGE_REQUEST.test(task);
   }
@@ -102,6 +108,8 @@ export function classifyAgents(message: string, owner: boolean, allowedAgentIds?
   if (/test|testing|qa/.test(text)) add('qa');
   if (/image|picture|photo|generate an image/.test(text)) add('image');
   if (/video|storyboard|cinematic/.test(text)) add('video');
+  if (/calendar|appointment|meeting|schedule an event/.test(text)) add('calendar');
+  if (/remind|reminder|daily update|personal schedule/.test(text)) add('personal-assistant');
   if (/email|mail/.test(text)) add('email');
   if (/buy|purchase|shopping|cart|checkout/.test(text)) add('shopping');
   if (/memory|remember|forget/.test(text)) add('memory');
