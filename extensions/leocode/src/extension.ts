@@ -1,19 +1,19 @@
 import * as vscode from 'vscode';
-import { LeonardXApi } from './api/client';
-import { applyPendingEdit, createProposalContentProvider, LeoChatView } from './views/chat-view';
+import { BravertonApi } from './api/client';
+import { applyPendingEdit, createProposalContentProvider, BramCodeChatView } from './views/chat-view';
 import { analyzeWorkspace } from './workspace/context';
-import { registerLeonardXMcpTools } from './tools/mcp-tools';
+import { registerBravertonMcpTools } from './tools/mcp-tools';
 import { reviewFile, reviewGitChanges, reviewSelection, reviewWorkspace } from './review/engine';
 import { CodeReviewCentre } from './review/centre';
 import { discoverWorkspaceTests, runApprovedTerminalCommand } from './workspace/terminal';
 import { BramCodeModelProvider } from './model-provider';
 import { BramInlineCompletionProvider } from './inline-completion';
 
-let chatView: LeoChatView | undefined;
+let chatView: BramCodeChatView | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('Bram Code');
-  const api = new LeonardXApi(context.secrets);
+  const api = new BravertonApi(context.secrets);
   const modelProvider = new BramCodeModelProvider(context);
   const inlineCompletionProvider = new BramInlineCompletionProvider(context);
   const proposals = createProposalContentProvider();
@@ -24,8 +24,8 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.lm.registerLanguageModelChatProvider('braverton-bram-code', modelProvider),
     vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, inlineCompletionProvider),
   );
-  registerLeonardXMcpTools(context, api);
-  chatView = new LeoChatView(context.extensionUri, api, context, proposals);
+  registerBravertonMcpTools(context, api);
+  chatView = new BramCodeChatView(context.extensionUri, api, context, proposals);
   context.subscriptions.push(vscode.window.registerWebviewViewProvider('leocode.chat', chatView, { webviewOptions: { retainContextWhenHidden: true } }));
 
   context.subscriptions.push(
@@ -164,13 +164,13 @@ export function activate(context: vscode.ExtensionContext) {
               if (status.job.result?.stdout) output.appendLine(status.job.result.stdout);
               if (status.job.result?.stderr || status.job.error) output.appendLine(status.job.result?.stderr || status.job.error || '');
               output.show(true);
-              if (status.job.status === 'completed' && status.job.result?.exit_code === 0) void vscode.window.showInformationMessage('LeoCode hosted runtime completed.');
-              else void vscode.window.showWarningMessage('LeoCode hosted runtime finished with errors. See the LeoCode output channel.');
+              if (status.job.status === 'completed' && status.job.result?.exit_code === 0) void vscode.window.showInformationMessage('Bram Code hosted runtime completed.');
+              else void vscode.window.showWarningMessage('Bram Code hosted runtime finished with errors. See the Bram Code output channel.');
               return;
             }
           }
           output.appendLine('\nJob is still running. Use the job ID to check its status later.'); output.show(true);
-        } catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'LeoCode hosted runtime could not run.'); }
+        } catch (error) { void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Bram Code hosted runtime could not run.'); }
       });
     }),
     vscode.commands.registerCommand('leocode.runCommand', async () => {
@@ -202,7 +202,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!extension) throw new Error('The built-in VS Code Git extension is unavailable.');
         const git = extension.isActive ? extension.exports : await extension.activate();
         const repositories = git.getAPI(1).repositories;
-        output.clear(); output.appendLine('LeoCode · Git workspace status');
+        output.clear(); output.appendLine('Bram Code · Git workspace status');
         for (const repository of repositories) {
           const state = repository.state;
           output.appendLine(`\n${vscode.workspace.asRelativePath(repository.rootUri, false)} · branch ${state.HEAD?.name || '(detached or unavailable)'}`);
@@ -216,7 +216,7 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         const data = await api.request<Record<string, unknown>>('/api/dashboard');
         output.clear();
-        output.appendLine('LeonardX account usage');
+        output.appendLine('Braverton account usage');
         output.appendLine(JSON.stringify({ plan: data.plan, credits: data.credits, counts: data.counts }, null, 2));
         output.show(true);
       } catch (error) {
