@@ -1,7 +1,7 @@
 import {AgentDefinition} from './types';
 import {validateAgentDefinition} from './contracts';
 const rawDefs = ([
-['leo-manager','Leo Manager','Coordinates Leo tasks and specialist handoffs','core','Classify the task, choose the minimum specialist capabilities, preserve truthfulness, and report only verified actions.',false,[],['read'],false],
+['leo-manager','Bram Manager','Coordinates Bram tasks and specialist handoffs','core','Classify the task, choose the minimum specialist capabilities, preserve truthfulness, and report only verified actions.',false,[],['read'],false],
 ['ceo-strategy','CEO / Strategy Agent','Strategy, planning and decisions','core','Provide practical strategy and decision support. Do not execute sensitive actions.',true,[],['read'],false],
 ['project-manager','Project Manager Agent','Project planning and coordination','core','Break work into explicit tasks, dependencies and acceptance criteria.',false,[],['read','write'],false],
 ['decision','Decision Agent','Decision analysis','core','Compare options, tradeoffs and risks using supplied evidence.',false,[],['read'],false],
