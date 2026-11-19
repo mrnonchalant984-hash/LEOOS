@@ -7,8 +7,6 @@ type MessagesResponse = {
   error?: { message?: string };
 };
 
-const SECRET_FILE = /(^|\/)(\.env(?:\..*)?|.*\.(?:pem|key|p12|pfx)|credentials\.json|service-account\.json)$/i;
-
 export class BramInlineCompletionProvider implements vscode.InlineCompletionItemProvider {
   private lastRequestAt = 0;
   private readonly inFlight = new Set<string>();
@@ -23,8 +21,12 @@ export class BramInlineCompletionProvider implements vscode.InlineCompletionItem
   ): Promise<vscode.InlineCompletionItem[]> {
     const config = vscode.workspace.getConfiguration('leocode');
     if (!config.get<boolean>('inlineCompletions.enabled', false)) return [];
-    if (document.uri.scheme !== 'file' || SECRET_FILE.test(document.fileName.replace(/\\/g, '/'))) return [];
-    if (document.languageId === 'plaintext' || document.languageId === 'log') return [];
+    if (document.uri.scheme !== 'file' || document.languageId === 'plaintext' || document.languageId === 'log') return [];
+    const workspace = vscode.workspace.getWorkspaceFolder(document.uri);
+    if (!workspace) return [];
+    const relativePath = vscode.workspace.asRelativePath(document.uri, false).replaceAll('\\', '/');
+    if (!isSafeWorkspacePath(relativePath)) return [];
+    try { await assertNoWorkspaceSymlinks(workspace, relativePath); } catch { return []; }
 
     const apiKey = await this.context.secrets.get('leocode.developer-api-key');
     if (!apiKey || token.isCancellationRequested) return [];
