@@ -8,6 +8,8 @@ import { readFileSync } from "node:fs";
 
 const contactRoute = readFileSync(new URL("../app/api/contact/route.ts", import.meta.url), "utf8");
 const contactPage = readFileSync(new URL("../app/contact/page.tsx", import.meta.url), "utf8");
+const leadRoute = readFileSync(new URL("../app/api/lead/route.ts", import.meta.url), "utf8");
+const leadCapture = readFileSync(new URL("../components/LeadCapture.tsx", import.meta.url), "utf8");
 
 const validSubmission = {
   name: "Alex Builder",
@@ -40,8 +42,16 @@ test("Web3Forms is submitted from the browser, not proxied through the server ro
   assert.match(contactPage, /web3Result\.success === true/);
 });
 
-test("contact page only sends a Web3Forms notification when server email delivery did not succeed", () => {
+test("contact and Bram lead notifications use Web3Forms only, never Resend or SMTP", () => {
+  assert.doesNotMatch(contactRoute, /RESEND_API_KEY|api\.resend\.com|sendSmtpMail|SMTP_HOST/);
+  assert.doesNotMatch(leadRoute, /RESEND_API_KEY|api\.resend\.com|sendSmtpMail|SMTP_HOST/);
   assert.match(contactPage, /if \(!result\.emailSent\)/);
+  assert.match(contactPage, /fetch\('https:\/\/api\.web3forms\.com\/submit'/);
+  assert.match(contactPage, /NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY/);
   assert.match(contactPage, /result\.emailSent === true \|\| web3FormsSent/);
-  assert.match(contactPage, /notification delivery is not confirmed/);
+  assert.match(leadCapture, /fetch\('https:\/\/api\.web3forms\.com\/submit'/);
+  assert.match(leadCapture, /NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY/);
+  assert.match(leadCapture, /New Braverton lead captured by Bram/);
+  assert.match(leadCapture, /web3Result\.success !== true/);
+  assert.match(leadRoute, /enforceIpRateLimit/);
 });
