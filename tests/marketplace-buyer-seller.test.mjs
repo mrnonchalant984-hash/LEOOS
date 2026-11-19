@@ -196,6 +196,8 @@ test('seller verification, order ledgers, and payout tables do not grant client-
 
 test('uncertain Paystack transfer network outcomes stay non-retryable and reconcile as unknown', () => {
   const transfer = source('lib/store-payouts.ts');
-  assert.match(transfer, /catch \{[\s\S]*Transfer outcome is uncertain[\s\S]*status: 'unknown'[\s\S]*eq\('status', 'initiating'\)/);
-  assert.match(transfer, /Reconcile with Paystack before retrying/);
+  assert.match(transfer, /markPayoutUnknown\(payout\.id/);
+  assert.match(transfer, /status: 'unknown'/);
+  assert.match(transfer, /eq\('id', payoutId\)[\s\S]*eq\('status', 'initiating'\)/);
+  assert.match(transfer, /Transfer outcome is unknown and requires provider reconciliation/);
 });
