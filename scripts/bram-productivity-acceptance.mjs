@@ -13,8 +13,8 @@ if (origin.hostname !== expectedHost) throw new Error('BASE_URL host does not ma
 if (['leoos-omega.vercel.app', 'braverton.com', 'www.braverton.com'].includes(origin.hostname)) {
   throw new Error('Refusing to run destructive acceptance tests against a production hostname.');
 }
-if (!origin.hostname.includes('vercel.app') && origin.hostname !== 'localhost') {
-  throw new Error('Use an isolated Vercel preview or localhost staging host for this acceptance suite.');
+if (origin.hostname !== 'localhost' && !origin.hostname.endsWith('-mrnonchalant984-hash.vercel.app')) {
+  throw new Error('Use a Braverton-owned Vercel preview hostname or localhost; custom and production domains are refused.');
 }
 
 const headers = { Cookie: cookie, Accept: 'application/json' };
