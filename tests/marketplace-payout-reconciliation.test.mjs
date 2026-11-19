@@ -16,6 +16,8 @@ test('ambiguous transfer initiation is quarantined and never reported as a defin
 test('scheduled reconciliation verifies the same Paystack reference and validates returned reference', () => {
   assert.match(reconcile, /transfer\/verify\//);
   assert.match(reconcile, /result\.data\.reference !== payout\.reference/);
+  assert.match(reconcile, /Number\(result\.data\.amount\) !== Number\(payout\.net_kobo\)/);
+  assert.match(reconcile, /result\.data\.recipient\?\.recipient_code !== payout\.recipient_code/);
   assert.match(reconcile, /timingSafeEqual/);
   assert.match(reconcile, /limit\(50\)/);
 });
