@@ -237,7 +237,16 @@
         "displayName": "Bram Code",
         "managementCommand": "leocode.configureModel"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "leocode.editSelection",
+          "when": "editorHasSelection && !editorReadonly",
+          "group": "1_modification@90"
+        }
+      ]
+    }
   },
   "scripts": {
     "compile": "tsc -p ./",
