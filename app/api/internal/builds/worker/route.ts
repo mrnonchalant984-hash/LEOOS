@@ -1,3 +1,4 @@
+import { recordBramWorkerEvent } from '@/lib/bram/execution-events';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
 import { POST as buildDeployPost } from '@/app/api/build-deploy/route';
@@ -22,11 +23,10 @@ export async function GET(req: NextRequest) {
     const sourceProjectId = websiteProject?.source_project_id;
     const recordWorkerEvent = async (eventType: 'claimed' | 'started' | 'completed' | 'failed', status: 'running' | 'succeeded' | 'failed', message: string, metadata: Record<string, unknown> = {}) => {
       if (!sourceProjectId) return;
-      const { error: eventError } = await db.from('bram_worker_events').insert({
-        user_id: job.user_id, project_id: sourceProjectId, job_id: job.id, worker_id: workerId,
-        worker_type: 'build', event_type: eventType, status, message, metadata,
-      });
-      if (eventError) console.warn('Bram build worker event could not be persisted.');
+      await recordBramWorkerEvent({
+        userId: job.user_id, projectId: sourceProjectId, jobId: job.id, workerId,
+        workerType: 'build', eventType, status, message, metadata,
+      }).catch(() => console.warn('Bram build worker event could not be persisted.'));
     };
     await recordWorkerEvent('claimed', 'running', 'Background build worker claimed the job.', { attempt: job.attempts || 1 });
     try {
