@@ -97,3 +97,16 @@ test('dedicated Gemini Live transcription endpoint issues a constrained token wi
   assert.match(liveTranscription, /Cache-Control': 'private, no-store'/);
   assert.doesNotMatch(liveTranscription, /return NextResponse\.json\(\{[^}]*key,/);
 });
+
+test('Gemini Live voice displays incoming and outgoing streaming transcript captions and commits completed turns', () => {
+  assert.match(widget, /content\?\.inputTranscription\?\.text/);
+  assert.match(widget, /content\?\.outputTranscription\?\.text/);
+  assert.match(widget, /setLiveTranscript\(liveInputTranscript\.current\)/);
+  assert.match(widget, /setLiveAssistantCaption\(liveOutputTranscript\.current\)/);
+  assert.match(widget, /content\?\.turnComplete/);
+  assert.match(widget, /liveInputTranscript\.current\.trim\(\)/);
+  assert.match(widget, /liveOutputTranscript\.current\.trim\(\)/);
+  assert.match(widget, /aria-live="polite"/);
+  assert.match(widget, /You/);
+  assert.match(widget, /Bram/);
+});
