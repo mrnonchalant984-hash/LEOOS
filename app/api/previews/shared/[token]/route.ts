@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { adminSupabase } from '@/lib/auth';
+import { adminSupabase, getProfile } from '@/lib/auth';
 export const runtime='nodejs';
 type Ctx={params:Promise<{token:string}>};
 export async function GET(_req:NextRequest,{params}:Ctx){
@@ -16,6 +16,7 @@ export async function GET(_req:NextRequest,{params}:Ctx){
  const {data:comments,error:ce}=await db.from('bram_preview_comments').select('id,body,anchor,status,created_at')
   .eq('share_id',share.id).in('status',['open','queued','applied']).order('created_at',{ascending:true}).limit(100);
  if(ce) return NextResponse.json({error:'Preview comments are unavailable.'},{status:503});
- return NextResponse.json({share:{id:share.id,project_id:share.project_id,title:share.title,preview_url:share.preview_url,allow_comments:share.allow_comments,expires_at:share.expires_at},comments:comments||[]},
+ const auth=await getProfile(_req).catch(()=>null);
+ return NextResponse.json({share:{id:share.id,project_id:share.project_id,title:share.title,preview_url:share.preview_url,allow_comments:share.allow_comments,expires_at:share.expires_at,can_apply:auth?.user.id===share.user_id},comments:comments||[]},
  {headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 }
