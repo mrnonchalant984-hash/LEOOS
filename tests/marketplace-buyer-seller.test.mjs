@@ -145,6 +145,6 @@ test('refund provider acceptance checks local state writes and webhook can recon
   assert.match(refund, /refundStateError/);
   assert.match(refund, /orderStateError/);
   assert.match(refund, /reconciliation_required: true/);
-  assert.match(refund, /Do not submit another refund/);
+  assert.match(refund, /do not submit another refund/i);
   assert.match(webhook, /\.in\('status', \['refund_pending', 'cancellation_requested'\]\)/);
 });
