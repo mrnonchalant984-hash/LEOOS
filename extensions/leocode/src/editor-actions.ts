@@ -30,6 +30,7 @@ export async function editSelectedCodeWithBram(
   if (!isSafeWorkspacePath(relativePath)) throw new Error('This path is excluded from Bram Code context because it may contain credentials.');
   await assertNoWorkspaceSymlinks(workspace, relativePath);
 
+  const originalVersion = document.version;
   const original = document.getText(selection);
   if (!original.trim()) throw new Error('The selected code is empty.');
   if (original.length > 12_000) throw new Error('Select a smaller code region (maximum 12,000 characters).');
@@ -100,7 +101,7 @@ export async function editSelectedCodeWithBram(
   );
   if (approval !== 'Apply change') return;
 
-  if (document.isClosed || document.version !== editor.document.version || document.getText(selection) !== original) {
+  if (document.isClosed || document.version !== originalVersion || document.getText(selection) !== original) {
     throw new Error('The source changed after Bram Code generated the proposal. Re-run the edit against the latest selection.');
   }
   const edit = new vscode.WorkspaceEdit();
