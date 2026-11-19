@@ -28,6 +28,8 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop');
+  const [shareUrl, setShareUrl] = useState('');
+  const [shareBusy, setShareBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     const accessToken = await getAccessToken();
@@ -71,6 +73,26 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
     return () => window.clearInterval(interval);
   }, [preview?.status, refresh]);
 
+  async function createShare() {
+    if (shareBusy || !url) return;
+    setShareBusy(true);
+    setError('');
+    try {
+      const accessToken = await getAccessToken();
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(projectId)}/preview/share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+        body: JSON.stringify({ title: projectName }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Share link could not be created.');
+      setShareUrl(data.share.url);
+      try { await navigator.clipboard.writeText(data.share.url); } catch { /* Keep the URL visible for manual copying. */ }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Share link could not be created.');
+    } finally { setShareBusy(false); }
+  }
+
   async function createPreview() {
     if (busy) return;
     setBusy(true);
@@ -107,9 +129,11 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
           <button type="button" onClick={() => setViewport('mobile')} aria-pressed={viewport === 'mobile'} aria-label="Mobile preview" className={'rounded-lg p-2 ' + (viewport === 'mobile' ? 'bg-slate-100' : 'text-slate-400')}><Smartphone size={15}/></button>
           <button type="button" onClick={() => void refresh().catch(cause => setError(cause instanceof Error ? cause.message : 'Preview status could not be loaded.'))} aria-label="Refresh preview status" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><RefreshCw size={15}/></button>
           {url && <a href={url} target="_blank" rel="noopener noreferrer" aria-label="Open preview in a new tab" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ExternalLink size={15}/></a>}
+          {url && <button type="button" onClick={() => void createShare()} disabled={shareBusy} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">{shareBusy ? 'Sharing…' : 'Share preview'}</button>}
         </div>
       </header>
       {error && <div role="alert" className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">{error}</div>}
+      {shareUrl && <div className="border-b border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950"><span className="font-semibold">Share link created:</span> <a className="break-all underline" href={shareUrl} target="_blank" rel="noreferrer">{shareUrl}</a></div>}
       <div className="flex min-h-[320px] flex-1 items-center justify-center overflow-auto p-3 sm:p-4">
         {url ? (
           <div className={'h-full min-h-[320px] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-lg ' + (viewport === 'mobile' ? 'w-[390px] max-w-full' : 'w-full')}>
