@@ -1,3 +1,4 @@
+import { recordBramWorkerEvent } from '@/lib/bram/execution-events';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { adminSupabase } from '@/lib/auth';
@@ -30,6 +31,12 @@ export async function GET(req: NextRequest) {
   }
   const job = Array.isArray(jobs) ? jobs[0] : null;
   if (!job) return NextResponse.json({ job: null }, { headers: { 'Cache-Control': 'no-store' } });
+
+  await recordBramWorkerEvent({
+    userId: job.user_id, projectId: job.project_id, jobId: job.id, workerId,
+    workerType: 'cloudflare_preview', eventType: 'claimed', status: 'running',
+    message: 'Preview worker claimed the queued job.', metadata: { attempt: job.attempts || 1 },
+  }).catch(() => console.error('Bram worker event could not be persisted for preview claim.'));
 
   return NextResponse.json({
     job: {

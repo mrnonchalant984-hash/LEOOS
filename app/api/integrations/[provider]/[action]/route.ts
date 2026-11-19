@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 import { openConnectionConfig, sealConnectionConfig, type CustomerProvider } from '@/lib/integrations/customer-connections';
+import { getGitHubAppInstallationTokenForId } from '@/lib/mcp/github-app-auth';
 
 export const runtime = 'nodejs';
 type Json = Record<string, unknown>;
@@ -25,6 +26,13 @@ async function getConnection(userId: string, provider: CustomerProvider, connect
   const { data, error } = await query.maybeSingle();
   if (error || !data) throw new Error(`Connect ${provider} in your own Integrations settings first.`);
   let config = openConnectionConfig(data.credential_ciphertext);
+  if (provider === 'github' && config.auth_method === 'github_app') {
+    const installationId = config.installation_id || '';
+    if (!/^\\d{1,20}$/.test(installationId)) throw new Error('The customer GitHub App installation is invalid. Reconnect GitHub in your own Integrations settings.');
+    // The encrypted installation ID is fetched only from this authenticated user's verified integration row.
+    // Mint a short-lived installation token for this customer; never fall back to a platform owner's token.
+    config = { ...config, token: await getGitHubAppInstallationTokenForId(installationId) };
+  }
   if ((provider === 'firebase' || provider === 'youtube') && config.refresh_token && Number(config.expires_at || 0) < Date.now() + 60_000) {
     const refreshed = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: process.env.GOOGLE_OAUTH_CLIENT_ID || '', client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || '', refresh_token: config.refresh_token, grant_type: 'refresh_token' }).toString(), cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15000) });
     const tokenData = await refreshed.json().catch(() => ({})) as Json;

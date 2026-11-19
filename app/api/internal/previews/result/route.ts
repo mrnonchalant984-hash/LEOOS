@@ -1,3 +1,4 @@
+import { recordBramWorkerEvent } from '@/lib/bram/execution-events';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
 import { getCloudflarePreviewConfig } from '@/lib/cloudflare-preview/config';
@@ -75,5 +76,16 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (updateError) return NextResponse.json({ error: 'Preview result could not be saved.' }, { status: 503 });
   if (!updated) return NextResponse.json({ error: 'Preview lease is no longer active.' }, { status: 409 });
+  const { data: jobOwner } = await db.from('cloudflare_preview_jobs').select('user_id,project_id').eq('id', id).maybeSingle();
+  if (jobOwner) {
+    await recordBramWorkerEvent({
+      userId: jobOwner.user_id, projectId: jobOwner.project_id, jobId: id, workerId,
+      workerType: 'cloudflare_preview',
+      eventType: status === 'deployed' ? 'completed' : 'failed',
+      status: status === 'deployed' ? 'succeeded' : 'failed',
+      message: status === 'deployed' ? 'Preview deployment was verified and published.' : 'Preview worker reported a deployment failure.',
+      metadata: { error_code: errorCode, deployment_url: deploymentUrl },
+    }).catch(() => console.error('Bram worker completion event could not be persisted.'));
+  }
   return NextResponse.json({ preview: updated }, { headers: { 'Cache-Control': 'no-store' } });
 }

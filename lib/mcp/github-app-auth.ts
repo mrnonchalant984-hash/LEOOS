@@ -110,7 +110,7 @@ export async function getGitHubAppInstallationToken(
         Accept: 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
         'Content-Type': 'application/json',
-        'User-Agent': 'LeonardX-MCP',
+        'User-Agent': 'Braverton-MCP',
       },
       body: JSON.stringify({ repository_names: [target.repository] }),
       signal: AbortSignal.timeout(15_000),
@@ -149,4 +149,63 @@ export async function getMainWebsiteGitHubToken(input: {
   if (mode === 'app') return getGitHubAppInstallationToken(input, input.options);
   if (input.fallbackToken?.trim()) return input.fallbackToken.trim();
   throw new Error('No GitHub App is configured and no verified GitHub integration token is available. Configure the GitHub App variables or reconnect the owner GitHub integration.');
+}
+
+/**
+ * Mints a short-lived installation token for a customer-owned GitHub App
+ * installation. The installation ID is loaded from that customer's encrypted
+ * integration record; it is never accepted from an unauthenticated request.
+ */
+export async function getGitHubAppInstallationTokenForId(
+  installationId: string,
+  options: GitHubAppTokenOptions = {},
+): Promise<string> {
+  const env = options.env || process.env;
+  const appId = env.GITHUB_APP_ID?.trim() || '';
+  const privateKey = env.GITHUB_APP_PRIVATE_KEY?.trim() || '';
+  if (!/^\d{1,20}$/.test(appId) || !privateKey) {
+    throw new Error('Braverton GitHub App is not configured. Set GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY.');
+  }
+  if (!/^\d{1,20}$/.test(installationId)) throw new Error('The saved GitHub App installation ID is invalid.');
+  const normalizedPrivateKey = privateKey.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n').trim();
+  const now = options.now || Date.now;
+  const fetcher = options.fetcher || fetch;
+  const cacheKey = `customer-installation:${appId}:${installationId}`;
+  const cached = installationTokenCache.get(cacheKey);
+  if (cached && cached.expiresAtMs - TOKEN_REFRESH_SKEW_MS > now()) return cached.token;
+  const jwt = createGitHubAppJwt(appId, normalizedPrivateKey, now());
+  let response: Response;
+  try {
+    response = await fetcher(`${GITHUB_API}/app/installations/${encodeURIComponent(installationId)}/access_tokens`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+        'User-Agent': 'Braverton-GitHub-App',
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw new Error('Could not reach GitHub to refresh the customer installation token.');
+  }
+  if (!response.ok) throw new Error(sanitizedGitHubAuthError(response.status));
+  let payload: unknown;
+  try { payload = await response.json(); } catch {
+    throw new Error('GitHub returned an invalid installation-token response.');
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('GitHub returned an invalid installation-token response.');
+  }
+  const result = payload as { token?: unknown; expires_at?: unknown };
+  if (typeof result.token !== 'string' || !result.token || typeof result.expires_at !== 'string') {
+    throw new Error('GitHub returned an incomplete installation-token response.');
+  }
+  const expiresAtMs = Date.parse(result.expires_at);
+  if (!Number.isFinite(expiresAtMs) || expiresAtMs <= now() + TOKEN_REFRESH_SKEW_MS) {
+    throw new Error('GitHub returned an installation token that is expired or too close to expiration.');
+  }
+  installationTokenCache.set(cacheKey, { token: result.token, expiresAtMs });
+  return result.token;
 }

@@ -15,6 +15,7 @@ import { normalizeVercelDomain, resolveVerifiedVercelMainUrl, toVercelSubdomain,
 import { buildDeployRequestHash, getBuildDeployRateLimitPerHour, resolveBuildDeployIdempotencyKey } from '@/lib/build-deploy-idempotency';
 import { ProviderHttpError, requestProviderJson } from '@/lib/provider-http';
 import { decryptMcpCredential } from '@/lib/mcp/outbound-security';
+import { getGitHubAppInstallationTokenForId } from '@/lib/mcp/github-app-auth';
 import type { DeploymentProvider } from '@/lib/provider-http';
 
 export const runtime = 'nodejs';
@@ -73,21 +74,65 @@ async function vercel(path: string, opts: RequestInit = {}, token: string | unde
   });
 }
 
-async function getCustomerProviderToken(userId: string, provider: 'github' | 'vercel'): Promise<string | undefined> {
+async function getCustomerProviderToken(userId: string, provider: 'vercel'): Promise<string | undefined> {
   const { data, error } = await adminSupabase().from('user_integrations')
     .select('credential_ciphertext')
     .eq('user_id', userId).eq('provider', provider).eq('status', 'verified')
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
-  // Keep existing platform-managed credentials as a compatibility fallback if a customer has
-  // not connected their own account. Never use a connection belonging to another user.
-  if (error || !data?.credential_ciphertext) return provider === 'github' ? process.env.GITHUB_TOKEN : process.env.VERCEL_TOKEN;
+  if (error || !data?.credential_ciphertext) return process.env.VERCEL_TOKEN;
   try {
     const config = JSON.parse(decryptMcpCredential(data.credential_ciphertext)) as Record<string, unknown>;
-    const token = provider === 'github' || provider === 'vercel' ? config.token : undefined;
+    const token = config.token;
     if (typeof token !== 'string' || !token.trim()) throw new Error('Credential is missing.');
     return token;
   } catch {
-    throw new Error(`The connected ${provider} credential could not be decrypted. Reconnect the integration before building.`);
+    throw new Error('The connected Vercel credential could not be decrypted. Reconnect the integration before building.');
+  }
+}
+
+type CustomerGitHubAuth = { token: string; accountLogin: string; accountType: 'User' | 'Organization'; connectionId: string };
+
+async function getCustomerGitHubAuth(userId: string): Promise<CustomerGitHubAuth> {
+  const { data, error } = await adminSupabase().from('user_integrations')
+    .select('id,credential_ciphertext,status')
+    .eq('user_id', userId).eq('provider', 'github')
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (error) throw new Error('Your GitHub connection could not be loaded. Reconnect the Braverton GitHub App in Integrations.');
+  if (!data?.credential_ciphertext) {
+    throw new Error('Install the Braverton GitHub App from Integrations before asking Bram to create a website repository.');
+  }
+  if (data.status !== 'verified') {
+    throw new Error('Your GitHub App installation needs attention. Reinstall it from Braverton Integrations before retrying.');
+  }
+  try {
+    const config = JSON.parse(decryptMcpCredential(data.credential_ciphertext)) as Record<string, unknown>;
+    if (config.auth_method !== 'github_app') {
+      throw new Error('Legacy GitHub OAuth connections are not used by Bram builds. Install the Braverton GitHub App from Integrations.');
+    }
+    const installationId = typeof config.installation_id === 'string' ? config.installation_id : '';
+    const accountLogin = typeof config.account_login === 'string' ? config.account_login : '';
+    const accountType = config.account_type === 'Organization' ? 'Organization' : 'User';
+    if (!/^\\d{1,20}$/.test(installationId) || !/^[A-Za-z0-9_.-]{1,100}$/.test(accountLogin)) {
+      throw new Error('The saved GitHub App installation details are incomplete. Reinstall the Braverton GitHub App.');
+    }
+    let token: string;
+    try {
+      token = await getGitHubAppInstallationTokenForId(installationId);
+    } catch (error) {
+      if (error instanceof Error && /authentication was rejected|installation or requested repository was not found/i.test(error.message)) {
+        await adminSupabase().from('user_integrations').update({
+          status: 'verification_failed',
+          last_verified_at: null,
+          last_error_code: 'GITHUB_APP_INSTALLATION_INVALID',
+        }).eq('id', data.id).eq('user_id', userId);
+        throw new Error('Your Braverton GitHub App installation is no longer valid. Reinstall it from Integrations, then retry the build.');
+      }
+      throw new Error('Braverton could not refresh the GitHub App installation token. Check the installation and retry.');
+    }
+    return { token, accountLogin, accountType, connectionId: data.id };
+  } catch (error) {
+    if (error instanceof Error && /Braverton GitHub App|Legacy GitHub OAuth|GitHub App installation/.test(error.message)) throw error;
+    throw new Error('The connected GitHub App details could not be decrypted. Reinstall the Braverton GitHub App in Integrations before building.');
   }
 }
 
@@ -149,6 +194,7 @@ export async function POST(req: NextRequest) {
   let mainDomainFailure: string | null = null;
   let buildContext: (BuildContext & { stage: 'building' | 'testing' | 'deploying' | 'live' }) | null = null;
   let githubOperation = 'not_started';
+  let githubIntegrationId: string | null = null;
   let mcpExternalModel = false;
   let suppliedMcpFiles: GeneratedFile[] | null = null;
   try {
@@ -407,14 +453,19 @@ export async function POST(req: NextRequest) {
 
     buildContext.stage = 'building';
     await recordBuildState(buildContext, 'building', 'Creating isolated customer repository');
-    const githubToken = await getCustomerProviderToken(ctx.user.id, 'github');
+    const githubAuth = await getCustomerGitHubAuth(ctx.user.id);
+    githubIntegrationId = githubAuth.connectionId;
+    const githubToken = githubAuth.token;
     const vercelToken = await getCustomerProviderToken(ctx.user.id, 'vercel');
-    if (!githubToken || !vercelToken) throw new Error('Connect verified GitHub and Vercel accounts in Integrations, or configure the platform-managed fallback credentials.');
-    githubOperation = 'verify_token_identity';
-    const me = await gh('/user', {}, githubToken);
+    if (!vercelToken) throw new Error('Connect your own Vercel account in Braverton Integrations before deploying.');
+    githubOperation = 'verify_installation_access';
+    const me = { login: githubAuth.accountLogin };
     const repoName = `${process.env.VERCEL_PROJECT_PREFIX || 'leo-site'}-${Date.now()}`;
     githubOperation = 'create_repository';
-    const repo = await gh('/user/repos', {
+    const repositoryCreatePath = githubAuth.accountType === 'Organization'
+      ? `/orgs/${encodeURIComponent(githubAuth.accountLogin)}/repos`
+      : '/user/repos';
+    const repo = await gh(repositoryCreatePath, {
       method: 'POST',
       body: JSON.stringify({ name: repoName, private: true, description: `Website generated by Braverton for ${ctx.profile.email}`, auto_init: true }),
     }, githubToken);
@@ -644,6 +695,15 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const providerError = e instanceof ProviderHttpError ? e : null;
     const githubFailure = providerError?.provider === 'github';
+    if (githubFailure && providerError?.status === 401 && githubIntegrationId) {
+      await adminSupabase().from('user_integrations').update({
+        status: 'verification_failed',
+        last_verified_at: null,
+        last_error_code: 'HTTP_401',
+      }).eq('id', githubIntegrationId).eq('user_id', buildContext?.userId || '');
+    }
+    const githubConnectionInvalid = githubFailure && providerError?.status === 401
+      && ['verify_token_identity', 'verify_installation_access'].includes(githubOperation);
     const githubDiagnostic = githubFailure ? {
       provider: 'github',
       operation: githubOperation,
@@ -674,12 +734,16 @@ export async function POST(req: NextRequest) {
     if (buildContext) {
       const status = buildContext.stage === 'deploying' ? 'deploy_failed' : 'build_failed';
       await recordBuildState(buildContext, status, status === 'deploy_failed' ? 'Deployment failed' : 'Build failed', {
-        error: mainDomainFailure || (githubFailure && githubOperation === 'create_repository' && [403, 404].includes(providerError?.status ?? 0)
-          ? 'GitHub denied repository creation. The token needs Repository creation: write permission (fine-grained token) or repo scope (classic token), and must be authorized for the selected account.'
-          : providerError?.message) || 'Build or deployment operation failed.',
-        message: mainDomainFailure || (githubFailure && githubOperation === 'create_repository' && [403, 404].includes(providerError?.status ?? 0)
-          ? 'GitHub denied repository creation. Check the token permission and account authorization.'
-          : providerError?.message) || 'Build or deployment operation failed.',
+        error: mainDomainFailure || (githubConnectionInvalid
+          ? 'Your GitHub connection is no longer valid. Reinstall or reconnect the Braverton GitHub App in Integrations, then retry the build.'
+          : githubFailure && githubOperation === 'create_repository' && [403, 404].includes(providerError?.status ?? 0)
+            ? 'GitHub denied repository creation. The Braverton GitHub App needs Repository creation: write permission, and must be installed on the selected account.'
+            : providerError?.message) || 'Build or deployment operation failed.',
+        message: mainDomainFailure || (githubConnectionInvalid
+          ? 'GitHub authorization expired or was revoked. Reinstall or reconnect the Braverton GitHub App in Integrations.'
+          : githubFailure && githubOperation === 'create_repository' && [403, 404].includes(providerError?.status ?? 0)
+            ? 'GitHub denied repository creation. Check the Braverton GitHub App installation and Repository creation permission.'
+            : providerError?.message) || 'Build or deployment operation failed.',
         diagnostics: githubDiagnostic,
         deploymentId: buildContext.deploymentId,
       }).catch(() => console.error(JSON.stringify({ level: 'error', event: 'leo.operation.persistence_failure', operation: 'project.build_deploy', request_id: requestId })));
@@ -693,8 +757,10 @@ export async function POST(req: NextRequest) {
         headers.set('Retry-After', String(providerError.retryAfterSeconds));
       }
       return NextResponse.json({
-        error: providerError.message,
-        code: providerError.code,
+        error: githubConnectionInvalid
+          ? 'Your GitHub connection is no longer valid. Reinstall or reconnect the Braverton GitHub App in Integrations, then retry the build.'
+          : providerError.message,
+        code: githubConnectionInvalid ? 'GITHUB_CONNECTION_INVALID' : providerError.code,
         retryable: providerError.retryable,
         ...(providerError.retryAfterSeconds !== null ? { retryAfterSeconds: providerError.retryAfterSeconds } : {}),
         provider: providerError.provider,
