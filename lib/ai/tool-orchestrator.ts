@@ -183,6 +183,7 @@ type AgentToolPolicy = {
   agentId: string;
   allowMcpRead: boolean;
   userMessage?: string;
+  timezone?: string;
 };
 
 export async function createUserAssistantTools(
@@ -191,7 +192,7 @@ export async function createUserAssistantTools(
   agentPolicy?: AgentToolPolicy,
 ): Promise<{ tools: AssistantTool[]; execute: AssistantToolExecutor }> {
   const db = adminSupabase();
-  const userTimezone = options?.request ? locationFromHeaders(options.request.headers).timezone : 'UTC';
+  const userTimezone = agentPolicy?.timezone || (options?.request ? locationFromHeaders(options.request.headers).timezone : 'UTC');
   const references = new Map<string, ToolReference>();
   const tools: AssistantTool[] = localTools.map(tool => {
     references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
