@@ -21,5 +21,5 @@ test('Bram project collections are keyed by project ID instead of clearing state
   assert.match(widget, /projectChecklist, setProjectChecklist\] = useState<\{ projectId: string;/);
   assert.doesNotMatch(widget, /setProjectResources\(\[\]\)/);
   assert.doesNotMatch(widget, /setProjectChecklist\(null\)/);
-  assert.match(widget, /activeProjectResources = projectResources\?\.projectId === workProject\?\.id/);
+  assert.match(widget, /activeProjectResources = projectResources && workProject && projectResources\.projectId === workProject\.id/);
 });
