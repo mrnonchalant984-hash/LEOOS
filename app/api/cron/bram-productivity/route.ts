@@ -120,11 +120,14 @@ export async function POST(req: NextRequest) {
       results.push({ id: reminder.id, status: next ? 'rescheduled' : 'delivered', email: emailStatus });
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'delivery_failed';
+      const attempts = Number(reminder.delivery_attempts || 1);
+      const terminal = attempts >= 10;
       await db.from('bram_reminders').update({
-        status: 'scheduled', next_run_at: new Date(Date.now() + Math.min(3600, 5 * (2 ** Math.min(6, Number(reminder.delivery_attempts || 1)))) * 60_000).toISOString(),
+        status: terminal ? 'failed' : 'scheduled',
+        next_run_at: terminal ? reminder.next_run_at : new Date(Date.now() + Math.min(3600, 5 * (2 ** Math.min(6, attempts))) * 60_000).toISOString(),
         lease_owner: null, lease_expires_at: null, last_delivery_error: message.slice(0, 120), updated_at: new Date().toISOString(),
       }).eq('id', reminder.id).eq('lease_owner', worker);
-      results.push({ id: reminder.id, status: 'retry_scheduled' });
+      results.push({ id: reminder.id, status: terminal ? 'failed' : 'retry_scheduled' });
     }
   }
   return NextResponse.json({ claimed: reminders?.length || 0, processed: results.length, results, at: new Date().toISOString() }, { headers: { 'Cache-Control': 'no-store' } });
