@@ -17,6 +17,18 @@ export async function GET(req: NextRequest) {
   const results: Array<{ job_id: string; status: string; code?: string }> = [];
   for (const job of jobs || []) {
     let buildRouteInvoked = false;
+    const { data: websiteProject } = await db.from('website_projects').select('source_project_id')
+      .eq('id', job.website_project_id).eq('owner_user_id', job.user_id).maybeSingle();
+    const sourceProjectId = websiteProject?.source_project_id;
+    const recordWorkerEvent = async (eventType: 'claimed' | 'started' | 'completed' | 'failed', status: 'running' | 'succeeded' | 'failed', message: string, metadata: Record<string, unknown> = {}) => {
+      if (!sourceProjectId) return;
+      const { error: eventError } = await db.from('bram_worker_events').insert({
+        user_id: job.user_id, project_id: sourceProjectId, job_id: job.id, worker_id: workerId,
+        worker_type: 'build', event_type: eventType, status, message, metadata,
+      });
+      if (eventError) console.warn('Bram build worker event could not be persisted.');
+    };
+    await recordWorkerEvent('claimed', 'running', 'Background build worker claimed the job.', { attempt: job.attempts || 1 });
     try {
       const request = new NextRequest(new URL('/api/build-deploy', req.url), {
         method: 'POST',
@@ -30,6 +42,7 @@ export async function GET(req: NextRequest) {
         body: JSON.stringify({ worker: true }),
       });
       buildRouteInvoked = true;
+      await recordWorkerEvent('started', 'running', 'Build/deploy route started processing the claimed job.');
       const response = await buildDeployPost(request);
       const body = await response.json().catch(() => null) as Record<string, unknown> | null;
       const succeeded = response.ok && body?.success === true && body?.status === 'deployed' && typeof body.liveUrl === 'string' && /^https:\/\//.test(body.liveUrl);
@@ -57,12 +70,15 @@ export async function GET(req: NextRequest) {
       } else if (retryableResponse) {
         await db.from('deployment_events').insert({ website_project_id: job.website_project_id, event_type: 'build_queue_retry', status: 'queued', message: 'A transient build provider failure occurred; a bounded retry has been scheduled.', metadata: { queue_job_id: job.id, attempt: Number(job.attempts || 1), code: failureCode } });
       }
+      if (succeeded) await recordWorkerEvent('completed', 'succeeded', 'Background build reached verified deployed state.', { build_id: build?.id || null });
+      else if (!retryableResponse) await recordWorkerEvent('failed', 'failed', 'Background build did not reach verified deployed state.', { code: failureCode });
       processed += 1;
       results.push({ job_id: job.id, status: succeeded ? 'succeeded' : retryableResponse ? 'retry_queued' : 'failed', ...(failureCode ? { code: failureCode } : {}) });
     } catch (error) {
       const retry = !buildRouteInvoked && Number(job.attempts || 1) < 3;
       const code = error instanceof Error && /timeout|timed out/i.test(error.message) ? 'worker_timeout' : 'worker_execution_failed';
       await db.from('leo_build_jobs').update({ status: retry ? 'queued' : 'failed', available_at: new Date(Date.now() + 60_000 * Number(job.attempts || 1)).toISOString(), lease_owner: null, lease_expires_at: null, error_code: retry ? null : code, ...(retry ? {} : { completed_at: new Date().toISOString() }) }).eq('id', job.id).eq('lease_owner', workerId).eq('status', 'running');
+      if (!retry) await recordWorkerEvent('failed', 'failed', 'Background build worker failed to complete the job.', { code });
       results.push({ job_id: job.id, status: retry ? 'retry_queued' : 'failed', code });
     }
   }
