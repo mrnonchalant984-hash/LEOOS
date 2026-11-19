@@ -43,12 +43,10 @@ test('Gemini API key and fallback configuration are server-side environment vari
   assert.match(envExample, /^GEMINI_API_KEY=$/m);
   assert.match(envExample, /^LEO_FALLBACK_MODEL=$/m);
   assert.match(envExample, /^LEO_GEMINI_IMAGE_MODEL=gemini-2\.5-flash-image$/m);
-  assert.match(envExample, /^LEO_GEMINI_AUDIO_MODEL=gemini-2\.5-flash$/m);
-  assert.match(envExample, /^LEO_GEMINI_TTS_MODEL=gemini-2\.5-flash-preview-tts$/m);
-  assert.match(envExample, /^LEO_GEMINI_AUDIO_MODEL=gemini-3\\.5-transcribe$/m);
-  assert.match(envExample, /^LEO_GEMINI_TTS_MODEL=gemini-3\\.8-flash-tts$/m);
-  assert.match(envExample, /^LEO_GEMINI_LIVE_MODEL=gemini-3\\.8-live$/m);
-  assert.match(envExample, /^LEO_GEMINI_TRANSCRIBE_LIVE_MODEL=gemini-3\\.5-transcribe-live$/m);
+  assert.match(envExample, /^LEO_GEMINI_AUDIO_MODEL=gemini-3\.5-transcribe$/m);
+  assert.match(envExample, /^LEO_GEMINI_TTS_MODEL=gemini-3\.8-flash-tts$/m);
+  assert.match(envExample, /^LEO_GEMINI_LIVE_MODEL=gemini-3\.8-live$/m);
+  assert.match(envExample, /^LEO_GEMINI_TRANSCRIBE_LIVE_MODEL=gemini-3\.5-transcribe-live$/m);
   assert.doesNotMatch(envExample, /^NEXT_PUBLIC_GEMINI_API_KEY=/m);
 });
 
