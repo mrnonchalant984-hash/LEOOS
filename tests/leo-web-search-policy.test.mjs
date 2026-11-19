@@ -12,6 +12,9 @@ const knowledge = await readFile(new URL('../lib/leo-knowledge.ts', import.meta.
 
 test('web search is enabled for explicit search and freshness-dependent requests', () => {
   assert.equal(shouldUseWebSearch('Please search the web for current Vercel deployment docs'), true);
+  assert.equal(shouldUseWebSearch('Bram, search for the latest Gemini API changes'), true);
+  assert.equal(shouldUseWebSearch('Look up the current Vercel deployment status online'), true);
+  assert.equal(shouldUseWebSearch('Find this information on the internet'), true);
   assert.equal(shouldUseWebSearch('What are the latest Gemini model releases?'), true);
   assert.equal(shouldUseWebSearch('What is 2 + 2?'), false);
   assert.equal(shouldUseWebSearch('  '), false);

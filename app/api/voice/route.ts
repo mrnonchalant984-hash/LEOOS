@@ -40,7 +40,8 @@ async function geminiTranscribe(audio: File) {
   const bytes = Buffer.from(await audio.arrayBuffer());
   const client = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 30_000 } });
   const response = await client.models.generateContent({
-    model: normalizeGeminiModelId(process.env.LEO_GEMINI_AUDIO_MODEL?.trim() || 'gemini-2.5-flash'),
+    // Gemini 2.5 Flash was retired for new API users; production logs confirmed 404s.
+    model: normalizeGeminiModelId(process.env.LEO_GEMINI_AUDIO_MODEL?.trim() || 'gemini-3.8-flash'),
     contents: [{ role: 'user', parts: [
       { inlineData: { mimeType, data: bytes.toString('base64') } },
       { text: 'Transcribe the spoken words accurately. Return only the transcript, without commentary.' },
@@ -57,9 +58,10 @@ async function geminiTranscribe(audio: File) {
 async function geminiSpeak(text: string) {
   const key = googleKey();
   if (!key) throw new Error('Gemini is not configured.');
-  const client = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 30_000 } });
+  const client = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 30_000, apiVersion: 'v1beta' } });
   const response = await client.models.generateContent({
-    model: process.env.LEO_GEMINI_TTS_MODEL?.trim() || 'gemini-2.5-flash-preview-tts',
+    // Use the current stable TTS model; v1beta exposes Gemini audio generation.
+    model: process.env.LEO_GEMINI_TTS_MODEL?.trim() || 'gemini-3.8-flash-tts',
     contents: [{ role: 'user', parts: [{ text }] }],
     config: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } },
   });

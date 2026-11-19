@@ -47,7 +47,8 @@ function isExplicitBuildIntent(message: string) {
   const asksToBuild = /\b(build|create|make|develop|generate|start|implement|need|want|looking for)\b/i.test(message);
   const namesProject = /\b(website|web\s?site|web\s?app|web\s?application|saas|game|platformer|racing|puzzle|browser\s?game|landing\s?page|portfolio|e-?commerce|marketplace|dashboard)\b/i.test(message);
   const negatesAction = /\b(?:do not|don't|never|not)\b.{0,32}\b(?:build|create|make|develop|generate|start|implement|deploy|publish|launch)\b/i.test(message);
-  return asksToBuild && namesProject && !negatesAction;
+  const explicitlyDeclinesBuild = /\b(?:never\s+ask(?:ed|ing)|not\s+ask(?:ing|ed)|did(?:n't| not)\s+ask|am\s+not\s+asking|not\s+requesting|don't\s+want|do\s+not\s+want|never\s+wanted)\b/i.test(message);
+  return asksToBuild && namesProject && !negatesAction && !explicitlyDeclinesBuild;
 }
 function isRepositoryTask(message: string) {
   return /\b(github|git\s?hub|repository|repo)\b/i.test(message);
@@ -260,8 +261,12 @@ export async function POST(req: NextRequest) {
     const hasRecentBuildRequest = recentUserMessages.some((item) => isExplicitBuildIntent(item.content));
     const shortBuildContinuation = hasRecentBuildRequest &&
       /^(start|go ahead|proceed|continue|do it|build it|create it|deploy|publish|launch|put it live)[.!\s]*$/i.test(message.trim());
+    // Carry a previous project type forward only for an explicit short continuation.
+    // Never let an old website request attach a builder card to unrelated chat turns.
     const requestedProjectType = customAgent ? null : inferProjectType(message) ??
-      [...recentUserMessages].reverse().map((item) => inferProjectType(item.content)).find((type): type is ProjectType => type !== null) ?? null;
+      (shortBuildContinuation
+        ? [...recentUserMessages].reverse().map((item) => inferProjectType(item.content)).find((type): type is ProjectType => type !== null) ?? null
+        : null);
     const webProjectRequest = requestedProjectType !== null && ['website', 'web_app', 'saas'].includes(requestedProjectType);
     const negatesDeployment = /\b(?:do not|don't|never|not)\b.{0,32}\b(?:deploy|deployment|publish|launch|go live|put it online|make it live|host it)\b/i.test(message);
     const explicitDeploymentIntent = Boolean(!customAgent && !negatesDeployment &&
