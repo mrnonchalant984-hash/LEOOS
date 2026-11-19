@@ -31,7 +31,7 @@ export class BramCodeModelProvider implements vscode.LanguageModelChatProvider<v
   ): Promise<vscode.LanguageModelChatInformation[]> {
     let apiKey = await this.context.secrets.get('leocode.developer-api-key');
     if (!apiKey) {
-      if (options.silent || token.isCancellationRequested) return [];
+      if ((options as vscode.PrepareLanguageModelChatModelOptions & { silent?: boolean }).silent || token.isCancellationRequested) return [];
       await vscode.commands.executeCommand('leocode.configureModel');
       apiKey = await this.context.secrets.get('leocode.developer-api-key');
       if (!apiKey) return [];
@@ -151,7 +151,7 @@ export class BramCodeModelProvider implements vscode.LanguageModelChatProvider<v
       };
 
       while (true) {
-        if (token.isCancellationRequested) throw new vscode.CancellationError();
+        if (token.isCancellationRequested) throw new Error('Bram Code request was cancelled.');
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
