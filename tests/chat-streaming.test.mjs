@@ -1,5 +1,3 @@
-  assert.match(widget, /const \[activityLabel, setActivityLabel\] = useState\("Thinking"\)/);
-  assert.match(widget, /setActivityLabel\("Thinking"\)/);
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -28,7 +26,7 @@ test('stream endpoint authenticates, rate limits, checks chat ownership, persist
   assert.match(route, /\.update\(\{ messages: updated/);
 });
 
-test('Leo UI consumes server-sent deltas and supports cancellation for streamed normal chat', () => {
+test('Bram UI consumes server-sent deltas, supports cancellation, and displays real thinking state', () => {
   assert.match(widget, /fetch\("\/api\/chat\/stream"/);
   assert.match(widget, /reader\.read\(\)/);
   assert.match(widget, /streamedText \+= event\.text/);
@@ -36,5 +34,6 @@ test('Leo UI consumes server-sent deltas and supports cancellation for streamed 
   assert.match(widget, /response stream ended before completion/);
   assert.match(widget, /function stopGeneration\(\)/);
   assert.match(widget, /chatAbortController\.current\?\.abort\(\)/);
-  assert.match(widget, /setActivityLabel\\("Thinking"\\)/);
+  assert.match(widget, /const \[activityLabel, setActivityLabel\] = useState\("Thinking"\)/);
+  assert.match(widget, /setActivityLabel\("Thinking"\)/);
 });
