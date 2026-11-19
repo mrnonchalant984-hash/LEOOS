@@ -27,7 +27,9 @@
     "test:visual": "python3 scripts/visual-qa-playwright.py",
     "diagnose:workflows": "node scripts/inspect-workflow-health.mjs",
     "verify:leocode": "node scripts/verify-leocode-runtime.mjs",
-    "verify:gemini:live": "node scripts/verify-live-gemini.mjs"
+    "verify:gemini:live": "node scripts/verify-live-gemini.mjs",
+    "test:bram:acceptance": "node scripts/bram-productivity-acceptance.mjs",
+    "verify:web3forms": "node scripts/verify-web3forms.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.134.0",
