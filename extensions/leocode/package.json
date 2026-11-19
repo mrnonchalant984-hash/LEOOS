@@ -177,10 +177,6 @@
         "title": "LeoCode: Generate Tests"
       },
       {
-        "command": "leocode.runAgent",
-        "title": "LeoCode: Run Specialist Agent"
-      },
-      {
         "command": "leocode.applyGeneratedCode",
         "title": "LeoCode: Apply Generated Code"
       },
@@ -211,10 +207,6 @@
       {
         "command": "leocode.openReviewCentre",
         "title": "LeoCode: Open Code Review Centre"
-      },
-      {
-        "command": "leocode.coordinateAgents",
-        "title": "LeoCode: Coordinate Specialist Agents"
       },
       {
         "command": "leocode.runTests",
