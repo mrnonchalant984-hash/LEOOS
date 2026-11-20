@@ -196,6 +196,8 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     [voiceLocked, setVoiceLocked] = useState(false),
     [voiceFallbackMode, setVoiceFallbackMode] = useState(false);
   const [platformCredits, setPlatformCredits] = useState<number | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [liveAssistantCaption, setLiveAssistantCaption] = useState("");
   const [buildProgress, setBuildProgress] = useState<BuildProgressState | null>(null);
   const [trackBuildProgress, setTrackBuildProgress] = useState(false);
   const [buildTrackingSince, setBuildTrackingSince] = useState("");
@@ -339,6 +341,8 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
   const livePlaybackAt = useRef(0);
   const liveSessionTimer = useRef<number | null>(null);
   const liveSessionActive = useRef(false);
+  const liveInputTranscript = useRef("");
+  const liveOutputTranscript = useRef("");
   const fileRef = useRef<HTMLInputElement | null>(null);
   const photoRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
@@ -1323,9 +1327,23 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     const liveConfig = {
       responseModalities: [Modality.AUDIO],
       speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: session.voice || "Kore" } } },
-      systemInstruction: LIVE_VOICE_SYSTEM_INSTRUCTION,
+      inputAudioTranscription: {},
+      outputAudioTranscription: {},
+      sessionResumption: {},
     };
     liveSessionActive.current = true;
+    liveInputTranscript.current = "";
+    liveOutputTranscript.current = "";
+    setLiveTranscript("");
+    setLiveAssistantCaption("");
+    const mergeCaption = (previous: string, next: string) => {
+      const value = next.trim();
+      if (!value) return previous;
+      if (!previous) return value;
+      if (value === previous || previous.endsWith(value)) return previous;
+      if (value.startsWith(previous)) return value;
+      return `${previous}${/\\s$/.test(previous) ? "" : " "}${value}`;
+    };
     const connected = await ai.live.connect({
       model: session.model,
       config: liveConfig,
@@ -1333,6 +1351,16 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         onopen: () => setVoiceStatus("Listening"),
         onmessage: (message) => {
           const content = message.serverContent;
+          const inputText = content?.inputTranscription?.text;
+          if (typeof inputText === "string" && inputText.trim()) {
+            liveInputTranscript.current = mergeCaption(liveInputTranscript.current, inputText);
+            setLiveTranscript(liveInputTranscript.current);
+          }
+          const outputText = content?.outputTranscription?.text;
+          if (typeof outputText === "string" && outputText.trim()) {
+            liveOutputTranscript.current = mergeCaption(liveOutputTranscript.current, outputText);
+            setLiveAssistantCaption(liveOutputTranscript.current);
+          }
           if (content?.interrupted) {
             livePlaybackSources.current.forEach((source) => { try { source.stop(); } catch {} });
             livePlaybackSources.current.clear();
@@ -1359,7 +1387,22 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
             setVoiceLocked(true);
             setVoiceStatus("Speaking");
           }
-          if (content?.turnComplete || content?.waitingForInput) {
+          if (content?.turnComplete) {
+            const userText = liveInputTranscript.current.trim();
+            const assistantText = liveOutputTranscript.current.trim();
+            if (userText || assistantText) {
+              setMessages(current => [
+                ...current,
+                ...(userText ? [{ role: "user" as const, content: userText }] : []),
+                ...(assistantText ? [{ role: "assistant" as const, content: assistantText }] : []),
+              ]);
+            }
+            liveInputTranscript.current = "";
+            liveOutputTranscript.current = "";
+            setLiveTranscript("");
+            setLiveAssistantCaption("");
+            setVoiceStatus("Listening");
+          } else if (content?.waitingForInput) {
             setVoiceStatus("Listening");
           }
         },
@@ -1400,9 +1443,9 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     setVoiceLocked(true);
     setVoiceStatus("Listening");
     liveSessionTimer.current = window.setTimeout(() => {
-      setError("This live voice session reached its five-minute limit. Start a new call to continue.");
+      setError("This live voice session reached its time limit. Start a new call to continue.");
       endVoiceChat();
-    }, 5 * 60 * 1000);
+    }, 9 * 60 * 1000);
   }
   async function startVoiceChat() {
     if (voiceOpen) {
@@ -1410,6 +1453,10 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       return;
     }
     setVoiceOpen(true);
+    setLiveTranscript("");
+    setLiveAssistantCaption("");
+    liveInputTranscript.current = "";
+    liveOutputTranscript.current = "";
     setVoiceLocked(false);
     setVoiceStatus("Connecting");
     setError("");
@@ -1421,7 +1468,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
           "Content-Type": "application/json",
           ...(t ? { Authorization: `Bearer ${t}` } : {}),
         },
-        body: JSON.stringify({ voice }),
+        body: JSON.stringify({ voice, session_id: sidRef.current }),
       });
       const session = await r.json();
       if (!r.ok) throw new Error(session.error || "Unable to start voice chat");
@@ -1518,6 +1565,10 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     pc.current?.close();
     pc.current = null;
     setVoiceOpen(false);
+    setLiveTranscript("");
+    setLiveAssistantCaption("");
+    liveInputTranscript.current = "";
+    liveOutputTranscript.current = "";
     setMuted(false);
     setVoiceLocked(false);
     setVoiceStatus("Ended");
@@ -2158,7 +2209,17 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
                     <div className="h-14 w-14 rounded-full bg-[var(--gold)]/60 blur-sm" />
                   </div>
                   <h2 className="mt-6 text-2xl font-black">Bram Voice</h2>
-                  <p className="mt-2 text-sm text-zinc-500">{voiceStatus}</p>
+                  <p className="mt-2 text-sm text-zinc-500" role="status" aria-live="polite">{voiceStatus}</p>
+                  {!voiceFallbackMode && <div className="mt-5 max-h-56 space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-white/[.035] p-4 text-left" aria-live="polite" aria-atomic="false">
+                    <div>
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-zinc-500">You</p>
+                      <p className="min-h-6 whitespace-pre-wrap text-sm leading-6 text-zinc-200">{liveTranscript || (voiceStatus === "Listening" ? "Listening… your words will appear here." : "Waiting for speech…")}</p>
+                    </div>
+                    <div className="border-t border-white/10 pt-3">
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-[var(--gold)]">Bram</p>
+                      <p className="min-h-6 whitespace-pre-wrap text-sm leading-6 text-zinc-200">{liveAssistantCaption || (voiceStatus === "Thinking" || voiceStatus === "Speaking" ? "Bram is preparing a reply…" : "Bram’s reply will appear here.")}</p>
+                    </div>
+                  </div>}
                   <div className="mt-6 flex items-center justify-center gap-2">
                     <label className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-zinc-400">
                       <Settings2 size={14} />
