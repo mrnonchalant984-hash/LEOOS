@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
         liveConnectConstraints: {
           model: `models/${model}`,
           config: {
-            responseModalities: [Modality.AUDIO],
+            responseModalities: [Modality.AUDIO as Modality],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
             systemInstruction,
             inputAudioTranscription: {},
