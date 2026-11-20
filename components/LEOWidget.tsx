@@ -2048,6 +2048,9 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     }
   }
 
+  const activeProjectResources = projectResources && projectResources.projectId === workProject?.id ? projectResources.items : [];
+  const activeProjectChecklist = projectChecklist && projectChecklist.projectId === workProject?.id ? projectChecklist.checklist : null;
+
   const messagesView = (
     <div className="mx-auto w-full max-w-[760px] space-y-5">
       <section className="rounded-xl border border-white/10 bg-white/[.025] p-3" aria-label="Bram local context permissions">
@@ -2213,8 +2216,6 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       )}
     </div>
   );
-  const activeProjectResources = projectResources?.projectId === workProject?.id ? projectResources.items : [];
-  const activeProjectChecklist = projectChecklist?.projectId === workProject?.id ? projectChecklist.checklist : null;
 
   if (full)
     return (
