@@ -78,13 +78,13 @@ test('proposal snapshots reject changed, replaced, and unexpectedly created file
   }), true);
 });
 
-test('the LeoCode chat view is registered as a retained activity-bar webview', () => {
+test('the Bram Code workspace view is registered as a retained activity-bar webview', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf8'));
   assert.equal(manifest.publisher, 'leonardx');
   assert.equal(`${manifest.publisher}.${manifest.name}`, 'leonardx.leocode');
   assert.deepEqual(manifest.contributes.views.leocode.find(view => view.id === 'leocode.chat'), {
     id: 'leocode.chat',
-    name: 'Leo Chat',
+    name: 'Bram Code',
     type: 'webview',
   });
   const extension = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
@@ -97,11 +97,11 @@ test('sign-in refreshes chat state and expired requests do not disguise network 
   const chat = fs.readFileSync(path.join(extensionRoot, 'src', 'views', 'chat-view.ts'), 'utf8');
   const api = fs.readFileSync(path.join(extensionRoot, 'src', 'api', 'client.ts'), 'utf8');
   assert.match(extension, /await api\.signIn[\s\S]*await chatView\?\.refresh\(\)/);
-  assert.match(chat, /result\.reason instanceof LeonardXSessionError/);
+  assert.match(chat, /result\.reason instanceof BravertonSessionError/);
   assert.match(chat, /state: 'unknown'/);
-  assert.match(chat, /Could not verify the LeonardX connection/);
+  assert.match(chat, /Could not verify the Braverton connection/);
   assert.match(api, /sessionGeneration/);
-  assert.match(api, /Your LeonardX session changed while refreshing/);
+  assert.match(api, /Your Braverton session changed while refreshing/);
 });
 
 test('workspace content is opt-in and terminal commands require confirmation', () => {
@@ -112,7 +112,7 @@ test('workspace content is opt-in and terminal commands require confirmation', (
   assert.match(chat, /includeActiveContext:document\.getElementById\('activeContext'\)\.checked/);
   assert.match(extension, /runApprovedTerminalCommand\(command, output\)/);
   assert.match(terminal, /showWarningMessage\([\s\S]*Run command[\s\S]*integration\.executeCommand\(normalized\)/);
-  assert.match(extension, /registerLeonardXMcpTools\(context, api\)/);
+  assert.match(extension, /registerBravertonMcpTools\(context, api\)/);
 });
 
 test('proposed edits require a confirmation and a second stale-file check before apply', () => {

@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
-import type { LeonardXApi } from '../api/client';
+import type { BravertonApi } from '../api/client';
 
 type DynamicModule = Record<string, (...args: any[]) => any>;
 type RunningHost = {
@@ -19,18 +19,18 @@ const TOOL_NAME = /^[a-z0-9_.-]+$/i;
  * Local AHP host for the VS Code Agents window.
  *
  * The listener is loopback-only and protected by a random, per-start token.
- * LeonardX Supabase credentials never leave VS Code SecretStorage: the
- * cofold model adapter obtains a fresh access token through LeonardXApi for
- * each provider request and sends it only to the configured LeonardX origin.
+ * Braverton Supabase credentials never leave VS Code SecretStorage: the
+ * cofold model adapter obtains a fresh access token through BravertonApi for
+ * each provider request and sends it only to the configured Braverton origin.
  */
-export class LeoAgentHost {
+export class BramAgentHost {
   private running: RunningHost | undefined;
   private starting: Promise<string> | undefined;
 
   get isRunning() { return Boolean(this.running); }
   get connectionUrl() { return this.running?.url; }
 
-  async start(api: LeonardXApi, context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<string> {
+  async start(api: BravertonApi, context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<string> {
     if (this.running) return this.running.url;
     if (this.starting) return this.starting;
     this.starting = this.startInternal(api, context, output);
@@ -41,7 +41,7 @@ export class LeoAgentHost {
     }
   }
 
-  private async startInternal(api: LeonardXApi, context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<string> {
+  private async startInternal(api: BravertonApi, context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<string> {
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) throw new Error('Open a workspace folder before starting the Bram Agent Host.');
     if (Number(process.versions.node.split('.')[0]) < 22) {
@@ -53,7 +53,7 @@ export class LeoAgentHost {
     const storage = context.globalStorageUri.fsPath;
     await fs.promises.mkdir(storage, { recursive: true });
 
-    // ESM-only AHP packages are loaded dynamically because LeoCode's current
+    // ESM-only AHP packages are loaded dynamically because Bram Code's current
     // extension compiler emits CommonJS.
     const ahp = await dynamicImport('@ahpd/sdk');
     const cofold = await dynamicImport('@ahpd/agent-cofold');
@@ -70,7 +70,7 @@ export class LeoAgentHost {
 
     const modelConfig = await api.request<{ model?: string; models?: Array<{ id: string; name?: string }> }>('/api/leocode/agent/v1/models');
     if (typeof modelConfig.model !== 'string' || !modelConfig.model.startsWith('google/')) {
-      throw new Error('LeonardX did not return a supported server-controlled Gemini model for Bram.');
+      throw new Error('Braverton did not return a supported server-controlled Gemini model for Bram.');
     }
     const agent = cofoldAgent({
       provider: 'leonardx',
@@ -112,7 +112,7 @@ export class LeoAgentHost {
           if (/(write|edit|patch|delete|remove|rename|move|create|mkdir|shell|bash|command|exec|terminal|run)/.test(name)) {
             return { behavior: 'ask', reason: 'Bram needs your approval before modifying files or running a command.' };
           }
-          return { behavior: 'deny', reason: 'This tool is not in the initial LeoCode Agent Host allowlist.' };
+          return { behavior: 'deny', reason: 'This tool is not in the initial Bram Code Agent Host allowlist.' };
         },
       },
     });

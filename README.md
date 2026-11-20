@@ -11,7 +11,7 @@ Braverton is an AI-assisted software creation platform with project demos, authe
 - Credit-gated image generation with owner bypass.
 - `/dashboard` and owner-only `/admin`.
 - TOTP 2FA setup for the owner admin path with backup codes.
-- Full-screen ChatGPT-style LEO chat UI with hands-free voice conversation, transcript display, spoken assistant replies, suggestions, generated-image display and per-user chat persistence.
+- Full-screen ChatGPT-style Bram chat UI with hands-free voice conversation, transcript display, spoken assistant replies, suggestions, generated-image display and per-user chat persistence.
 - 3D particle background and reusable glass-card styling.
 - Blog, terms, privacy, refund-policy, sitemap and robots routes.
 
@@ -30,7 +30,7 @@ Braverton is an AI-assisted software creation platform with project demos, authe
 A successful frontend payment redirect never unlocks a plan by itself. Subscription and credits are granted by the verified Paystack webhook. Owner access is checked against the authenticated account and the server-side owner email.
 ## Bram assistant experience + usage analytics
 
-This upgrade adds a personalized Bram opening state with the signed-in user's first name, a glowing Leo bubble, and quick actions for brainstorming, creating, deploying, fixing, and coding.
+This upgrade adds a personalized Bram opening state with the signed-in user's first name, a glowing Bram bubble, and quick actions for brainstorming, creating, deploying, fixing, and coding.
 
 It also adds the `ai_usage` Supabase table. Chat requests record provider usage, while feature credit consumption records credits used. The owner admin dashboard polls the protected analytics endpoint every 5 seconds and shows total AI tokens, credits used, request count, per-feature usage, and recent usage.
 
@@ -42,7 +42,7 @@ Run the updated `supabase/schema.sql` in Supabase before using the analytics das
 - `/setup` — 20-type onboarding wizard with automatic country/timezone/currency detection.
 - `/setup/keys` — explains every public/secret integration key and why it is required.
 - `/payment/manual` — Email manual payment request flow when the client explicitly chooses manual payment.
-- Client-owned OpenAI keys are intended for deployed client chatbots; Leo's platform key is not used as the client's billing account.
+- Client-owned OpenAI keys are intended for deployed client chatbots; Braverton's platform key is not used as the client's billing account.
 - `hosting_subscriptions` tracks free trials and renewals; renewal automation requires a scheduled job/cron plus Resend/Paystack credentials.
 - Google Search Console/GA4 automation is optional and requires Google API credentials; the app does not fabricate verification or analytics data.
 
@@ -62,13 +62,13 @@ Run the updated `supabase/schema.sql` in Supabase before using the analytics das
 Configure only the credentials you actually use. Google credentials must be a server-side service account JSON with access granted to the relevant Search Console property and/or GA4 property. Never put Google service-account JSON or other secrets in `NEXT_PUBLIC_*` variables.
 
 
-## Legal, global Leo access, demos, memory and trusted devices
+## Legal, global Bram access, demos, memory and trusted devices
 
 - `/privacy`, `/terms` and `/refund-policy` are linked from the global footer and included in the sitemap.
-- The Privacy and Terms pages describe account data, Leo chat/memory, payments, website services, security and user responsibilities. They should receive a jurisdiction-specific legal review before launch.
-- A global Leo launcher is available on public pages and opens a compact chat panel; `/app` remains the full Leo workspace.
+- The Privacy and Terms pages describe account data, Bram chat/memory, payments, website services, security and user responsibilities. They should receive a jurisdiction-specific legal review before launch.
+- A global Bram launcher is available on public pages and opens a compact chat panel; `/app` remains the full Bram workspace.
 - The project library presents the 12 named LeoOS demo projects from the Big 12 set with curated Unsplash image URLs. A real project is labelled live only when its deployed URL is configured.
-- Signed-in Leo chats are persisted per user in `chats_v2`. User-approved memories are stored separately in `leo_memories` and can be listed or removed through `/api/memory`.
+- Signed-in Bram chats are persisted per user in `chats_v2`. User-approved memories are stored separately in `leo_memories` and can be listed or removed through `/api/memory`.
 - Owner admin 2FA now supports trusted-device cookies. After a successful authenticator verification, the current browser is trusted for up to 365 days for up to 365 days; a new/unrecognized browser must provide the authenticator code.
 
 ## Authentication and public access
@@ -76,7 +76,7 @@ Configure only the credentials you actually use. Google credentials must be a se
 - Account creation/login is available from `/account` and `/auth`.
 - Authentication uses Supabase and persists the signed-in session on the device; passwords are never stored by the application.
 - Server APIs accept the authenticated Supabase access token and the secure LEO auth cookie.
-- Chat history and user-approved Leo memories are stored per authenticated user.
+- Chat history and user-approved Bram memories are stored per authenticated user.
 
 ## Project URL configuration
 The 12 project entries are demo records in this LeoOS application, not twelve separate application codebases. Their real source projects are not embedded in this ZIP. A project is only labelled `live` when its real URL is configured. Set the corresponding `NEXT_PUBLIC_PROJECT_*_URL` variable in the deployment environment to connect each real deployed project. Until then the entry is labelled as a demo or awaiting a live URL, not presented as a real deployment.
@@ -95,7 +95,7 @@ Gemini, GitHub, Vercel, Supabase, Paystack, Resend and optional provider credent
 
 ## Google Video Generation
 
-LeonardX uses a server-side Google Veo adapter for asynchronous text-to-video generation. Jobs reuse the existing authenticated generation-job, platform-credit, and private Supabase media-storage systems. Google Flow does not expose a verified public generation API in this integration; any future Flow browser/MCP connection must be clearly identified as unofficial automation and separately authorized. Image-to-video, multi-scene project assembly, and avatar clips are not enabled in the current adapter.
+Braverton uses a server-side Google Veo adapter for asynchronous text-to-video generation. Jobs reuse the existing authenticated generation-job, platform-credit, and private Supabase media-storage systems. Google Flow does not expose a verified public generation API in this integration; any future Flow browser/MCP connection must be clearly identified as unofficial automation and separately authorized. Image-to-video, multi-scene project assembly, and avatar clips are not enabled in the current adapter.
 
 Required server environment variables:
 
@@ -128,9 +128,9 @@ The app verifies the returned Supabase session before setting its secure authent
 
 ### Braverton MCP connection
 
-The deployed Streamable HTTP endpoint is `https://leoos-omega.vercel.app/mcp`. Clients authenticate through LeonardX's OAuth 2.1 authorization-code flow with PKCE; do not create or share API keys. The initial authorization can grant read-only access. Approving `mcp:write` additionally exposes project creation/rename, source-file saving, and plan-limited build/deploy tools. Reconnect an existing MCP client to review and grant the write scope.
+The deployed Streamable HTTP endpoint is `https://leoos-omega.vercel.app/mcp`. Clients authenticate through Braverton's OAuth 2.1 authorization-code flow with PKCE; do not create or share API keys. The initial authorization can grant read-only access. Approving `mcp:write` additionally exposes project creation/rename, source-file saving, and plan-limited build/deploy tools. Reconnect an existing MCP client to review and grant the write scope.
 
-Claude, ChatGPT, or another connected model supplies its own model inference; these MCP tools do not call Leo AI or consume Leo AI credits. Every write tool requires `confirm: true` and client-side user approval. Build/deploy starts the existing no-cost hosting trial; after the trial, the site may be suspended unless hosting is renewed through the LeonardX account flow. MCP cannot make payments or renew hosting. Project deletion is not available.
+Claude, ChatGPT, or another connected model supplies its own model inference; these MCP tools do not call Bram or consume Bram platform credits. Every write tool requires `confirm: true` and client-side user approval. Build/deploy starts the existing no-cost hosting trial; after the trial, the site may be suspended unless hosting is renewed through the Braverton account flow. MCP cannot make payments or renew hosting. Project deletion is not available.
 
 For production, configure `MCP_PUBLIC_URL` to the HTTPS origin only, such as `https://leoos-omega.vercel.app` (no `/mcp` path). Leave `MCP_ALLOWED_ORIGINS` blank for server-to-server clients; browser MCP clients that send an `Origin` header need their exact HTTPS origins, comma-separated. External-model project deployments require `GITHUB_TOKEN` and `VERCEL_TOKEN`; they do not require `OPENAI_API_KEY` for inference. Apply the MCP OAuth, rate-limit, and `20261018180000_build_deploy_idempotency.sql` Supabase migrations before enabling deployment admission, and verify the deployment's OAuth metadata at `/.well-known/oauth-authorization-server`. `LEO_BUILD_DEPLOY_LIMIT_PER_HOUR` sets the per-account cap for distinct new builds; duplicate retries do not consume another slot.
 

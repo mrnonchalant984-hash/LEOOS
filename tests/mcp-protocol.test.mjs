@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -78,6 +79,7 @@ test('Streamable HTTP MCP server initializes, lists tools, and calls a harmless 
     await client.connect(transport);
     const { tools } = await client.listTools();
     assert.deepEqual(tools.map(tool => tool.name).sort(), [
+      'bram_get_execution_status',
       'discover_application_capabilities',
       'export_browser_game_project',
       'get_account_plan',
@@ -157,6 +159,7 @@ test('MCP write tools require the write scope and explicit confirmation input', 
     assert.equal(tools.some(tool => tool.name === 'build_and_deploy_project'), false);
     assert.equal(tools.some(tool => tool.name === 'start_cloud_build'), false);
     assert.equal(tools.some(tool => tool.name === 'leo_ai_external_assist'), false);
+    assert.equal(tools.some(tool => tool.name === 'bram_external_assist'), false);
     assert.equal(tools.some(tool => tool.name === 'leo_ai_external_assist_complete'), false);
   } finally {
     await readClient.close();
@@ -173,9 +176,14 @@ test('MCP write tools require the write scope and explicit confirmation input', 
     const deploy = tools.find(tool => tool.name === 'build_and_deploy_project');
     const cloudBuild = tools.find(tool => tool.name === 'start_cloud_build');
     const leoChat = tools.find(tool => tool.name === 'leo_ai_chat');
+    const bramChat = tools.find(tool => tool.name === 'bram_chat');
     assert.deepEqual(tools.map(tool => tool.name).sort(), [
       'advance_engineering_workflow',
       'approve_agent_execution',
+      'bram_chat',
+      'bram_external_assist',
+      'bram_external_assist_complete',
+      'bram_get_execution_status',
       'build_and_deploy_project',
       'build_android_calculator',
       'cancel_agent_execution',
@@ -218,6 +226,8 @@ test('MCP write tools require the write scope and explicit confirmation input', 
     assert.ok(deploy);
     assert.ok(cloudBuild);
     assert.ok(leoChat);
+    assert.ok(bramChat);
+    assert.equal(bramChat.inputSchema.properties.confirm.const, true);
     assert.equal(leoChat.inputSchema.properties.confirm.const, true);
     assert.ok(leoChat.inputSchema.properties.fallback_model);
     assert.equal(tools.find(tool => tool.name === 'leo_ai_external_assist').inputSchema.properties.confirm.const, true);
@@ -410,4 +420,15 @@ test('OAuth scope parser accepts only read and optional write permissions', () =
   assert.deepEqual(parseRequestedMcpScopes(null), ['mcp:read', 'mcp:write']);
   assert.deepEqual(parseRequestedMcpScopes('mcp:read'), ['mcp:read']);
   assert.equal(parseRequestedMcpScopes(''), null);
+});
+
+test('Braverton MCP advertises Bram names and keeps legacy Leo AI aliases', async () => {
+  const source = await readFile(new URL('../lib/mcp/server.ts', import.meta.url), 'utf8');
+  assert.match(source, /new McpServer\(\{ name: 'Braverton'/);
+  for (const name of ['bram_chat', 'bram_get_execution_status', 'bram_external_assist', 'bram_external_assist_complete']) {
+    assert.match(source, new RegExp(`registerTool\\('${name}'`));
+  }
+  for (const name of ['leo_ai_chat', 'leo_ai_get_execution_status', 'leo_ai_external_assist', 'leo_ai_external_assist_complete']) {
+    assert.match(source, new RegExp(`registerTool\\('${name}'`));
+  }
 });

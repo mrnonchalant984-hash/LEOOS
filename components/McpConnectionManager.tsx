@@ -128,13 +128,13 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
   return (
     <section className="mt-8 rounded-2xl border border-white/10 bg-white/[.03] p-5">
       <div className="mb-5 rounded-xl border border-violet-300/20 bg-violet-300/[.05] p-4">
-        <h3 className="font-semibold">Connect LeonardX to ChatGPT or Claude</h3>
+        <h3 className="font-semibold">Connect Bram to ChatGPT or Claude</h3>
         <p className="mt-1 text-sm leading-6 text-zinc-300">
-          Add this LeonardX MCP endpoint in your AI assistant’s connector settings. Do not enter <code>chatgpt.com</code> or <code>claude.ai</code> in the remote-server form below; those are assistant websites, not MCP servers.
+          Add this Bram MCP endpoint in your AI assistant’s connector settings. Do not enter <code>chatgpt.com</code> or <code>claude.ai</code> in the remote-server form below; those are assistant websites, not MCP servers.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <code className="min-w-0 flex-1 break-all rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100">
-            {leonardXMcpEndpoint || 'https://your-leonardx-domain.example/mcp'}
+            {leonardXMcpEndpoint || 'https://your-braverton-domain.example/mcp'}
           </code>
           <button
             type="button"
@@ -142,9 +142,9 @@ export function McpConnectionManager({ configuredLeonardXMcpUrl }: { configuredL
             onClick={() => void (async () => {
               try {
                 await navigator.clipboard.writeText(leonardXMcpEndpoint);
-                setNotice('LeonardX MCP endpoint copied. Add it in ChatGPT or Claude connector settings.');
+                setNotice('Bram MCP endpoint copied. Add it in ChatGPT or Claude connector settings.');
               } catch {
-                setError('Copy failed. Select and copy the LeonardX MCP endpoint manually.');
+                setError('Copy failed. Select and copy the Bram MCP endpoint manually.');
               }
             })()}
             className="rounded-lg border border-white/15 px-3 py-2 text-sm disabled:opacity-50"

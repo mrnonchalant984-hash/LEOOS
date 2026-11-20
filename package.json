@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "typecheck": "npm run clean && next typegen && tsc --noEmit",
-    "verify": "npm run lint && npm test && npm run build",
+    "verify": "npm run lint && npm test && npm run build && npm run verify:leocode",
     "db:dry-run": "npx supabase db push --dry-run",
     "db:push": "npx supabase db push",
     "load:smoke": "node scripts/load-smoke.mjs",
@@ -26,7 +26,7 @@
     "verify:release": "npm run verify && npm run preflight:production && npm run db:dry-run && npm run test:staging && npm run test:mcp:external && npm run test:live:services",
     "test:visual": "python3 scripts/visual-qa-playwright.py",
     "diagnose:workflows": "node scripts/inspect-workflow-health.mjs",
-    "verify:leocode": "node scripts/verify-leocode-runtime.mjs",
+    "verify:leocode": "npm --prefix extensions/leocode ci && node scripts/verify-leocode-runtime.mjs",
     "verify:gemini:live": "node scripts/verify-live-gemini.mjs"
   },
   "dependencies": {

@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
       let history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
       if (/^[0-9a-f-]{36}$/i.test(sessionId)) {
         const { data: chat, error: chatError } = await db.from('chats_v2').select('user_id,messages').eq('id', sessionId).maybeSingle();
-        if (chatError) throw new Error('Leo conversation history is temporarily unavailable.');
+        if (chatError) throw new Error('Bram conversation history is temporarily unavailable.');
         if (chat && chat.user_id !== ctx.user.id) return NextResponse.json({ error: 'Chat not found.' }, { status: 404 });
         history = Array.isArray(chat?.messages) ? chat.messages.filter((item: any) => (item?.role === 'user' || item?.role === 'assistant') && typeof item?.content === 'string').slice(-16) : [];
       }
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
       const { data: memories, error: memoryError } = await db.from('leo_memories')
         .select('memory').eq('user_id', ctx.user.id).eq('active', true)
         .is('project_id', null).order('updated_at', { ascending: false }).limit(20);
-      if (memoryError) throw new Error('Leo memory is temporarily unavailable.');
+      if (memoryError) throw new Error('Bram memory is temporarily unavailable.');
       if (memories?.length) memoryContext = `\nUser-approved persistent memories:\n${memories.map((item: { memory: string }) => `- ${item.memory}`).join('\n')}`;
       let knowledgeContext = '';
       try { knowledgeContext = formatKnowledgeContext(await retrieveLeoKnowledge(transcript, 4)); } catch { /* RAG is supplementary. */ }
@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
         const write = history.length || (await db.from('chats_v2').select('id').eq('id', sessionId).eq('user_id', ctx.user.id).maybeSingle()).data
           ? await db.from('chats_v2').update({ messages: updated, updated_at: new Date().toISOString() }).eq('id', sessionId).eq('user_id', ctx.user.id)
           : await db.from('chats_v2').insert({ id: sessionId, user_id: ctx.user.id, title: transcript.slice(0, 60), messages: updated, updated_at: new Date().toISOString() });
-        if (write.error) throw new Error('Leo replied, but the conversation could not be saved.');
+        if (write.error) throw new Error('Bram replied, but the conversation could not be saved.');
       }
     }
     const speechText = turnMode ? assistantReply : transcript;

@@ -1,22 +1,23 @@
 {
   "name": "leocode",
   "publisher": "leonardx",
-  "displayName": "LeoCode by LeonardX",
-  "description": "Workspace-aware AI coding assistance from your LeonardX account.",
-  "version": "0.1.2",
+  "displayName": "Bram Code by Braverton",
+  "description": "Independent Braverton AI coding model for VS Code Chat, with account-based API billing and workspace-aware coding tools.",
+  "version": "0.2.0",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.106.0"
+    "vscode": "^1.109.0"
   },
   "categories": [
     "Other",
     "Programming Languages"
   ],
   "keywords": [
-    "LeoCode",
-    "LeonardX",
-    "Leo AI",
-    "AI coding assistant"
+    "Bram Code",
+    "Bram",
+    "Braverton",
+    "AI coding model",
+    "VS Code model provider"
   ],
   "icon": "media/icon.png",
   "main": "./out/extension.js",
@@ -30,7 +31,6 @@
     "onCommand:leocode.generateCode",
     "onCommand:leocode.analyzeWorkspace",
     "onCommand:leocode.generateTests",
-    "onCommand:leocode.runAgent",
     "onCommand:leocode.applyGeneratedCode",
     "onCommand:leocode.runCommand",
     "onCommand:leocode.viewUsage",
@@ -39,22 +39,20 @@
     "onCommand:leocode.reviewWorkspace",
     "onCommand:leocode.reviewGitChanges",
     "onCommand:leocode.openReviewCentre",
-    "onCommand:leocode.coordinateAgents",
     "onCommand:leocode.runTests",
-    "onCommand:leocode.inspectGit"
+    "onCommand:leocode.inspectGit",
+    "onCommand:leocode.configureModel",
+    "onCommand:leocode.toggleInlineCompletions",
+    "onCommand:leocode.runHostedWorkspace",
+    "onCommand:leocode.editSelection"
   ],
   "contributes": {
-    "chatAgents": [
-      {
-        "path": "./agents/leocode-native.agent.md"
-      }
-    ],
     "languageModelTools": [
       {
         "name": "leocode_list_mcp_tools",
-        "toolReferenceName": "listLeonardXMcpTools",
-        "displayName": "List LeonardX MCP Tools",
-        "modelDescription": "Lists the signed-in user's LeonardX MCP connections and their existing approval status.",
+        "toolReferenceName": "listBravertonMcpTools",
+        "displayName": "List Braverton MCP Tools",
+        "modelDescription": "Lists the signed-in user's Braverton MCP connections and their existing approval status.",
         "canBeReferencedInPrompt": false,
         "inputSchema": {
           "type": "object",
@@ -64,9 +62,9 @@
       },
       {
         "name": "leocode_call_mcp_tool",
-        "toolReferenceName": "callLeonardXMcpTool",
-        "displayName": "Call LeonardX MCP Tool",
-        "modelDescription": "Calls a LeonardX MCP tool that is already enabled and approved for the signed-in account. The user must confirm the call.",
+        "toolReferenceName": "callBravertonMcpTool",
+        "displayName": "Call Braverton MCP Tool",
+        "modelDescription": "Calls a Braverton MCP tool that is already enabled and approved for the signed-in account. The user must confirm the call.",
         "canBeReferencedInPrompt": false,
         "inputSchema": {
           "type": "object",
@@ -94,17 +92,34 @@
       }
     ],
     "configuration": {
-      "title": "LeoCode",
+      "title": "Bram Code",
       "properties": {
         "leocode.baseUrl": {
           "type": "string",
           "default": "https://leoos-omega.vercel.app",
-          "description": "LeonardX server origin. Use HTTPS except for local development."
+          "description": "Braverton server origin. HTTPS is required except for local development."
         },
         "leocode.projectId": {
           "type": "string",
           "default": "",
-          "description": "LeonardX project UUID whose saved private workspace LeoCode should execute on a temporary GitHub-hosted runner."
+          "description": "Optional Braverton project UUID for project-aware features."
+        },
+        "leocode.model": {
+          "type": "string",
+          "default": "gemini-3.8-flash",
+          "description": "Braverton Developer API model used for Bram Code and inline completions."
+        },
+        "leocode.inlineCompletions.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable opt-in Bram Code inline code suggestions. Each request uses your Braverton Developer API key and is billable under your active API plan."
+        },
+        "leocode.inlineCompletions.minimumIntervalMs": {
+          "type": "number",
+          "default": 1200,
+          "minimum": 500,
+          "maximum": 10000,
+          "description": "Minimum delay between inline-completion API requests, in milliseconds."
         }
       }
     },
@@ -112,7 +127,7 @@
       "activitybar": [
         {
           "id": "leocode",
-          "title": "LeoCode",
+          "title": "Bram Code",
           "icon": "media/icon.svg"
         }
       ]
@@ -121,114 +136,125 @@
       "leocode": [
         {
           "id": "leocode.chat",
-          "name": "Leo Chat",
+          "name": "Bram Code",
           "type": "webview"
         }
       ]
     },
     "commands": [
       {
-        "command": "leocode.startAgentHost",
-        "title": "LeoCode: Start Local Agent Host"
-      },
-      {
-        "command": "leocode.stopAgentHost",
-        "title": "LeoCode: Stop Local Agent Host"
+        "command": "leocode.configureModel",
+        "title": "Bram Code: Configure Braverton API"
       },
       {
         "command": "leocode.openChat",
-        "title": "LeoCode: Open Chat"
+        "title": "Bram Code: Open Chat"
       },
       {
         "command": "leocode.connect",
-        "title": "LeoCode: Connect LeonardX"
+        "title": "Bram Code: Connect Braverton"
       },
       {
         "command": "leocode.explainSelection",
-        "title": "LeoCode: Explain Selected Code"
+        "title": "Bram Code: Explain Selected Code"
       },
       {
         "command": "leocode.reviewFile",
-        "title": "LeoCode: Review Current File"
+        "title": "Bram Code: Review Current File"
       },
       {
         "command": "leocode.fixSelection",
-        "title": "LeoCode: Fix Selected Code"
+        "title": "Bram Code: Fix Selected Code"
       },
       {
         "command": "leocode.generateCode",
-        "title": "LeoCode: Generate Code"
+        "title": "Bram Code: Generate Code"
       },
       {
         "command": "leocode.analyzeWorkspace",
-        "title": "LeoCode: Analyze Workspace"
+        "title": "Bram Code: Analyze Workspace"
       },
       {
         "command": "leocode.generateTests",
-        "title": "LeoCode: Generate Tests"
-      },
-      {
-        "command": "leocode.runAgent",
-        "title": "LeoCode: Run Specialist Agent"
+        "title": "Bram Code: Generate Tests"
       },
       {
         "command": "leocode.applyGeneratedCode",
-        "title": "LeoCode: Apply Generated Code"
+        "title": "Bram Code: Apply Generated Code"
       },
       {
         "command": "leocode.runCommand",
-        "title": "LeoCode: Run Approved Terminal Command"
+        "title": "Bram Code: Run Approved Terminal Command"
       },
       {
         "command": "leocode.viewUsage",
-        "title": "LeoCode: View Usage"
+        "title": "Bram Code: View Usage"
       },
       {
         "command": "leocode.signOut",
-        "title": "LeoCode: Sign Out"
+        "title": "Bram Code: Sign Out"
       },
       {
         "command": "leocode.reviewSelection",
-        "title": "LeoCode: Review Selected Code"
+        "title": "Bram Code: Review Selected Code"
       },
       {
         "command": "leocode.reviewWorkspace",
-        "title": "LeoCode: Review Entire Workspace"
+        "title": "Bram Code: Review Entire Workspace"
       },
       {
         "command": "leocode.reviewGitChanges",
-        "title": "LeoCode: Review Git Changes"
+        "title": "Bram Code: Review Git Changes"
       },
       {
         "command": "leocode.openReviewCentre",
-        "title": "LeoCode: Open Code Review Centre"
-      },
-      {
-        "command": "leocode.coordinateAgents",
-        "title": "LeoCode: Coordinate Specialist Agents"
+        "title": "Bram Code: Open Code Review Centre"
       },
       {
         "command": "leocode.runTests",
-        "title": "LeoCode: Discover and Run Tests"
+        "title": "Bram Code: Discover and Run Tests"
       },
       {
         "command": "leocode.inspectGit",
-        "title": "LeoCode: Inspect Git Status"
+        "title": "Bram Code: Inspect Git Status"
+      },
+      {
+        "command": "leocode.toggleInlineCompletions",
+        "title": "Bram Code: Toggle Inline Completions"
       },
       {
         "command": "leocode.runHostedWorkspace",
-        "title": "LeoCode: Run on Private GitHub Runtime"
+        "title": "Bram Code: Run Hosted Workspace Check"
+      },
+      {
+        "command": "leocode.editSelection",
+        "title": "Bram Code: Edit Selected Code"
       }
-    ]
+    ],
+    "languageModelChatProviders": [
+      {
+        "vendor": "braverton-bram-code",
+        "displayName": "Bram Code",
+        "managementCommand": "leocode.configureModel"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "leocode.editSelection",
+          "when": "editorHasSelection && !editorReadonly",
+          "group": "1_modification@90"
+        }
+      ]
+    }
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test test/*.test.cjs",
+    "package": "npm run compile && npx --yes @vscode/vsce package"
   },
-  "dependencies": {
-    "@ahpd/agent-cofold": "0.14.0",
-    "@ahpd/sdk": "0.14.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.90.0",

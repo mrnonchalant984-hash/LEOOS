@@ -19,7 +19,7 @@ test('Leo chat validates caller-selected models against the authenticated model 
   assert.match(route, /getModelProviderStatus\(\)\.find/);
   assert.match(route, /Choose a model from the available model list/);
   assert.match(route, /selectedModel\.toLowerCase\(\) === 'auto'/);
-  assert.match(route, /Leo uses Gemini/);
+  assert.match(route, /Bram uses Gemini/);
   assert.match(route, /Design system workflows are available on the Business plan/);
 });
 

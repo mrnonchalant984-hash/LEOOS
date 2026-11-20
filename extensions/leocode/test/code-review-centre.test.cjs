@@ -28,25 +28,16 @@ test('review findings can be opened and safe fixes require preview, approval, an
   assert.match(centre, /showTextDocument/);
 });
 
-test('LeoCode registers file, selection, workspace and Git review plus specialist orchestration', () => {
+test('Bram Code registers file, selection, workspace and Git review without an agent command surface', () => {
   const manifest = JSON.parse(read('package.json'));
   const commands = new Set(manifest.contributes.commands.map(command => command.command));
-  for (const command of ['leocode.reviewFile', 'leocode.reviewSelection', 'leocode.reviewWorkspace', 'leocode.reviewGitChanges', 'leocode.coordinateAgents', 'leocode.runTests', 'leocode.inspectGit']) {
+  for (const command of ['leocode.reviewFile', 'leocode.reviewSelection', 'leocode.reviewWorkspace', 'leocode.reviewGitChanges', 'leocode.runTests', 'leocode.inspectGit']) {
     assert.ok(commands.has(command), `missing ${command}`);
   }
   const extension = read('src', 'extension.ts');
   assert.match(extension, /reviewCentre\.show\(await reviewFile\(\)\)/);
-  assert.match(extension, /coordinateSpecialists\(api, output\)/);
-});
-
-test('specialist coordination uses existing registry, collects real responses and gates delegation on approval', () => {
-  const source = read('src', 'review', 'orchestration.ts');
-  assert.match(source, /\/api\/agents/);
-  assert.match(source, /agent_id: 'leo-manager'/);
-  assert.match(source, /available\.has\(item\.agent_id\)/);
-  assert.match(source, /showWarningMessage/);
-  assert.match(source, /\/api\/agents\/run/);
-  assert.match(source, /results\.push/);
+  assert.doesNotMatch(extension, /coordinateSpecialists/);
+  assert.doesNotMatch(extension, /registerCommand\('leocode\.runAgent'/);
 });
 
 test('terminal execution captures VS Code shell output after exact-command approval', () => {
