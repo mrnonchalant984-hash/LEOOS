@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
         liveConnectConstraints: {
           model: `models/${model}`,
           config: {
-            responseModalities: [Modality.TEXT],
+            responseModalities: [Modality.TEXT as Modality],
             inputAudioTranscription: {},
             systemInstruction: 'Transcribe the user audio accurately. Return only the words spoken. Do not answer, summarize, or add commentary.',
           },
