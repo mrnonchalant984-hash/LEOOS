@@ -188,7 +188,8 @@ async function buildNextProject(directory, workerName) {
   try {
     await (await import('node:fs/promises')).access(nextConfigPath);
   } catch {
-    const defaultConfig = packageJson.type === 'module' ? 'export default {};\\n' : 'module.exports = {};\\n';
+    const newline = String.fromCharCode(10);
+    const defaultConfig = packageJson.type === 'module' ? 'export default {};' + newline : 'module.exports = {};' + newline;
     await writeFile(nextConfigPath, defaultConfig, 'utf8');
   }
 
