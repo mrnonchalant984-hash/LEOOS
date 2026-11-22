@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -246,7 +246,37 @@ async function deployWorker(directory, token, accountId) {
   if (deployment.stderr) console.log('Wrangler deployment diagnostics (no credentials):\\n' + deployment.stderr.slice(-2000));
 }
 
-async function waitForWorker(url) {
+async function captureWorkerRuntimeLogs(directory, workerName, token, accountId, url) {
+  let child;
+  const chunks = [];
+  try {
+    child = spawn('npx', ['--yes', 'wrangler@4.159.0', 'tail', workerName, '--format', 'json'], {
+      cwd: directory,
+      env: deployEnvironment(token, accountId),
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stdout.on('data', chunk => chunks.push(Buffer.from(chunk)));
+    child.stderr.on('data', chunk => chunks.push(Buffer.from(chunk)));
+    await new Promise(resolve => setTimeout(resolve, 1_500));
+    try {
+      const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(10_000) });
+      console.log('Worker runtime diagnostic request returned HTTP ' + response.status + '.');
+      await response.body?.cancel();
+    } catch (error) {
+      console.log('Worker runtime diagnostic request failed: ' + (error instanceof Error ? error.message.slice(0, 240) : 'network error'));
+    }
+    await new Promise(resolve => setTimeout(resolve, 4_000));
+  } catch (error) {
+    console.log('Could not collect Worker tail diagnostics: ' + (error instanceof Error ? error.message.slice(0, 240) : 'unknown error'));
+  } finally {
+    if (child && child.exitCode === null) child.kill('SIGTERM');
+  }
+  const output = Buffer.concat(chunks).toString('utf8').slice(-6_000);
+  if (output) console.log('Cloudflare Worker runtime logs (diagnostic excerpt):\\n' + output);
+}
+
+async function waitForWorker(url, directory, workerName, token, accountId) {
   let lastStatus = 'no response';
   for (let attempt = 0; attempt < 24; attempt++) {
     try {
@@ -260,7 +290,14 @@ async function waitForWorker(url) {
         return url;
       }
       console.log('Cloudflare Worker preview health check ' + (attempt + 1) + '/24 returned ' + lastStatus + '.');
+      if (response.status >= 500) {
+        await response.body?.cancel();
+        await captureWorkerRuntimeLogs(directory, workerName, token, accountId, url);
+        throw Object.assign(new Error('Cloudflare Worker returned ' + lastStatus + '; runtime logs were captured.'), { code: 'preview_not_ready' });
+      }
+      await response.body?.cancel();
     } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'preview_not_ready') throw error;
       lastStatus = error instanceof Error ? error.message.slice(0, 240) : 'network error';
       console.log('Cloudflare Worker preview health check ' + (attempt + 1) + '/24 failed: ' + lastStatus);
     }
@@ -311,7 +348,7 @@ async function main() {
     await deployWorker(directory, cloudflareToken, accountId);
     const url = 'https://' + job.workerName + '.' + subdomain + '.workers.dev';
     console.log('Checking deployed Worker preview URL: ' + url);
-    const verifiedUrl = await waitForWorker(url);
+    const verifiedUrl = await waitForWorker(url, directory, job.workerName, token, accountId);
     status = 'deployed';
     result = { id: job.id, workerId: job.workerId, status, url: verifiedUrl };
   } catch (error) {
