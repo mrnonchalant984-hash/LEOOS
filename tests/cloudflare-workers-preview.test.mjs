@@ -65,6 +65,8 @@ test('Cloudflare preview runner is valid JavaScript and the API passes/verifies 
   assert.ok(workerScript.includes('--include=dev'));
   assert.ok(workerScript.includes('preview health check'));
   assert.ok(workerScript.includes('captureWorkerRuntimeLogs'));
+  assert.ok(workerScript.includes('diagnosticStatus >= 200'));
+  assert.ok(workerScript.includes('became healthy after warm-up'));
   assert.ok(workerScript.includes('cloudflareToken, accountId'));
   assert.ok(workerScript.includes("'tail', workerName"));
   assert.ok(workerScript.includes('timeout: 10_000'));
