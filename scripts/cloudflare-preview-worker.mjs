@@ -198,7 +198,7 @@ async function buildNextProject(directory) {
     await execFileAsync('npm', ['install', '--no-audit', '--no-fund'], {
       cwd: directory, env, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
     });
-    await execFileAsync('npm', ['install', '--no-save', '--no-audit', '--no-fund', '@opennextjs/cloudflare@latest', 'wrangler@4.159.0'], {
+    await execFileAsync('npm', ['install', '--no-save', '--no-audit', '--no-fund', '@opennextjs/cloudflare@1.19.11', 'wrangler@4.159.0'], {
       cwd: directory, env, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
     });
     await execFileAsync('npx', ['opennextjs-cloudflare', 'build'], {
@@ -242,8 +242,8 @@ async function main() {
   const cloudflareToken = requiredEnv('CLOUDFLARE_API_TOKEN');
   const accountId = requiredEnv('CLOUDFLARE_ACCOUNT_ID');
   if (!/^[0-9a-f]{32}$/i.test(accountId)) throw new Error('CLOUDFLARE_ACCOUNT_ID is invalid.');
-  const expectedPrefix = requiredEnv('CLOUDFLARE_PAGES_PROJECT');
-  if (!validateProjectName(expectedPrefix)) throw new Error('CLOUDFLARE_PAGES_PROJECT must be a valid Worker name prefix.');
+  const expectedPrefix = requiredEnv('CLOUDFLARE_WORKER_PREFIX');
+  if (!validateProjectName(expectedPrefix)) throw new Error('CLOUDFLARE_WORKER_PREFIX must be a valid Worker name prefix.');
 
   const payload = await requestJson(new URL('/api/internal/previews/worker', baseUrl), secret);
   if (!payload || typeof payload !== 'object' || !Object.hasOwn(payload, 'job')) {
