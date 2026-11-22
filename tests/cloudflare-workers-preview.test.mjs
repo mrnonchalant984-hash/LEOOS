@@ -57,7 +57,8 @@ test('Cloudflare preview runner is valid JavaScript and the API passes/verifies 
   assert.match(workerScript, /workers\.dev/);
   assert.ok(workerScript.includes('wrangler.jsonc'));
   assert.ok(workerScript.includes('next.config.js'));
-  assert.match(workerScript, /Object\\.keys\\(job\\.files\\)\\.some/);
+  assert.ok(workerScript.includes('Object.keys(job.files).some'));
+  assert.ok(workerScript.includes("filePath.endsWith('.tsx')"));
   assert.ok(workerScript.includes('currentDevDependencies.typescript'));
   assert.ok(workerScript.includes('@types/react'));
   assert.match(workerScript, /String\\.fromCharCode\\(10\\)/);
