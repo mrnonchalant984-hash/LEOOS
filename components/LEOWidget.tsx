@@ -343,6 +343,33 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
   }, [loading, toolActivitySince]);
 
   useEffect(() => {
+    if (!workProject?.id) return;
+    const latestSave = [...toolActivityEvents].reverse().find(event =>
+      event.tool_name === 'save_project_files' &&
+      event.event_type === 'completed' &&
+      event.status === 'succeeded' &&
+      !event.is_error &&
+      event.id > lastWorkspaceSaveEventIdRef.current
+    );
+    if (!latestSave) return;
+    lastWorkspaceSaveEventIdRef.current = latestSave.id;
+    window.dispatchEvent(new CustomEvent('bram:workspace-saved', {
+      detail: { projectId: workProject.id, savedAt: latestSave.created_at },
+    }));
+    void (async () => {
+      const accessToken = await token();
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(workProject.id)}/source`, {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        cache: 'no-store',
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.data) setWorkManifest(data.data);
+    })().catch(() => {
+      setError('Workspace files were saved, but the file list could not be refreshed.');
+    });
+  }, [toolActivityEvents, workProject?.id]);
+
+  useEffect(() => {
     const updateNetworkState = () => setNetworkOnline(navigator.onLine);
     updateNetworkState();
     window.addEventListener("online", updateNetworkState);
@@ -400,6 +427,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
   const [sharingAssetId, setSharingAssetId] = useState("");
   const [sharedAssetStatus, setSharedAssetStatus] = useState<{ id: string; message: string } | null>(null);
   const sidRef = useRef("");
+  const lastWorkspaceSaveEventIdRef = useRef(0);
   const chatAbortController = useRef<AbortController | null>(null);
   const [activeChatId, setActiveChatId] = useState("");
   const media = useRef<MediaRecorder | null>(null);
