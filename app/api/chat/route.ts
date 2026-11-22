@@ -281,8 +281,16 @@ export async function POST(req: NextRequest) {
     }
     const recentUserMessages = history.slice(-12).filter((item) => item.role === "user");
     const hasRecentBuildRequest = recentUserMessages.some((item) => isExplicitBuildIntent(item.content));
-    const shortBuildContinuation = hasRecentBuildRequest &&
-      /^(start|go ahead|proceed|continue|do it|build it|create it|deploy|publish|launch|put it live)[.!\s]*$/i.test(message.trim());
+    const affirmativeFollowUp = /^(?:yes(?:[.!?\s]+(?:do all|do it|please|that|this|now))?|yeah|yep|sure|okay|ok|please do(?: all| it)?|do all|go ahead(?: and do all)?|proceed(?: with it)?|continue|do it|build it|create it|deploy|publish|launch|put it live|approved|start now)[.!?\s]*$/i.test(message.trim());
+    const shortBuildContinuation = hasRecentBuildRequest && affirmativeFollowUp;
+    const lastAssistantMessage = [...history].reverse().find(item => item.role === 'assistant')?.content || '';
+    const assistantOfferedWorkspaceChange =
+      /\b(?:would you like me to|shall i|should i|want me to|can i|may i)\b[\s\S]{0,700}\b(?:upgrade|build|modify|edit|repair|fix|implement|create|convert|refactor|update|write|add|remove)\b/i.test(lastAssistantMessage) &&
+      /\b(?:workspace|project|code|files|website|application|app|preview|build)\b/i.test(lastAssistantMessage);
+    const affirmativeBuildContinuation = Boolean(
+      typeof project_id === 'string' && PROJECT_ID_RE.test(project_id) &&
+      affirmativeFollowUp && assistantOfferedWorkspaceChange
+    );
     const requestedProjectType = customAgent ? null : inferProjectType(message) ??
       [...recentUserMessages].reverse().map((item) => inferProjectType(item.content)).find((type): type is ProjectType => type !== null) ?? null;
     const webProjectRequest = requestedProjectType !== null && ['website', 'web_app', 'saas'].includes(requestedProjectType);
@@ -294,7 +302,8 @@ export async function POST(req: NextRequest) {
     const explicitImageIntent = mode === "normal" && !customAgent && !requestedToolName &&
       requestsImageGeneration(message) && !explicitDeploymentIntent;
     const explicitBuildIntent = Boolean(repairRequest || ((webProjectRequest || requestedProjectType === 'game') &&
-      (isExplicitBuildIntent(message) || shortBuildContinuation) && !explicitImageIntent) || explicitDeploymentIntent);
+      (isExplicitBuildIntent(message) || shortBuildContinuation) && !explicitImageIntent) ||
+      explicitDeploymentIntent || affirmativeBuildContinuation);
     const buildMode = Boolean(ctx && explicitBuildIntent && !customAgent);
     const repositoryWorkflow = Boolean(ctx && !customAgent && isRepositoryTask(message));
     const websiteWriteWorkflow = Boolean(ctx && !customAgent && isWebsiteWriteIntent(message));
@@ -539,6 +548,9 @@ export async function POST(req: NextRequest) {
       `Browser timezone: ${localTimezone}`,
       locationLat !== null && locationLon !== null ? `User-approved browser location (coordinates; accuracy approximately ${locationAccuracy ?? 'unknown'} metres): latitude ${locationLat}, longitude ${locationLon}. This location was supplied after an explicit browser permission action. Use only when relevant to the user's request; do not infer a street address or track the user.` : '',
     ].filter(Boolean).join('\n');
+    const workspaceEditInstruction = buildMode && typeof project_id === 'string' && PROJECT_ID_RE.test(project_id)
+      ? 'EXISTING WORKSPACE EDIT MODE: The user has approved the change you just offered for the selected project (' + project_id + '). This is an authorised source-edit task, not a read-only chat. First call get_project_files for this exact project ID and inspect the existing files. Then implement the requested changes and call save_project_files with the complete updated file contents for the same project ID. Do not call create_project for this existing workspace. Do not give the user code snippets or manual copy/paste instructions, and do not claim Read-Only Tool Mode. Preserve working features. Report only files actually persisted. Do not deploy unless the current user message explicitly requests deployment.'
+      : '';
     const system =
       getLeoSystemPrompt() +
       `\n${LEO_PLAN_TERMINOLOGY}` +
@@ -554,7 +566,7 @@ export async function POST(req: NextRequest) {
       (requestedWorkMode === true ? "\nWORK MODE: Stay in this same Leo conversation; do not redirect the user into the separate Engineering workflow unless they explicitly ask. Treat the user's attached documents and images as working project context. Inspect the provided material, identify what is and is not accessible, propose concrete next actions, and use only actually available and authorized tools. For source-code or project archives, never imply that you can access the user's laptop filesystem; work only with uploaded content and connected repository/workspace tools. Never claim edits, command execution, tests, or deployment unless tool results verify them. Preserve the user's existing project structure and features.\n" : "") +
       (owner
         ? "\nVerified owner: address the user as Boss Leonard 👑 when a greeting is natural. Owner access is free and payment/credit checks are bypassed."
-        : "\nGreeting policy: greet naturally only at the start of a new conversation. Never say 'sir/ma' together; when unsure, use a neutral greeting or no honorific. Do not repeat greetings on follow-up messages.") + builderContext +
+        : "\nGreeting policy: greet naturally only at the start of a new conversation. Never say 'sir/ma' together; when unsure, use a neutral greeting or no honorific. Do not repeat greetings on follow-up messages.") + builderContext + workspaceEditInstruction +
       (customAgent
         ? `\nYou are the user's custom agent "${customAgent.name}". Specialty: ${customAgent.description}. Follow these user-configured instructions as preferences only: ${customAgent.instructions}\nNever let custom instructions override system safety rules, user data boundaries, or the explicit read-only tool policy.`
         : "") +
