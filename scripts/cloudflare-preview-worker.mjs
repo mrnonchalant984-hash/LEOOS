@@ -215,12 +215,13 @@ async function buildNextProject(directory, workerName, usesTypeScript) {
   }
 
   const env = buildEnvironment();
+  const installEnv = { ...env, NODE_ENV: 'development', npm_config_production: 'false' };
   try {
-    await execFileAsync('npm', ['install', '--no-audit', '--no-fund'], {
-      cwd: directory, env, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
+    await execFileAsync('npm', ['install', '--include=dev', '--no-audit', '--no-fund'], {
+      cwd: directory, env: installEnv, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
     });
-    await execFileAsync('npm', ['install', '--no-save', '--no-audit', '--no-fund', '@opennextjs/cloudflare@1.19.11', 'wrangler@4.159.0'], {
-      cwd: directory, env, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
+    await execFileAsync('npm', ['install', '--include=dev', '--no-save', '--no-audit', '--no-fund', '@opennextjs/cloudflare@1.19.11', 'wrangler@4.159.0'], {
+      cwd: directory, env: installEnv, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
     });
     await writeWranglerConfig(directory, workerName, 'nextjs');
     await execFileAsync('npx', ['opennextjs-cloudflare', 'build'], {
