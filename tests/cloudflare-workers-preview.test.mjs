@@ -57,6 +57,9 @@ test('Cloudflare preview runner is valid JavaScript and the API passes/verifies 
   assert.match(workerScript, /workers\.dev/);
   assert.ok(workerScript.includes('wrangler.jsonc'));
   assert.ok(workerScript.includes('next.config.js'));
+  assert.match(workerScript, /Object\\.keys\\(job\\.files\\)\\.some/);
+  assert.ok(workerScript.includes('currentDevDependencies.typescript'));
+  assert.ok(workerScript.includes('@types/react'));
   assert.match(workerScript, /String\\.fromCharCode\\(10\\)/);
   assert.ok(workerScript.indexOf("await writeWranglerConfig(directory, workerName, 'nextjs')") < workerScript.indexOf("['opennextjs-cloudflare', 'build']"));
   assert.match(migration, /preview_build_failed/);
