@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   const limited = await enforceUserRateLimit(ctx.user.id, 'leo-chat-stream', 30, 60);
   if (limited) return limited;
 
-  let body: { session_id?: unknown; message?: unknown; model?: unknown };
+  let body: { session_id?: unknown; message?: unknown; model?: unknown; local_context?: unknown };
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 }); }
   const sessionId = typeof body.session_id === 'string' ? body.session_id : '';
   const message = typeof body.message === 'string' ? body.message.trim() : '';
@@ -47,8 +47,20 @@ export async function POST(req: NextRequest) {
     boundedHistory.unshift({ role: item.role, content });
     historyBudget -= content.length;
   }
+  const localContext = body.local_context && typeof body.local_context === 'object' && !Array.isArray(body.local_context) ? body.local_context as Record<string, unknown> : {};
+  const timezone = typeof localContext.timezone === 'string' && localContext.timezone.length <= 80 ? localContext.timezone : 'UTC';
+  const localDateTime = typeof localContext.local_datetime === 'string' && localContext.local_datetime.length <= 80 ? localContext.local_datetime : '';
+  const location = localContext.location && typeof localContext.location === 'object' && !Array.isArray(localContext.location) ? localContext.location as Record<string, unknown> : null;
+  const latitude = location && typeof location.latitude === 'number' && Number.isFinite(location.latitude) && Math.abs(location.latitude) <= 90 ? location.latitude : null;
+  const longitude = location && typeof location.longitude === 'number' && Number.isFinite(location.longitude) && Math.abs(location.longitude) <= 180 ? location.longitude : null;
+  const accuracy = location && typeof location.accuracy === 'number' && Number.isFinite(location.accuracy) ? Math.max(0, Math.min(100000, location.accuracy)) : null;
+  const localContextInstruction = [
+    localDateTime ? `Browser local date/time: ${localDateTime}` : '',
+    `Browser timezone: ${timezone}`,
+    latitude !== null && longitude !== null ? `User-approved browser location (accuracy approximately ${accuracy ?? 'unknown'} metres): latitude ${latitude}, longitude ${longitude}. Use only when relevant. Do not infer a street address or track the user.` : '',
+  ].filter(Boolean).join('\n');
   const messages: ModelMessage[] = [
-    { role: 'system', content: getLeoSystemPrompt() },
+    { role: 'system', content: getLeoSystemPrompt() + (localContextInstruction ? `\nUSER-APPROVED LOCAL CONTEXT:\n${localContextInstruction}` : '') },
     ...boundedHistory,
     { role: 'user', content: message },
   ];

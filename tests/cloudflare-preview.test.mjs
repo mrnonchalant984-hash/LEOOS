@@ -63,7 +63,7 @@ test('preview API is owner- and plan-scoped and the deployment queue has hard ca
   const workflow = await source('.github/workflows/cloudflare-preview-worker.yml');
   assert.match(route, /getProfile\(req\)/);
   assert.match(route, /getEffectiveUserPlan/);
-  assert.match(route, /validateStaticPreviewFiles/);
+  assert.match(route, /validateCloudflareWorkerPreviewFiles/);
   assert.match(route, /create_cloudflare_preview_job/);
   assert.match(route, /status: 202/);
   assert.match(migration, /where user_id = p_user_id and created_at >= now\(\) - interval '24 hours'/i);
@@ -78,15 +78,16 @@ test('preview API is owner- and plan-scoped and the deployment queue has hard ca
   assert.doesNotMatch(workflow, /wrangler pages project create/);
 });
 
-test('preview worker stores no credentials in job payloads and verifies branch deployment', async () => {
+test('preview worker stores no credentials in job payloads and verifies project-scoped Worker deployment', async () => {
   const worker = await source('scripts/cloudflare-preview-worker.mjs');
   const resultRoute = await source('app/api/internal/previews/result/route.ts');
   assert.match(worker, /wrangler@4\.159\.0/);
-  assert.match(worker, /--branch/);
+  assert.match(worker, /wrangler\.preview\.jsonc/);
+  assert.match(worker, /workers\.dev/);
   assert.match(worker, /SECRET_PATTERNS/);
   assert.match(worker, /redirect: 'manual'/);
   assert.match(worker, /api\/internal\/previews\/result/);
-  assert.match(resultRoute, /isVerifiedCloudflarePreviewUrl/);
+  assert.match(resultRoute, /isVerifiedCloudflareWorkerPreviewUrl/);
   assert.match(resultRoute, /static_files: \{\}/);
   assert.doesNotMatch(resultRoute, /CLOUDFLARE_API_TOKEN/);
 });

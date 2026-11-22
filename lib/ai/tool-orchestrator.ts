@@ -23,7 +23,7 @@ type RemoteToolReference = {
   accessLevel: 'read' | 'write';
 };
 
-type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -166,6 +166,7 @@ type LeoBuildToolOptions = {
   allowRemoteWrites?: boolean;
   allowBrowserGame?: boolean;
   allowAgentExecution?: boolean;
+  sessionId?: string;
 };
 
 type AgentToolPolicy = {
@@ -192,6 +193,8 @@ export async function createUserAssistantTools(
   if (options?.allowBuildActions) {
     const buildTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [
       { name: 'create_project', description: 'Create a real, plan-authorized LeonardX website, web-app, SaaS, or browser-game project workspace. Only use this when the user explicitly asked to build or create a project. Returns the persisted source project ID.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, project_type: { type: 'string', enum: ['website', 'web_app', 'saas', 'game'] }, brief: { type: 'string' } }, required: ['name', 'project_type'], additionalProperties: false } },
+      { name: 'save_website_intake', description: 'Persist the conversational website requirements as they are collected. Call this during website, web-app, or SaaS intake; if required details are missing, ask the user only for those details. Returns the saved intake ID and missing fields.', inputSchema: { type: 'object', properties: { business_name: { type: 'string' }, project_type: { type: 'string', enum: ['website','web_app','saas'] }, website_type: { type: 'string' }, description: { type: 'string' }, pages: { type: 'array', items: { type: 'string' } }, features: { type: 'array', items: { type: 'string' } }, design_preferences: { type: 'string' }, chatbot_enabled: { type: 'boolean' }, payment_mode: { type: 'string', enum: ['manual_email','automatic_paystack'] }, intake_id: { type: 'string' } }, required: ['business_name','project_type'], additionalProperties: false } },
+      { name: 'create_website_from_intake', description: 'Create the actual plan-authorized website project from a saved Bram intake after the required business name, description, and pages have been collected. This calls the existing project-creation workflow and returns the real created project record.', inputSchema: { type: 'object', properties: { intake_id: { type: 'string' } }, required: ['intake_id'], additionalProperties: false } },
       { name: 'save_project_files', description: 'Persist generated source files into an owned LeonardX project. Supply complete file contents as an array of {path, content}; paths and total size are validated. This does not deploy the project.', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } } }, required: ['project_id', 'files'], additionalProperties: false } },
     ];
     if (options.allowDeployment && !options.allowBrowserGame) buildTools.push({ name: 'build_and_deploy_project', description: 'Deploy the supplied generated website files through LeonardX existing GitHub/Vercel integration. This tool is available only because the user explicitly requested deployment in the current message. It enforces existing plan, ownership, provider, idempotency, and deployment verification checks. Never claim success unless the tool returns confirmed deployed status and a verified liveUrl.', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, brief: { type: 'string' }, files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'], additionalProperties: false } } }, required: ['project_id', 'brief', 'files'], additionalProperties: false } });
@@ -314,6 +317,42 @@ export async function createUserAssistantTools(
       const latest = builds.data?.[0] || null;
       const liveUrl = websiteProject.status === 'live' && typeof websiteProject.live_url === 'string' && /^https:\/\//.test(websiteProject.live_url) ? websiteProject.live_url : null;
       return { text: JSON.stringify({ project, websiteProject: { status: websiteProject.status, build_status: websiteProject.build_status, build_step: websiteProject.build_step, liveUrl }, latestBuild: latest ? { id: latest.id, provider: latest.provider, status: latest.status, step: latest.step, deployment_id: latest.deployment_id, deployment_url: latest.status === 'deployed' ? latest.deployment_url : null, error: latest.error, created_at: latest.created_at, started_at: latest.started_at, completed_at: latest.completed_at } : null, events: events.data || [] }) };
+    }
+    if (reference.kind === 'save_website_intake') {
+      if (!options?.allowBuildActions || !options.request) return { text: 'Website intake requires an authenticated, explicitly requested build workflow.', isError: true };
+      const businessName = typeof args.business_name === 'string' ? args.business_name.trim().slice(0,160) : '';
+      const projectType = ['website','web_app','saas'].includes(String(args.project_type)) ? String(args.project_type) : 'website';
+      const pages = Array.isArray(args.pages) ? args.pages.filter((x): x is string => typeof x === 'string').slice(0,30) : [];
+      const requirements = {
+        description: typeof args.description === 'string' ? args.description.slice(0,4000) : '',
+        pages,
+        features: Array.isArray(args.features) ? args.features.filter((x): x is string => typeof x === 'string').slice(0,50) : [],
+        design_preferences: typeof args.design_preferences === 'string' ? args.design_preferences.slice(0,2000) : '',
+      };
+      try {
+        const result = await postAsUser(options.request, '/api/bram/website-intake', {
+          ...(typeof args.intake_id === 'string' ? { id: args.intake_id } : {}),
+          business_name: businessName, project_type: projectType,
+          website_type: typeof args.website_type === 'string' ? args.website_type : 'landing',
+          chatbot_enabled: args.chatbot_enabled === true,
+          payment_mode: args.payment_mode === 'automatic_paystack' ? 'automatic_paystack' : 'manual_email',
+          requirements, session_id: options.sessionId,
+        });
+        return { text: JSON.stringify(result) };
+      } catch (error) {
+        return { text: error instanceof Error ? error.message : 'Website intake could not be saved.', isError: true };
+      }
+    }
+    if (reference.kind === 'create_website_from_intake') {
+      if (!options?.allowBuildActions || !options.request) return { text: 'Website creation requires an authenticated build workflow.', isError: true };
+      const intakeId = typeof args.intake_id === 'string' ? args.intake_id : '';
+      if (!/^[0-9a-f-]{36}$/i.test(intakeId)) return { text: 'A valid saved intake ID is required.', isError: true };
+      try {
+        const result = await postAsUser(options.request, '/api/bram/website-intake', { id: intakeId, create_project: true });
+        return { text: JSON.stringify(result) };
+      } catch (error) {
+        return { text: error instanceof Error ? error.message : 'Website project creation failed.', isError: true };
+      }
     }
     if (reference.kind === 'create_project') {
       if (!options?.allowBuildActions) return { text: 'Project creation is not enabled for this request. Ask Leo to build a website or web app first.', isError: true };
@@ -565,5 +604,26 @@ export async function createUserAssistantTools(
     if (auditError) return { text: 'The remote tool returned, but its audit entry could not be saved.', isError: true };
     return { text: result.text, isError: result.isError };
   };
-  return { tools, execute };
+  const executeWithLifecycle: AssistantToolExecutor = async (name, args, signal) => {
+    const requestId = randomUUID();
+    const sessionId = options?.sessionId;
+    const persist = async (eventType: 'started' | 'completed' | 'failed', status: 'running' | 'succeeded' | 'failed', isError = false) => {
+      if (!sessionId || !/^[0-9a-f-]{36}$/i.test(sessionId)) return;
+      const { error } = await db.from('bram_tool_events').insert({
+        user_id: userId, session_id: sessionId, request_id: requestId,
+        tool_name: name.slice(0, 120), event_type: eventType, status, is_error: isError,
+      });
+      if (error) console.warn('Bram tool lifecycle event could not be persisted', { tool: name, eventType });
+    };
+    await persist('started', 'running');
+    try {
+      const result = await execute(name, args, signal);
+      await persist(result.isError ? 'failed' : 'completed', result.isError ? 'failed' : 'succeeded', Boolean(result.isError));
+      return result;
+    } catch (error) {
+      await persist('failed', 'failed', true);
+      throw error;
+    }
+  };
+  return { tools, execute: executeWithLifecycle };
 }

@@ -10,7 +10,7 @@ const buildRoute = await readFile(new URL('../app/api/build-deploy/route.ts', im
 test('explicit website build requests activate the existing Leo tool orchestrator from normal chat', () => {
   assert.match(route, /explicitBuildIntent/);
   assert.match(route, /mode === "tools" \|\| buildMode/);
-  assert.match(route, /createUserAssistantTools\(ctx\.user\.id, \{\s*request: req,\s*userMessage: message,\s*allowBuildActions: buildMode/);
+  assert.match(route, /createUserAssistantTools\(ctx\.user\.id, \{\s*request: req,\s*sessionId: typeof session_id === 'string' \? session_id : undefined,\s*userMessage: message,\s*allowBuildActions: buildMode/);
   assert.match(route, /requestedProjectType && projectBuilder && !buildMode/);
 });
 
@@ -57,4 +57,13 @@ test('natural-language website requests and short follow-ups stay in the same Br
   assert.ok(route.includes('history.slice(-12)'));
   assert.match(widget, /priorBuildRequest/);
   assert.match(widget, /buildContinuation/);
+});
+
+
+test('affirmative approval of Bram workspace changes activates the write workflow', () => {
+  assert.match(route, /affirmativeBuildContinuation/);
+  assert.match(route, /assistantOfferedWorkspaceChange/);
+  assert.match(route, /EXISTING WORKSPACE EDIT MODE/);
+  assert.match(route, /do all/);
+  assert.match(widget, /do all/);
 });

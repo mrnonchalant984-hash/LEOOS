@@ -28,7 +28,9 @@ const CAPABILITY_CATALOG: Record<CustomerProvider, { id: string; label: string; 
 export function getCustomerProviderCapabilities(provider: CustomerProvider, scopes: readonly string[], verified: boolean) {
   const granted = new Set(scopes);
   return CAPABILITY_CATALOG[provider].map(capability => {
-    const missingScopes = capability.requiredScopes.filter(scope => !granted.has(scope));
+    const missingScopes = provider === 'github' && granted.has('contents:write') && granted.has('repository_creation:write')
+      ? []
+      : capability.requiredScopes.filter(scope => !granted.has(scope));
     const status = !verified ? 'unverified' as const
       : missingScopes.length ? 'permission_review' as const
         : capability.requiredScopes.length ? 'scope_granted' as const : 'provider_verified_only' as const;
