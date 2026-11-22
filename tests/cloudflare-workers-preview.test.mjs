@@ -11,6 +11,7 @@ import {
 const workerScript = await readFile(new URL('../scripts/cloudflare-preview-worker.mjs', import.meta.url), 'utf8');
 const workerRoute = await readFile(new URL('../app/api/internal/previews/worker/route.ts', import.meta.url), 'utf8');
 const resultRoute = await readFile(new URL('../app/api/internal/previews/result/route.ts', import.meta.url), 'utf8');
+const migration = await readFile(new URL('../supabase/migrations/20261122172741_allow_cloudflare_worker_preview_error_codes.sql', import.meta.url), 'utf8');
 const previewRoute = await readFile(new URL('../app/api/workspaces/[id]/preview/route.ts', import.meta.url), 'utf8');
 
 test('Cloudflare Worker preview validator accepts static bundles and full Next.js source trees', () => {
@@ -54,4 +55,8 @@ test('Cloudflare preview runner is valid JavaScript and the API passes/verifies 
   assert.match(previewRoute, /validateCloudflareWorkerPreviewFiles/);
   assert.match(workerScript, /opennextjs-cloudflare/);
   assert.match(workerScript, /workers\.dev/);
+  assert.ok(workerScript.includes('wrangler.jsonc'));
+  assert.ok(workerScript.indexOf("await writeWranglerConfig(directory, workerName, 'nextjs')") < workerScript.indexOf("['opennextjs-cloudflare', 'build']"));
+  assert.match(migration, /preview_build_failed/);
+  assert.match(migration, /preview_worker_configuration_failed/);
 });
