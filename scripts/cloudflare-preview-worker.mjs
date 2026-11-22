@@ -177,11 +177,23 @@ async function writeWranglerConfig(directory, workerName, framework) {
   await writeFile(path.join(directory, 'wrangler.jsonc'), JSON.stringify(config, null, 2), 'utf8');
 }
 
-async function buildNextProject(directory, workerName) {
+async function buildNextProject(directory, workerName, usesTypeScript) {
   const packagePath = path.join(directory, 'package.json');
   const packageJson = JSON.parse(await (await import('node:fs/promises')).readFile(packagePath, 'utf8'));
   packageJson.scripts = packageJson.scripts && typeof packageJson.scripts === 'object' ? packageJson.scripts : {};
   if (!packageJson.scripts.build) packageJson.scripts.build = 'next build';
+  if (usesTypeScript) {
+    const currentDevDependencies = packageJson.devDependencies && typeof packageJson.devDependencies === 'object'
+      ? packageJson.devDependencies
+      : {};
+    packageJson.devDependencies = {
+      ...currentDevDependencies,
+      typescript: currentDevDependencies.typescript || '^5.9.3',
+      '@types/node': currentDevDependencies['@types/node'] || '^22.0.0',
+      '@types/react': currentDevDependencies['@types/react'] || '^19.2.0',
+      '@types/react-dom': currentDevDependencies['@types/react-dom'] || '^19.2.0',
+    };
+  }
   await writeFile(packagePath, JSON.stringify(packageJson, null, 2), 'utf8');
 
   const nextConfigPath = path.join(directory, 'next.config.js');
@@ -272,7 +284,8 @@ async function main() {
     const subdomain = await getWorkersSubdomain(accountId, cloudflareToken);
     if (job.framework === 'nextjs') {
       await writeProjectFiles(directory, job.files);
-      await buildNextProject(directory, job.workerName);
+      const usesTypeScript = Object.keys(job.files).some(filePath => /\\.(?:ts|tsx)$/i.test(filePath) || filePath === 'tsconfig.json');
+      await buildNextProject(directory, job.workerName, usesTypeScript);
     } else {
       const assetsDirectory = path.join(directory, 'preview-assets');
       await writeProjectFiles(assetsDirectory, job.files);
