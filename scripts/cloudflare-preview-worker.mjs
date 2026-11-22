@@ -8,9 +8,9 @@ const execFileAsync = promisify(execFile);
 const MAX_FILES = 250;
 const MAX_FILE_BYTES = 256_000;
 const MAX_TOTAL_BYTES = 2_000_000;
-const EXTENSIONS = new Set([
-  '.css', '.html', '.js', '.json', '.mjs', '.svg', '.txt',
-  '.webmanifest', '.xml',
+const SUPPORTED_EXTENSIONS = new Set([
+  '.css', '.scss', '.sass', '.html', '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
+  '.json', '.md', '.mdx', '.svg', '.txt', '.xml', '.webmanifest', '.yaml', '.yml', '.toml',
 ]);
 const SECRET_PATTERNS = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
@@ -24,7 +24,7 @@ const SECRET_PATTERNS = [
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
-  if (!value) throw new Error(`Missing required worker configuration: ${name}`);
+  if (!value) throw new Error('Missing required worker configuration: ' + name);
   return value;
 }
 
@@ -32,17 +32,23 @@ function validateProjectName(value) {
   return typeof value === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,56}[a-z0-9])?$/.test(value);
 }
 
-function validateJob(value, expectedProject) {
+function getWorkerName(prefix, projectId) {
+  const safePrefix = prefix.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'braverton-preview';
+  return (safePrefix + '-' + projectId.replaceAll('-', '').toLowerCase().slice(0, 16)).slice(0, 63);
+}
+
+function validateJob(value, expectedPrefix) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid preview job.');
-  const { id, workerId, branchName, projectName, files } = value;
+  const { id, workerId, branchName, projectName, projectId, files } = value;
   if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Invalid preview job ID.');
   if (typeof workerId !== 'string' || !/^gha-[0-9a-f-]{36}$/i.test(workerId)) throw new Error('Invalid preview lease.');
-  if (typeof branchName !== 'string' || !/^leo-preview-[0-9a-f]{32}$/.test(branchName)) throw new Error('Invalid preview branch.');
-  if (projectName !== expectedProject || !validateProjectName(projectName)) throw new Error('Preview project does not match worker configuration.');
-  if (!files || typeof files !== 'object' || Array.isArray(files)) throw new Error('Invalid static file map.');
+  if (typeof branchName !== 'string' || !/^leo-preview-[0-9a-f]{32}$/.test(branchName)) throw new Error('Invalid preview job branch.');
+  if (typeof projectId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) throw new Error('Invalid preview project ID.');
+  if (projectName !== expectedPrefix || !validateProjectName(projectName)) throw new Error('Preview project prefix does not match worker configuration.');
+  if (!files || typeof files !== 'object' || Array.isArray(files)) throw new Error('Invalid preview source file map.');
 
   const entries = Object.entries(files);
-  if (entries.length === 0 || entries.length > MAX_FILES) throw new Error('Static file count is outside allowed limits.');
+  if (entries.length === 0 || entries.length > MAX_FILES) throw new Error('Preview file count is outside allowed limits.');
   let totalBytes = 0;
   const seenPaths = new Set();
   for (const [filePath, content] of entries) {
@@ -51,89 +57,171 @@ function validateJob(value, expectedProject) {
       || filePath.split('/').some(part => !part || part === '.' || part === '..' || part.startsWith('.')
         || part === '__proto__' || part === 'constructor' || part === 'prototype')
       || /[\u0000-\u001f]/.test(filePath)) {
-      throw new Error('Static file path is invalid.');
+      throw new Error('Preview source path is invalid.');
     }
     const extension = path.posix.extname(filePath).toLowerCase();
-    if (!EXTENSIONS.has(extension)) throw new Error('Static bundle contains an unsupported file type.');
+    if (!SUPPORTED_EXTENSIONS.has(extension)) throw new Error('Preview bundle contains an unsupported source file type.');
     const normalized = filePath.toLowerCase();
-    if (seenPaths.has(normalized)) throw new Error('Static bundle contains duplicate paths.');
+    if (seenPaths.has(normalized)) throw new Error('Preview bundle contains duplicate paths.');
     seenPaths.add(normalized);
-    if (typeof content !== 'string') throw new Error('Static file contents must be text.');
+    if (typeof content !== 'string') throw new Error('Preview source file contents must be text.');
     const bytes = Buffer.byteLength(content, 'utf8');
-    if (bytes > MAX_FILE_BYTES) throw new Error('A static asset exceeds the per-file size limit.');
-    if (SECRET_PATTERNS.some(pattern => pattern.test(content))) throw new Error('Static asset contains a recognizable credential pattern.');
+    if (bytes > MAX_FILE_BYTES) throw new Error('A preview source file exceeds the per-file size limit.');
+    if (SECRET_PATTERNS.some(pattern => pattern.test(content))) throw new Error('Preview source contains a recognizable credential pattern.');
     totalBytes += bytes;
-    if (totalBytes > MAX_TOTAL_BYTES) throw new Error('Static assets exceed the total size limit.');
+    if (totalBytes > MAX_TOTAL_BYTES) throw new Error('Preview source exceeds the total size limit.');
   }
-  if (!Object.hasOwn(files, 'index.html')) throw new Error('A root index.html file is required.');
-  return { id, workerId, branchName, projectName, files };
-}
 
-function getPreviewUrl(job) {
-  return `https://${job.branchName}.${job.projectName}.pages.dev`;
+  let framework = 'static';
+  if (!Object.hasOwn(files, 'index.html')) {
+    let packageJson;
+    try { packageJson = JSON.parse(files['package.json'] || ''); }
+    catch { throw new Error('A valid package.json or root index.html is required.'); }
+    const dependencies = {
+      ...(packageJson?.dependencies && typeof packageJson.dependencies === 'object' ? packageJson.dependencies : {}),
+      ...(packageJson?.devDependencies && typeof packageJson.devDependencies === 'object' ? packageJson.devDependencies : {}),
+    };
+    const hasNext = typeof dependencies.next === 'string' && dependencies.next.length > 0;
+    const hasAppPage = ['app/page.tsx', 'app/page.jsx', 'app/page.js', 'src/app/page.tsx', 'src/app/page.jsx', 'src/app/page.js'].some(file => Object.hasOwn(files, file));
+    const hasAppLayout = ['app/layout.tsx', 'app/layout.jsx', 'app/layout.js', 'src/app/layout.tsx', 'src/app/layout.jsx', 'src/app/layout.js'].some(file => Object.hasOwn(files, file));
+    const hasPagesIndex = ['pages/index.tsx', 'pages/index.jsx', 'pages/index.js', 'src/pages/index.tsx', 'src/pages/index.jsx', 'src/pages/index.js'].some(file => Object.hasOwn(files, file));
+    if (!hasNext || !((hasAppPage && hasAppLayout) || hasPagesIndex)) {
+      throw new Error('A root index.html or supported Next.js application entry is required.');
+    }
+    framework = 'nextjs';
+  }
+
+  return { id, workerId, branchName, projectId, projectName, workerName: getWorkerName(projectName, projectId), framework, files };
 }
 
 async function requestJson(url, secret, body) {
   const response = await fetch(url, {
     method: body === undefined ? 'GET' : 'POST',
     headers: {
-      authorization: `Bearer ${secret}`,
+      authorization: 'Bearer ' + secret,
       'cache-control': 'no-store',
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: AbortSignal.timeout(30_000),
   });
-  if (!response.ok) throw new Error(`LeonardX worker API returned HTTP ${response.status}.`);
+  if (!response.ok) throw new Error('Braverton preview API returned HTTP ' + response.status + '.');
   return response.json();
 }
 
-async function assertPrecreatedPagesProject(accountId, projectName, token) {
-  const projectUrl = new URL(
-    `/client/v4/accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}`,
-    'https://api.cloudflare.com',
-  );
-  const response = await fetch(projectUrl, {
-    headers: { authorization: `Bearer ${token}` },
+async function getWorkersSubdomain(accountId, token) {
+  const url = new URL('/client/v4/accounts/' + accountId + '/workers/subdomain', 'https://api.cloudflare.com');
+  const response = await fetch(url, {
+    headers: { authorization: 'Bearer ' + token },
     signal: AbortSignal.timeout(20_000),
   });
   const result = await response.json().catch(() => null);
-  const sourceType = result?.result?.source?.type;
-  if (!response.ok || result?.success !== true || result?.result?.name !== projectName
-    || (sourceType && sourceType !== 'upload' && sourceType !== 'direct_upload')) {
-    throw new Error('Configured Cloudflare Pages project must already exist and use Direct Upload.');
+  const subdomain = result?.result?.subdomain;
+  if (!response.ok || result?.success !== true || typeof subdomain !== 'string' || !/^[a-z0-9-]{1,63}$/.test(subdomain)) {
+    throw Object.assign(new Error('Cloudflare Workers subdomain could not be verified.'), { code: 'preview_worker_configuration_failed' });
   }
+  return subdomain;
 }
 
-async function writeStaticAssets(directory, files) {
+function buildEnvironment() {
+  const env = { ...process.env };
+  for (const name of [
+    'CRON_SECRET', 'LEONARDX_BASE_URL', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID',
+    'CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_WORKER_PREFIX', 'GITHUB_TOKEN', 'VERCEL_TOKEN',
+    'SUPABASE_SERVICE_ROLE_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY',
+    'ANTHROPIC_API_KEY', 'NPM_TOKEN', 'NODE_AUTH_TOKEN',
+  ]) delete env[name];
+  env.CI = 'true';
+  env.NODE_ENV = 'production';
+  env.NEXT_TELEMETRY_DISABLED = '1';
+  return env;
+}
+
+function deployEnvironment(token, accountId) {
+  const env = {
+    PATH: process.env.PATH || '',
+    HOME: process.env.HOME || '',
+    CI: 'true',
+    CLOUDFLARE_API_TOKEN: token,
+    CLOUDFLARE_ACCOUNT_ID: accountId,
+  };
+  for (const name of ['TMPDIR', 'TEMP', 'TMP', 'LANG', 'SYSTEMROOT']) {
+    if (process.env[name]) env[name] = process.env[name];
+  }
+  return env;
+}
+
+async function writeProjectFiles(directory, files) {
   for (const [filePath, content] of Object.entries(files)) {
     const destination = path.resolve(directory, ...filePath.split('/'));
-    if (!destination.startsWith(`${directory}${path.sep}`)) throw new Error('Static file path escaped its workspace.');
+    if (!destination.startsWith(directory + path.sep)) throw new Error('Preview source path escaped its workspace.');
     await mkdir(path.dirname(destination), { recursive: true });
     await writeFile(destination, content, { encoding: 'utf8', flag: 'wx' });
   }
 }
 
-async function deploy(job, directory) {
-  await execFileAsync('npx', [
-    '--yes',
-    'wrangler@4.159.0',
-    'pages',
-    'deploy',
-    directory,
-    '--project-name',
-    job.projectName,
-    '--branch',
-    job.branchName,
-  ], {
+async function writeWranglerConfig(directory, workerName, framework) {
+  const config = {
+    '$schema': './node_modules/wrangler/config-schema.json',
+    name: workerName,
+    main: framework === 'nextjs' ? '.open-next/worker.js' : 'worker.mjs',
+    compatibility_date: '2026-11-22',
+    compatibility_flags: ['nodejs_compat'],
+    assets: {
+      directory: framework === 'nextjs' ? '.open-next/assets' : 'preview-assets',
+      binding: 'ASSETS',
+    },
+    workers_dev: true,
+    observability: { enabled: true },
+  };
+  await writeFile(path.join(directory, 'wrangler.preview.jsonc'), JSON.stringify(config, null, 2), 'utf8');
+}
+
+async function buildNextProject(directory) {
+  const packagePath = path.join(directory, 'package.json');
+  const packageJson = JSON.parse(await (await import('node:fs/promises')).readFile(packagePath, 'utf8'));
+  packageJson.scripts = packageJson.scripts && typeof packageJson.scripts === 'object' ? packageJson.scripts : {};
+  if (!packageJson.scripts.build) packageJson.scripts.build = 'next build';
+  await writeFile(packagePath, JSON.stringify(packageJson, null, 2), 'utf8');
+
+  const openNextConfig = path.join(directory, 'open-next.config.ts');
+  try {
+    await (await import('node:fs/promises')).access(openNextConfig);
+  } catch {
+    await writeFile(openNextConfig,
+      'import { defineCloudflareConfig } from "@opennextjs/cloudflare";\nexport default defineCloudflareConfig();\n',
+      'utf8');
+  }
+
+  const env = buildEnvironment();
+  try {
+    await execFileAsync('npm', ['install', '--no-audit', '--no-fund'], {
+      cwd: directory, env, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
+    });
+    await execFileAsync('npm', ['install', '--no-save', '--no-audit', '--no-fund', '@opennextjs/cloudflare@latest', 'wrangler@4.159.0'], {
+      cwd: directory, env, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
+    });
+    await execFileAsync('npx', ['opennextjs-cloudflare', 'build'], {
+      cwd: directory, env, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
+    });
+  } catch (error) {
+    const detail = error && typeof error === 'object' && typeof error.stderr === 'string' ? error.stderr.slice(-4000) : '';
+    if (detail) console.error('Next.js preview build diagnostics (no credentials were passed to this process):\n' + detail);
+    throw Object.assign(new Error('Next.js preview build failed. Review the Cloudflare preview worker build log.'), { code: 'preview_build_failed' });
+  }
+}
+
+async function deployWorker(directory, token, accountId) {
+  await execFileAsync('npx', ['--yes', 'wrangler@4.159.0', 'deploy', '--config', 'wrangler.preview.jsonc'], {
     cwd: directory,
-    env: { ...process.env, CI: 'true' },
+    env: deployEnvironment(token, accountId),
     timeout: 300_000,
     windowsHide: true,
-    maxBuffer: 1_000_000,
+    maxBuffer: 2_000_000,
   });
+}
 
-  const url = getPreviewUrl(job);
+async function waitForWorker(url) {
   for (let attempt = 0; attempt < 18; attempt++) {
     const response = await fetch(url, {
       redirect: 'manual',
@@ -142,7 +230,7 @@ async function deploy(job, directory) {
     if (response.status === 200) return url;
     await new Promise(resolve => setTimeout(resolve, 5_000));
   }
-  throw Object.assign(new Error('Cloudflare preview did not become ready.'), { code: 'preview_not_ready' });
+  throw Object.assign(new Error('Cloudflare Worker preview did not become ready.'), { code: 'preview_not_ready' });
 }
 
 async function main() {
@@ -154,44 +242,60 @@ async function main() {
   const cloudflareToken = requiredEnv('CLOUDFLARE_API_TOKEN');
   const accountId = requiredEnv('CLOUDFLARE_ACCOUNT_ID');
   if (!/^[0-9a-f]{32}$/i.test(accountId)) throw new Error('CLOUDFLARE_ACCOUNT_ID is invalid.');
-  const expectedProject = requiredEnv('CLOUDFLARE_PAGES_PROJECT');
-  if (!validateProjectName(expectedProject)) throw new Error('CLOUDFLARE_PAGES_PROJECT is invalid.');
+  const expectedPrefix = requiredEnv('CLOUDFLARE_PAGES_PROJECT');
+  if (!validateProjectName(expectedPrefix)) throw new Error('CLOUDFLARE_PAGES_PROJECT must be a valid Worker name prefix.');
 
   const payload = await requestJson(new URL('/api/internal/previews/worker', baseUrl), secret);
   if (!payload || typeof payload !== 'object' || !Object.hasOwn(payload, 'job')) {
-    throw new Error('LeonardX returned an invalid preview queue response.');
+    throw new Error('Braverton returned an invalid preview queue response.');
   }
   if (payload.job === null) {
-    console.log('No Cloudflare preview job is queued.');
+    console.log('No Cloudflare Worker preview job is queued.');
     return;
   }
-  const job = validateJob(payload.job, expectedProject);
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'leo-cloudflare-preview-'));
+
+  const job = validateJob(payload.job, expectedPrefix);
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'braverton-cloudflare-worker-preview-'));
   let status = 'failed';
   let result;
   try {
-    await assertPrecreatedPagesProject(accountId, expectedProject, cloudflareToken);
-    await writeStaticAssets(directory, job.files);
-    const url = await deploy(job, directory);
+    const subdomain = await getWorkersSubdomain(accountId, cloudflareToken);
+    if (job.framework === 'nextjs') {
+      await writeProjectFiles(directory, job.files);
+      await buildNextProject(directory);
+      await writeWranglerConfig(directory, job.workerName, 'nextjs');
+    } else {
+      const assetsDirectory = path.join(directory, 'preview-assets');
+      await writeProjectFiles(assetsDirectory, job.files);
+      await writeFile(path.join(directory, 'worker.mjs'),
+        'export default { async fetch(request, env) { const response = await env.ASSETS.fetch(request); if (response.status !== 404) return response; const url = new URL(request.url); url.pathname = "/index.html"; return env.ASSETS.fetch(new Request(url.toString(), request)); } };\n',
+        'utf8');
+      await writeWranglerConfig(directory, job.workerName, 'static');
+    }
+    await deployWorker(directory, cloudflareToken, accountId);
+    const url = 'https://' + job.workerName + '.' + subdomain + '.workers.dev';
+    const verifiedUrl = await waitForWorker(url);
     status = 'deployed';
-    result = { id: job.id, workerId: job.workerId, status, url };
+    result = { id: job.id, workerId: job.workerId, status, url: verifiedUrl };
   } catch (error) {
-    const code = error && typeof error === 'object' && error.code === 'preview_not_ready'
-      ? 'preview_not_ready'
+    const allowedCodes = new Set(['preview_build_failed', 'preview_not_ready', 'preview_worker_configuration_failed']);
+    const code = error && typeof error === 'object' && typeof error.code === 'string' && allowedCodes.has(error.code)
+      ? error.code
       : error && typeof error === 'object' && (error.killed || error.signal)
         ? 'preview_worker_timeout'
         : 'preview_deploy_failed';
+    console.error('Cloudflare Worker preview failed with code: ' + code);
     result = { id: job.id, workerId: job.workerId, status, errorCode: code };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 
   await requestJson(new URL('/api/internal/previews/result', baseUrl), secret, result);
-  console.log(`Cloudflare preview ${status} for job ${job.id}.`);
+  console.log('Cloudflare Worker preview ' + status + ' for job ' + job.id + '.');
 }
 
 main().catch(error => {
-  const message = error instanceof Error ? error.message : 'Unexpected preview worker error.';
+  const message = error instanceof Error ? error.message : 'Unexpected Cloudflare Worker preview error.';
   console.error(message);
   process.exitCode = 1;
 });
