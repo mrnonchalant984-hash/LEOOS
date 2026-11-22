@@ -251,6 +251,7 @@ async function deployWorker(directory, token, accountId) {
 }
 
 async function captureWorkerRuntimeLogs(directory, workerName, token, accountId, url) {
+  let diagnosticStatus = null;
   const tailPromise = execFileAsync('npx', ['--yes', 'wrangler@' + WORKER_WRANGLER_VERSION, 'tail', workerName, '--format', 'json'], {
     cwd: directory,
     env: deployEnvironment(token, accountId),
@@ -263,6 +264,7 @@ async function captureWorkerRuntimeLogs(directory, workerName, token, accountId,
   await new Promise(resolve => setTimeout(resolve, 1_500));
   try {
     const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(10_000) });
+    diagnosticStatus = response.status;
     console.log('Worker runtime diagnostic request returned HTTP ' + response.status + '.');
     await response.body?.cancel();
   } catch (error) {
@@ -272,10 +274,12 @@ async function captureWorkerRuntimeLogs(directory, workerName, token, accountId,
   const eventStart = rawOutput.indexOf('\"event\": {');
   const output = (eventStart >= 0 ? rawOutput.slice(0, eventStart) + '\"event\": \"[redacted]\"\\n' : rawOutput).slice(-6_000);
   if (output) console.log('Cloudflare Worker runtime logs (diagnostic excerpt; request metadata redacted):\\n' + output);
+  return diagnosticStatus;
 }
 
 async function waitForWorker(url, directory, workerName, token, accountId) {
   let lastStatus = 'no response';
+  let diagnosticsCaptured = false;
   for (let attempt = 0; attempt < 24; attempt++) {
     try {
       const response = await fetch(url, {
@@ -288,10 +292,15 @@ async function waitForWorker(url, directory, workerName, token, accountId) {
         return url;
       }
       console.log('Cloudflare Worker preview health check ' + (attempt + 1) + '/24 returned ' + lastStatus + '.');
-      if (response.status >= 500) {
+      if (response.status >= 500 && !diagnosticsCaptured) {
         await response.body?.cancel();
-        await captureWorkerRuntimeLogs(directory, workerName, token, accountId, url);
-        throw Object.assign(new Error('Cloudflare Worker returned ' + lastStatus + '; runtime logs were captured.'), { code: 'preview_not_ready' });
+        diagnosticsCaptured = true;
+        const diagnosticStatus = await captureWorkerRuntimeLogs(directory, workerName, token, accountId, url);
+        if (diagnosticStatus !== null && diagnosticStatus >= 200 && diagnosticStatus < 400) {
+          console.log('Cloudflare Worker became healthy after warm-up (HTTP ' + diagnosticStatus + ').');
+          return url;
+        }
+        lastStatus += '; diagnostic request ' + (diagnosticStatus === null ? 'had no response' : 'returned HTTP ' + diagnosticStatus);
       }
       await response.body?.cancel();
     } catch (error) {
