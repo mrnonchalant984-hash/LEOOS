@@ -314,9 +314,10 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
   }, [workProject?.id]);
 
   useEffect(() => {
-    if (!loading) return;
+    if (!toolActivitySince) return;
     let cancelled = false;
     let cursor = 0;
+    const stopAt = Date.now() + (loading ? 60_000 : 3_000);
     const poll = async () => {
       try {
         const accessToken = await token();
@@ -338,12 +339,18 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
       } catch { /* Activity polling is supplemental; the chat request remains authoritative. */ }
     };
     void poll();
-    const timer = window.setInterval(() => { void poll(); }, 1000);
+    const timer = window.setInterval(() => {
+      if (!loading && Date.now() >= stopAt) {
+        window.clearInterval(timer);
+        return;
+      }
+      void poll();
+    }, 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [loading, toolActivitySince]);
 
   useEffect(() => {
-    if (!workProject?.id) return;
+    if (loading || !workProject?.id) return;
     const latestSave = [...toolActivityEvents].reverse().find(event =>
       event.tool_name === 'save_project_files' &&
       event.event_type === 'completed' &&
@@ -367,7 +374,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     })().catch(() => {
       setError('Workspace files were saved, but the file list could not be refreshed.');
     });
-  }, [toolActivityEvents, workProject?.id]);
+  }, [loading, toolActivityEvents, workProject?.id]);
 
   useEffect(() => {
     const updateNetworkState = () => setNetworkOnline(navigator.onLine);
