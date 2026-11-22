@@ -2,11 +2,11 @@ import { recordBramWorkerEvent } from '@/lib/bram/execution-events';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
 import { getCloudflarePreviewConfig } from '@/lib/cloudflare-preview/config';
-import { isVerifiedCloudflarePreviewUrl } from '@/lib/cloudflare-preview/static-assets';
+import { getCloudflarePreviewWorkerName, isVerifiedCloudflareWorkerPreviewUrl } from '@/lib/cloudflare-preview/static-assets';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WORKER_PATTERN = /^gha-[0-9a-f-]{36}$/i;
-const ERROR_CODES = new Set(['preview_deploy_failed', 'preview_not_ready', 'preview_worker_timeout']);
+const ERROR_CODES = new Set(['preview_build_failed', 'preview_deploy_failed', 'preview_not_ready', 'preview_worker_timeout', 'preview_worker_configuration_failed']);
 
 function authorized(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   const db = adminSupabase();
   const { data: job, error: jobError } = await db.from('cloudflare_preview_jobs')
-    .select('id,branch_name')
+    .select('id,branch_name,project_id')
     .eq('id', id)
     .eq('lease_owner', workerId)
     .eq('status', 'running')
@@ -48,8 +48,9 @@ export async function POST(req: NextRequest) {
   let deploymentUrl: string | null = null;
   let errorCode: string | null = null;
   if (status === 'deployed') {
-    if (!isVerifiedCloudflarePreviewUrl(value.url, job.branch_name, config.projectName)) {
-      return NextResponse.json({ error: 'The preview deployment URL did not match the assigned Cloudflare branch.' }, { status: 400 });
+    const expectedWorkerName = getCloudflarePreviewWorkerName(config.projectName, job.project_id);
+    if (!isVerifiedCloudflareWorkerPreviewUrl(value.url, expectedWorkerName)) {
+      return NextResponse.json({ error: 'The preview deployment URL did not match the assigned Cloudflare Worker.' }, { status: 400 });
     }
     deploymentUrl = value.url;
   } else {
