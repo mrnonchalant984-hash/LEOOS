@@ -58,3 +58,12 @@ test('natural-language website requests and short follow-ups stay in the same Br
   assert.match(widget, /priorBuildRequest/);
   assert.match(widget, /buildContinuation/);
 });
+
+
+test('affirmative approval of Bram workspace changes activates the write workflow', () => {
+  assert.match(route, /affirmativeBuildContinuation/);
+  assert.match(route, /assistantOfferedWorkspaceChange/);
+  assert.match(route, /EXISTING WORKSPACE EDIT MODE/);
+  assert.match(route, /do all/);
+  assert.match(widget, /do all/);
+});
