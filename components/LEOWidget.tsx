@@ -863,7 +863,12 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     );
     const directBuildRequest = /\b(build|create|make|develop|generate|need|want|looking for)\b/i.test(next) &&
       /\b(website|web\s?site|web\s?app|saas|game|project|site)\b/i.test(next);
-    const buildContinuation = priorBuildRequest &&
+    const previousAssistantMessage = [...messages].reverse().find(item => item.role === 'assistant')?.content || '';
+    const assistantOfferedWorkspaceChange =
+      /\b(?:would you like me to|shall i|should i|want me to|can i|may i)\b[\s\S]{0,700}\b(?:upgrade|build|modify|edit|repair|fix|implement|create|convert|refactor|update|write|add|remove)\b/i.test(previousAssistantMessage) &&
+      /\b(?:workspace|project|code|files|website|application|app|preview|build)\b/i.test(previousAssistantMessage) &&
+      !/\b(?:generate|create|make|draw)\b.{0,40}\b(?:image|picture|illustration|visual)\b/i.test(previousAssistantMessage);
+    const buildContinuation = priorBuildRequest && assistantOfferedWorkspaceChange &&
       /^(?:yes(?:[.!?\s]+(?:do all|do it|please|that|this|now))?|yeah|yep|sure|okay|ok|please do(?: all| it)?|do all|go ahead(?: and do all)?|proceed(?: with it)?|continue|do it|build it|create it|deploy|publish|launch|put it live|approved|start now)[.!?\s]*$/i.test(next);
     const buildIntent = !negatesBuild && (directBuildRequest || buildContinuation);
     if (buildIntent) { setBuildTrackingSince(new Date().toISOString()); setBuildProgress({ status: 'preparing', step: 'Preparing your build request', message: 'Bram is preparing the project and will show persisted build events here.' }); setTrackBuildProgress(true); }
