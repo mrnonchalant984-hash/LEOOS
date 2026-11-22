@@ -348,7 +348,7 @@ async function main() {
     await deployWorker(directory, cloudflareToken, accountId);
     const url = 'https://' + job.workerName + '.' + subdomain + '.workers.dev';
     console.log('Checking deployed Worker preview URL: ' + url);
-    const verifiedUrl = await waitForWorker(url, directory, job.workerName, token, accountId);
+    const verifiedUrl = await waitForWorker(url, directory, job.workerName, cloudflareToken, accountId);
     status = 'deployed';
     result = { id: job.id, workerId: job.workerId, status, url: verifiedUrl };
   } catch (error) {
