@@ -30,6 +30,7 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
   const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop');
   const [shareUrl, setShareUrl] = useState('');
   const [shareBusy, setShareBusy] = useState(false);
+  const [autoCreateAfter, setAutoCreateAfter] = useState('');
 
   const refresh = useCallback(async () => {
     const accessToken = await getAccessToken();
@@ -66,6 +67,16 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
   }, [projectId]);
 
   useEffect(() => {
+    const handleWorkspaceSaved = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectId?: string; savedAt?: string }>).detail;
+      if (detail?.projectId !== projectId) return;
+      setAutoCreateAfter(detail.savedAt || new Date().toISOString());
+    };
+    window.addEventListener('bram:workspace-saved', handleWorkspaceSaved);
+    return () => window.removeEventListener('bram:workspace-saved', handleWorkspaceSaved);
+  }, [projectId]);
+
+  useEffect(() => {
     if (preview?.status !== 'queued' && preview?.status !== 'running') return;
     const interval = window.setInterval(() => {
       void refresh().catch(cause => setError(cause instanceof Error ? cause.message : 'Preview status could not be loaded.'));
@@ -93,7 +104,7 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
     } finally { setShareBusy(false); }
   }
 
-  async function createPreview() {
+  const createPreview = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     setError('');
@@ -112,10 +123,18 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
     } finally {
       setBusy(false);
     }
-  }
+  }, [busy, projectId]);
 
   const pending = preview?.status === 'queued' || preview?.status === 'running';
   const url = preview?.status === 'deployed' ? preview.deployment_url : null;
+  useEffect(() => {
+    if (!autoCreateAfter || busy || pending) return;
+    const savedAt = Date.parse(autoCreateAfter);
+    const previewAt = preview?.created_at ? Date.parse(preview.created_at) : 0;
+    setAutoCreateAfter('');
+    if (Number.isFinite(savedAt) && previewAt >= savedAt) return;
+    void createPreview();
+  }, [autoCreateAfter, busy, pending, preview?.created_at, createPreview]);
 
   return (
     <aside className="flex min-h-[380px] min-w-0 flex-col border-t border-white/10 bg-[#f1f3f7] text-slate-900 lg:min-h-0 lg:w-[46%] lg:border-l lg:border-t-0">
