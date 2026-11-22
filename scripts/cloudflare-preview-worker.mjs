@@ -235,25 +235,38 @@ async function buildNextProject(directory, workerName, usesTypeScript) {
 }
 
 async function deployWorker(directory, token, accountId) {
-  await execFileAsync('npx', ['--yes', 'wrangler@4.159.0', 'deploy', '--config', 'wrangler.jsonc'], {
+  const deployment = await execFileAsync('npx', ['--yes', 'wrangler@4.159.0', 'deploy', '--config', 'wrangler.jsonc'], {
     cwd: directory,
     env: deployEnvironment(token, accountId),
     timeout: 300_000,
     windowsHide: true,
     maxBuffer: 2_000_000,
   });
+  if (deployment.stdout) console.log('Wrangler deployment output (no credentials):\\n' + deployment.stdout.slice(-4000));
+  if (deployment.stderr) console.log('Wrangler deployment diagnostics (no credentials):\\n' + deployment.stderr.slice(-2000));
 }
 
 async function waitForWorker(url) {
-  for (let attempt = 0; attempt < 18; attempt++) {
-    const response = await fetch(url, {
-      redirect: 'manual',
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (response.status >= 200 && response.status < 400) return url;
+  let lastStatus = 'no response';
+  for (let attempt = 0; attempt < 24; attempt++) {
+    try {
+      const response = await fetch(url, {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(10_000),
+      });
+      lastStatus = 'HTTP ' + response.status;
+      if (response.status >= 200 && response.status < 400) {
+        console.log('Cloudflare Worker preview health check passed (' + lastStatus + ').');
+        return url;
+      }
+      console.log('Cloudflare Worker preview health check ' + (attempt + 1) + '/24 returned ' + lastStatus + '.');
+    } catch (error) {
+      lastStatus = error instanceof Error ? error.message.slice(0, 240) : 'network error';
+      console.log('Cloudflare Worker preview health check ' + (attempt + 1) + '/24 failed: ' + lastStatus);
+    }
     await new Promise(resolve => setTimeout(resolve, 5_000));
   }
-  throw Object.assign(new Error('Cloudflare Worker preview did not become ready.'), { code: 'preview_not_ready' });
+  throw Object.assign(new Error('Cloudflare Worker preview did not become ready; last result: ' + lastStatus), { code: 'preview_not_ready' });
 }
 
 async function main() {
@@ -297,6 +310,7 @@ async function main() {
     }
     await deployWorker(directory, cloudflareToken, accountId);
     const url = 'https://' + job.workerName + '.' + subdomain + '.workers.dev';
+    console.log('Checking deployed Worker preview URL: ' + url);
     const verifiedUrl = await waitForWorker(url);
     status = 'deployed';
     result = { id: job.id, workerId: job.workerId, status, url: verifiedUrl };
