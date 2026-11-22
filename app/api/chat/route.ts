@@ -282,11 +282,12 @@ export async function POST(req: NextRequest) {
     const recentUserMessages = history.slice(-12).filter((item) => item.role === "user");
     const hasRecentBuildRequest = recentUserMessages.some((item) => isExplicitBuildIntent(item.content));
     const affirmativeFollowUp = /^(?:yes(?:[.!?\s]+(?:do all|do it|please|that|this|now))?|yeah|yep|sure|okay|ok|please do(?: all| it)?|do all|go ahead(?: and do all)?|proceed(?: with it)?|continue|do it|build it|create it|deploy|publish|launch|put it live|approved|start now)[.!?\s]*$/i.test(message.trim());
-    const shortBuildContinuation = hasRecentBuildRequest && affirmativeFollowUp;
     const lastAssistantMessage = [...history].reverse().find(item => item.role === 'assistant')?.content || '';
     const assistantOfferedWorkspaceChange =
       /\b(?:would you like me to|shall i|should i|want me to|can i|may i)\b[\s\S]{0,700}\b(?:upgrade|build|modify|edit|repair|fix|implement|create|convert|refactor|update|write|add|remove)\b/i.test(lastAssistantMessage) &&
-      /\b(?:workspace|project|code|files|website|application|app|preview|build)\b/i.test(lastAssistantMessage);
+      /\b(?:workspace|project|code|files|website|application|app|preview|build)\b/i.test(lastAssistantMessage) &&
+      !requestsImageGeneration(lastAssistantMessage);
+    const shortBuildContinuation = hasRecentBuildRequest && affirmativeFollowUp && assistantOfferedWorkspaceChange;
     const affirmativeBuildContinuation = Boolean(
       typeof project_id === 'string' && PROJECT_ID_RE.test(project_id) &&
       affirmativeFollowUp && assistantOfferedWorkspaceChange
