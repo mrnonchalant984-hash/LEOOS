@@ -284,7 +284,7 @@ async function main() {
     const subdomain = await getWorkersSubdomain(accountId, cloudflareToken);
     if (job.framework === 'nextjs') {
       await writeProjectFiles(directory, job.files);
-      const usesTypeScript = Object.keys(job.files).some(filePath => /\\.(?:ts|tsx)$/i.test(filePath) || filePath === 'tsconfig.json');
+      const usesTypeScript = Object.keys(job.files).some(filePath => filePath.endsWith('.ts') || filePath.endsWith('.tsx') || filePath === 'tsconfig.json');
       await buildNextProject(directory, job.workerName, usesTypeScript);
     } else {
       const assetsDirectory = path.join(directory, 'preview-assets');
