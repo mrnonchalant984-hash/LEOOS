@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -247,32 +247,24 @@ async function deployWorker(directory, token, accountId) {
 }
 
 async function captureWorkerRuntimeLogs(directory, workerName, token, accountId, url) {
-  let child;
-  const chunks = [];
+  const tailPromise = execFileAsync('npx', ['--yes', 'wrangler@4.159.0', 'tail', workerName, '--format', 'json'], {
+    cwd: directory,
+    env: deployEnvironment(token, accountId),
+    timeout: 10_000,
+    windowsHide: true,
+    maxBuffer: 2_000_000,
+  }).then(result => result.stdout + result.stderr).catch(error =>
+    String(error.stdout || '') + String(error.stderr || '') + '\\nTail command ended: ' + (error instanceof Error ? error.message : 'unknown error')
+  );
+  await new Promise(resolve => setTimeout(resolve, 1_500));
   try {
-    child = spawn('npx', ['--yes', 'wrangler@4.159.0', 'tail', workerName, '--format', 'json'], {
-      cwd: directory,
-      env: deployEnvironment(token, accountId),
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    child.stdout.on('data', chunk => chunks.push(Buffer.from(chunk)));
-    child.stderr.on('data', chunk => chunks.push(Buffer.from(chunk)));
-    await new Promise(resolve => setTimeout(resolve, 1_500));
-    try {
-      const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(10_000) });
-      console.log('Worker runtime diagnostic request returned HTTP ' + response.status + '.');
-      await response.body?.cancel();
-    } catch (error) {
-      console.log('Worker runtime diagnostic request failed: ' + (error instanceof Error ? error.message.slice(0, 240) : 'network error'));
-    }
-    await new Promise(resolve => setTimeout(resolve, 4_000));
+    const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(10_000) });
+    console.log('Worker runtime diagnostic request returned HTTP ' + response.status + '.');
+    await response.body?.cancel();
   } catch (error) {
-    console.log('Could not collect Worker tail diagnostics: ' + (error instanceof Error ? error.message.slice(0, 240) : 'unknown error'));
-  } finally {
-    if (child && child.exitCode === null) child.kill('SIGTERM');
+    console.log('Worker runtime diagnostic request failed: ' + (error instanceof Error ? error.message.slice(0, 240) : 'network error'));
   }
-  const output = Buffer.concat(chunks).toString('utf8').slice(-6_000);
+  const output = (await tailPromise).slice(-6_000);
   if (output) console.log('Cloudflare Worker runtime logs (diagnostic excerpt):\\n' + output);
 }
 
