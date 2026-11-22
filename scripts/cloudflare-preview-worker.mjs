@@ -174,10 +174,10 @@ async function writeWranglerConfig(directory, workerName, framework) {
     workers_dev: true,
     observability: { enabled: true },
   };
-  await writeFile(path.join(directory, 'wrangler.preview.jsonc'), JSON.stringify(config, null, 2), 'utf8');
+  await writeFile(path.join(directory, 'wrangler.jsonc'), JSON.stringify(config, null, 2), 'utf8');
 }
 
-async function buildNextProject(directory) {
+async function buildNextProject(directory, workerName) {
   const packagePath = path.join(directory, 'package.json');
   const packageJson = JSON.parse(await (await import('node:fs/promises')).readFile(packagePath, 'utf8'));
   packageJson.scripts = packageJson.scripts && typeof packageJson.scripts === 'object' ? packageJson.scripts : {};
@@ -201,6 +201,7 @@ async function buildNextProject(directory) {
     await execFileAsync('npm', ['install', '--no-save', '--no-audit', '--no-fund', '@opennextjs/cloudflare@1.19.11', 'wrangler@4.159.0'], {
       cwd: directory, env, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
     });
+    await writeWranglerConfig(directory, workerName, 'nextjs');
     await execFileAsync('npx', ['opennextjs-cloudflare', 'build'], {
       cwd: directory, env, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
     });
@@ -212,7 +213,7 @@ async function buildNextProject(directory) {
 }
 
 async function deployWorker(directory, token, accountId) {
-  await execFileAsync('npx', ['--yes', 'wrangler@4.159.0', 'deploy', '--config', 'wrangler.preview.jsonc'], {
+  await execFileAsync('npx', ['--yes', 'wrangler@4.159.0', 'deploy', '--config', 'wrangler.jsonc'], {
     cwd: directory,
     env: deployEnvironment(token, accountId),
     timeout: 300_000,
@@ -227,7 +228,7 @@ async function waitForWorker(url) {
       redirect: 'manual',
       signal: AbortSignal.timeout(15_000),
     });
-    if (response.status === 200) return url;
+    if (response.status >= 200 && response.status < 400) return url;
     await new Promise(resolve => setTimeout(resolve, 5_000));
   }
   throw Object.assign(new Error('Cloudflare Worker preview did not become ready.'), { code: 'preview_not_ready' });
@@ -262,8 +263,7 @@ async function main() {
     const subdomain = await getWorkersSubdomain(accountId, cloudflareToken);
     if (job.framework === 'nextjs') {
       await writeProjectFiles(directory, job.files);
-      await buildNextProject(directory);
-      await writeWranglerConfig(directory, job.workerName, 'nextjs');
+      await buildNextProject(directory, job.workerName);
     } else {
       const assetsDirectory = path.join(directory, 'preview-assets');
       await writeProjectFiles(assetsDirectory, job.files);
