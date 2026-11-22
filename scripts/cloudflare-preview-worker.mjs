@@ -184,6 +184,14 @@ async function buildNextProject(directory, workerName) {
   if (!packageJson.scripts.build) packageJson.scripts.build = 'next build';
   await writeFile(packagePath, JSON.stringify(packageJson, null, 2), 'utf8');
 
+  const nextConfigPath = path.join(directory, 'next.config.js');
+  try {
+    await (await import('node:fs/promises')).access(nextConfigPath);
+  } catch {
+    const defaultConfig = packageJson.type === 'module' ? 'export default {};\\n' : 'module.exports = {};\\n';
+    await writeFile(nextConfigPath, defaultConfig, 'utf8');
+  }
+
   const openNextConfig = path.join(directory, 'open-next.config.ts');
   try {
     await (await import('node:fs/promises')).access(openNextConfig);
