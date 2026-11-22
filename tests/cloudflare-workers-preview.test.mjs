@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { getOpenNextVersionForNext, WORKER_WRANGLER_VERSION } from '../scripts/cloudflare-preview-versions.mjs';
 import { readFile } from 'node:fs/promises';
 import {
   getCloudflarePreviewWorkerName,
@@ -74,4 +75,13 @@ test('Cloudflare preview runner is valid JavaScript and the API passes/verifies 
   assert.ok(workerScript.indexOf("await writeWranglerConfig(directory, workerName, 'nextjs')") < workerScript.indexOf("['opennextjs-cloudflare', 'build']"));
   assert.match(migration, /preview_build_failed/);
   assert.match(migration, /preview_worker_configuration_failed/);
+});
+
+test('selects a verified OpenNext adapter for the installed Next.js version', () => {
+  assert.equal(getOpenNextVersionForNext('16.4.5'), '1.20.17');
+  assert.equal(getOpenNextVersionForNext('16.4.4'), '1.20.12');
+  assert.equal(getOpenNextVersionForNext('16.3.8'), '1.20.10');
+  assert.equal(getOpenNextVersionForNext('15.5.0'), '1.19.11');
+  assert.equal(WORKER_WRANGLER_VERSION, '4.164.0');
+  assert.throws(() => getOpenNextVersionForNext('17.0.0'), /No verified OpenNext adapter/);
 });
