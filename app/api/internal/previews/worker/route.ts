@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   const config = getCloudflarePreviewConfig();
   if (!config.enabled || !config.projectName) {
-    return NextResponse.json({ error: 'Cloudflare previews are not configured.' }, { status: 503 });
+    return NextResponse.json({ error: 'Cloudflare Workers previews are not configured.' }, { status: 503 });
   }
 
   const workerId = `gha-${randomUUID()}`;
@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     job: {
       id: job.id,
+      projectId: job.project_id,
       branchName: job.branch_name,
       workerId,
       projectName: config.projectName,
