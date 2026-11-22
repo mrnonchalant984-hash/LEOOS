@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { getOpenNextVersionForNext, WORKER_WRANGLER_VERSION } from './cloudflare-preview-versions.mjs';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -179,7 +180,7 @@ async function writeWranglerConfig(directory, workerName, framework) {
 
 async function buildNextProject(directory, workerName, usesTypeScript) {
   const packagePath = path.join(directory, 'package.json');
-  const packageJson = JSON.parse(await (await import('node:fs/promises')).readFile(packagePath, 'utf8'));
+  const packageJson = JSON.parse(await readFile(packagePath, 'utf8'));
   packageJson.scripts = packageJson.scripts && typeof packageJson.scripts === 'object' ? packageJson.scripts : {};
   if (!packageJson.scripts.build) packageJson.scripts.build = 'next build';
   if (usesTypeScript) {
@@ -220,7 +221,10 @@ async function buildNextProject(directory, workerName, usesTypeScript) {
     await execFileAsync('npm', ['install', '--include=dev', '--no-audit', '--no-fund'], {
       cwd: directory, env: installEnv, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
     });
-    await execFileAsync('npm', ['install', '--include=dev', '--no-save', '--no-audit', '--no-fund', '@opennextjs/cloudflare@1.19.11', 'wrangler@4.159.0'], {
+    const installedNext = JSON.parse(await readFile(path.join(directory, 'node_modules', 'next', 'package.json'), 'utf8')).version;
+    const openNextVersion = getOpenNextVersionForNext(installedNext);
+    console.log('Using Next.js ' + installedNext + ', OpenNext ' + openNextVersion + ', Wrangler ' + WORKER_WRANGLER_VERSION + '.');
+    await execFileAsync('npm', ['install', '--include=dev', '--no-save', '--no-audit', '--no-fund', '@opennextjs/cloudflare@' + openNextVersion, 'wrangler@' + WORKER_WRANGLER_VERSION], {
       cwd: directory, env: installEnv, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
     });
     await writeWranglerConfig(directory, workerName, 'nextjs');
@@ -235,7 +239,7 @@ async function buildNextProject(directory, workerName, usesTypeScript) {
 }
 
 async function deployWorker(directory, token, accountId) {
-  const deployment = await execFileAsync('npx', ['--yes', 'wrangler@4.159.0', 'deploy', '--config', 'wrangler.jsonc'], {
+  const deployment = await execFileAsync('npx', ['--yes', 'wrangler@' + WORKER_WRANGLER_VERSION, 'deploy', '--config', 'wrangler.jsonc'], {
     cwd: directory,
     env: deployEnvironment(token, accountId),
     timeout: 300_000,
@@ -247,7 +251,7 @@ async function deployWorker(directory, token, accountId) {
 }
 
 async function captureWorkerRuntimeLogs(directory, workerName, token, accountId, url) {
-  const tailPromise = execFileAsync('npx', ['--yes', 'wrangler@4.159.0', 'tail', workerName, '--format', 'json'], {
+  const tailPromise = execFileAsync('npx', ['--yes', 'wrangler@' + WORKER_WRANGLER_VERSION, 'tail', workerName, '--format', 'json'], {
     cwd: directory,
     env: deployEnvironment(token, accountId),
     timeout: 10_000,
@@ -264,8 +268,10 @@ async function captureWorkerRuntimeLogs(directory, workerName, token, accountId,
   } catch (error) {
     console.log('Worker runtime diagnostic request failed: ' + (error instanceof Error ? error.message.slice(0, 240) : 'network error'));
   }
-  const output = (await tailPromise).slice(-6_000);
-  if (output) console.log('Cloudflare Worker runtime logs (diagnostic excerpt):\\n' + output);
+  const rawOutput = (await tailPromise).slice(-12_000);
+  const eventStart = rawOutput.indexOf('\"event\": {');
+  const output = (eventStart >= 0 ? rawOutput.slice(0, eventStart) + '\"event\": \"[redacted]\"\\n' : rawOutput).slice(-6_000);
+  if (output) console.log('Cloudflare Worker runtime logs (diagnostic excerpt; request metadata redacted):\\n' + output);
 }
 
 async function waitForWorker(url, directory, workerName, token, accountId) {
