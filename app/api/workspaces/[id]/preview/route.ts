@@ -6,7 +6,7 @@ import {
   MAX_CLOUDFLARE_PREVIEW_FILE_BYTES,
   MAX_CLOUDFLARE_PREVIEW_FILES,
   MAX_CLOUDFLARE_PREVIEW_TOTAL_BYTES,
-  validateStaticPreviewFiles,
+  validateCloudflareWorkerPreviewFiles,
 } from '@/lib/cloudflare-preview/static-assets';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -14,7 +14,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3
 
 function unavailableResponse() {
   return NextResponse.json({
-    error: 'Cloudflare static previews are not configured.',
+    error: 'Cloudflare Workers previews are not configured.',
     requiredEnvironment: getCloudflarePreviewConfig().requiredEnvironment,
   }, { status: 503 });
 }
@@ -78,15 +78,15 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const projectType = typeof project.type === 'string' ? project.type : '';
   const requiredFeature = projectType === 'saas' ? 'saas-builder' : projectType === 'web_app' ? 'web-app-builder' : 'website-builder';
   if (!plan.projectTypes.includes(projectType as 'website' | 'web_app' | 'saas') || !planAllows(plan, requiredFeature)) {
-    return NextResponse.json({ error: 'Static previews are not included for this project type or plan.' }, { status: 403 });
+    return NextResponse.json({ error: 'Previews are not included for this project type or plan.' }, { status: 403 });
   }
 
-  const validation = validateStaticPreviewFiles(project.files);
+  const validation = validateCloudflareWorkerPreviewFiles(project.files);
   if (!validation.ok) {
     const error = validation.code === 'missing_index'
-      ? 'A root index.html file is required for a static preview.'
+      ? 'A root index.html or supported Next.js app entry is required for a preview.'
       : validation.code === 'unsupported_file'
-        ? 'Only prebuilt static assets are supported. Build frameworks and server-side source files are not executed.'
+        ? 'Only static web assets or supported Next.js source files can be previewed.'
         : validation.code === 'sensitive_credential'
           ? 'Static assets contain a recognizable credential pattern. Remove sensitive values before creating a public preview.'
         : validation.code === 'file_too_large' || validation.code === 'too_many_files'
