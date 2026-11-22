@@ -829,7 +829,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     const directBuildRequest = /\b(build|create|make|develop|generate|need|want|looking for)\b/i.test(next) &&
       /\b(website|web\s?site|web\s?app|saas|game|project|site)\b/i.test(next);
     const buildContinuation = priorBuildRequest &&
-      /^(start|go ahead|proceed|continue|do it|build it|create it|deploy|publish|launch|put it live)[.!\s]*$/i.test(next);
+      /^(?:yes(?:[.!?\s]+(?:do all|do it|please|that|this|now))?|yeah|yep|sure|okay|ok|please do(?: all| it)?|do all|go ahead(?: and do all)?|proceed(?: with it)?|continue|do it|build it|create it|deploy|publish|launch|put it live|approved|start now)[.!?\s]*$/i.test(next);
     const buildIntent = !negatesBuild && (directBuildRequest || buildContinuation);
     if (buildIntent) { setBuildTrackingSince(new Date().toISOString()); setBuildProgress({ status: 'preparing', step: 'Preparing your build request', message: 'Bram is preparing the project and will show persisted build events here.' }); setTrackBuildProgress(true); }
     setActivityLabel("Thinking");
