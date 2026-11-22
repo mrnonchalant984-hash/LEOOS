@@ -1,11 +1,13 @@
 export const WORKER_WRANGLER_VERSION = '4.164.0';
 
 export function getOpenNextVersionForNext(nextVersion) {
-  const match = String(nextVersion).match(/^(\\d+)\\.(\\d+)\\.(\\d+)/);
-  if (!match) throw new Error('Could not determine the installed Next.js version for preview compatibility.');
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
-  const patch = Number(match[3]);
+  const parts = String(nextVersion).split(/[.-]/);
+  const major = Number(parts[0]);
+  const minor = Number(parts[1]);
+  const patch = Number(parts[2]);
+  if (![major, minor, patch].every(Number.isFinite)) {
+    throw new Error('Could not determine the installed Next.js version for preview compatibility.');
+  }
 
   if (major === 16 && minor >= 4) return minor === 4 && patch < 5 ? '1.20.12' : '1.20.17';
   if (major === 16 && minor === 3) return '1.20.10';
