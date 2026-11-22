@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { getOpenNextVersionForNext, WORKER_WRANGLER_VERSION } from './cloudflare-preview-versions.mjs';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -174,15 +175,36 @@ async function writeWranglerConfig(directory, workerName, framework) {
     workers_dev: true,
     observability: { enabled: true },
   };
-  await writeFile(path.join(directory, 'wrangler.preview.jsonc'), JSON.stringify(config, null, 2), 'utf8');
+  await writeFile(path.join(directory, 'wrangler.jsonc'), JSON.stringify(config, null, 2), 'utf8');
 }
 
-async function buildNextProject(directory) {
+async function buildNextProject(directory, workerName, usesTypeScript) {
   const packagePath = path.join(directory, 'package.json');
-  const packageJson = JSON.parse(await (await import('node:fs/promises')).readFile(packagePath, 'utf8'));
+  const packageJson = JSON.parse(await readFile(packagePath, 'utf8'));
   packageJson.scripts = packageJson.scripts && typeof packageJson.scripts === 'object' ? packageJson.scripts : {};
   if (!packageJson.scripts.build) packageJson.scripts.build = 'next build';
+  if (usesTypeScript) {
+    const currentDevDependencies = packageJson.devDependencies && typeof packageJson.devDependencies === 'object'
+      ? packageJson.devDependencies
+      : {};
+    packageJson.devDependencies = {
+      ...currentDevDependencies,
+      typescript: currentDevDependencies.typescript || '^5.9.3',
+      '@types/node': currentDevDependencies['@types/node'] || '^22.0.0',
+      '@types/react': currentDevDependencies['@types/react'] || '^19.2.0',
+      '@types/react-dom': currentDevDependencies['@types/react-dom'] || '^19.2.0',
+    };
+  }
   await writeFile(packagePath, JSON.stringify(packageJson, null, 2), 'utf8');
+
+  const nextConfigPath = path.join(directory, 'next.config.js');
+  try {
+    await (await import('node:fs/promises')).access(nextConfigPath);
+  } catch {
+    const newline = String.fromCharCode(10);
+    const defaultConfig = packageJson.type === 'module' ? 'export default {};' + newline : 'module.exports = {};' + newline;
+    await writeFile(nextConfigPath, defaultConfig, 'utf8');
+  }
 
   const openNextConfig = path.join(directory, 'open-next.config.ts');
   try {
@@ -194,13 +216,18 @@ async function buildNextProject(directory) {
   }
 
   const env = buildEnvironment();
+  const installEnv = { ...env, NODE_ENV: 'development', npm_config_production: 'false' };
   try {
-    await execFileAsync('npm', ['install', '--no-audit', '--no-fund'], {
-      cwd: directory, env, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
+    await execFileAsync('npm', ['install', '--include=dev', '--no-audit', '--no-fund'], {
+      cwd: directory, env: installEnv, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
     });
-    await execFileAsync('npm', ['install', '--no-save', '--no-audit', '--no-fund', '@opennextjs/cloudflare@1.19.11', 'wrangler@4.159.0'], {
-      cwd: directory, env, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
+    const installedNext = JSON.parse(await readFile(path.join(directory, 'node_modules', 'next', 'package.json'), 'utf8')).version;
+    const openNextVersion = getOpenNextVersionForNext(installedNext);
+    console.log('Using Next.js ' + installedNext + ', OpenNext ' + openNextVersion + ', Wrangler ' + WORKER_WRANGLER_VERSION + '.');
+    await execFileAsync('npm', ['install', '--include=dev', '--no-save', '--no-audit', '--no-fund', '@opennextjs/cloudflare@' + openNextVersion, 'wrangler@' + WORKER_WRANGLER_VERSION], {
+      cwd: directory, env: installEnv, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
     });
+    await writeWranglerConfig(directory, workerName, 'nextjs');
     await execFileAsync('npx', ['opennextjs-cloudflare', 'build'], {
       cwd: directory, env, timeout: 600_000, windowsHide: true, maxBuffer: 4_000_000,
     });
@@ -212,25 +239,78 @@ async function buildNextProject(directory) {
 }
 
 async function deployWorker(directory, token, accountId) {
-  await execFileAsync('npx', ['--yes', 'wrangler@4.159.0', 'deploy', '--config', 'wrangler.preview.jsonc'], {
+  const deployment = await execFileAsync('npx', ['--yes', 'wrangler@' + WORKER_WRANGLER_VERSION, 'deploy', '--config', 'wrangler.jsonc'], {
     cwd: directory,
     env: deployEnvironment(token, accountId),
     timeout: 300_000,
     windowsHide: true,
     maxBuffer: 2_000_000,
   });
+  if (deployment.stdout) console.log('Wrangler deployment output (no credentials):\\n' + deployment.stdout.slice(-4000));
+  if (deployment.stderr) console.log('Wrangler deployment diagnostics (no credentials):\\n' + deployment.stderr.slice(-2000));
 }
 
-async function waitForWorker(url) {
-  for (let attempt = 0; attempt < 18; attempt++) {
-    const response = await fetch(url, {
-      redirect: 'manual',
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (response.status === 200) return url;
+async function captureWorkerRuntimeLogs(directory, workerName, token, accountId, url) {
+  let diagnosticStatus = null;
+  const tailPromise = execFileAsync('npx', ['--yes', 'wrangler@' + WORKER_WRANGLER_VERSION, 'tail', workerName, '--format', 'json'], {
+    cwd: directory,
+    env: deployEnvironment(token, accountId),
+    timeout: 10_000,
+    windowsHide: true,
+    maxBuffer: 2_000_000,
+  }).then(result => result.stdout + result.stderr).catch(error =>
+    String(error.stdout || '') + String(error.stderr || '') + '\\nTail command ended: ' + (error instanceof Error ? error.message : 'unknown error')
+  );
+  await new Promise(resolve => setTimeout(resolve, 1_500));
+  try {
+    const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(10_000) });
+    diagnosticStatus = response.status;
+    console.log('Worker runtime diagnostic request returned HTTP ' + response.status + '.');
+    await response.body?.cancel();
+  } catch (error) {
+    console.log('Worker runtime diagnostic request failed: ' + (error instanceof Error ? error.message.slice(0, 240) : 'network error'));
+  }
+  const rawOutput = (await tailPromise).slice(-12_000);
+  const eventStart = rawOutput.indexOf('\"event\": {');
+  const output = (eventStart >= 0 ? rawOutput.slice(0, eventStart) + '\"event\": \"[redacted]\"\\n' : rawOutput).slice(-6_000);
+  if (output) console.log('Cloudflare Worker runtime logs (diagnostic excerpt; request metadata redacted):\\n' + output);
+  return diagnosticStatus;
+}
+
+async function waitForWorker(url, directory, workerName, token, accountId) {
+  let lastStatus = 'no response';
+  let diagnosticsCaptured = false;
+  for (let attempt = 0; attempt < 24; attempt++) {
+    try {
+      const response = await fetch(url, {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(10_000),
+      });
+      lastStatus = 'HTTP ' + response.status;
+      if (response.status >= 200 && response.status < 400) {
+        console.log('Cloudflare Worker preview health check passed (' + lastStatus + ').');
+        return url;
+      }
+      console.log('Cloudflare Worker preview health check ' + (attempt + 1) + '/24 returned ' + lastStatus + '.');
+      if (response.status >= 500 && !diagnosticsCaptured) {
+        await response.body?.cancel();
+        diagnosticsCaptured = true;
+        const diagnosticStatus = await captureWorkerRuntimeLogs(directory, workerName, token, accountId, url);
+        if (diagnosticStatus !== null && diagnosticStatus >= 200 && diagnosticStatus < 400) {
+          console.log('Cloudflare Worker became healthy after warm-up (HTTP ' + diagnosticStatus + ').');
+          return url;
+        }
+        lastStatus += '; diagnostic request ' + (diagnosticStatus === null ? 'had no response' : 'returned HTTP ' + diagnosticStatus);
+      }
+      await response.body?.cancel();
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'preview_not_ready') throw error;
+      lastStatus = error instanceof Error ? error.message.slice(0, 240) : 'network error';
+      console.log('Cloudflare Worker preview health check ' + (attempt + 1) + '/24 failed: ' + lastStatus);
+    }
     await new Promise(resolve => setTimeout(resolve, 5_000));
   }
-  throw Object.assign(new Error('Cloudflare Worker preview did not become ready.'), { code: 'preview_not_ready' });
+  throw Object.assign(new Error('Cloudflare Worker preview did not become ready; last result: ' + lastStatus), { code: 'preview_not_ready' });
 }
 
 async function main() {
@@ -262,8 +342,8 @@ async function main() {
     const subdomain = await getWorkersSubdomain(accountId, cloudflareToken);
     if (job.framework === 'nextjs') {
       await writeProjectFiles(directory, job.files);
-      await buildNextProject(directory);
-      await writeWranglerConfig(directory, job.workerName, 'nextjs');
+      const usesTypeScript = Object.keys(job.files).some(filePath => filePath.endsWith('.ts') || filePath.endsWith('.tsx') || filePath === 'tsconfig.json');
+      await buildNextProject(directory, job.workerName, usesTypeScript);
     } else {
       const assetsDirectory = path.join(directory, 'preview-assets');
       await writeProjectFiles(assetsDirectory, job.files);
@@ -274,7 +354,8 @@ async function main() {
     }
     await deployWorker(directory, cloudflareToken, accountId);
     const url = 'https://' + job.workerName + '.' + subdomain + '.workers.dev';
-    const verifiedUrl = await waitForWorker(url);
+    console.log('Checking deployed Worker preview URL: ' + url);
+    const verifiedUrl = await waitForWorker(url, directory, job.workerName, cloudflareToken, accountId);
     status = 'deployed';
     result = { id: job.id, workerId: job.workerId, status, url: verifiedUrl };
   } catch (error) {
