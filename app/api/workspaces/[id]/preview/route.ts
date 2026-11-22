@@ -88,10 +88,10 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       : validation.code === 'unsupported_file'
         ? 'Only static web assets or supported Next.js source files can be previewed.'
         : validation.code === 'sensitive_credential'
-          ? 'Static assets contain a recognizable credential pattern. Remove sensitive values before creating a public preview.'
+          ? 'Workspace source contains a recognizable credential pattern. Remove sensitive values before creating a public preview.'
         : validation.code === 'file_too_large' || validation.code === 'too_many_files'
-          ? 'Static preview assets exceed the configured file-count or size limits.'
-          : 'Workspace files are not a valid static preview bundle.';
+          ? 'Preview source exceeds the configured file-count or size limits.'
+          : 'Workspace files are not a valid static or Next.js preview bundle.';
     return NextResponse.json({
       error,
       limits: {
