@@ -131,9 +131,9 @@ test('backup workflow encrypts database and Storage archives and restore is stag
   assert.match(backup, /age --recipient/);
   assert.match(backup, /pg_restore --list/);
   assert.match(backup, /remote_checksum/);
-  assert.match(backup, /remote-verification\\.age/);
-  assert.match(backup, /sha256sum "\$workdir\/remote-verification\\.age"/);
-  assert.match(backup, /map\\(select\\(\\.ID != "braverton-market-backup-retention"\\)\\)/);
+  assert.match(backup, /remote-verification\.age/);
+  assert.match(backup, /sha256sum "\$workdir\/remote-verification\.age"/);
+  assert.match(backup, /map\(select\(\.ID != "braverton-market-backup-retention"\)\)/);
   assert.match(restore, /RESTORE_TARGET_ENV.*staging/);
   assert.match(restore, /pg_restore/);
   assert.match(runbook, /not operationally verified/);
@@ -146,7 +146,7 @@ test('Paystack marketplace checkout remains gated and webhook verifies the exact
   ]);
   assert.match(checkout, /STORE_CHECKOUT_ENABLED !== 'true'.*STORE_PAYOUTS_ENABLED !== 'true'/);
   assert.match(checkout, /PAYSTACK_SECRET_KEY/);
-  assert.match(checkout, /api\\.paystack\\.co\/transaction\/initialize/);
+  assert.match(checkout, /api\.paystack\.co\/transaction\/initialize/);
   assert.match(checkout, /STORE_PAYSTACK_SPLIT_ENABLED === 'true'/);
   assert.match(checkout, /name: order\.order_number/);
   assert.match(checkout, /currency: 'NGN'/);
