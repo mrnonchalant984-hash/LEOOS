@@ -223,6 +223,15 @@ export async function POST(req: NextRequest) {
         if (!affiliateUpdated) return NextResponse.json({ received: true, idempotent: true });
         await db.from('marketplace_affiliate_commissions').update({ status: affiliateStatus === 'success' ? 'paid' : affiliateStatus === 'reversed' ? 'reversed' : 'failed', paid_at: affiliateStatus === 'success' ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq('id', affiliatePayout.commission_id);
         await db.from('marketplace_affiliate_payout_requests').update({ status: affiliateStatus === 'success' ? 'paid' : affiliateStatus === 'reversed' ? 'reversed' : 'failed', updated_at: new Date().toISOString() }).eq('commission_id', affiliatePayout.commission_id);
+        try {
+          await notifyMarketplaceUser({
+            userId: affiliatePayout.affiliate_id, kind: 'affiliate_payout',
+            title: affiliateStatus === 'success' ? 'Affiliate payout sent' : affiliateStatus === 'reversed' ? 'Affiliate payout reversed' : 'Affiliate payout failed',
+            body: affiliateStatus === 'success' ? 'Your approved Braverton affiliate payout was sent.' : 'Your Braverton affiliate payout needs review. Check your affiliate dashboard and contact support if needed.',
+            href: '/store/affiliates', preference: 'support_updates',
+            idempotencyKey: `affiliate-payout:${affiliatePayout.id}:${affiliateStatus}`,
+          });
+        } catch (noticeError) { reportFailure(noticeError, 'marketplace_notification'); }
         return NextResponse.json({ received: true });
       }
       const payoutStatus = eventName === 'transfer.success' ? 'paid' : eventName === 'transfer.failed' ? 'failed' : 'reversed';
