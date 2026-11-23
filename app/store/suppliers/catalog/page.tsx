@@ -12,6 +12,8 @@ export default function SupplierCatalogPage() {
   const [prices, setPrices] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Record<string, string>>({});
   const [cities, setCities] = useState<Record<string, string>>({});
+  const [countries, setCountries] = useState<Record<string, string>>({});
+  const [termsAccepted, setTermsAccepted] = useState<Record<string, boolean>>({});
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState('');
@@ -29,8 +31,8 @@ export default function SupplierCatalogPage() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         supplierProductId: product.id, sellingPriceKobo: price,
-        category: categories[product.id] || 'General', countryCode: 'NG',
-        city: cities[product.id] || '', termsAccepted: true,
+        category: categories[product.id] || 'General', countryCode: countries[product.id] || 'NG',
+        city: cities[product.id] || '', termsAccepted: termsAccepted[product.id] === true,
       }),
     });
     const result = await response.json().catch(() => ({}));
@@ -56,8 +58,8 @@ export default function SupplierCatalogPage() {
           {application ? <div className="mt-4 rounded-xl bg-white/[.05] p-3"><p className="text-sm font-medium capitalize">Application: {application.supplier_status}</p><p className="mt-1 text-xs text-white/45">Proposed price ₦{(application.proposed_selling_price_kobo/100).toLocaleString('en-NG')}</p>{application.supplier_note && <p className="mt-2 text-xs text-amber-100">{application.supplier_note}</p>}</div> : <>
             <label className="mt-4 block text-sm">Your selling price (kobo)<input type="number" min={product.cost_kobo + 1} step="1" value={prices[product.id] ?? ''} onChange={event => setPrices(old => ({ ...old, [product.id]: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2" /></label>
             <label className="mt-3 block text-sm">Category<input maxLength={80} value={categories[product.id] ?? ''} onChange={event => setCategories(old => ({ ...old, [product.id]: event.target.value }))} placeholder="e.g. Fashion" className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2" /></label>
-            <label className="mt-3 block text-sm">Your listing city<input maxLength={100} value={cities[product.id] ?? ''} onChange={event => setCities(old => ({ ...old, [product.id]: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2" /></label>
-            <button disabled={busy === product.id || Number(prices[product.id]) <= product.cost_kobo || !(cities[product.id] ?? '').trim()} onClick={() => void apply(product)} className="mt-4 w-full rounded-xl bg-amber-200 px-4 py-3 font-semibold text-neutral-950 disabled:opacity-50">{busy === product.id ? 'Submitting…' : 'Apply to supplier'}</button>
+            <label className="mt-3 block text-sm">Country code<input maxLength={2} value={countries[product.id] ?? 'NG'} onChange={event => setCountries(old => ({ ...old, [product.id]: event.target.value.toUpperCase() }))} className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2" /></label><label className="mt-3 block text-sm">Your listing city<input maxLength={100} value={cities[product.id] ?? ''} onChange={event => setCities(old => ({ ...old, [product.id]: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2" /></label>
+            <label className="mt-3 flex items-start gap-2 text-xs text-white/65"><input type="checkbox" checked={termsAccepted[product.id] === true} onChange={event => setTermsAccepted(old => ({ ...old, [product.id]: event.target.checked }))} className="mt-0.5" /><span>I accept Braverton dropship terms: the supplier decides whether to accept, and remains responsible for supplier-side fulfilment and courier arrangements.</span></label><button disabled={busy === product.id || !termsAccepted[product.id] || Number(prices[product.id]) <= product.cost_kobo || !(cities[product.id] ?? '').trim() || !/^[A-Za-z]{2}$/.test(countries[product.id] ?? 'NG')} onClick={() => void apply(product)} className="mt-4 w-full rounded-xl bg-amber-200 px-4 py-3 font-semibold text-neutral-950 disabled:opacity-50">{busy === product.id ? 'Submitting…' : 'Apply to supplier'}</button>
           </>}
         </article>;
       })}
