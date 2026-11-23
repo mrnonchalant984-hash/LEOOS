@@ -152,3 +152,14 @@ test('seller verification evidence is HTTPS-only, human-reviewed and visible to 
   assert.match(ownerPage, /Open submitted business evidence/);
   assert.match(migration, /marketplace_seller_verification_evidence_url_check/);
 });
+
+test('affiliate commission release runs through a CRON_SECRET-protected scheduled worker', async () => {
+  const [worker, config] = await Promise.all([
+    read('../app/api/cron/store/affiliate-commission-release/route.ts'),
+    read('../vercel.json'),
+  ]);
+  assert.match(worker, /CRON_SECRET/);
+  assert.match(worker, /release_eligible_marketplace_affiliate_commissions/);
+  assert.match(worker, /affiliate-commission:.*eligible/);
+  assert.ok(JSON.parse(config).crons.some(item => item.path === '/api/cron/store/affiliate-commission-release'));
+});
