@@ -57,10 +57,9 @@ export function getSafeFallbackModel(
   }
 
   if (!configured('google')) return undefined;
-  const fallbackModel = primary.model === 'gemini-3.5-flash-lite'
-    ? 'gemini-2.5-flash-lite'
-    : 'gemini-3.5-flash-lite';
-  return `google/${fallbackModel}`;
+  // There is one currently supported built-in free-tier model. Do not retry
+  // with the legacy 2.5 Flash-Lite ID, which can return HTTP 404 for new keys.
+  return undefined;
 }
 
 function safeErrorStatus(error: unknown) {

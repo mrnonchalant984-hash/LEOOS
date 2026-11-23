@@ -58,8 +58,9 @@ function isRepositoryTask(message: string) {
 function isWebsiteResearchIntent(message: string) {
   const action = /\b(search|research|crawl|browse|read|fetch|inspect|summari[sz]e|analy[sz]e)\b/i.test(message);
   const site = /\b(websites?|web\s?sites?|site|webpage|web\s?page|pages|domain)\b/i.test(message);
+  const explicitWebSearch = /\b(web|internet|online)\b/i.test(message);
   const url = /https?:\/\/[^\s<>()]+/i.test(message);
-  return action && (site || url);
+  return action && (site || explicitWebSearch || url);
 }
 
 function isWebsiteWriteIntent(message: string) {
@@ -319,7 +320,9 @@ export async function POST(req: NextRequest) {
         error: "Grounded Web Search is available in Chat mode only. Turn off Web Search or switch out of authorized tool, build, and repository workflows.",
       }, { status: 400 });
     }
-    const webSearchRequested = mode !== 'tools' && (requestedWebSearch === true || shouldUseWebSearch(message));
+    // Explicit web research uses the authenticated Tavily-backed research tool,
+    // not Gemini's native Search grounding (which is unavailable on the free tier).
+    const webSearchRequested = !webResearchWorkflow && mode !== 'tools' && (requestedWebSearch === true || shouldUseWebSearch(message));
     if (mode === "tools" || requestedCustomAgentId || buildMode || repositoryWorkflow || webResearchWorkflow || websiteWriteWorkflow) {
       if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });
       const limited = await enforceUserRateLimit(ctx.user.id, requestedCustomAgentId ? 'leo-custom-agent-run' : buildMode ? 'leo-chat-build' : repositoryWorkflow ? 'leo-chat-repository' : 'leo-chat-tools', 10, 60);
@@ -618,6 +621,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: message }, { status: 503 });
       }
     } else {
+      // Normalize stale client selections (for example Gemini 2.5 Flash-Lite)
+      // before checking the current model catalog.
+      try {
+        const normalized = resolveModel(selectedModel);
+        selectedModel = `${normalized.provider}/${normalized.model}`;
+      } catch {
+        return NextResponse.json({ error: "That model is no longer supported. Refresh the model list and try again." }, { status: 400 });
+      }
       const advertised = getModelProviderStatus().find(item => item.id === selectedModel);
       if (!advertised) return NextResponse.json({ error: "Choose a model from the available model list." }, { status: 400 });
       if (!advertised.configured || !isProviderConfigured(advertised.provider)) {

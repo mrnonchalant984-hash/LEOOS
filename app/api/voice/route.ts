@@ -40,8 +40,7 @@ async function geminiTranscribe(audio: File) {
   const bytes = Buffer.from(await audio.arrayBuffer());
   const client = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 30_000 } });
   const configuredAudioModel = process.env.LEO_GEMINI_AUDIO_MODEL?.trim() || '';
-  const freeAudioModels = new Set(['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite']);
-  const audioModel = freeAudioModels.has(configuredAudioModel) ? configuredAudioModel : 'gemini-2.5-flash-lite';
+  const audioModel = configuredAudioModel === 'gemini-3.5-flash-lite' ? configuredAudioModel : 'gemini-3.5-flash-lite';
   const response = await client.models.generateContent({
     model: normalizeGeminiModelId(audioModel),
     contents: [{ role: 'user', parts: [
@@ -119,7 +118,7 @@ export async function POST(req: NextRequest) {
       const asksDeploy = /\b(deploy|publish|redeploy)\b/i.test(transcript);
       const asksAgentRun = /\b(run|execute|start|launch)\b.{0,60}\b(agent|specialist)\b/i.test(transcript);
       const asksWebsiteResearch = /\b(search|research|browse|read|inspect|summari[sz]e|analy[sz]e)\b/i.test(transcript)
-        && (/\b(website|web\s?site|webpage|web\s?page|domain|online)\b/i.test(transcript) || /https?:\/\//i.test(transcript));
+        && (/\b(website|web\s?site|webpage|web\s?page|domain|web|internet|online)\b/i.test(transcript) || /https?:\/\//i.test(transcript));
       const tools = await createUserAssistantTools(ctx.user.id, {
         request: req,
         userMessage: transcript,

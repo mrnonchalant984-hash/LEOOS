@@ -6,12 +6,12 @@ import { IntegrationStudio } from '@/components/IntegrationStudio';
 
 export const metadata = createPublicMetadata({
   title: 'API Reference',
-  description: "Reference for LeonardX API authentication, supported project endpoints, usage records and response behavior.",
+  description: "Reference for Braverton API authentication, supported project endpoints, usage records and response behavior.",
   path: "/docs/api",
   type: "website",
 });
 export default function API() {
-  return <LEOAppShell title="API v1" subtitle="Authenticated programmatic access to LEO OS resources.">
+  return <LEOAppShell title="API v1" subtitle="Authenticated programmatic access to Braverton resources.">
     <div className="page-hero">
       <span className="mini-label">Developer reference</span>
       <h2>Use the versioned API with clear access boundaries.</h2>

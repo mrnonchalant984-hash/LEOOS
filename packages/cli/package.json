@@ -4,9 +4,10 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "Official LeonardX command-line client",
+  "description": "Braverton command-line client (legacy package name retained for compatibility)",
   "type": "module",
   "bin": {
+    "braverton": "src/index.mjs",
     "leo": "src/index.mjs",
     "leonardx": "src/index.mjs"
   },
