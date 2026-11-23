@@ -302,7 +302,11 @@ export async function POST(req: NextRequest) {
         (!requestedProjectType && /\b(project|it|that|this|the site|the website)\b/i.test(message))));
     const explicitImageIntent = mode === "normal" && !customAgent && !requestedToolName &&
       requestsImageGeneration(message) && !explicitDeploymentIntent;
-    const explicitBuildIntent = Boolean(repairRequest || ((webProjectRequest || requestedProjectType === 'game') &&
+    // Workspace Builder requests are authenticated, project-scoped write tasks.
+    // The client must not send these through generic read-only Tools mode.
+    const workspaceWriteRequest = Boolean(requestedWorkMode === true && project_id &&
+      PROJECT_ID_RE.test(project_id) && (requestedRequestType === 'build' || requestedRequestType === 'repair'));
+    const explicitBuildIntent = Boolean(repairRequest || workspaceWriteRequest || ((webProjectRequest || requestedProjectType === 'game') &&
       (isExplicitBuildIntent(message) || shortBuildContinuation) && !explicitImageIntent) ||
       explicitDeploymentIntent || affirmativeBuildContinuation);
     const buildMode = Boolean(ctx && explicitBuildIntent && !customAgent);

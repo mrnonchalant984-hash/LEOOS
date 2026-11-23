@@ -1,6 +1,9 @@
 name: Cloudflare Workers preview worker
 
 on:
+  push:
+    branches:
+      - test/cloudflare-workers-smoke
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
