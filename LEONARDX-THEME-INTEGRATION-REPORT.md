@@ -7,7 +7,7 @@
 ## Completed implementation
 
 1. Reworked the design-system stylesheet so Google Forms-inspired tokens and component overrides apply only to the `public` route scope. The theme no longer globally changes document backgrounds, form controls, or color-scheme behavior.
-2. Added a route-scope classifier in `components/StoreChrome.tsx`. LeoX Store, developer tools/documentation, and all existing `LEOAppShell` workspace pages retain their previous styling.
+2. Added a route-scope classifier in `components/StoreChrome.tsx`. Braverton Market, developer tools/documentation, and all existing `LEOAppShell` workspace pages retain their previous styling.
 3. Kept theme preference persistent through `leonardx-theme`, while removing the global root `color-scheme` mutation so preserved surfaces do not inherit the public theme's native-control changes.
 4. Restored public header/theme-toggle visibility on `/leo-ai`; standardized the Leo AI marketing page with token-driven cards, purple actions, responsive sections, FAQ, and an illustrative workflow card.
 5. Added theme controls to sign-in and MFA screens. The workspace shell's newly introduced public-theme toggle was removed to preserve its existing design.
@@ -67,6 +67,6 @@ The output contains `route-results.csv`, `summary.json`, and up to 672 viewport 
 
 - No application files or existing features were deleted.
 - No Supabase schema, migrations, auth endpoints, APIs, MCP handlers, environment variables, provider routing, or business logic were modified.
-- LeoX Store, developer tools, and workspace visual styling were explicitly excluded from the new public theme.
+- Braverton Market, developer tools, and workspace visual styling were explicitly excluded from the new public theme.
 - No Git commit, push, pull request, Vercel deployment, or production change was made.
 - Production still reflects the previously deployed version until the user reviews and authorizes a deployment.
