@@ -275,3 +275,17 @@ revoke all on function public.assign_braverton_order_number() from public,anon,a
 alter table public.marketplace_notifications
   add column if not exists preference_key text not null default 'order_updates'
   check(preference_key in ('messages','order_updates','support_updates'));
+
+alter table public.marketplace_seller_verification_requests
+  add column if not exists evidence_url text,
+  add column if not exists evidence_notes text;
+alter table public.marketplace_seller_verification_requests
+  drop constraint if exists marketplace_seller_verification_evidence_url_check;
+alter table public.marketplace_seller_verification_requests
+  add constraint marketplace_seller_verification_evidence_url_check
+  check(evidence_url is null or (length(evidence_url) <= 500 and evidence_url ~ '^https://'));
+alter table public.marketplace_seller_verification_requests
+  drop constraint if exists marketplace_seller_verification_evidence_notes_check;
+alter table public.marketplace_seller_verification_requests
+  add constraint marketplace_seller_verification_evidence_notes_check
+  check(evidence_notes is null or length(evidence_notes) <= 1000);
