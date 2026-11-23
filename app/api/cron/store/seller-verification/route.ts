@@ -23,6 +23,8 @@ export async function POST(request: NextRequest) {
     .eq('status', 'pending').order('created_at', { ascending: true }).limit(20);
   if (error) return NextResponse.json({ error: 'Seller verification queue is unavailable.' }, { status: 503 });
 
+  const { data: prohibitedTerms, error: termsError } = await db.from('marketplace_prohibited_terms').select('term').eq('active', true).limit(500);
+  if (termsError) return NextResponse.json({ error: 'Bram policy checks are unavailable.' }, { status: 503 });
   const requestIds = (requests ?? []).map(item => item.id);
   const { data: priorDecisions, error: priorError } = requestIds.length
     ? await db.from('marketplace_seller_verification_decisions').select('request_id').in('request_id', requestIds).eq('engine_version', ENGINE_VERSION)
@@ -52,6 +54,7 @@ export async function POST(request: NextRequest) {
       details: item.details,
       duplicateBusiness: Boolean((existingSeller ?? []).length || (duplicateRequest ?? []).length),
       evidenceUrl: item.evidence_url,
+      policyFlags: (prohibitedTerms ?? []).map(row => String(row.term)).filter(term => term.trim().length >= 2 && (item.business_name + ' ' + item.details).toLowerCase().includes(term.toLowerCase())).slice(0, 5),
     });
     const signals = risk.signals;
     const score = risk.riskScore;
