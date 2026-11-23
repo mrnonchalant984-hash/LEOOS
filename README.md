@@ -175,7 +175,7 @@ The client displays both sides of the conversation, plays Bram's answer, and aut
 
 Server configuration:
 - `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) for transcription, assistant orchestration and speech generation.
-- `LEO_GEMINI_AUDIO_MODEL` for audio transcription (defaults to `gemini-2.5-flash`).
+- `LEO_GEMINI_AUDIO_MODEL` for audio transcription (defaults to `gemini-2.5-flash-lite`).
 - `LEO_GEMINI_TTS_MODEL` for speech generation (defaults to `gemini-2.5-flash-preview-tts`).
 
 The voice session is handled by Braverton's authenticated server-side session and voice endpoints. Automatic speech detection keeps the conversation flowing without manual per-turn controls.
