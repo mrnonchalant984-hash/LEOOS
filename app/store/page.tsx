@@ -34,12 +34,18 @@ export default async function StorePage({ searchParams }: PageProps<'/store'>) {
   const term = (typeof params.q === 'string' ? params.q : '').trim().slice(0, 80);
   const category = (typeof params.category === 'string' ? params.category : '').trim().slice(0, 80);
   let products: StoreProduct[] = [];
+  let categoryNames: string[] = [];
   let unavailable = false;
   try {
     const verifiedSellerIds = await getVerifiedStoreSellerIds();
     if (!verifiedSellerIds) unavailable = true;
     else if (verifiedSellerIds.length) {
-      let query = adminSupabase().from('marketplace_products')
+      const db = adminSupabase();
+      const { data: categoryRows, error: categoryError } = await db.from('marketplace_products')
+        .select('category').eq('status', 'active').in('seller_id', verifiedSellerIds).limit(2000);
+      if (categoryError) unavailable = true;
+      else categoryNames = [...new Set((categoryRows ?? []).map(row => row.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+      let query = db.from('marketplace_products')
         .select('slug,title,description,category,price,currency,condition,country_code,city,image_urls')
         .eq('status', 'active').in('seller_id', verifiedSellerIds).order('created_at', { ascending: false }).limit(36);
       if (term) query = query.ilike('title', `%${term.replace(/[%_,]/g, ' ')}%`);
@@ -49,7 +55,7 @@ export default async function StorePage({ searchParams }: PageProps<'/store'>) {
       else products = (result.data ?? []) as StoreProduct[];
     }
   } catch { unavailable = true; }
-  const categories = [...new Set(products.map(product => product.category).filter(Boolean))].slice(0, 8);
+  const categories = categoryNames;
   const feature = products[0];
 
   return <main className="store-home px-4 pb-12 pt-5 sm:px-7 sm:pt-8">
