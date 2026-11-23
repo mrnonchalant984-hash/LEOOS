@@ -133,7 +133,7 @@ alter table public.marketplace_dropship_applications
   add column if not exists country_code char(2) not null default 'NG' check(country_code ~ '^[A-Z]{2}$'),
   add column if not exists region text check(region is null or length(region) <= 100),
   add column if not exists city text not null default 'Not specified' check(length(btrim(city)) between 1 and 100),
-  add column if not exists currency char(3) not null default 'NGN' check(currency ~ '^[A-Z]{3}
+  add column if not exists currency char(3) not null default 'NGN' check(currency ~ '^[A-Z]{3}$');
 
 create or replace function public.review_marketplace_dropship_application(
   p_application_id uuid, p_supplier_id uuid, p_decision text, p_note text default null
@@ -333,7 +333,6 @@ after update of verification_status on public.marketplace_suppliers
 for each row when (old.verification_status is distinct from new.verification_status)
 execute function public.sync_braverton_supplier_verification_to_listings();
 revoke all on function public.sync_braverton_supplier_verification_to_listings() from public,anon,authenticated;
-);
 
 create or replace function public.review_marketplace_dropship_application(
   p_application_id uuid, p_supplier_id uuid, p_decision text, p_note text default null
