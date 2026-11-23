@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { ModelProviderError, isProviderConfigured, resolveModel, type ModelMessage, type ModelProvider } from './model-catalog';
+import { ModelProviderError, isProviderConfigured, recordModelHealth, resolveModel, type ModelMessage, type ModelProvider } from './model-catalog';
 import { FunctionCallingConfigMode, type Content, type Part } from '@google/genai';
 import { retryProviderRequest } from './provider-retry';
 
@@ -42,14 +42,14 @@ async function withProviderError<T>(provider: ModelProvider, model: string, requ
     // One attempt per model call: the outer router may try one different Gemini
     // model, while route-level deadlines prevent nested retries from exhausting
     // the Vercel request window.
-    return await retryProviderRequest(request, { signal, maxAttempts: 2, baseDelayMs: 250, maxDelayMs: 1_000 });
+    const result = await retryProviderRequest(request, { signal, maxAttempts: 2, baseDelayMs: 250, maxDelayMs: 1_000 });\n    recordModelHealth(model, true);\n    return result;
   } catch (error) {
     if (error instanceof ModelProviderError) throw error;
     const candidate = error && typeof error === 'object' ? error as { status?: unknown; statusCode?: unknown } : {};
     const status = typeof candidate.status === 'number' ? candidate.status
       : typeof candidate.statusCode === 'number' ? candidate.statusCode : null;
     const message = error instanceof Error ? error.message.toLowerCase() : '';
-    const safeStatus = status && status >= 400 && status <= 599 ? status : /timeout|timed out|aborterror|aborted/.test(message) ? 504 : 502;
+    const safeStatus = status && status >= 400 && status <= 599 ? status : /timeout|timed out|aborterror|aborted/.test(message) ? 504 : 502;\n    recordModelHealth(model, false, safeStatus);
     const providerName = 'Gemini';
     const cause = safeStatus === 401 || safeStatus === 403 ? 'rejected the configured credential or denied model access'
       : safeStatus === 404 ? 'could not find the configured model'
