@@ -28,7 +28,7 @@ test('API checkout is enabled and all non-free tiers use monthly subscriptions w
 });
 
 test('Developer API exposes only free-tier Gemini models and charges the platform minimum credit', () => {
-  assert.equal(API_MODEL_PRICING_REVIEWED_ON, '2026-11-23');
+  assert.equal(API_MODEL_PRICING_REVIEWED_ON, '2026-11-24');
   assert.deepEqual(API_MODEL_PRICING['gemini-3.1-flash-lite'], { inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 });
   assert.deepEqual(API_MODEL_PRICING['gemini-2.5-flash'], { inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 });
   assert.equal(API_CREDIT_PROVIDER_COST_USD, 0.0006);
