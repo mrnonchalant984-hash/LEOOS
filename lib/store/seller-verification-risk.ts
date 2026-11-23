@@ -4,6 +4,7 @@ export type SellerVerificationRiskInput = {
   businessName: string;
   details: string;
   duplicateBusiness: boolean;
+  evidenceUrl?: string | null;
 };
 
 export function scoreSellerVerificationRisk(input: SellerVerificationRiskInput) {
@@ -14,6 +15,7 @@ export function scoreSellerVerificationRisk(input: SellerVerificationRiskInput) 
   if (input.details.trim().length < 120) { score += 25; signals.push('business_context_incomplete'); }
   if (/https?:\/\/|www\./i.test(input.businessName + ' ' + input.details)) { score += 20; signals.push('external_link_requires_review'); }
   if (input.duplicateBusiness) { score += 70; signals.push('possible_duplicate_business'); }
+  if (input.evidenceUrl?.trim()) { score += 15; signals.push('submitted_evidence_requires_human_review'); }
   const riskScore = Math.min(100, score);
   return {
     riskScore,
