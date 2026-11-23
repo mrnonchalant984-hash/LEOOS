@@ -139,6 +139,22 @@ test('backup workflow encrypts database and Storage archives and restore is stag
   assert.match(runbook, /not operationally verified/);
 });
 
+test('Paystack marketplace checkout remains gated and webhook verifies the exact NGN order before fulfillment', async () => {
+  const [checkout, webhook] = await Promise.all([
+    read('../app/api/store/checkout/route.ts'),
+    read('../app/api/payment/webhook/route.ts'),
+  ]);
+  assert.match(checkout, /STORE_CHECKOUT_ENABLED !== 'true'.*STORE_PAYOUTS_ENABLED !== 'true'/);
+  assert.match(checkout, /PAYSTACK_SECRET_KEY/);
+  assert.match(checkout, /api\\.paystack\\.co\/transaction\/initialize/);
+  assert.match(checkout, /STORE_PAYSTACK_SPLIT_ENABLED === 'true'/);
+  assert.match(webhook, /verifyPaystackTransaction\(reference\)/);
+  assert.match(webhook, /verifiedMetadata\.type !== 'marketplace_order'/);
+  assert.match(webhook, /String\(verified\.currency\)\.toUpperCase\(\) !== 'NGN'/);
+  assert.match(webhook, /Number\(verified\.amount\) !== Number\(order\.total_kobo\)/);
+  assert.match(webhook, /apply_marketplace_payment/);
+});
+
 test('buyer checkout and marketplace partner applications require a confirmed account email', async () => {
   const [checkout, affiliate, supplier] = await Promise.all([
     read('../app/api/store/checkout/route.ts'),
