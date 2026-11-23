@@ -5,7 +5,7 @@ export function getConfiguredModel(fallback = 'gemini-3.5-flash-lite') {
     || process.env.LEO_MEETING_MODEL?.trim()
     || process.env.LEO_REASONING_MODEL?.trim();
   const freeGeminiModels = new Set(['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite']);
-  const candidate = preferred?.replace(/^google\\//, '');
+  const candidate = preferred?.replace(/^google\//, '');
   if (candidate && freeGeminiModels.has(candidate)) return candidate;
   if (process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim()) return 'gemini-3.5-flash-lite';
   return freeGeminiModels.has(fallback) ? fallback : 'gemini-3.5-flash-lite';
