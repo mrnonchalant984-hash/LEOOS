@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import { getOpenNextVersionForNext, WORKER_WRANGLER_VERSION } from '../scripts/cloudflare-preview-versions.mjs';
+import {
+  getOpenNextVersionForNext,
+  getSupportedNextVersionForPreview,
+  OPENNEXT_CLOUDFLARE_VERSION,
+  WORKER_WRANGLER_VERSION,
+} from '../scripts/cloudflare-preview-versions.mjs';
 import {
   MAX_CLOUDFLARE_PREVIEW_FILE_BYTES,
   MAX_CLOUDFLARE_PREVIEW_FILES,
@@ -94,10 +99,17 @@ test('preview worker stores no credentials in job payloads and verifies project-
   assert.doesNotMatch(resultRoute, /CLOUDFLARE_API_TOKEN/);
 });
 
-test('preview worker uses a pinned compatible OpenNext adapter and rejects unknown Next versions', () => {
-  assert.equal(getOpenNextVersionForNext('16.3.6'), '1.20.10');
-  assert.equal(getOpenNextVersionForNext('15.5.9'), '1.19.11');
-  assert.throws(() => getOpenNextVersionForNext('17.0.0'), /No verified OpenNext adapter mapping/);
+test('preview worker upgrades legacy Next.js projects to the current OpenNext security floor', () => {
+  assert.equal(OPENNEXT_CLOUDFLARE_VERSION, '1.20.18');
+  assert.equal(getSupportedNextVersionForPreview('14.2.5'), '15.5.29');
+  assert.equal(getSupportedNextVersionForPreview('15.5.9'), '15.5.29');
+  assert.equal(getSupportedNextVersionForPreview('15.5.29'), '15.5.29');
+  assert.equal(getSupportedNextVersionForPreview('16.3.6'), '16.4.5');
+  assert.equal(getSupportedNextVersionForPreview('16.4.5'), '16.4.5');
+  assert.equal(getOpenNextVersionForNext('15.5.29'), '1.20.18');
+  assert.equal(getOpenNextVersionForNext('16.4.5'), '1.20.18');
+  assert.throws(() => getSupportedNextVersionForPreview('17.0.0'), /No supported Cloudflare preview runtime/);
+  assert.throws(() => getOpenNextVersionForNext('14.2.5'), /below the supported OpenNext security floor/);
 });
 
 test('scheduled preview worker fails visibly when credentials are missing', async () => {
