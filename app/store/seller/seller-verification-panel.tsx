@@ -61,7 +61,7 @@ export function SellerVerificationPanel({ verified, businessName, countryCode }:
       return;
     }
     setRequest(result.request);
-    setNotice('Your seller verification request was submitted for review.');
+    setNotice('Your application was submitted. Bram will check it and either approve a low-risk application or escalate it for owner review.');
     formElement.reset();
     setBusy(false);
   }
@@ -71,7 +71,7 @@ export function SellerVerificationPanel({ verified, businessName, countryCode }:
       <div>
         <p className="text-xs font-semibold uppercase tracking-[.16em] text-amber-200">Seller access</p>
         <h2 className="mt-2 text-xl font-semibold">Seller verification</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">Submit your storefront details for staff review. Listings, product images, and public delivery settings unlock after approval. Do not send identity documents in this form.</p>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">Bram checks application completeness and account-risk signals. Low-risk applications may be approved automatically; ambiguous or higher-risk cases are escalated for owner review. Approval unlocks listings and delivery settings, but is not government identity or business-registration certification. Do not send identity documents in this form.</p>
       </div>
       <button type="button" onClick={() => void refresh()} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-semibold">Refresh status</button>
     </div>
