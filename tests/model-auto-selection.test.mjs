@@ -11,7 +11,7 @@ test('Auto chooses the configured Gemini model', () => {
     process.env.GEMINI_API_KEY = 'configured';
     assert.equal(getDefaultTextModel('chat'), 'google/gemini-3.5-flash-lite');
     assert.equal(getDefaultTextModel('reasoning'), 'google/gemini-3.5-flash-lite');
-    assert.equal(getDefaultTextModel('research'), 'google/gemini-2.5-flash-lite');
+    assert.equal(getDefaultTextModel('research'), 'google/gemini-3.5-flash-lite');
     assert.equal(getModelProviderStatus().find(item => item.provider === 'google')?.configured, true);
   } finally {
     for (const name of names) {
