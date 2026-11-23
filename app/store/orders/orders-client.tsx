@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-type Order = { id: string; order_number: string; status: string; currency: string; subtotal_kobo: number; delivery_total_kobo: number; total_kobo: number; created_at: string; paid_at: string | null; items: { title: string; slug: string; quantity: number; unit_price_kobo: number; line_total_kobo: number; seller_id: string }[]; deliveries: { seller_id: string; name: string; details: string; fee_kobo: number }[]; fulfillments: { order_id: string; seller_id: string; status: string; courier_name: string | null; tracking_reference: string | null; tracking_url: string | null; delivery_notes: string; buyer_confirmed_at: string | null }[]; events?: { event_type: string; details: Record<string, unknown>; created_at: string }[] };
+type Order = { id: string; order_number: string; status: string; currency: string; subtotal_kobo: number; delivery_total_kobo: number; total_kobo: number; created_at: string; paid_at: string | null; items: { title: string; slug: string; quantity: number; unit_price_kobo: number; line_total_kobo: number; seller_id: string }[]; deliveries: { seller_id: string; name: string; details: string; fee_kobo: number }[]; fulfillments: { order_id: string; seller_id: string; status: string; courier_name: string | null; tracking_reference: string | null; tracking_url: string | null; delivery_notes: string; buyer_confirmed_at: string | null }[]; events?: { event_type: string; created_at: string }[] };
 const money = (kobo: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(kobo / 100);
 
 export function OrdersClient() {
