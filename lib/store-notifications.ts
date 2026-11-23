@@ -111,9 +111,16 @@ export async function notifyMarketplaceUser(input: NotificationInput) {
   }
   const origin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || '';
   await recordDelivery({ notificationId, userId: input.userId, channel: 'email', deliveryKey: 'email', status: 'pending' });
-  const sent = await sendClientEmail({ to: authResult.user.email, subject: input.title.slice(0, 160), text: `${input.body}\n\n${origin}${input.href}` });
+  let sent = false;
+  let emailErrorCode: string | null = null;
+  try {
+    sent = await sendClientEmail({ to: authResult.user.email, subject: input.title.slice(0, 160), text: `${input.body}\n\n${origin}${input.href}` });
+    if (!sent) emailErrorCode = 'email_provider_unavailable_or_rejected';
+  } catch {
+    emailErrorCode = 'email_delivery_exception';
+  }
   await recordDelivery({
     notificationId, userId: input.userId, channel: 'email', deliveryKey: 'email',
-    status: sent ? 'sent' : 'failed', errorCode: sent ? null : 'email_provider_unavailable_or_rejected',
+    status: sent ? 'sent' : 'failed', errorCode: emailErrorCode,
   });
 }
