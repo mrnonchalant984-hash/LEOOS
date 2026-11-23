@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 const route = await readFile(new URL('../app/api/chat/route.ts', import.meta.url), 'utf8');
+const streamRoute = await readFile(new URL('../app/api/chat/stream/route.ts', import.meta.url), 'utf8');
 const envExample = await readFile(new URL('../.env.example', import.meta.url), 'utf8');
 const provider = await readFile(new URL('../lib/ai/provider-registry.ts', import.meta.url), 'utf8');
 const fallback = await readFile(new URL('../lib/ai/provider-fallback.ts', import.meta.url), 'utf8');
@@ -13,6 +14,17 @@ test('Leo chat sends its server-generated system prompt and bounded conversation
   assert.match(route, /history\.slice\(-20\)/);
   assert.match(route, /generateText\(\{ \.\.\.request, model, webSearch: webSearchRequested \}\)/);
   assert.match(route, /requestedWebSearch === true \|\| shouldUseWebSearch\(message\)/);
+});
+
+test('Bram sends browser date, time, timezone and only permission-approved coordinates into the streamed model context', () => {
+  assert.match(streamRoute, /body\.local_context/);
+  assert.match(streamRoute, /Browser local date\/time: \$\{localDateTime\}/);
+  assert.match(streamRoute, /Browser timezone: \$\{timezone\}/);
+  assert.match(streamRoute, /User-approved browser location/);
+  assert.match(streamRoute, /latitude !== null && longitude !== null/);
+  assert.match(route, /USER-APPROVED LOCAL CONTEXT/);
+  assert.match(route, /Browser local date\/time: \$\{localDateTime\}/);
+  assert.match(route, /Browser timezone: \$\{localTimezone\}/);
 });
 
 test('Leo chat validates caller-selected models against the authenticated model catalog', () => {
