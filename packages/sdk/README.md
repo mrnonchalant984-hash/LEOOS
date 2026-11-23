@@ -17,7 +17,7 @@ The SDK is Braverton-branded. The historical `LeoApiError` and `LeoRateLimitErro
 Create a key at `/developers` with `read` scope for account, model-list, and project reads. Include `write` scope if you want to create projects or call model inference, then:
 
 ```ts
-import { BravertonClient, LeoApiError, LeoRateLimitError // legacy exported error names retained for compatibility } from '@braverton/sdk';
+import { BravertonClient, LeoApiError, LeoRateLimitError } from '@braverton/sdk'; // legacy error export names remain for compatibility
 
 const braverton = new BravertonClient({ apiKey: process.env.BRAVERTON_API_KEY! }); // defaults to https://leoos-omega.vercel.app
 // Pass baseUrl explicitly for self-hosted or staging deployments.
