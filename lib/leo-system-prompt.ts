@@ -8,7 +8,7 @@ export function getConfiguredModel(fallback = 'gemini-3.1-flash-lite') {
   const candidate = preferred?.replace(/^google\//, '');
   if (candidate && freeGeminiModels.has(candidate)) return candidate;
   if (process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim()) return 'gemini-3.1-flash-lite';
-  return freeGeminiModels.has(fallback) ? fallback : 'gemini-3.5-flash-lite';
+  return freeGeminiModels.has(fallback) ? fallback : 'gemini-3.1-flash-lite';
 }
 
 export const LEO_PLAN_TERMINOLOGY = "Customer-facing plan names are Free, Standard, Pro, and Business. The legacy stored ID 'unlimited' maps to Business and must not be shown as a plan name.";
