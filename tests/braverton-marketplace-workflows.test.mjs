@@ -165,3 +165,11 @@ test('affiliate commission release runs through a CRON_SECRET-protected schedule
   assert.match(worker, /affiliate-commission:.*eligible/);
   assert.ok(JSON.parse(config).crons.some(item => item.path === '/api/cron/store/affiliate-commission-release'));
 });
+
+test('marketplace landing shows all active seller categories by default and filters by stored category', async () => {
+  const page = await read('../app/store/page.tsx');
+  assert.match(page, /categoryRows/);
+  assert.match(page, /\.eq\('status', 'active'\)/);
+  assert.match(page, /if \(category\) query = query\.eq\('category', category\)/);
+  assert.match(page, /href="\/store"/);
+});
