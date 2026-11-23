@@ -43,7 +43,7 @@ test('order references are human-readable, sequence-backed and fulfillment event
     read('../app/store/orders/orders-client.tsx'),
   ]);
   assert.match(migration, /BRV-/);
-  assert.match(migration, /marketplace_order_number_seq/);
+  assert.match(migration, /gen_random_uuid\(\)/);
   assert.match(migration, /before insert on public\.marketplace_orders/);
   assert.match(migration, /record_marketplace_fulfillment_timeline/);
   assert.match(buyerApi, /eq\('buyer_id', user\.id\)/);
