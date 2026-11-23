@@ -561,7 +561,8 @@ begin
     insert into public.marketplace_dropship_application_events(application_id,actor_id,actor_type,event_type,details)
     values(new.id,new.reviewed_by,'supplier','supplier_' || new.supplier_status,
       jsonb_build_object('supplier_status',new.supplier_status,'supplier_note',new.supplier_note,
-        'marketplace_product_id',new.marketplace_product_id,'dropship_listing_id',new.dropship_listing_id));
+        'marketplace_product_id',new.marketplace_product_id,'dropship_listing_id',new.dropship_listing_id,
+        'supplier_terms_version',new.supplier_terms_version,'supplier_agreed_at',new.supplier_agreed_at));
   end if;
   return new;
 end;
