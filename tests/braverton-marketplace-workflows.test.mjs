@@ -85,6 +85,8 @@ test('dropship application requires seller terms acceptance and supplier approva
   assert.match(migration, /v_seller\.is_verified/);
   assert.match(migration, /'pending_review'/);
   assert.match(migration, /'paused'/);
+  assert.match(migration, /sync_braverton_dropship_listing_moderation/);
+  assert.match(migration, /sync_braverton_supplier_verification_to_listings/);
 });
 
 test('owner can override escalated seller decisions only through the audited two-factor-protected RPC', async () => {
