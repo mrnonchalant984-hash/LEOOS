@@ -1,7 +1,7 @@
 -- Braverton Market launch hardening: seller decision audit, human-readable order refs,
 -- notification delivery evidence, and supplier-approved dropship applications.
 create or replace function public.assign_braverton_order_number()
-returns trigger language plpgsql set search_path = public as $
+returns trigger language plpgsql set search_path = public as $$
 begin
   -- Random 80-bit suffix prevents easy reference enumeration; order access still
   -- requires the authenticated buyer or seller relationship.
