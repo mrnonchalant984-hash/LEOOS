@@ -319,7 +319,9 @@ export async function POST(req: NextRequest) {
         error: "Grounded Web Search is available in Chat mode only. Turn off Web Search or switch out of authorized tool, build, and repository workflows.",
       }, { status: 400 });
     }
-    const webSearchRequested = mode !== 'tools' && (requestedWebSearch === true || shouldUseWebSearch(message));
+    // Explicit web research uses the authenticated Tavily-backed research tool,
+    // not Gemini's native Search grounding (which is unavailable on the free tier).
+    const webSearchRequested = !webResearchWorkflow && mode !== 'tools' && (requestedWebSearch === true || shouldUseWebSearch(message));
     if (mode === "tools" || requestedCustomAgentId || buildMode || repositoryWorkflow || webResearchWorkflow || websiteWriteWorkflow) {
       if (!ctx) return NextResponse.json({ error: "Sign in to use account and approved MCP tools." }, { status: 401 });
       const limited = await enforceUserRateLimit(ctx.user.id, requestedCustomAgentId ? 'leo-custom-agent-run' : buildMode ? 'leo-chat-build' : repositoryWorkflow ? 'leo-chat-repository' : 'leo-chat-tools', 10, 60);
