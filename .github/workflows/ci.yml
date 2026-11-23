@@ -43,3 +43,17 @@ jobs:
           AGENT_WORKER_ENABLED: 'false'
           WORKFORCE_WORKER_ENABLED: 'false'
           WORKFLOW_WORKER_ENABLED: 'false'
+      - name: Build production bundle without deploying
+        run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+          NEXT_TELEMETRY_DISABLED: '1'
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key
+          OWNER_EMAIL: owner@example.invalid
+          GEMINI_API_KEY: ci-placeholder-key
+          CRON_SECRET: ci-placeholder-cron-secret-that-is-long-enough-123456
+          AGENT_WORKER_ENABLED: 'false'
+          WORKFORCE_WORKER_ENABLED: 'false'
+          WORKFLOW_WORKER_ENABLED: 'false'
