@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   const ids = (data ?? []).map(order => order.id);
   const [{ data: fulfillments, error: fulfillmentError }, { data: events, error: eventsError }] = await Promise.all([
     ids.length ? db.from('marketplace_fulfillments').select('order_id,seller_id,status,courier_name,tracking_reference,tracking_url,delivery_notes,buyer_confirmed_at').in('order_id', ids) : { data: [], error: null },
-    ids.length ? db.from('marketplace_order_events').select('order_id,event_type,details,created_at').in('order_id', ids).order('created_at', { ascending: true }) : { data: [], error: null },
+    ids.length ? db.from('marketplace_order_events').select('order_id,event_type,created_at').in('order_id', ids).order('created_at', { ascending: true }) : { data: [], error: null },
   ]);
   if (fulfillmentError || eventsError) return NextResponse.json({ error: 'Order tracking history is temporarily unavailable.' }, { status: 503 });
   return NextResponse.json({ orders: (data ?? []).map(order => ({ ...order, fulfillments: (fulfillments ?? []).filter(item => item.order_id === order.id), events: (events ?? []).filter(item => item.order_id === order.id) })) }, { headers: { 'Cache-Control': 'no-store' } });
