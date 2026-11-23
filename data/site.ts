@@ -30,6 +30,6 @@ export const siteData = {
   services: [
     {name:'AI Mockup',price:'₦50,000',description:'Turn a business idea into a polished visual website direction before development.',href:'/app',details:'You get a visual concept, page direction, section ideas, content direction, and a clearer blueprint for the final website.'},
     {name:'Braverton Builder',price:'Included with plan',description:'Build websites, web apps, and SaaS projects within your plan limits.',href:'/pricing',details:'Your plan controls project types, project capacity, and monthly build limits. Each successful deployment includes a 90-day hosting trial; hosting is separate after the trial.'},
-    {name:'Code Review',price:'₦20,000',description:'A practical review of your codebase with prioritized problems, explanations, and fixes.',href:'/app',details:'Braverton's code-review workflow can assess structure, bugs, responsiveness, performance, security risks, accessibility, SEO and code quality, then recommend practical fixes.'}
+    {name:'Code Review',price:'₦20,000',description:'A practical review of your codebase with prioritized problems, explanations, and fixes.',href:'/app',details:'Braverton code-review workflow can assess structure, bugs, responsiveness, performance, security risks, accessibility, SEO and code quality, then recommend practical fixes.'}
   ]
 };
