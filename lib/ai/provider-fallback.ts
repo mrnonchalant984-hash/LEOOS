@@ -161,7 +161,14 @@ export async function generateWithExplicitFallback<T>(
           status_code: safeErrorStatus(fallbackError),
           error_type: fallbackError instanceof Error ? fallbackError.name : 'unknown',
         });
-        if (attempt >= maxFallbackAttempts || !isRetryableFallbackFailure(fallbackError) || !shouldFallbackOnError(fallbackError)) {\n          const primaryStatus = safeErrorStatus(primaryError);\n          const fallbackStatus = safeErrorStatus(fallbackError);\n          throw new ModelProviderError(\n            `Gemini primary model ${primary.model} failed${primaryStatus ? ` (HTTP ${primaryStatus})` : ''}; fallback model ${resolvedFallback.model} also failed${fallbackStatus ? ` (HTTP ${fallbackStatus})` : ''}. Latest provider error: ${fallbackError instanceof Error ? fallbackError.message : 'unknown provider error'}`,\n            fallbackStatus || primaryStatus || 503,\n          );\n        }
+        if (attempt >= maxFallbackAttempts || !isRetryableFallbackFailure(fallbackError) || !shouldFallbackOnError(fallbackError)) {
+          const primaryStatus = safeErrorStatus(primaryError);
+          const fallbackStatus = safeErrorStatus(fallbackError);
+          throw new ModelProviderError(
+            `Gemini primary model ${primary.model} failed${primaryStatus ? ` (HTTP ${primaryStatus})` : ''}; fallback model ${resolvedFallback.model} also failed${fallbackStatus ? ` (HTTP ${fallbackStatus})` : ''}. Latest provider error: ${fallbackError instanceof Error ? fallbackError.message : 'unknown provider error'}`,
+            fallbackStatus || primaryStatus || 503,
+          );
+        }
       }
     }
     throw lastError;
