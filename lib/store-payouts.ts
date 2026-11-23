@@ -20,7 +20,7 @@ export async function initiateMarketplacePayout(payout: MarketplacePayout) {
       source: 'balance',
       amount: Number(payout.net_kobo),
       recipient: payout.recipient_code,
-      reason: 'LeoX Store seller payout after buyer-confirmed delivery',
+      reason: 'Braverton Market seller payout after buyer-confirmed delivery',
       reference: payout.reference,
     }),
     cache: 'no-store',
