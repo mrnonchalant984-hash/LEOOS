@@ -271,3 +271,7 @@ revoke all on function public.owner_review_marketplace_seller_verification(uuid,
 grant execute on function public.owner_review_marketplace_seller_verification(uuid,uuid,text,text) to service_role;
 
 revoke all on function public.assign_braverton_order_number() from public,anon,authenticated;
+
+alter table public.marketplace_notifications
+  add column if not exists preference_key text not null default 'order_updates'
+  check(preference_key in ('messages','order_updates','support_updates'));
