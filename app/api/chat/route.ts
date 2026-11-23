@@ -58,8 +58,9 @@ function isRepositoryTask(message: string) {
 function isWebsiteResearchIntent(message: string) {
   const action = /\b(search|research|crawl|browse|read|fetch|inspect|summari[sz]e|analy[sz]e)\b/i.test(message);
   const site = /\b(websites?|web\s?sites?|site|webpage|web\s?page|pages|domain)\b/i.test(message);
+  const explicitWebSearch = /\b(web|internet|online)\b/i.test(message);
   const url = /https?:\/\/[^\s<>()]+/i.test(message);
-  return action && (site || url);
+  return action && (site || explicitWebSearch || url);
 }
 
 function isWebsiteWriteIntent(message: string) {
