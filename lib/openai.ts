@@ -43,7 +43,7 @@ export function getConfiguredModel(fallback = 'gemini-3.1-flash-lite') {
   const normalizedPreferred = preferred?.replace(/^google\//, '');
   if (normalizedPreferred && freeGeminiModels.has(normalizedPreferred)) return normalizedPreferred;
   if (process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim()) return 'gemini-3.1-flash-lite';
-  return freeGeminiModels.has(fallback) ? fallback : 'gemini-3.5-flash-lite';
+  return freeGeminiModels.has(fallback) ? fallback : 'gemini-3.1-flash-lite';
 }
 
 type TextInputMessage = { role: 'system' | 'user' | 'assistant' | 'developer'; content: string | Array<{ type?: string; text?: string }> };
