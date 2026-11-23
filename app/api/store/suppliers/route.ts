@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Request origin is invalid.' }, { status: 403 });
   const user = await getUserFromRequest(request); if (!user) return NextResponse.json({ error: 'Sign in to apply as a supplier.' }, { status: 401 });
+  if (!user.email_confirmed_at) return NextResponse.json({ error: 'Verify your account email before applying as a supplier.' }, { status: 403 });
   const limited = await enforceUserRateLimit(user.id, 'store-supplier-apply', 2, 86_400); if (limited) return limited;
   const body = await request.json().catch(() => null) as { businessName?: unknown; countryCode?: unknown } | null;
   if (typeof body?.businessName !== 'string' || body.businessName.trim().length < 2 || body.businessName.trim().length > 140 || typeof body.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(body.countryCode)) return NextResponse.json({ error: 'Provide a business name and a two-letter country code.' }, { status: 400 });
