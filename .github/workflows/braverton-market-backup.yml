@@ -39,6 +39,8 @@ jobs:
             if [[ -z "${!key}" ]]; then missing+=("$key"); fi
           done
           if (( ${#missing[@]} )); then
+            echo "Backup was NOT run. Missing GitHub secrets/variables: ${missing[*]}"
+            echo "::warning title=Backup configuration incomplete::Missing GitHub secrets/variables: ${missing[*]}"
             echo "Backup was NOT run. Missing GitHub secrets/variables: ${missing[*]}" >> "$GITHUB_STEP_SUMMARY"
             echo "configured=false" >> "$GITHUB_OUTPUT"
           else
