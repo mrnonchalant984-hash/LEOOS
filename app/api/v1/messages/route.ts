@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return apiResponse({ error: { code: 'INVALID_JSON', message: 'Send a valid JSON object.' }, request_id: auth.requestId }, 400, auth.requestId);
     }
-    const requestedModel = typeof body.model === 'string' ? body.model : 'gemini-3.8-flash';
+    const requestedModel = typeof body.model === 'string' ? body.model : 'gemini-3.5-flash-lite';
     if (!isApiModel(requestedModel) || !getSupportedApiModels().includes(requestedModel as ApiModel)) {
       return apiResponse({ error: { code: 'MODEL_NOT_FOUND', message: 'The requested Gemini model is not available to this API.' }, request_id: auth.requestId }, 400, auth.requestId);
     }
