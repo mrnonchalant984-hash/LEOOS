@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   if (!supplierIds.length) return NextResponse.json({ products: [], applications: [] }, { headers: { 'Cache-Control': 'private, no-store' } });
   const [{ data: products, error: productsError }, { data: applications, error: applicationsError }] = await Promise.all([
     db.from('marketplace_supplier_products').select('id,supplier_id,supplier_sku,title,description,cost_kobo,currency,available_quantity,updated_at').in('supplier_id', supplierIds).eq('status', 'active').gt('available_quantity', 0).order('updated_at', { ascending: false }).limit(200),
-    db.from('marketplace_dropship_applications').select('id,supplier_product_id,supplier_status,proposed_selling_price_kobo,supplier_note,created_at').eq('seller_id', user.id).order('created_at', { ascending: false }).limit(200),
+    db.from('marketplace_dropship_applications').select('id,supplier_product_id,supplier_status,proposed_selling_price_kobo,currency,supplier_note,created_at').eq('seller_id', user.id).order('created_at', { ascending: false }).limit(200),
   ]);
   if (productsError || applicationsError) return NextResponse.json({ error: 'Supplier catalogue could not be loaded.' }, { status: 503 });
   const supplierById = new Map((suppliers ?? []).map(item => [item.user_id, item]));
