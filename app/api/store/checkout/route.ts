@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     if (attributionError) console.error('Affiliate attribution could not be recorded for checkout:', attributionError.message);
   }
   try {
-    let split: { type: 'flat'; bearer_type: 'account'; subaccounts: { subaccount: string; share: number }[] } | undefined;
+    let split: { name: string; type: 'flat'; currency: 'NGN'; bearer_type: 'account'; subaccounts: { subaccount: string; share: number }[] } | undefined;
     if (process.env.STORE_PAYSTACK_SPLIT_ENABLED === 'true') {
       const { data: orderItems, error: itemError } = await db.from('marketplace_order_items').select('seller_id,line_total_kobo').eq('order_id', orderId);
       if (itemError || !orderItems?.length) throw new Error('Order split data could not be verified.');
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         return { subaccount, share: gross - platformCommission };
       });
       if (subaccounts.some(item => !Number.isSafeInteger(item.share) || item.share <= 0) || subaccounts.reduce((sum, item) => sum + item.share, 0) > Number(order.total_kobo)) throw new Error('Marketplace split shares are invalid.');
-      split = { type: 'flat', bearer_type: 'account', subaccounts };
+      split = { name: order.order_number, type: 'flat', currency: 'NGN', bearer_type: 'account', subaccounts };
     }
     const response = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
