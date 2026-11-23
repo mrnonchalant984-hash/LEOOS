@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const db = adminSupabase();
   const [{ data: listings, error: listingError }, { data: applications, error: applicationError }] = await Promise.all([
     db.from('marketplace_dropship_listings').select('id,supplier_product_id,marketplace_product_id,selling_price_kobo,status,last_stock_sync_at,created_at,updated_at').eq('seller_id', user.id).order('created_at', { ascending: false }).limit(100),
-    db.from('marketplace_dropship_applications').select('id,supplier_product_id,proposed_selling_price_kobo,category,country_code,city,region,supplier_status,supplier_note,terms_version,created_at,reviewed_at').eq('seller_id', user.id).order('created_at', { ascending: false }).limit(100),
+    db.from('marketplace_dropship_applications').select('id,supplier_product_id,proposed_selling_price_kobo,category,country_code,city,region,supplier_status,supplier_note,terms_version,supplier_terms_version,supplier_agreed_at,created_at,reviewed_at').eq('seller_id', user.id).order('created_at', { ascending: false }).limit(100),
   ]);
   if (listingError || applicationError) return NextResponse.json({ error: 'Dropship applications are unavailable.' }, { status: 503 });
   const applicationIds = (applications ?? []).map(item => item.id);
