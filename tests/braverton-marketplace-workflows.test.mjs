@@ -131,6 +131,9 @@ test('backup workflow encrypts database and Storage archives and restore is stag
   assert.match(backup, /age --recipient/);
   assert.match(backup, /pg_restore --list/);
   assert.match(backup, /remote_checksum/);
+  assert.match(backup, /remote-verification\\.age/);
+  assert.match(backup, /sha256sum "\$workdir\/remote-verification\\.age"/);
+  assert.match(backup, /map\\(select\\(\\.ID != "braverton-market-backup-retention"\\)\\)/);
   assert.match(restore, /RESTORE_TARGET_ENV.*staging/);
   assert.match(restore, /pg_restore/);
   assert.match(runbook, /not operationally verified/);
