@@ -1,4 +1,4 @@
-/** Developer API tiers. Model rates are maintained from the official Gemini pricing page; metadata endpoints do not consume usage credits. */
+/** Developer API tiers. Built-in inference uses free-tier Gemini Developer API models. */
 export const API_PLAN_CATALOG = [
   { key: 'developer', audience: 'developer', name: 'Free Developer', monthlyNgn: 0, monthlyUsd: 0, includedCredits: 0, rpm: 5, concurrency: 1, maxKeys: 2, maxProjects: 1, features: ['Create and manage API keys', 'Read documentation and SDK examples', 'No billable API execution until a paid plan is active'] },
   { key: 'builder', audience: 'developer', name: 'Builder', monthlyNgn: 9_900, monthlyUsd: 9, includedCredits: 2_000, rpm: 30, concurrency: 3, maxKeys: 5, maxProjects: 3, features: ['API execution and usage dashboard', '2,000 usage credits each month', 'Custom agents with approved read-only tools', 'Standard support'] },
@@ -19,33 +19,29 @@ export type ApiPlanCurrency = typeof API_PLAN_CURRENCIES[number];
 export const API_PLAN_BILLING_PERIOD = 'monthly' as const;
 export const API_PLAN_CHECKOUT_ENABLED = true;
 export const API_MODEL_PRICING_SOURCE = 'https://ai.google.dev/gemini-api/docs/pricing';
-export const API_MODEL_PRICING_REVIEWED_ON = '2026-10-29';
+export const API_MODEL_PRICING_REVIEWED_ON = '2026-11-23';
 export const API_CREDIT_PROVIDER_COST_USD = 0.0006;
 
+// Free-tier inference has no Gemini token charge. The platform still uses a
+// one-credit minimum per billable API request to retain usage accounting.
 export const API_MODEL_PRICING = {
-  // Introductory Standard rates through 2026-12-31. getApiProviderCostUsd
-  // switches to the published standard rates on 2027-01-01.
-  'gemini-3.8-flash': { inputUsdPerMillionTokens: 0.75, outputUsdPerMillionTokens: 3.75 },
+  'gemini-3.5-flash-lite': { inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 },
+  'gemini-2.5-flash-lite': { inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 },
 } as const;
 
 export type ApiModel = keyof typeof API_MODEL_PRICING;
-
-export function isApiModel(model: string): model is ApiModel {
-  return Object.hasOwn(API_MODEL_PRICING, model);
-}
+export function isApiModel(model: string): model is ApiModel { return Object.hasOwn(API_MODEL_PRICING, model); }
 
 export function getSupportedApiModels(configured = process.env.LEONARDX_API_MODELS): ApiModel[] {
-  const requested = configured === undefined ? ['gemini-3.8-flash'] : configured.split(',').map(model => model.trim()).filter(Boolean);
+  const requested = configured === undefined
+    ? ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite']
+    : configured.split(',').map(model => model.trim()).filter(Boolean);
   return [...new Set(requested.filter(isApiModel))];
 }
 
-export function getApiModelPricing(model: string, now = new Date()) {
+export function getApiModelPricing(model: string, _now = new Date()) {
   if (!isApiModel(model)) return null;
-  const base = API_MODEL_PRICING[model];
-  if (model === 'gemini-3.8-flash' && now >= new Date('2027-01-01T00:00:00.000Z')) {
-    return { inputUsdPerMillionTokens: 1.5, outputUsdPerMillionTokens: 7.5 };
-  }
-  return base;
+  return API_MODEL_PRICING[model];
 }
 
 export function getCurrentApiModelPricingCatalog(now = new Date()): Record<ApiModel, { inputUsdPerMillionTokens: number; outputUsdPerMillionTokens: number }> {
@@ -69,7 +65,6 @@ export function getApiPlan(key: string) {
   if (key === 'enterprise') return ENTERPRISE_API_PLAN;
   return API_PLAN_CATALOG.find((plan) => plan.key === key) ?? null;
 }
-
 export function getApiPlanPriceMinor(key: string, currency: ApiPlanCurrency): number | null {
   const plan = API_PLAN_CATALOG.find((item) => item.key === key);
   if (!plan || plan.key === 'developer') return null;
