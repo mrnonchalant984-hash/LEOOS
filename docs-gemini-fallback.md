@@ -1,28 +1,27 @@
-# Leo AI: Gemini provider and automatic fallback
+# Leo AI: free-tier Gemini model routing
 
-Leo AI already uses the shared provider registry, which passes the full server-built Leo system prompt and the most recent conversation history to supported providers. Gemini is configured server-side; never expose its API key to browser code.
+Leo's built-in text agents use the Gemini Developer API free tier. The server accepts only the free-tier model IDs listed below; paid-only model IDs in old environment variables are ignored or rejected.
 
-## Configure
+## Free-tier model routing
 
-Set these variables in your deployment platform's server-side environment settings:
+- General chat, coding agents, and ordinary specialist work: `gemini-3.5-flash-lite`.
+- Research and Deep Research: `gemini-2.5-flash-lite`, because its free tier supports Google Search grounding (subject to Google's published request quota).
+- Audio transcription: `gemini-2.5-flash-lite` or `gemini-3.5-flash-lite`.
+- Text-to-speech: `gemini-2.5-flash-preview-tts`.
 
-- `GEMINI_API_KEY`: API key created in Google AI Studio. `GOOGLE_API_KEY` is accepted as an alternative for compatibility.
-- `LEO_CHAT_MODEL=gemini-3.5-flash-lite` to make Gemini the normal chat model.
-- `LEO_FALLBACK_MODEL` to select a configured cross-provider fallback. Setting it to another Gemini model will not provide a fallback when Gemini itself is the primary provider.
-- `LEO_GEMINI_IMAGE_MODEL=gemini-nano-banana-2.1`, `LEO_GEMINI_AUDIO_MODEL=gemini-3.5-transcribe`, and `LEO_GEMINI_TTS_MODEL=gemini-3.5-flash-lite-tts` for the current image, transcription, and speech models.
+Set `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) only in server-side environment variables. `LEO_CHAT_MODEL`, `LEO_REASONING_MODEL`, `LEO_AGENT_MODEL`, and `LEO_FALLBACK_MODEL` are accepted only when they resolve to a model in the free-tier catalog. A global `LEO_AGENT_MODEL` no longer overrides every specialist.
 
-Leave both chat and fallback model variables blank to use automatic provider selection: Gemini is selected as the primary only when Google is configured and OpenAI is not. When Gemini is primary, an explicitly configured fallback must use another provider and that provider must have usable access and quota. Leo retries once with the configured cross-provider fallback for HTTP 401/403, 404, 408, 409, 429, 5xx, and recognized transient network failures. Invalid requests and other non-retryable errors do not trigger fallback. Paid custom-agent requests remain on their provider-priced OpenAI model and do not cross-provider fallback, keeping usage settlement tied to the rated model. Tool mode retains the account-scoped read-only tool allowlist.
+Google Search grounding on Gemini 2.5 Flash-Lite has a free-tier quota; it is not unlimited. If that quota is exhausted, Research should return a clear provider/quota error rather than silently switch to a paid model.
 
-Google AI Studio free-tier availability, quotas, supported models, and regional eligibility can change; fallback is not guaranteed to succeed if the Google account has exhausted quota or the model is unavailable. No provider key is included in this repository.
+Image generation uses a separate image-capable Gemini model and is not covered by this text-agent free-tier routing. Do not assume that a text model can generate images or that an image model is included in the free API tier.
 
 ## Deploy and verify
 
-1. Add the key and model variables in the server deployment environment; do not add them to `NEXT_PUBLIC_*` variables or commit them to Git.
-2. Redeploy the app so the server process receives the variables.
-3. Open Leo AI and test a greeting (for example, `Hi Leo, introduce yourself`), a LeonardX capability question, and a follow-up that refers to the previous message.
-4. To verify fallback, temporarily use an intentionally unavailable primary model only in a staging deployment and confirm a successful Gemini reply plus provider/model telemetry. Do not test by breaking production credentials.
-5. Check server-side AI usage/monitoring and confirm the provider is recorded as `google` after a fallback. A configured key and passing unit tests do not prove a live provider request; test with the actual deployed key.
+1. Confirm the server-side Google API key is configured.
+2. Keep `LEO_CHAT_MODEL` blank for automatic free-tier selection, or set it to `gemini-3.5-flash-lite`.
+3. Keep `LEO_REASONING_MODEL` and `LEO_AGENT_MODEL` blank unless setting a supported free-tier model.
+4. Test ordinary chat, a coding specialist, Research, and Deep Research.
+5. Confirm the execution telemetry reports `google/gemini-3.5-flash-lite` for general agents and `google/gemini-2.5-flash-lite` for research.
+6. Check the Google AI Studio usage dashboard for the actual key quota and requests.
 
-## Validation
-
-Run `npm ci`, then `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build`. Keep all real `.env` files and deployment secrets out of release archives.
+A configured key and passing unit tests do not prove live provider access. Verify with the actual deployed key without exposing it in logs or chat.
