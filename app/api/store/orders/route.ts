@@ -13,11 +13,12 @@ export async function GET(request: NextRequest) {
   const { data, error } = await db.from('marketplace_orders').select('id,order_number,status,currency,subtotal_kobo,delivery_total_kobo,total_kobo,created_at,paid_at,items:marketplace_order_items(title,slug,quantity,unit_price_kobo,line_total_kobo,seller_id),deliveries:marketplace_order_deliveries(seller_id,name,details,fee_kobo)').eq('buyer_id', user.id).order('created_at', { ascending: false }).limit(100);
   if (error) return NextResponse.json({ error: 'Orders are temporarily unavailable.' }, { status: 503 });
   const ids = (data ?? []).map(order => order.id);
-  const { data: fulfillments, error: fulfillmentError } = ids.length
-    ? await db.from('marketplace_fulfillments').select('order_id,seller_id,status,courier_name,tracking_reference,tracking_url,delivery_notes,buyer_confirmed_at').in('order_id', ids)
-    : { data: [], error: null };
-  if (fulfillmentError) return NextResponse.json({ error: 'Order delivery status is temporarily unavailable.' }, { status: 503 });
-  return NextResponse.json({ orders: (data ?? []).map(order => ({ ...order, fulfillments: (fulfillments ?? []).filter(item => item.order_id === order.id) })) }, { headers: { 'Cache-Control': 'no-store' } });
+  const [{ data: fulfillments, error: fulfillmentError }, { data: events, error: eventsError }] = await Promise.all([
+    ids.length ? db.from('marketplace_fulfillments').select('order_id,seller_id,status,courier_name,tracking_reference,tracking_url,delivery_notes,buyer_confirmed_at').in('order_id', ids) : { data: [], error: null },
+    ids.length ? db.from('marketplace_order_events').select('order_id,event_type,details,created_at').in('order_id', ids).order('created_at', { ascending: true }) : { data: [], error: null },
+  ]);
+  if (fulfillmentError || eventsError) return NextResponse.json({ error: 'Order tracking history is temporarily unavailable.' }, { status: 503 });
+  return NextResponse.json({ orders: (data ?? []).map(order => ({ ...order, fulfillments: (fulfillments ?? []).filter(item => item.order_id === order.id), events: (events ?? []).filter(item => item.order_id === order.id) })) }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function PATCH(request: NextRequest) {
