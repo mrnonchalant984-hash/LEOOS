@@ -88,7 +88,7 @@ test('does not retry when fallback is unavailable and logs only safe metadata', 
   console.info = (...args) => logs.push(args.join(' '));
   try {
     await assert.rejects(generateWithExplicitFallback('google/gemini-3.5-flash-lite', 'google/gemini-2.5-flash-lite', async model => {
-      throw new ModelProviderError(model.includes('3.8') ? 'primary unavailable: do-not-log-this' : 'fallback unavailable', 503);
+      throw new ModelProviderError(model.includes('3.5') ? 'primary unavailable: do-not-log-this' : 'fallback unavailable', 503);
     }, () => true), /fallback unavailable/);
     assert.ok(logs.some(line => line.includes('leo.ai.fallback.failure')));
     assert.ok(logs.every(line => !line.includes('do-not-log-this')));
