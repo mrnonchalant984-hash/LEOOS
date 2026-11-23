@@ -17,6 +17,7 @@ test('Bram only auto-approves complete, established, email-confirmed, non-duplic
     { emailConfirmed: true, accountAgeDays: 1, businessName: 'Example', details: 'A detailed business description '.repeat(6), duplicateBusiness: false },
     { emailConfirmed: true, accountAgeDays: 30, businessName: 'Example', details: 'Short details', duplicateBusiness: false },
     { emailConfirmed: true, accountAgeDays: 30, businessName: 'Example', details: 'A detailed business description '.repeat(6), duplicateBusiness: true },
+    { emailConfirmed: true, accountAgeDays: 30, businessName: 'Example', details: 'A detailed business description '.repeat(6), duplicateBusiness: false, evidenceUrl: 'https://example.invalid/business' },
     { emailConfirmed: true, accountAgeDays: 30, businessName: 'Example', details: 'Visit https://example.invalid', duplicateBusiness: false },
   ]) assert.equal(scoreSellerVerificationRisk(input).outcome, 'manual_review');
 });
@@ -136,4 +137,18 @@ test('buyer checkout and marketplace partner applications require a confirmed ac
   assert.match(checkout, /user\.email_confirmed_at/);
   assert.match(affiliate, /user\.email_confirmed_at/);
   assert.match(supplier, /user\.email_confirmed_at/);
+});
+
+test('seller verification evidence is HTTPS-only, human-reviewed and visible to owner reviewers', async () => {
+  const [submission, worker, ownerPage, migration] = await Promise.all([
+    read('../app/api/store/seller/verification/route.ts'),
+    read('../app/api/cron/store/seller-verification/route.ts'),
+    read('../app/admin/store/seller-verification/page.tsx'),
+    read('../supabase/migrations/20261123160000_braverton_market_launch_hardening.sql'),
+  ]);
+  assert.match(submission, /evidenceUrl/);
+  assert.match(submission, /\^https:/);
+  assert.match(worker, /evidenceUrl: item\.evidence_url/);
+  assert.match(ownerPage, /Open submitted business evidence/);
+  assert.match(migration, /marketplace_seller_verification_evidence_url_check/);
 });
