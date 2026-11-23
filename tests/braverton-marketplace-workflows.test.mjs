@@ -51,9 +51,10 @@ test('order references are human-readable, sequence-backed and fulfillment event
 });
 
 test('notification helper records idempotent in-app, email and push outcomes and respects preferences', async () => {
-  const [helper, migration] = await Promise.all([
+  const [helper, migration, retryWorker] = await Promise.all([
     read('../lib/store-notifications.ts'),
     read('../supabase/migrations/20261123160000_braverton_market_launch_hardening.sql'),
+    read('../app/api/cron/store/notification-retries/route.ts'),
   ]);
   assert.match(helper, /idempotencyKey/);
   assert.match(helper, /marketplace_notification_deliveries/);
