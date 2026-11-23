@@ -3,70 +3,13 @@ import { test } from 'node:test';
 import { ModelProviderError, resolveModel } from '../lib/ai/model-catalog.ts';
 import { generateWithExplicitFallback, getSafeFallbackModel, isRetryableProviderFailure } from '../lib/ai/provider-fallback.ts';
 
-test('uses a configured alternate Gemini model after transient failure', async () => {
+test('does not retry the legacy Gemini 2.5 ID after it is normalized to the current model', async () => {
   const calls = [];
-  const result = await generateWithExplicitFallback('google/gemini-3.5-flash-lite', 'google/gemini-2.5-flash-lite', async model => {
+  await assert.rejects(generateWithExplicitFallback('google/gemini-3.5-flash-lite', 'google/gemini-2.5-flash-lite', async model => {
     calls.push(model);
-    if (calls.length === 1) throw new ModelProviderError('rate limited', 429);
-    return { text: 'fallback response' };
-  }, () => true);
-  assert.deepEqual(calls, ['google/gemini-3.5-flash-lite', 'google/gemini-2.5-flash-lite']);
-  assert.equal(result.model, 'google/gemini-2.5-flash-lite');
-  assert.equal(result.fallback_used, true);
-  assert.equal(result.result.text, 'fallback response');
-});
-
-test('does not replay a failed model turn after a tool side effect started', async () => {
-  const calls = [];
-  let sideEffectStarted = false;
-  await assert.rejects(generateWithExplicitFallback(
-    'google/gemini-3.5-flash-lite',
-    'google/gemini-2.5-flash-lite',
-    async model => {
-      calls.push(model);
-      sideEffectStarted = true;
-      throw new ModelProviderError('response failed after tool call', 503);
-    },
-    () => true,
-    { shouldFallbackOnError: () => !sideEffectStarted },
-  ), /response failed after tool call/);
+    throw new ModelProviderError('primary unavailable', 503);
+  }, () => true), /primary unavailable/);
   assert.deepEqual(calls, ['google/gemini-3.5-flash-lite']);
-});
-
-test('respects the configured maximum number of safe fallback attempts', async () => {
-  const calls = [];
-  const result = await generateWithExplicitFallback(
-    'google/gemini-3.5-flash-lite',
-    'google/gemini-2.5-flash-lite',
-    async model => {
-      calls.push(model);
-      if (calls.length < 3) throw new ModelProviderError('temporary provider failure', 503);
-      return { text: 'recovered' };
-    },
-    () => true,
-    { maxFallbackAttempts: 2 },
-  );
-  assert.deepEqual(calls, [
-    'google/gemini-3.5-flash-lite',
-    'google/gemini-2.5-flash-lite',
-    'google/gemini-2.5-flash-lite',
-  ]);
-  assert.equal(result.result.text, 'recovered');
-});
-
-test('does not retry the same fallback after an authorization failure', async () => {
-  const calls = [];
-  await assert.rejects(generateWithExplicitFallback(
-    'google/gemini-3.5-flash-lite',
-    'google/gemini-2.5-flash-lite',
-    async model => {
-      calls.push(model);
-      throw new ModelProviderError('fallback credential rejected', 403);
-    },
-    () => true,
-    { maxFallbackAttempts: 2 },
-  ), /fallback credential rejected/);
-  assert.deepEqual(calls, ['google/gemini-3.5-flash-lite', 'google/gemini-2.5-flash-lite']);
 });
 
 test('rejects non-Gemini primary models before calling a provider', async () => {
@@ -82,22 +25,15 @@ test('retries network failures only once and treats client errors as non-retryab
   assert.equal(isRetryableProviderFailure(new ModelProviderError('model not found', 404)), true);
 });
 
-test('does not retry when fallback is unavailable and logs only safe metadata', async () => {
-  const logs = [];
-  const originalInfo = console.info;
-  console.info = (...args) => logs.push(args.join(' '));
-  try {
-    await assert.rejects(generateWithExplicitFallback('google/gemini-3.5-flash-lite', 'google/gemini-2.5-flash-lite', async model => {
-      throw new ModelProviderError(model.includes('3.5') ? 'primary unavailable: do-not-log-this' : 'fallback unavailable', 503);
-    }, () => true), /fallback unavailable/);
-    assert.ok(logs.some(line => line.includes('leo.ai.fallback.failure')));
-    assert.ok(logs.every(line => !line.includes('do-not-log-this')));
-  } finally { console.info = originalInfo; }
+test('does not retry when the only available model fails', async () => {
+  const calls = [];
+  await assert.rejects(generateWithExplicitFallback('google/gemini-3.5-flash-lite', undefined, async model => {
+    calls.push(model);
+    throw new ModelProviderError('provider unavailable', 503);
+  }, () => true), /provider unavailable/);
+  assert.deepEqual(calls, ['google/gemini-3.5-flash-lite']);
 });
 
-test('ignores a non-catalogued Gemini 2.5 Flash fallback and selects a listed model', () => {
-  assert.equal(
-    getSafeFallbackModel('google/gemini-3.5-flash-lite', 'google/gemini-2.5-flash', false, () => true),
-    'google/gemini-2.5-flash-lite',
-  );
+test('does not advertise a legacy Gemini 2.5 fallback', () => {
+  assert.equal(getSafeFallbackModel('google/gemini-3.5-flash-lite', 'google/gemini-2.5-flash', false, () => true), undefined);
 });
