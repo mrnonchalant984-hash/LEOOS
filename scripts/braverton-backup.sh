@@ -17,6 +17,7 @@ trap 'rm -rf "$workdir"' EXIT
 mkdir -p "$workdir/storage"
 
 pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges --file "$workdir/database.dump"
+pg_restore --list "$workdir/database.dump" > "$workdir/restore-list.txt"
 for bucket in $SUPABASE_STORAGE_BUCKETS; do
   mkdir -p "$workdir/storage/$bucket"
   AWS_ACCESS_KEY_ID="$SUPABASE_STORAGE_S3_ACCESS_KEY_ID" \
@@ -24,13 +25,26 @@ for bucket in $SUPABASE_STORAGE_BUCKETS; do
   aws --endpoint-url "$SUPABASE_STORAGE_S3_ENDPOINT" s3 sync "s3://$bucket" "$workdir/storage/$bucket" --only-show-errors
 done
 
-tar -C "$workdir" -czf "$workdir/braverton-$timestamp.tar.gz" database.dump storage
+cat > "$workdir/manifest.txt" <<MANIFEST
+backup_timestamp_utc=$timestamp
+storage_buckets=$SUPABASE_STORAGE_BUCKETS
+database_dump_sha256=$(sha256sum "$workdir/database.dump" | awk '{print $1}')
+storage_object_count=$(find "$workdir/storage" -type f | wc -l | tr -d ' ')
+MANIFEST
+tar -C "$workdir" -czf "$workdir/braverton-$timestamp.tar.gz" database.dump storage manifest.txt
 age --recipient "$BACKUP_AGE_RECIPIENT" --output "$workdir/braverton-$timestamp.tar.gz.age" "$workdir/braverton-$timestamp.tar.gz"
 
 export AWS_ACCESS_KEY_ID="$BACKUP_S3_ACCESS_KEY_ID"
 export AWS_SECRET_ACCESS_KEY="$BACKUP_S3_SECRET_ACCESS_KEY"
+object_key="braverton/$timestamp/braverton-$timestamp.tar.gz.age"
+checksum="$(sha256sum "$workdir/braverton-$timestamp.tar.gz.age" | awk '{print $1}')"
 aws --endpoint-url "$BACKUP_S3_ENDPOINT" s3 cp "$workdir/braverton-$timestamp.tar.gz.age" \
-  "s3://$BACKUP_S3_BUCKET/braverton/$timestamp/braverton-$timestamp.tar.gz.age" --only-show-errors
+  "s3://$BACKUP_S3_BUCKET/$object_key" --metadata "sha256=$checksum" --only-show-errors
+remote_checksum="$(aws --endpoint-url "$BACKUP_S3_ENDPOINT" s3api head-object --bucket "$BACKUP_S3_BUCKET" --key "$object_key" --query 'Metadata.sha256' --output text)"
+if [[ "$remote_checksum" != "$checksum" ]]; then
+  echo "Off-site backup checksum verification failed." >&2
+  exit 1
+fi
 
 retention="${BACKUP_RETENTION_DAYS:-90}"
 if [[ ! "$retention" =~ ^[0-9]+$ ]] || (( retention < 30 )); then
@@ -43,4 +57,4 @@ JSON
 aws --endpoint-url "$BACKUP_S3_ENDPOINT" s3api put-bucket-lifecycle-configuration \
   --bucket "$BACKUP_S3_BUCKET" --lifecycle-configuration "file://$workdir/lifecycle.json"
 
-echo "Encrypted Braverton backup uploaded: braverton/$timestamp/ (database + configured Storage buckets)."
+echo "Encrypted Braverton backup uploaded and checksum-verified: $object_key"
