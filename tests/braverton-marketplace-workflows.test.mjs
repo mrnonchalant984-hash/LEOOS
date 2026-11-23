@@ -189,3 +189,15 @@ test('owner can inspect notification delivery evidence without exposing delivery
   assert.match(page, /Notification delivery evidence/);
   assert.match(page, /attempts/);
 });
+
+test('affiliate withdrawal requests and owner decisions notify the affiliate without bypassing payout gates', async () => {
+  const [requestApi, ownerApi] = await Promise.all([
+    read('../app/api/store/affiliates/payout-requests/route.ts'),
+    read('../app/api/admin/store/affiliates/payouts/route.ts'),
+  ]);
+  assert.match(requestApi, /affiliate-payout-request:/);
+  assert.match(ownerApi, /requireOwner\(request\)/);
+  assert.match(ownerApi, /AFFILIATE_PAYOUTS_ENABLED/);
+  assert.match(ownerApi, /Braverton affiliate commission/);
+  assert.match(ownerApi, /affiliate-payout:/);
+});
