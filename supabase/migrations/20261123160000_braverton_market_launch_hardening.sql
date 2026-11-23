@@ -192,6 +192,7 @@ begin
   returning * into v_listing;
   update public.marketplace_dropship_applications set supplier_status='approved',
     supplier_note=nullif(p_note,''),reviewed_by=p_supplier_id,reviewed_at=now(),
+    supplier_terms_version='braverton-supplier-dropship-v1',supplier_agreed_at=now(),
     marketplace_product_id=v_product.id,dropship_listing_id=v_listing.id,updated_at=now()
     where id=v_app.id;
   return jsonb_build_object('processed',true,'status','approved',
