@@ -9,8 +9,8 @@ import {
 import { getExternalModelBuilderAvailability } from '../lib/builders/providers.ts';
 
 test('provider registry accepts Gemini models and rejects alternative model providers', () => {
-  assert.deepEqual(resolveModel('google/gemini-2.5-flash-lite'), { provider: 'google', model: 'gemini-2.5-flash-lite' });
-  assert.deepEqual(resolveModel('gemini-2.5-flash-lite'), { provider: 'google', model: 'gemini-2.5-flash-lite' });
+  assert.deepEqual(resolveModel('google/gemini-2.5-flash-lite'), { provider: 'google', model: 'gemini-3.5-flash-lite' });
+  assert.deepEqual(resolveModel('gemini-2.5-flash-lite'), { provider: 'google', model: 'gemini-3.5-flash-lite' });
   assert.deepEqual(resolveModel('gemini-3.5-flash-lite'), { provider: 'google', model: 'gemini-3.5-flash-lite' });
   assert.throws(() => resolveModel('gemini-3.8-flash'), /free-tier/i);
   assert.throws(() => resolveModel('openai/gpt-4o-mini'), /only Gemini/i);
@@ -21,14 +21,8 @@ test('provider registry accepts Gemini models and rejects alternative model prov
 
 test('LEO model options resolve to distinct catalogued Google models', () => {
   const models = getModelProviderStatus();
-  assert.deepEqual(models.map(({ model }) => model), [
-    'gemini-3.5-flash-lite',
-    'gemini-2.5-flash-lite',
-  ]);
-  assert.deepEqual(models.map(({ name }) => name), [
-    'Gemini 3.5 Flash-Lite (Free tier)',
-    'Gemini 2.5 Flash-Lite (Free tier)',
-  ]);
+  assert.deepEqual(models.map(({ model }) => model), ['gemini-3.5-flash-lite']);
+  assert.deepEqual(models.map(({ name }) => name), ['Gemini 3.5 Flash-Lite (Free tier)']);
   assert.equal(new Set(models.map(({ model }) => model)).size, 2);
   assert.ok(models.every(({ tier }) => tier === 'free'));
   for (const model of models) {
@@ -75,7 +69,7 @@ test('model defaults ignore local and alternative-provider configuration', () =>
     process.env.GEMINI_API_KEY = 'test-key';
     assert.equal(getDefaultTextModel(), 'google/gemini-3.5-flash-lite');
     process.env.LEO_CHAT_MODEL = 'google/gemini-2.5-flash-lite';
-    assert.equal(getDefaultTextModel(), 'google/gemini-2.5-flash-lite');
+    assert.equal(getDefaultTextModel(), 'google/gemini-3.5-flash-lite');
     process.env.LEO_CHAT_MODEL = 'openai/gpt-4o-mini';
     assert.equal(getDefaultTextModel(), 'google/gemini-3.5-flash-lite');
   } finally {
@@ -106,7 +100,7 @@ test('invalid explicit fallback configuration safely uses configured Gemini for 
   const configured = provider => provider === 'google' || provider === 'openai';
   assert.equal(
     getSafeFallbackModel('google/gemini-3.5-flash-lite', 'unsupported/fallback-model', false, configured),
-    'google/gemini-2.5-flash-lite',
+    'google/gemini-3.5-flash-lite',
   );
 });
 
@@ -124,9 +118,9 @@ test('valid explicit fallback is normalized and requires a configured provider',
 
 test('Gemini is the only automatic fallback, including for a Gemini primary', () => {
   const configured = provider => provider === 'google';
-  assert.equal(getSafeFallbackModel('google/gemini-3.5-flash-lite', 'bad/model', true, configured), 'google/gemini-2.5-flash-lite');
-  assert.equal(getSafeFallbackModel('google/gemini-2.5-flash-lite', 'bad/model', false, configured), 'google/gemini-3.5-flash-lite');
-  assert.equal(getSafeFallbackModel('google/gemini-3.5-flash-lite', undefined, false, configured), 'google/gemini-2.5-flash-lite');
+  assert.equal(getSafeFallbackModel('google/gemini-3.5-flash-lite', 'bad/model', true, configured), undefined);
+  assert.equal(getSafeFallbackModel('google/gemini-2.5-flash-lite', 'bad/model', false, configured), undefined);
+  assert.equal(getSafeFallbackModel('google/gemini-3.5-flash-lite', undefined, false, configured), undefined);
 });
 
 test('OpenAI credentials alone do not enable a model provider', () => {
