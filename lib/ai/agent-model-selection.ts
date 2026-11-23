@@ -1,32 +1,20 @@
-import { getDefaultTextModel, isProviderConfigured, resolveModel } from './model-catalog.ts';
+import { getDefaultTextModel, isProviderConfigured, resolveModel, getModelProviderStatus } from './model-catalog.ts';
 import type { AgentDefinition } from '@/lib/agents/types';
-import { getModelProviderStatus } from './model-catalog.ts';
 
-/**
- * Resolve the model used by built-in text agents.
- *
- * Gemini is the platform default. Only a valid, configured Gemini-specific
- * agent override is accepted; local and other provider endpoints are ignored.
- */
-export function getAgentPrimaryModel(
-  agentModel = process.env.LEO_AGENT_MODEL?.trim(),
-): string {
-  if (agentModel) {
+/** Built-in agents use the free-tier Gemini catalog. Per-agent overrides are
+ * accepted only when they resolve to a catalogued free-tier model. */
+export function getAgentPrimaryModel(agentModel?: string): string {
+  if (agentModel?.trim()) {
     try {
-      const candidate = agentModel.includes('/')
-        ? agentModel
-        : agentModel.startsWith('gemini-') ? `google/${agentModel}` : '';
-      if (candidate) {
-        const resolved = resolveModel(candidate);
-        if (resolved.provider === 'google' && isProviderConfigured('google')) {
-          return `google/${resolved.model}`;
-        }
-      }
-    } catch {
-      // Invalid or stale environment overrides must not block the default route.
-    }
+      const configured = agentModel.trim();
+      const candidate = configured.includes('/') ? configured : `google/${configured}`;
+      const resolved = resolveModel(candidate);
+      const freeModel = getModelProviderStatus().some(entry =>
+        entry.provider === resolved.provider && entry.model === resolved.model && entry.tier === 'free',
+      );
+      if (resolved.provider === 'google' && freeModel && isProviderConfigured('google')) return `google/${resolved.model}`;
+    } catch { /* Invalid or paid-only agent overrides fall through to free defaults. */ }
   }
-
   return getDefaultTextModel('chat');
 }
 
@@ -34,9 +22,10 @@ export function selectAgentModel(agent: Pick<AgentDefinition, 'id' | 'model' | '
   const reasoning = agent.allowedTools.some(tool =>
     ['database_write', 'deployment', 'github_write', 'security'].includes(tool),
   ) || /architect|analy[sz]e|debug|design|plan|reason|security|trade.?off/i.test(`${agent.id} ${task}`);
-  const configuredAgentModel = agent.model?.trim() || process.env.LEO_AGENT_MODEL?.trim();
-  const model = configuredAgentModel
-    ? getAgentPrimaryModel(configuredAgentModel)
+  // Only explicit per-agent model overrides are considered. A global
+  // LEO_AGENT_MODEL must not silently force every specialist onto one model.
+  const model = agent.model?.trim()
+    ? getAgentPrimaryModel(agent.model)
     : getDefaultTextModel(reasoning ? 'reasoning' : 'chat');
   const resolved = resolveModel(model);
   const catalogEntry = getModelProviderStatus().find(entry =>
