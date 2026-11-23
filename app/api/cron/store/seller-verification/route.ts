@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/auth';
 import { notifyMarketplaceUser } from '@/lib/store-notifications';
+import { scoreSellerVerificationRisk } from '@/lib/store/seller-verification-risk';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,8 +32,6 @@ export async function POST(request: NextRequest) {
   const results: Array<{ requestId: string; outcome: string; riskScore: number }> = [];
   for (const item of requests ?? []) {
     if (alreadyReviewed.has(item.id)) continue;
-    const signals: string[] = [];
-    let score = 0;
     const [{ data: authResult, error: authError }, { data: profile, error: profileError }, { data: existingSeller, error: sellerError }, { data: duplicateRequest, error: duplicateError }] = await Promise.all([
       db.auth.admin.getUserById(item.seller_id),
       db.from('profiles').select('created_at').eq('id', item.seller_id).maybeSingle(),
@@ -44,16 +43,19 @@ export async function POST(request: NextRequest) {
       continue;
     }
     const authUser = authResult.user;
-    if (!authUser?.email_confirmed_at) { score += 80; signals.push('email_not_confirmed'); }
     const createdAt = profile?.created_at || authUser?.created_at;
     const accountAgeDays = createdAt ? (Date.now() - new Date(createdAt).getTime()) / 86_400_000 : 0;
-    if (!Number.isFinite(accountAgeDays) || accountAgeDays < 7) { score += 30; signals.push('account_younger_than_7_days'); }
-    if (item.details.trim().length < 120) { score += 25; signals.push('business_context_incomplete'); }
-    if (/https?:\/\/|www\./i.test(item.business_name + ' ' + item.details)) { score += 20; signals.push('external_link_requires_review'); }
-    if ((existingSeller ?? []).length || (duplicateRequest ?? []).length) { score += 70; signals.push('possible_duplicate_business'); }
-    score = Math.min(100, score);
-    const autoApprove = score === 0 && Boolean(authUser?.email_confirmed_at) && accountAgeDays >= 7;
-    const outcome = autoApprove ? 'auto_approved' : 'manual_review';
+    const risk = scoreSellerVerificationRisk({
+      emailConfirmed: Boolean(authUser?.email_confirmed_at),
+      accountAgeDays,
+      businessName: item.business_name,
+      details: item.details,
+      duplicateBusiness: Boolean((existingSeller ?? []).length || (duplicateRequest ?? []).length),
+    });
+    const signals = risk.signals;
+    const score = risk.riskScore;
+    const autoApprove = risk.outcome === 'auto_approved';
+    const outcome = risk.outcome;
     const rationale = autoApprove
       ? 'Bram rules v1: confirmed account email, account age of at least seven days, complete business context, and no exact-name duplicate or external-link signal. This is marketplace seller-access approval, not government identity or business-registration certification.'
       : `Bram rules v1 escalated this application for owner review. Signals: ${signals.join(', ') || 'additional review required'}. No automatic rejection was made.`;
