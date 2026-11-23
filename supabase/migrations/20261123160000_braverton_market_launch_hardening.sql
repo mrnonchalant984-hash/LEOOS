@@ -127,3 +127,75 @@ alter table public.marketplace_dropship_applications enable row level security;
 revoke all on public.marketplace_dropship_applications from public,anon,authenticated;
 grant all on public.marketplace_dropship_applications to service_role;
 
+
+alter table public.marketplace_dropship_applications
+  add column if not exists category text not null default 'General' check(length(btrim(category)) between 1 and 80),
+  add column if not exists country_code char(2) not null default 'NG' check(country_code ~ '^[A-Z]{2}$'),
+  add column if not exists region text check(region is null or length(region) <= 100),
+  add column if not exists city text not null default 'Not specified' check(length(btrim(city)) between 1 and 100);
+
+create or replace function public.review_marketplace_dropship_application(
+  p_application_id uuid, p_supplier_id uuid, p_decision text, p_note text default null
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_app public.marketplace_dropship_applications%rowtype;
+  v_supplier_product public.marketplace_supplier_products%rowtype;
+  v_supplier public.marketplace_suppliers%rowtype;
+  v_seller public.marketplace_sellers%rowtype;
+  v_product public.marketplace_products%rowtype;
+  v_listing public.marketplace_dropship_listings%rowtype;
+begin
+  if p_decision not in ('approved','rejected') or length(coalesce(p_note,'')) > 1000 then
+    raise exception 'invalid dropship application decision';
+  end if;
+  select * into v_app from public.marketplace_dropship_applications
+    where id=p_application_id and supplier_id=p_supplier_id for update;
+  if not found then raise exception 'dropship application not found'; end if;
+  if v_app.supplier_status <> 'pending' then
+    return jsonb_build_object('processed',false,'status',v_app.supplier_status);
+  end if;
+  select * into v_supplier from public.marketplace_suppliers where user_id=p_supplier_id;
+  if not found or v_supplier.verification_status <> 'approved' then raise exception 'supplier is not approved'; end if;
+  if p_decision='rejected' then
+    update public.marketplace_dropship_applications set supplier_status='rejected',
+      supplier_note=nullif(p_note,''),reviewed_by=p_supplier_id,reviewed_at=now(),updated_at=now()
+      where id=v_app.id;
+    return jsonb_build_object('processed',true,'status','rejected');
+  end if;
+  select * into v_seller from public.marketplace_sellers where user_id=v_app.seller_id;
+  if not found or not v_seller.is_verified then raise exception 'reseller is not verified'; end if;
+  select * into v_supplier_product from public.marketplace_supplier_products
+    where id=v_app.supplier_product_id and supplier_id=p_supplier_id for update;
+  if not found or v_supplier_product.status <> 'active' or v_supplier_product.available_quantity <= 0 then
+    raise exception 'supplier product is unavailable';
+  end if;
+  if v_app.proposed_selling_price_kobo <= v_supplier_product.cost_kobo then
+    raise exception 'reseller price must exceed supplier cost';
+  end if;
+  insert into public.marketplace_products(
+    seller_id,slug,title,description,category,price,currency,condition,country_code,region,city,
+    status,image_urls,image_paths,stock_quantity,reserved_quantity
+  ) values (
+    v_app.seller_id,
+    'dropship-' || replace(gen_random_uuid()::text,'-',''),
+    left(v_supplier_product.title,120),
+    left(coalesce(nullif(v_supplier_product.description,''),v_supplier_product.title),5000),
+    v_app.category,v_app.proposed_selling_price_kobo::numeric / 100,'NGN','new',
+    v_app.country_code,v_app.region,v_app.city,'pending_review','{}','{}',
+    v_supplier_product.available_quantity,0
+  ) returning * into v_product;
+  insert into public.marketplace_dropship_listings(
+    seller_id,supplier_product_id,marketplace_product_id,selling_price_kobo,status
+  ) values(v_app.seller_id,v_app.supplier_product_id,v_product.id,v_app.proposed_selling_price_kobo,'paused')
+  returning * into v_listing;
+  update public.marketplace_dropship_applications set supplier_status='approved',
+    supplier_note=nullif(p_note,''),reviewed_by=p_supplier_id,reviewed_at=now(),
+    marketplace_product_id=v_product.id,dropship_listing_id=v_listing.id,updated_at=now()
+    where id=v_app.id;
+  return jsonb_build_object('processed',true,'status','approved',
+    'marketplace_product_id',v_product.id,'listing_id',v_listing.id,
+    'listing_moderation_status',v_product.status);
+end;
+$$;
+revoke all on function public.review_marketplace_dropship_application(uuid,uuid,text,text) from public,anon,authenticated;
+grant execute on function public.review_marketplace_dropship_application(uuid,uuid,text,text) to service_role;
