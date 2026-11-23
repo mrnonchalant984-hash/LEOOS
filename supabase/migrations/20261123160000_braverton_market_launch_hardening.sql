@@ -9,7 +9,7 @@ begin
     upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 20));
   return new;
 end;
-$;
+$$;
 drop trigger if exists marketplace_orders_braverton_number on public.marketplace_orders;
 create trigger marketplace_orders_braverton_number
 before insert on public.marketplace_orders
