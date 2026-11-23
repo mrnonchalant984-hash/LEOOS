@@ -31,6 +31,10 @@
     {
       "path": "/api/cron/store/notification-retries",
       "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/store/affiliate-commission-release",
+      "schedule": "0 17 * * *"
     }
   ]
 }
