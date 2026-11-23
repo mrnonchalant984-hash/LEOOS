@@ -44,7 +44,7 @@ export function WorkspaceBuilderSplit({ projectId, projectName, previewUrl, prev
       const response=await fetch('/api/chat',{
         method:'POST',
         headers:{'Content-Type':'application/json',Authorization:'Bearer '+auth.session.access_token,'Idempotency-Key':crypto.randomUUID()},
-        body:JSON.stringify({session_id:activeSessionId,message:text,project_id:projectId,mode:'tools',work_mode:true,request_type:requestType,request_id:crypto.randomUUID()}),
+        body:JSON.stringify({session_id:activeSessionId,message:text,project_id:projectId,mode:'normal',work_mode:true,request_type:requestType,request_id:crypto.randomUUID()}),
       });
       const body=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(body.error||'Bram could not process this workspace request.');
