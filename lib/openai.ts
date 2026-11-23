@@ -39,11 +39,11 @@ export function getTextOpenAI(){
 export function getConfiguredModel(fallback = 'gemini-3.5-flash-lite') {
   if (process.env.LEO_LOCAL_MODEL_URL?.trim()) return process.env.LEO_LOCAL_MODEL_NAME?.trim() || 'local-model';
   const preferred = process.env.LEO_CHAT_MODEL?.trim() || process.env.LEO_MEETING_MODEL?.trim() || process.env.LEO_AGENT_MODEL?.trim() || process.env.LEO_REASONING_MODEL?.trim();
-  const freeGeminiModels = new Set(['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite']);
   const normalizedPreferred = preferred?.replace(/^google\//, '');
-  if (normalizedPreferred && freeGeminiModels.has(normalizedPreferred)) return normalizedPreferred;
+  if (normalizedPreferred === 'gemini-2.5-flash-lite') return 'gemini-3.5-flash-lite';
+  if (normalizedPreferred === 'gemini-3.5-flash-lite') return normalizedPreferred;
   if (process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim()) return 'gemini-3.5-flash-lite';
-  return freeGeminiModels.has(fallback) ? fallback : 'gemini-3.5-flash-lite';
+  return fallback === 'gemini-3.5-flash-lite' ? fallback : 'gemini-3.5-flash-lite';
 }
 
 type TextInputMessage = { role: 'system' | 'user' | 'assistant' | 'developer'; content: string | Array<{ type?: string; text?: string }> };

@@ -12,19 +12,21 @@ npm install @braverton/sdk
 
 ## Quick start
 
+The SDK is Braverton-branded. The historical `LeoApiError` and `LeoRateLimitError` export names remain unchanged for source compatibility.
+
 Create a key at `/developers` with `read` scope for account, model-list, and project reads. Include `write` scope if you want to create projects or call model inference, then:
 
 ```ts
-import { BravertonClient, LeoApiError, LeoRateLimitError } from '@braverton/sdk';
+import { BravertonClient, LeoApiError, LeoRateLimitError } from '@braverton/sdk'; // legacy error export names remain for compatibility
 
-const leo = new BravertonClient({ apiKey: process.env.BRAVERTON_API_KEY! }); // defaults to https://leoos-omega.vercel.app
+const braverton = new BravertonClient({ apiKey: process.env.BRAVERTON_API_KEY! }); // defaults to https://leoos-omega.vercel.app
 // Pass baseUrl explicitly for self-hosted or staging deployments.
 
 try {
-  const { data, request_id } = await leo.projects.list();
+  const { data, request_id } = await braverton.projects.list();
   console.log(data, request_id);
-  const models = await leo.models.list();
-  const answer = await leo.messages.create({ model: models.data[0]?.id, messages: [{ role: 'user', content: 'Say hello.' }] });
+  const models = await braverton.models.list();
+  const answer = await braverton.messages.create({ model: models.data[0]?.id, messages: [{ role: 'user', content: 'Say hello.' }] });
   console.log(answer.content[0]?.text, answer.usage);
 } catch (e) {
   if (e instanceof LeoRateLimitError) console.log('Retry in', e.retryAfterSeconds, 'seconds');
@@ -56,7 +58,7 @@ Agent coordination contracts (path boundaries, run telemetry, and bounded scratc
 ### Streaming responses
 
 ```ts
-for await (const event of leo.messages.stream({ messages: [{ role: "user", content: "Explain streaming." }] })) {
+for await (const event of braverton.messages.stream({ messages: [{ role: "user", content: "Explain streaming." }] })) {
   if (event.event === "content_block_delta") {
     const delta = event.data.delta as { text?: string } | undefined;
     process.stdout.write(delta?.text ?? "");

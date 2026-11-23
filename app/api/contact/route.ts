@@ -40,7 +40,7 @@ async function notifyContact(data: {
   const destination = process.env.CONTACT_EMAIL || process.env.OWNER_EMAIL;
   if (!destination) return false;
   const text = [
-    'New LeonardX contact message',
+    'New Braverton contact message',
     '',
     `Name: ${data.name}`,
     `Email: ${data.email}`,
@@ -58,7 +58,7 @@ async function notifyContact(data: {
       if (await sendSmtpMail({
         to: destination,
         from: smtpFrom,
-        subject: `New LeonardX contact: ${data.name}`,
+        subject: `New Braverton contact: ${data.name}`,
         text,
       })) return true;
     } catch {
@@ -80,7 +80,7 @@ async function notifyContact(data: {
         from,
         to: [destination],
         reply_to: data.email,
-        subject: `New LeonardX contact: ${data.name}`,
+        subject: `New Braverton contact: ${data.name}`,
         text,
       }),
       signal: AbortSignal.timeout(8_000),

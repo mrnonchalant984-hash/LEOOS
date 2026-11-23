@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     workspaceRuntimeProvider: (process.env.LEO_WORKSPACE_RUNTIME_PROVIDER || 'github_actions').trim(),
     workspaceRuntimeRepository: present(process.env.LEO_WORKSPACE_GITHUB_REPOSITORY),
     imageModel: process.env.LEO_GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
-    audioModel: process.env.LEO_GEMINI_AUDIO_MODEL || 'gemini-2.5-flash',
+    audioModel: process.env.LEO_GEMINI_AUDIO_MODEL || 'gemini-3.5-flash-lite',
   };
 
   return NextResponse.json({

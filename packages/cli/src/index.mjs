@@ -6,7 +6,7 @@ import { appendScratchpad, createAgentWorktree, isPathAllowed, mergeAgentWorktre
 
 const configDir = join(homedir(), '.config', 'leonardx');
 const configFile = join(configDir, 'config.json');
-const usage = `LEO OS CLI\n\nCommands:\n  leo login --api-key <key> [--base-url <url>]  Validate and store credentials\n  leo init <workspace-id>                     Link this directory to a workspace\n  leo status                                  Read the linked workspace status\n  leo deploy --brief "<prompt>"               Build and deploy the linked project\n  leo ship                                    Build and deploy the linked project\n  leo agents strategy <strategy>              Select a conflict strategy\n  leo agents check-path --role <role> <path>   Check a worker path boundary\n  leo agents worktree <create|validate|merge>  Manage an isolated Git worktree\n  leo agents scratchpad <read|add>             Read or append handoff metadata\n  leo projects list [--status <status>]       List your projects\n  leo projects create <name> [--type <type>]  Create a project\n  leo models list                               List available models\n  leo chat --message <text> [--model <id>]      Send a model request (paid plan required)\n  leo usage                                    Show recent usage\n  leo logout                                  Remove local credentials\n`;
+const usage = `BRAVERTON CLI\n\nCommands:\n  braverton login --api-key <key> [--base-url <url>]  Validate and store credentials\n  braverton init <workspace-id>                     Link this directory to a workspace\n  braverton status                                  Read the linked workspace status\n  braverton deploy --brief "<prompt>"               Build and deploy the linked project\n  braverton ship                                    Build and deploy the linked project\n  braverton agents strategy <strategy>              Select a conflict strategy\n  braverton agents check-path --role <role> <path>   Check a worker path boundary\n  braverton agents worktree <create|validate|merge>  Manage an isolated Git worktree\n  braverton agents scratchpad <read|add>             Read or append handoff metadata\n  braverton projects list [--status <status>]       List your projects\n  braverton projects create <name> [--type <type>]  Create a project\n  braverton models list                               List available models\n  braverton chat --message <text> [--model <id>]      Send a model request (paid plan required)\n  braverton usage                                    Show recent usage\n  braverton logout                                  Remove local credentials\n`;
 
 const usageText = usage;
 
@@ -27,18 +27,18 @@ function option(args, name) {
 }
 async function api(path, init = {}) {
   const config = readConfig();
-  if (!config?.apiKey || !config?.baseUrl) throw new Error('Not authenticated. Run: leonardx login --api-key <key> (or pass --base-url for another deployment)');
+  if (!config?.apiKey || !config?.baseUrl) throw new Error('Not authenticated. Run: braverton login --api-key <key> (or pass --base-url for another deployment)');
   const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}${path}`, {
     ...init,
     headers: { authorization: `Bearer ${config.apiKey}`, 'content-type': 'application/json', ...(init.headers || {}) },
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.error?.message || body?.error || `LeonardX API request failed (${response.status})`);
+  if (!response.ok) throw new Error(body?.error?.message || body?.error || `Braverton API request failed (${response.status})`);
   return body;
 }
 function readWorkspaceLink() {
   const linkFile = resolve(process.cwd(), '.leo', 'config.json');
-  if (!existsSync(linkFile)) throw new Error('This directory is not linked. Run: leo init <workspace-id>');
+  if (!existsSync(linkFile)) throw new Error('This directory is not linked. Run: braverton init <workspace-id>');
   const link = JSON.parse(readFileSync(linkFile, 'utf8'));
   if (typeof link.workspaceId !== 'string' || !/^[\w-]{1,80}$/.test(link.workspaceId)) throw new Error('The local workspace link is invalid.');
   return link;

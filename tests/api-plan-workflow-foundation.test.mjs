@@ -122,7 +122,7 @@ test('CLI and OpenAPI default to the supported Gemini API model', async () => {
   assert.match(cliReadme, /--model gemini-3\.5-flash-lite/);
   assert.match(openapi, /default: 'gemini-3\.5-flash-lite'/);
   assert.equal((envExample.match(/^LEONARDX_API_MODELS=/gm) || []).length, 1);
-  assert.match(envExample, /^LEONARDX_API_MODELS=gemini-3\.5-flash-lite,gemini-2\.5-flash-lite$/m);
+  assert.match(envExample, /^LEONARDX_API_MODELS=gemini-3\.5-flash-lite$/m);
 });
 
 test('API key journey keeps free key creation separate from paid execution and offers pricing after copying', async () => {

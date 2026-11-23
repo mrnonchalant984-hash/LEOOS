@@ -10,12 +10,11 @@ export class ModelProviderError extends Error {
   }
 }
 
-// Built-in routing is restricted to Gemini Developer API models with free-tier
-// inference. 2.5 Flash-Lite retains free Google Search grounding; 3.5 Flash-Lite
-// is the default general-purpose agent model.
+// Built-in routing uses the current free-tier Gemini Developer API model.
+// Gemini 2.5 Flash-Lite remains a legacy ID for existing clients, but is no
+// longer advertised or called because access is restricted for new API projects.
 const MODEL_PRESETS: Record<string, { name: string; provider: ModelProvider; model: string; capabilities: string[] }> = {
-  'google/gemini-3.5-flash-lite': { name: 'Gemini 3.5 Flash-Lite (Free tier)', provider: 'google', model: 'gemini-3.5-flash-lite', capabilities: ['text', 'tools', 'multimodal'] },
-  'google/gemini-2.5-flash-lite': { name: 'Gemini 2.5 Flash-Lite (Free tier)', provider: 'google', model: 'gemini-2.5-flash-lite', capabilities: ['text', 'tools', 'multimodal', 'web_search'] },
+  'google/gemini-3.5-flash-lite': { name: 'Gemini 3.5 Flash-Lite (Free tier)', provider: 'google', model: 'gemini-3.5-flash-lite', capabilities: ['text', 'tools', 'multimodal', 'web_search'] },
 };
 
 export function normalizeGeminiModelId(modelName: string) { return modelName.trim(); }
@@ -32,10 +31,13 @@ export function getModelProviderStatus() {
   }));
 }
 
-const SUPPORTED_GEMINI_TEXT_MODELS = new Set(['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite']);
+const SUPPORTED_GEMINI_TEXT_MODELS = new Set(['gemini-3.5-flash-lite']);
+const LEGACY_GEMINI_MODEL_ALIASES = new Map([['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite']]);
 
 export function resolveModel(modelName: string): { provider: ModelProvider; model: string } {
-  const normalized = modelName.trim();
+  const requested = modelName.trim();
+  const bareRequested = requested.startsWith('google/') ? requested.slice('google/'.length) : requested;
+  const normalized = LEGACY_GEMINI_MODEL_ALIASES.get(bareRequested) || requested;
   const preset = MODEL_PRESETS[normalized];
   if (preset) return { provider: preset.provider, model: preset.model };
   const matchingPreset = Object.values(MODEL_PRESETS).find(entry => entry.model === normalized);
@@ -45,7 +47,7 @@ export function resolveModel(modelName: string): { provider: ModelProvider; mode
     const provider = normalized.slice(0, separator);
     const model = normalized.slice(separator + 1);
     if (provider === 'google' && SUPPORTED_GEMINI_TEXT_MODELS.has(model)) return { provider: 'google', model: normalizeGeminiModelId(model) };
-    throw new ModelProviderError('Only Gemini free-tier models are enabled. Choose a supported model: gemini-3.5-flash-lite or gemini-2.5-flash-lite.', 400);
+    throw new ModelProviderError('Only Gemini free-tier models are enabled. Choose the supported model: gemini-3.5-flash-lite.', 400);
   }
   if (SUPPORTED_GEMINI_TEXT_MODELS.has(normalized)) return { provider: 'google', model: normalizeGeminiModelId(normalized) };
   throw new ModelProviderError('Choose a supported model from the free-tier Gemini registry.', 400);
