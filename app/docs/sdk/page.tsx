@@ -20,7 +20,7 @@ export default function SDK() {
     </div>
     <Panel className="mt-3">
       <div className="panel-title">Install when the npm package is published</div>
-      <div className="code-block mt-4"><span className="text-zinc-500">After npm publication:</span><br/>npm install @braverton/sdk<br/><br/><span className="gold-text">import</span> {'{ BravertonClient }'} <span className="gold-text">from</span> <span className="green-text">&apos;@braverton/sdk&apos;</span>;<br/><br/><span className="gold-text">const</span> leo = <span className="gold-text">new</span> BravertonClient({'{'} apiKey: process.env.BRAVERTON_API_KEY! {'}'});<br/><span className="gold-text">const</span> projects = <span className="gold-text">await</span> leo.projects.list();</div>
+      <div className="code-block mt-4"><span className="text-zinc-500">After npm publication:</span><br/>npm install @braverton/sdk<br/><br/><span className="gold-text">import</span> {'{ BravertonClient }'} <span className="gold-text">from</span> <span className="green-text">&apos;@braverton/sdk&apos;</span>;<br/><br/><span className="gold-text">const</span> braverton = <span className="gold-text">new</span> BravertonClient({'{'} apiKey: process.env.BRAVERTON_API_KEY! {'}'});<br/><span className="gold-text">const</span> projects = <span className="gold-text">await</span> braverton.projects.list();</div>
       <p className="mt-4 text-xs leading-5 text-zinc-500">The SDK is currently available as repository source; npm publication is a separate release step. Keep API keys in server-side code.</p>
     </Panel>
     <IntegrationStudio initialIntegration="sdk"/>
