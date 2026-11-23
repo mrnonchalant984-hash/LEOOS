@@ -57,9 +57,9 @@ export function getSafeFallbackModel(
   }
 
   if (!configured('google')) return undefined;
-  const fallbackModel = primary.model === 'gemini-2.5-flash'
+  const fallbackModel = primary.model === 'gemini-3.5-flash-lite'
     ? 'gemini-2.5-flash-lite'
-    : 'gemini-2.5-flash';
+    : 'gemini-3.5-flash-lite';
   return `google/${fallbackModel}`;
 }
 
