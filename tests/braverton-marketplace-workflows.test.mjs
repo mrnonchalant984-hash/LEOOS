@@ -62,6 +62,11 @@ test('notification helper records idempotent in-app, email and push outcomes and
   assert.match(helper, /marketplace_notification_deliveries/);
   assert.match(helper, /email_opt_out/);
   assert.match(helper, /user_preference_disabled/);
+  assert.match(emailProvider, /WEB3FORMS_ACCESS_KEY/);
+  assert.match(emailProvider, /api\\.web3forms\\.com\\/submit/);
+  assert.match(emailProvider, /access_key: accessKey/);
+  assert.doesNotMatch(emailProvider, /WEB3FORMS_FORM_ID|v1\\/submissions/);
+  assert.match(emailProvider, /response\\.status !== 200/);
   assert.match(migration, /unique\(notification_id,delivery_key\)/);
 });
 
