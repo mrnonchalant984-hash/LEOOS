@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
 type Order = { id: string; order_number: string; status: string; currency: string; created_at: string; buyer_id: string; total_kobo: number };
 type Fulfillment = { status: string; method: string; courier_name: string | null; tracking_reference: string | null; tracking_url: string | null; delivery_notes: string; issue_details: string | null; buyer_confirmed_at: string | null } | null;
-type Event = { event_type: string; details: Record<string, unknown>; created_at: string };
+type Event = { event_type: string; created_at: string };
 type Row = { order_id: string; title: string; quantity: number; line_total_kobo: number; order: Order | Order[]; fulfillment: Fulfillment; delivery: { name: string; details: string; fee_kobo: number } | null; events?: Event[] };
 type Group = { order: Order; rows: Row[]; fulfillment: Fulfillment; delivery: Row['delivery']; events: Event[] };
 
