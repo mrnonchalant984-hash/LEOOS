@@ -19,6 +19,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Validate Braverton backup and restore shell syntax
+        run: bash -n scripts/braverton-backup.sh scripts/braverton-restore-staging.sh
       - run: npm run verify
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
