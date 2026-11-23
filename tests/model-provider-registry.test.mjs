@@ -27,7 +27,7 @@ test('LEO model options resolve to distinct catalogued Google models', () => {
   ]);
   assert.deepEqual(models.map(({ name }) => name), [
     'Gemini 3.5 Flash-Lite (Free tier)',
-    'Gemini 2.5 Flash-Lite (Free tier + Search)',
+    'Gemini 2.5 Flash-Lite (Free tier)',
   ]);
   assert.equal(new Set(models.map(({ model }) => model)).size, 2);
   assert.ok(models.every(({ tier }) => tier === 'free'));
