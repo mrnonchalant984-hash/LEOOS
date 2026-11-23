@@ -26,8 +26,8 @@ export async function PUT(request: NextRequest) {
   const location = typeof body.location === 'string' ? body.location.trim() : '';
   const deliveryDetails = typeof body.deliveryDetails === 'string' ? body.deliveryDetails.trim() : '';
   if (displayName.length < 2 || displayName.length > 80 || bio.length > 2000 || !/^[A-Z]{2}$/.test(countryCode)) return NextResponse.json({ error: 'Enter a storefront name, a bio under 2,000 characters, and a two-letter country code.' }, { status: 400 });
-  if (whatsappNumber && !/^\\+[1-9][0-9]{7,14}$/.test(whatsappNumber)) return NextResponse.json({ error: 'Enter WhatsApp in international format, for example +2348012345678.' }, { status: 400 });
-  if (contactEmail && (contactEmail.length > 254 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(contactEmail))) return NextResponse.json({ error: 'Enter a valid contact email address.' }, { status: 400 });
+  if (whatsappNumber && !/^\+[1-9][0-9]{7,14}$/.test(whatsappNumber)) return NextResponse.json({ error: 'Enter WhatsApp in international format, for example +2348012345678.' }, { status: 400 });
+  if (contactEmail && (contactEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail))) return NextResponse.json({ error: 'Enter a valid contact email address.' }, { status: 400 });
   if (location.length > 180 || deliveryDetails.length > 1200) return NextResponse.json({ error: 'Location or delivery details are too long.' }, { status: 400 });
   const { data, error } = await adminSupabase().from('marketplace_sellers').upsert({ user_id: user.id, display_name: displayName, bio, country_code: countryCode, whatsapp_number: whatsappNumber || null, contact_email: contactEmail || null, location_text: location || null, delivery_details: deliveryDetails || null, updated_at: new Date().toISOString() }, { onConflict: 'user_id' }).select(PROFILE_FIELDS).single();
   if (error) return NextResponse.json({ error: 'Storefront profile could not be saved.' }, { status: 503 });
