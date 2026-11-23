@@ -39,24 +39,24 @@ function normalizeUsage(inputTokens?: number | null, outputTokens?: number | nul
 
 async function withProviderError<T>(provider: ModelProvider, model: string, request: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   try {
-    // One attempt per model call: the outer router may try one different Gemini
-    // model, while route-level deadlines prevent nested retries from exhausting
-    // the Vercel request window.
-    const result = await retryProviderRequest(request, { signal, maxAttempts: 2, baseDelayMs: 250, maxDelayMs: 1_000 });\n    recordModelHealth(model, true);\n    return result;
+    const result = await retryProviderRequest(request, { signal, maxAttempts: 2, baseDelayMs: 250, maxDelayMs: 1_000 });
+    recordModelHealth(model, true);
+    return result;
   } catch (error) {
-    if (error instanceof ModelProviderError) throw error;
     const candidate = error && typeof error === 'object' ? error as { status?: unknown; statusCode?: unknown } : {};
-    const status = typeof candidate.status === 'number' ? candidate.status
-      : typeof candidate.statusCode === 'number' ? candidate.statusCode : null;
+    const status = error instanceof ModelProviderError ? error.statusCode
+      : typeof candidate.status === 'number' ? candidate.status
+        : typeof candidate.statusCode === 'number' ? candidate.statusCode : null;
     const message = error instanceof Error ? error.message.toLowerCase() : '';
-    const safeStatus = status && status >= 400 && status <= 599 ? status : /timeout|timed out|aborterror|aborted/.test(message) ? 504 : 502;\n    recordModelHealth(model, false, safeStatus);
-    const providerName = 'Gemini';
+    const safeStatus = status && status >= 400 && status <= 599 ? status : /timeout|timed out|aborterror|aborted/.test(message) ? 504 : 502;
+    recordModelHealth(model, false, safeStatus);
+    if (error instanceof ModelProviderError) throw error;
     const cause = safeStatus === 401 || safeStatus === 403 ? 'rejected the configured credential or denied model access'
       : safeStatus === 404 ? 'could not find the configured model'
         : safeStatus === 429 ? 'reached a rate or quota limit'
           : safeStatus >= 500 ? 'is temporarily unavailable'
             : 'rejected the generation request';
-    throw new ModelProviderError(`${providerName} model ${model} ${safeStatus === 504 ? 'timed out before completing the request' : cause} (HTTP ${safeStatus}). ${safeStatus === 504 ? 'Retry once; if it repeats, reduce the request size.' : 'Check the model ID, provider key, and quota.'}`, safeStatus);
+    throw new ModelProviderError(`Gemini model ${model} ${safeStatus === 504 ? 'timed out before completing the request' : cause} (HTTP ${safeStatus}). ${safeStatus === 504 ? 'Retry once; if it repeats, reduce the request size.' : 'Check the model ID, provider key, and quota.'}`, safeStatus);
   }
 }
 
