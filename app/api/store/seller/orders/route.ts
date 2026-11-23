@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   const [{ data: fulfillments, error: fulfillmentError }, { data: deliveries, error: deliveryError }, { data: events, error: eventsError }] = await Promise.all([
     ids.length ? db.from('marketplace_fulfillments').select('order_id,status,method,courier_name,tracking_reference,tracking_url,delivery_notes,issue_details,buyer_confirmed_at').in('order_id', ids).eq('seller_id', user.id) : { data: [], error: null },
     ids.length ? db.from('marketplace_order_deliveries').select('order_id,name,details,fee_kobo').in('order_id', ids).eq('seller_id', user.id) : { data: [], error: null },
-    ids.length ? db.from('marketplace_order_events').select('order_id,event_type,details,created_at').in('order_id', ids).order('created_at', { ascending: true }) : { data: [], error: null },
+    ids.length ? db.from('marketplace_order_events').select('order_id,event_type,created_at').in('order_id', ids).order('created_at', { ascending: true }) : { data: [], error: null },
   ]);
   if (fulfillmentError || deliveryError || eventsError) return NextResponse.json({ error: 'Seller order tracking details are unavailable.' }, { status: 503 });
   const byOrder = new Map((fulfillments ?? []).map(row => [row.order_id, row]));
