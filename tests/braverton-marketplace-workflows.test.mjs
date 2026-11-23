@@ -216,3 +216,11 @@ test('new message and supplier application decisions use deterministic notificat
   assert.match(reseller, /dropship-application:.*submitted/);
   assert.match(supplier, /dropship-application:.*String\(body\.decision\)/);
 });
+
+test('backup runbook covers key custody, live marketplace buckets and staging-only recovery', async () => {
+  const runbook = await read('../docs/BRAVERTON_MARKET_BACKUP_RUNBOOK.md');
+  assert.match(runbook, /age-keygen/);
+  assert.match(runbook, /marketplace-products marketplace-private/);
+  assert.match(runbook, /RESTORE_TARGET_ENV=staging/);
+  assert.match(runbook, /not operationally verified|not a backup/i);
+});
