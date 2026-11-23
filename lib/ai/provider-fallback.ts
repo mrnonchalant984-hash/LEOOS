@@ -57,9 +57,9 @@ export function getSafeFallbackModel(
   }
 
   if (!configured('google')) return undefined;
-  const fallbackModel = primary.model === 'gemini-3.5-flash-lite'
-    ? 'gemini-2.5-flash-lite'
-    : 'gemini-3.5-flash-lite';
+  const fallbackModel = primary.model === 'gemini-3.1-flash-lite'
+    ? 'gemini-2.5-flash'
+    : 'gemini-3.1-flash-lite';
   return `google/${fallbackModel}`;
 }
 
@@ -133,7 +133,7 @@ export async function generateWithExplicitFallback<T>(
         !isRetryableProviderFailure(primaryError) || !shouldFallbackOnError(primaryError)) throw primaryError;
     let resolvedFallback: ReturnType<typeof resolveModel>;
     try { resolvedFallback = resolveModel(fallbackModel); }
-    catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use a free-tier Google AI Studio model ID such as gemini-3.5-flash-lite.', 503); }
+    catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use a free-tier Google AI Studio model ID such as gemini-3.1-flash-lite.', 503); }
     const normalizedFallback = `${resolvedFallback.provider}/${resolvedFallback.model}`;
     const fallbackProvider = resolvedFallback.provider;
     if (normalizedFallback === normalizedPrimary || !configured(fallbackProvider)) throw primaryError;
