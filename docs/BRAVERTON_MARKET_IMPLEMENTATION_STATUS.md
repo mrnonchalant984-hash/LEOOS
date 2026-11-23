@@ -74,8 +74,8 @@ This report separates code added to the branch from live services and acceptance
 8. Escrow is **not ready**: production schema has no escrow-hold ledger or independent custodial arrangement. Existing payout preparation checks buyer-confirmed delivery and open disputes, but that alone does not prove funds are held. `STORE_CHECKOUT_ENABLED=false` and `STORE_PAYOUTS_ENABLED=false` are now set in Vercel Production. The latest production deployment (`main` at `73a6758`) was already READY before those environment edits, so the flags are not active in that deployment until a subsequent production deployment. Do not enable checkout, split settlement or payouts until the funds-hold, dispute, refund, release and reconciliation design is implemented and independently validated. No transaction or payout has been initiated.
 
 ## Release boundary
-- No production migration was run.
-- Production feature gates `STORE_CHECKOUT_ENABLED` and `STORE_PAYOUTS_ENABLED` were set to `false`; Vercel environment changes take effect only in a subsequent deployment. No payment credentials were read or changed.
+- The two Braverton migrations were applied to the connected Supabase production database on 2026-11-23 and verified in migration history. This was a database-only change; matching application code remains isolated on this branch and has not been deployed.
+- Production feature gates `STORE_CHECKOUT_ENABLED` and `STORE_PAYOUTS_ENABLED` were set to `false`; those values are not active in the currently serving deployment until a new production deployment is authorized and completed. No payment credentials were read or changed.
 - No payment or payout was initiated.
-- No merge or production deployment was performed.
+- No Git merge or Vercel production deployment was performed.
 - Keep the branch isolated until staging evidence is reviewed and the owner explicitly approves the next release step.
