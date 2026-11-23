@@ -128,6 +128,8 @@ test('backup workflow encrypts database and Storage archives and restore is stag
   assert.match(backup, /pg_dump/);
   assert.match(backup, /aws .* s3 sync/);
   assert.match(backup, /age --recipient/);
+  assert.match(backup, /pg_restore --list/);
+  assert.match(backup, /remote_checksum/);
   assert.match(restore, /RESTORE_TARGET_ENV.*staging/);
   assert.match(restore, /pg_restore/);
   assert.match(runbook, /not operationally verified/);
