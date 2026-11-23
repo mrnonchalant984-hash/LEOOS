@@ -17,7 +17,12 @@ export async function GET(request: NextRequest) {
     db.from('marketplace_dropship_applications').select('id,supplier_product_id,proposed_selling_price_kobo,category,country_code,city,region,supplier_status,supplier_note,terms_version,created_at,reviewed_at').eq('seller_id', user.id).order('created_at', { ascending: false }).limit(100),
   ]);
   if (listingError || applicationError) return NextResponse.json({ error: 'Dropship applications are unavailable.' }, { status: 503 });
-  return NextResponse.json({ listings: listings ?? [], applications: applications ?? [] }, { headers: { 'Cache-Control': 'private, no-store' } });
+  const applicationIds = (applications ?? []).map(item => item.id);
+  const { data: events, error: eventsError } = applicationIds.length
+    ? await db.from('marketplace_dropship_application_events').select('application_id,event_type,details,created_at').in('application_id', applicationIds).order('created_at', { ascending: true })
+    : { data: [], error: null };
+  if (eventsError) return NextResponse.json({ error: 'Dropship application history is unavailable.' }, { status: 503 });
+  return NextResponse.json({ listings: listings ?? [], applications: (applications ?? []).map(item => ({ ...item, events: (events ?? []).filter(event => event.application_id === item.id) })) }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
 export async function POST(request: NextRequest) {
