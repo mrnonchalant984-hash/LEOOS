@@ -50,3 +50,12 @@ export function getOpenNextVersionForNext(nextVersion) {
     ' or ' + MINIMUM_SUPPORTED_NEXT[16] + ' before building.'
   );
 }
+
+export function getStaticRobotsTextFromLegacySource(source) {
+  if (typeof source !== 'string' || !/export\s+default\s+function/.test(source)) return null;
+  const match = /\breturn\s+\`([\s\S]*?)\`/.exec(source);
+  if (!match || match[1].includes(String.fromCharCode(36) + '{')) return null;
+  const robotsText = match[1].replace(/\r\n/g, '\n');
+  if (!/^\s*User-agent\s*:/im.test(robotsText)) return null;
+  return robotsText.endsWith('\n') ? robotsText : robotsText + '\n';
+}

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   getOpenNextVersionForNext,
+  getStaticRobotsTextFromLegacySource,
   getSupportedNextVersionForPreview,
   WORKER_WRANGLER_VERSION,
 } from './cloudflare-preview-versions.mjs';
@@ -182,6 +183,39 @@ async function writeWranglerConfig(directory, workerName, framework) {
   await writeFile(path.join(directory, 'wrangler.jsonc'), JSON.stringify(config, null, 2), 'utf8');
 }
 
+async function normalizeLegacyRobotsTextRoute(directory) {
+  for (const relativePath of ['app/robots.ts', 'src/app/robots.ts']) {
+    const routePath = path.join(directory, relativePath);
+    let source;
+    try {
+      source = await readFile(routePath, 'utf8');
+    } catch {
+      continue;
+    }
+
+    const robotsText = getStaticRobotsTextFromLegacySource(source);
+    if (robotsText === null) continue;
+
+    const publicDirectory = path.join(directory, 'public');
+    const publicRobotsPath = path.join(publicDirectory, 'robots.txt');
+    try {
+      await readFile(publicRobotsPath);
+      console.log(
+        'Preview compatibility: removed a legacy string-returning ' + relativePath +
+        ' because public/robots.txt already defines the robots response.'
+      );
+    } catch {
+      await mkdir(publicDirectory, { recursive: true });
+      await writeFile(publicRobotsPath, robotsText, 'utf8');
+      console.log(
+        'Preview compatibility: converted legacy string-returning ' + relativePath +
+        ' into public/robots.txt for the isolated build copy.'
+      );
+    }
+    await rm(routePath, { force: true });
+  }
+}
+
 async function buildNextProject(directory, workerName, usesTypeScript) {
   const packagePath = path.join(directory, 'package.json');
   const packageJson = JSON.parse(await readFile(packagePath, 'utf8'));
@@ -217,6 +251,7 @@ async function buildNextProject(directory, workerName, usesTypeScript) {
     );
   }
   await writeFile(packagePath, JSON.stringify(packageJson, null, 2), 'utf8');
+  await normalizeLegacyRobotsTextRoute(directory);
 
   const nextConfigPath = path.join(directory, 'next.config.js');
   try {

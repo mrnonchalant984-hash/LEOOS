@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import {
   getOpenNextVersionForNext,
+  getStaticRobotsTextFromLegacySource,
   getSupportedNextVersionForPreview,
   WORKER_WRANGLER_VERSION,
 } from '../scripts/cloudflare-preview-versions.mjs';
@@ -93,4 +94,29 @@ test('selects the current secure OpenNext adapter and upgrades legacy Next.js pr
   assert.equal(WORKER_WRANGLER_VERSION, '4.164.0');
   assert.throws(() => getOpenNextVersionForNext('14.2.5'), /below the supported OpenNext security floor/);
   assert.throws(() => getSupportedNextVersionForPreview('17.0.0'), /No supported Cloudflare preview runtime/);
+});
+
+
+test('converts only static string-returning legacy robots metadata routes', () => {
+  const source = [
+    'export default function Robots() {',
+    '  return \`User-agent: *',
+    'Allow: /',
+    'Sitemap: https://example.com/sitemap.xml\`;',
+    '}',
+  ].join('\n');
+  assert.equal(
+    getStaticRobotsTextFromLegacySource(source),
+    'User-agent: *\nAllow: /\nSitemap: https://example.com/sitemap.xml\n'
+  );
+  assert.equal(
+    getStaticRobotsTextFromLegacySource('export default function robots() { return { rules: { userAgent: "*" } }; }'),
+    null
+  );
+  const dynamicSource = [
+    'export default function robots() {',
+    '  return \`User-agent: ' + String.fromCharCode(36) + '{process.env.BOT}\\nAllow: /\`;',
+    '}',
+  ].join('\n');
+  assert.equal(getStaticRobotsTextFromLegacySource(dynamicSource), null);
 });
