@@ -201,3 +201,14 @@ test('affiliate withdrawal requests and owner decisions notify the affiliate wit
   assert.match(ownerApi, /Braverton affiliate commission/);
   assert.match(ownerApi, /affiliate-payout:/);
 });
+
+test('new message and supplier application decisions use deterministic notification keys', async () => {
+  const [messages, reseller, supplier] = await Promise.all([
+    read('../app/api/store/conversations/[id]/messages/route.ts'),
+    read('../app/api/store/suppliers/dropship/route.ts'),
+    read('../app/api/store/suppliers/route.ts'),
+  ]);
+  assert.match(messages, /idempotencyKey: `message:/);
+  assert.match(reseller, /dropship-application:.*submitted/);
+  assert.match(supplier, /dropship-application:.*String\(body\.decision\)/);
+});
