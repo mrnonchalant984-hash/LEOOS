@@ -36,7 +36,8 @@ export function getSupportedApiModels(configured = process.env.LEONARDX_API_MODE
   const requested = configured === undefined
     ? ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite']
     : configured.split(',').map(model => model.trim()).filter(Boolean);
-  return [...new Set(requested.filter(isApiModel))];
+  const supported = [...new Set(requested.filter(isApiModel))];
+  return supported.length || !requested.length ? supported : ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
 }
 
 export function getApiModelPricing(model: string, _now = new Date()) {
