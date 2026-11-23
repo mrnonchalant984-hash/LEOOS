@@ -335,6 +335,13 @@ async function main() {
   }
 
   const job = validateJob(payload.job, expectedPrefix);
+  const heartbeatUrl = new URL('/api/internal/previews/worker', baseUrl);
+  const heartbeatTimer = setInterval(() => {
+    requestJson(heartbeatUrl, secret, { id: job.id, workerId: job.workerId }).catch(error => {
+      console.error('Cloudflare preview worker heartbeat failed: ' + (error instanceof Error ? error.message.slice(0, 240) : 'unknown error'));
+    });
+  }, 60_000);
+  heartbeatTimer.unref?.();
   const directory = await mkdtemp(path.join(os.tmpdir(), 'braverton-cloudflare-worker-preview-'));
   let status = 'failed';
   let result;
@@ -366,8 +373,11 @@ async function main() {
         ? 'preview_worker_timeout'
         : 'preview_deploy_failed';
     console.error('Cloudflare Worker preview failed with code: ' + code);
-    result = { id: job.id, workerId: job.workerId, status, errorCode: code };
+    const errorMessage = error instanceof Error ? error.message.slice(0, 1000) : 'Unexpected preview deployment failure.';
+    console.error('Cloudflare Worker preview diagnostic: ' + errorMessage);
+    result = { id: job.id, workerId: job.workerId, status, errorCode: code, errorMessage };
   } finally {
+    clearInterval(heartbeatTimer);
     await rm(directory, { recursive: true, force: true });
   }
 
