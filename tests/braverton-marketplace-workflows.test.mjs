@@ -161,14 +161,18 @@ test('seller verification evidence is HTTPS-only, human-reviewed and visible to 
 });
 
 test('affiliate commission release runs through a CRON_SECRET-protected scheduled worker', async () => {
-  const [worker, config] = await Promise.all([
+  const [worker, config, operations] = await Promise.all([
     read('../app/api/cron/store/affiliate-commission-release/route.ts'),
     read('../vercel.json'),
+    read('../.github/workflows/braverton-market-operations.yml'),
   ]);
   assert.match(worker, /CRON_SECRET/);
   assert.match(worker, /release_eligible_marketplace_affiliate_commissions/);
   assert.match(worker, /affiliate-commission:.*eligible/);
-  assert.ok(JSON.parse(config).crons.some(item => item.path === '/api/cron/store/affiliate-commission-release'));
+  assert.match(operations, /affiliate-commission-release/);
+  assert.match(operations, /notification-retries/);
+  assert.match(operations, /CRON_SECRET/);
+  assert.deepEqual(JSON.parse(config).crons.map(item => item.schedule), ['0 9 * * *','0 10 * * *','0 11 * * *','0 12 * * *','0 13 * * *','0 14 * * *']);
 });
 
 test('marketplace landing shows all active seller categories by default and filters by stored category', async () => {
