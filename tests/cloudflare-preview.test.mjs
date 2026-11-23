@@ -109,7 +109,7 @@ test('scheduled preview worker fails visibly when credentials are missing', asyn
 });
 
 test('preview queue supports bounded retries, lease recovery, and persistent heartbeats', async () => {
-  const migration = await source('supabase/migrations/20261123150000_cloudflare_preview_retries_and_heartbeats.sql');
+  const migration = await source('supabase/migrations/20261123124237_cloudflare_preview_retries_and_heartbeats.sql');
   const workerRoute = await source('app/api/internal/previews/worker/route.ts');
   const resultRoute = await source('app/api/internal/previews/result/route.ts');
   const worker = await source('scripts/cloudflare-preview-worker.mjs');
