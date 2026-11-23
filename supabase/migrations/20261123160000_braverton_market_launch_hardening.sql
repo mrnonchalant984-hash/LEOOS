@@ -1,24 +1,22 @@
 -- Braverton Market launch hardening: seller decision audit, human-readable order refs,
 -- notification delivery evidence, and supplier-approved dropship applications.
-create sequence if not exists public.marketplace_order_number_seq;
-revoke all on sequence public.marketplace_order_number_seq from public,anon,authenticated;
-grant usage, select on sequence public.marketplace_order_number_seq to service_role;
-
 create or replace function public.assign_braverton_order_number()
-returns trigger language plpgsql set search_path = public as $$
+returns trigger language plpgsql set search_path = public as $
 begin
+  -- Random 48-bit suffix prevents easy reference enumeration; order access still
+  -- requires the authenticated buyer or seller relationship.
   new.order_number := 'BRV-' || to_char(coalesce(new.created_at, now()), 'YYYY') || '-' ||
-    lpad(nextval('public.marketplace_order_number_seq')::text, 6, '0');
+    upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 12));
   return new;
 end;
-$$;
+$;
 drop trigger if exists marketplace_orders_braverton_number on public.marketplace_orders;
 create trigger marketplace_orders_braverton_number
 before insert on public.marketplace_orders
 for each row execute function public.assign_braverton_order_number();
 update public.marketplace_orders
 set order_number = 'BRV-' || to_char(created_at, 'YYYY') || '-' ||
-  lpad(nextval('public.marketplace_order_number_seq')::text, 6, '0')
+  upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 12))
 where order_number like 'LX-%';
 
 create table if not exists public.marketplace_seller_verification_decisions (
@@ -271,8 +269,6 @@ end;
 $$;
 revoke all on function public.owner_review_marketplace_seller_verification(uuid,uuid,text,text) from public,anon,authenticated;
 grant execute on function public.owner_review_marketplace_seller_verification(uuid,uuid,text,text) to service_role;
-
-revoke all on function public.assign_braverton_order_number() from public,anon,authenticated;
 
 alter table public.marketplace_notifications
   add column if not exists preference_key text not null default 'order_updates'
