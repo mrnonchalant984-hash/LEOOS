@@ -99,21 +99,21 @@ test('selects the current secure OpenNext adapter and upgrades legacy Next.js pr
 test('converts only static string-returning legacy robots metadata routes', () => {
   const source = [
     'export default function Robots() {',
-    '  return `User-agent: *',
+    '  return \`User-agent: *',
     'Allow: /',
-    'Sitemap: https://example.com/sitemap.xml`;',
+    'Sitemap: https://example.com/sitemap.xml\`;',
     '}',
-  ].join('\\n');
+  ].join('\n');
   assert.equal(
     getStaticRobotsTextFromLegacySource(source),
-    'User-agent: *\\nAllow: /\\nSitemap: https://example.com/sitemap.xml\\n'
+    'User-agent: *\nAllow: /\nSitemap: https://example.com/sitemap.xml\n'
   );
   assert.equal(
     getStaticRobotsTextFromLegacySource('export default function robots() { return { rules: { userAgent: "*" } }; }'),
     null
   );
   assert.equal(
-    getStaticRobotsTextFromLegacySource('export default function robots() { return `User-agent: ${process.env.BOT}\\nAllow: /`; }'),
+    getStaticRobotsTextFromLegacySource('export default function robots() { return \`User-agent: ' + ' + '{process.env.BOT}\\nAllow: /\`; }'),
     null
   );
 });
