@@ -3,10 +3,10 @@
 create or replace function public.assign_braverton_order_number()
 returns trigger language plpgsql set search_path = public as $
 begin
-  -- Random 48-bit suffix prevents easy reference enumeration; order access still
+  -- Random 80-bit suffix prevents easy reference enumeration; order access still
   -- requires the authenticated buyer or seller relationship.
   new.order_number := 'BRV-' || to_char(coalesce(new.created_at, now()), 'YYYY') || '-' ||
-    upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 12));
+    upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 20));
   return new;
 end;
 $;
@@ -16,7 +16,7 @@ before insert on public.marketplace_orders
 for each row execute function public.assign_braverton_order_number();
 update public.marketplace_orders
 set order_number = 'BRV-' || to_char(created_at, 'YYYY') || '-' ||
-  upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 12))
+  upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 20))
 where order_number like 'LX-%';
 
 create table if not exists public.marketplace_seller_verification_decisions (
