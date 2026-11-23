@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   const ctx = await getProfile(request);
   if (!ctx) return NextResponse.json({ error: 'Sign in to view available models.' }, { status: 401 });
-  const configured = getModelProviderStatus().filter(model => model.configured);
+  const models = getModelProviderStatus();\n  const configured = models.filter(model => model.credential_present);\n  const operational = models.filter(model => model.operational);
   const defaults: { chat?: string; reasoning?: string } = {};
   try { defaults.chat = getDefaultTextModel('chat'); } catch { /* empty state is returned below */ }
   try { defaults.reasoning = getDefaultTextModel('reasoning'); } catch { /* empty state is returned below */ }
@@ -15,6 +15,6 @@ export async function GET(request: NextRequest) {
     models: getModelProviderStatus(),
     configured_count: configured.length,
     defaults,
-    error: configured.length ? undefined : 'No configured text model is available in this deployment.',
+    error: operational.length ? undefined : configured.length ? 'Gemini credentials are present, but no model has passed a live generation health check in this runtime.' : 'No Gemini API credential is configured in this deployment.',
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
