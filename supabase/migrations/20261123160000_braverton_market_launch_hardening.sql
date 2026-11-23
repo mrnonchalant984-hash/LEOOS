@@ -289,3 +289,26 @@ alter table public.marketplace_seller_verification_requests
 alter table public.marketplace_seller_verification_requests
   add constraint marketplace_seller_verification_evidence_notes_check
   check(evidence_notes is null or length(evidence_notes) <= 1000);
+
+create or replace function public.sync_braverton_dropship_listing_moderation()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  update public.marketplace_dropship_listings l
+     set status = case
+       when new.status = 'active' and sp.status = 'active' and sp.available_quantity > 0 and s.verification_status = 'approved' then 'active'
+       when sp.status <> 'active' or sp.available_quantity <= 0 or s.verification_status <> 'approved' then 'supplier_unavailable'
+       else 'paused'
+     end,
+     updated_at = now()
+    from public.marketplace_supplier_products sp
+    join public.marketplace_suppliers s on s.user_id=sp.supplier_id
+   where l.marketplace_product_id=new.id and l.supplier_product_id=sp.id and l.status <> 'removed';
+  return new;
+end;
+$$;
+drop trigger if exists marketplace_product_dropship_moderation on public.marketplace_products;
+create trigger marketplace_product_dropship_moderation
+after update of status on public.marketplace_products
+for each row when (old.status is distinct from new.status)
+execute function public.sync_braverton_dropship_listing_moderation();
+revoke all on function public.sync_braverton_dropship_listing_moderation() from public,anon,authenticated;
