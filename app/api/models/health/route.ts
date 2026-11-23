@@ -10,7 +10,7 @@ type ModelCheck = {
   credential_status: 'missing' | 'accepted' | 'rejected' | 'unknown';
   model_access: 'available' | 'denied' | 'not_found' | 'unknown';
   generation_method_supported: boolean | null;
-  quota_status: 'unknown';
+  quota_status: 'available_on_last_generation' | 'rate_or_quota_limited' | 'unknown';
   detail?: string;
 };
 
@@ -51,18 +51,18 @@ export async function GET(request: NextRequest) {
           credential_status: 'accepted',
           model_access: supported ? 'available' : 'denied',
           generation_method_supported: supported,
-          quota_status: 'unknown',
+          quota_status: item.health_status_code === 429 ? 'rate_or_quota_limited' : item.operational ? 'available_on_last_generation' : 'unknown',
           ...(!supported ? { detail: 'The API key can read model metadata, but generateContent is not listed as a supported method.' } : {}),
         };
       }
       if (response.status === 401 || response.status === 403) return {
         model: item.model, credential_status: 'rejected', model_access: 'denied',
-        generation_method_supported: null, quota_status: 'unknown',
+        generation_method_supported: null, quota_status: item.health_status_code === 429 ? 'rate_or_quota_limited' : item.operational ? 'available_on_last_generation' : 'unknown',
         detail: response.status === 401 ? 'Google rejected the API credential.' : 'Google denied access to this model or API for the configured project.',
       };
       if (response.status === 404) return {
         model: item.model, credential_status: 'accepted', model_access: 'not_found',
-        generation_method_supported: false, quota_status: 'unknown',
+        generation_method_supported: false, quota_status: item.health_status_code === 429 ? 'rate_or_quota_limited' : item.operational ? 'available_on_last_generation' : 'unknown',
         detail: 'Google could not resolve this model ID for the configured API.',
       };
       return {
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     } catch {
       return {
         model: item.model, credential_status: 'unknown', model_access: 'unknown',
-        generation_method_supported: null, quota_status: 'unknown',
+        generation_method_supported: null, quota_status: item.health_status_code === 429 ? 'rate_or_quota_limited' : item.operational ? 'available_on_last_generation' : 'unknown',
         detail: 'Google model metadata check failed due to a network or timeout error.',
       };
     }
