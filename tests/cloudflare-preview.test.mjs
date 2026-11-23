@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import { WORKER_WRANGLER_VERSION } from '../scripts/cloudflare-preview-versions.mjs';
+import { getOpenNextVersionForNext, WORKER_WRANGLER_VERSION } from '../scripts/cloudflare-preview-versions.mjs';
 import {
   MAX_CLOUDFLARE_PREVIEW_FILE_BYTES,
   MAX_CLOUDFLARE_PREVIEW_FILES,
@@ -92,4 +92,35 @@ test('preview worker stores no credentials in job payloads and verifies project-
   assert.match(resultRoute, /isVerifiedCloudflareWorkerPreviewUrl/);
   assert.match(resultRoute, /static_files: \{\}/);
   assert.doesNotMatch(resultRoute, /CLOUDFLARE_API_TOKEN/);
+});
+
+test('preview worker uses a pinned compatible OpenNext adapter and rejects unknown Next versions', () => {
+  assert.equal(getOpenNextVersionForNext('16.3.6'), '1.20.10');
+  assert.equal(getOpenNextVersionForNext('15.5.9'), '1.19.11');
+  assert.throws(() => getOpenNextVersionForNext('17.0.0'), /No verified OpenNext adapter mapping/);
+});
+
+test('scheduled preview worker fails visibly when credentials are missing', async () => {
+  const workflow = await source('.github/workflows/cloudflare-preview-worker.yml');
+  assert.match(workflow, /cron: '\*\/5 \* \* \* \*'/);
+  assert.match(workflow, /Required Cloudflare preview worker secrets are missing/);
+  assert.doesNotMatch(workflow, /ready=false/);
+  assert.match(workflow, /timeout-minutes: 30/);
+});
+
+test('preview queue supports bounded retries, lease recovery, and persistent heartbeats', async () => {
+  const migration = await source('supabase/migrations/20261123150000_cloudflare_preview_retries_and_heartbeats.sql');
+  const workerRoute = await source('app/api/internal/previews/worker/route.ts');
+  const resultRoute = await source('app/api/internal/previews/result/route.ts');
+  const worker = await source('scripts/cloudflare-preview-worker.mjs');
+  assert.match(migration, /attempts between 0 and 3/);
+  assert.match(migration, /lease_expires_at <= now\(\)/);
+  assert.match(migration, /cloudflare_preview_worker_heartbeats/);
+  assert.match(workerRoute, /p_lease_seconds: 1800/);
+  assert.match(workerRoute, /cloudflare_preview_worker_heartbeats/);
+  assert.match(workerRoute, /lease_expires_at: new Date\(Date.now\(\) \+ 30 \* 60 \* 1000\)/);
+  assert.match(resultRoute, /const shouldRetry = status === 'failed' && \(job\.attempts \|\| 0\) < 3/);
+  assert.match(resultRoute, /nextStatus === 'queued'/);
+  assert.match(worker, /setInterval\(\(\) =>/);
+  assert.match(worker, /errorMessage/);
 });
