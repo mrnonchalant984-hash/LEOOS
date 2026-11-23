@@ -1,4 +1,4 @@
-# LeoX Store validation report
+# Braverton Market validation report
 
 Validation commands below were run in the audit worktree (`attachment-pasted-text-1`), not inferred from earlier session results.
 

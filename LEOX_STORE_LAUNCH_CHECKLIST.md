@@ -1,4 +1,4 @@
-# LeoX Store release checklist
+# Braverton Market release checklist
 
 The current implementation and production status are maintained in [LEOX_STORE_RELEASE_GAPS.md](./LEOX_STORE_RELEASE_GAPS.md). This checklist supersedes older checkboxes and must not be read as a deployment approval.
 

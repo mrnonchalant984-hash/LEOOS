@@ -1,4 +1,4 @@
-# LeoX Store deployment
+# Braverton Market deployment
 
 No deployment or production migration was performed for this reconciliation. No production URL, Paystack account, or live checkout was tested. Read-only Supabase migration-history output showed remote migration versions matching local through `20261111160000`; this does not establish environment identity, actual RLS behavior, or live readiness.
 

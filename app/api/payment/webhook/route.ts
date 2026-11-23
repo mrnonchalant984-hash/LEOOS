@@ -223,6 +223,15 @@ export async function POST(req: NextRequest) {
         if (!affiliateUpdated) return NextResponse.json({ received: true, idempotent: true });
         await db.from('marketplace_affiliate_commissions').update({ status: affiliateStatus === 'success' ? 'paid' : affiliateStatus === 'reversed' ? 'reversed' : 'failed', paid_at: affiliateStatus === 'success' ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq('id', affiliatePayout.commission_id);
         await db.from('marketplace_affiliate_payout_requests').update({ status: affiliateStatus === 'success' ? 'paid' : affiliateStatus === 'reversed' ? 'reversed' : 'failed', updated_at: new Date().toISOString() }).eq('commission_id', affiliatePayout.commission_id);
+        try {
+          await notifyMarketplaceUser({
+            userId: affiliatePayout.affiliate_id, kind: 'affiliate_payout',
+            title: affiliateStatus === 'success' ? 'Affiliate payout sent' : affiliateStatus === 'reversed' ? 'Affiliate payout reversed' : 'Affiliate payout failed',
+            body: affiliateStatus === 'success' ? 'Your approved Braverton affiliate payout was sent.' : 'Your Braverton affiliate payout needs review. Check your affiliate dashboard and contact support if needed.',
+            href: '/store/affiliates', preference: 'support_updates',
+            idempotencyKey: `affiliate-payout:${affiliatePayout.id}:${affiliateStatus}`,
+          });
+        } catch (noticeError) { reportFailure(noticeError, 'marketplace_notification'); }
         return NextResponse.json({ received: true });
       }
       const payoutStatus = eventName === 'transfer.success' ? 'paid' : eventName === 'transfer.failed' ? 'failed' : 'reversed';
@@ -241,7 +250,7 @@ export async function POST(req: NextRequest) {
           userId: payout.seller_id,
           kind: 'payout',
           title: payoutStatus === 'paid' ? 'Seller payout sent' : payoutStatus === 'failed' ? 'Seller payout needs review' : 'Seller payout reversed',
-          body: payoutStatus === 'paid' ? 'Your LeoX Store payout has been sent to your saved bank account.' : 'Your LeoX Store payout requires review. Contact support before changing your payout account.',
+          body: payoutStatus === 'paid' ? 'Your Braverton Market payout has been sent to your saved bank account.' : 'Your Braverton Market payout requires review. Contact support before changing your payout account.',
           href: '/store/seller',
           preference: 'order_updates',
         });
@@ -259,7 +268,7 @@ export async function POST(req: NextRequest) {
       if (verifiedMetadata.type !== 'marketplace_order' || verifiedMetadata.order_id !== orderId || verifiedMetadata.user_id !== userId || String(verified.currency).toUpperCase() !== 'NGN') {
         return NextResponse.json({ error: 'Verified marketplace payment metadata does not match.' }, { status: 409 });
       }
-      const { data: order, error: orderError } = await db.from('marketplace_orders').select('id,buyer_id,total_kobo,payment_reference').eq('id', orderId).maybeSingle();
+      const { data: order, error: orderError } = await db.from('marketplace_orders').select('id,order_number,buyer_id,total_kobo,payment_reference').eq('id', orderId).maybeSingle();
       if (orderError) throw orderError;
       if (!order || order.buyer_id !== userId || order.payment_reference !== reference || Number(verified.amount) !== Number(order.total_kobo)) {
         return NextResponse.json({ error: 'Verified marketplace payment does not match the order.' }, { status: 409 });
@@ -271,6 +280,28 @@ export async function POST(req: NextRequest) {
       });
       if (applyError) throw applyError;
       if (applied !== false) {
+        const { data: orderItemsForNotice, error: noticeItemsError } = await db.from('marketplace_order_items')
+          .select('seller_id').eq('order_id', orderId);
+        if (noticeItemsError) reportFailure(noticeItemsError, 'marketplace_notification');
+        const sellerIds = [...new Set((orderItemsForNotice ?? []).map(item => item.seller_id))];
+        try {
+          await notifyMarketplaceUser({
+            userId: order.buyer_id, kind: 'order_payment', title: 'Braverton Market payment confirmed',
+            body: `Payment confirmed for order ${order.order_number}. You can follow its fulfilment updates in Orders.`,
+            href: '/store/orders', preference: 'order_updates',
+            idempotencyKey: `order:${orderId}:payment-confirmed:buyer`,
+          });
+        } catch (noticeError) { reportFailure(noticeError, 'marketplace_notification'); }
+        for (const sellerId of sellerIds) {
+          try {
+            await notifyMarketplaceUser({
+              userId: sellerId, kind: 'new_order', title: 'New paid Braverton Market order',
+              body: `A buyer has paid order ${order.order_number}. Open your seller workspace to arrange fulfilment.`,
+              href: '/store/seller/orders', preference: 'order_updates',
+              idempotencyKey: `order:${orderId}:payment-confirmed:seller:${sellerId}`,
+            });
+          } catch (noticeError) { reportFailure(noticeError, 'marketplace_notification'); }
+        }
         const { data: jobs, error: jobsError } = await db.from('marketplace_supplier_fulfillment_requests')
           .select('id,order_id,supplier_id,supplier_product_id,quantity').eq('order_id', orderId).eq('status', 'requested').limit(50);
         if (jobsError) reportFailure(jobsError, 'supplier_dispatch');
@@ -297,6 +328,24 @@ export async function POST(req: NextRequest) {
     }
 
     if (eventName === 'charge.failed' && reference) {
+      if (metadata.type === 'marketplace_order' && typeof metadata.order_id === 'string') {
+        const { data: failedOrder, error: failedOrderError } = await db.from('marketplace_orders')
+          .update({ status: 'payment_failed', updated_at: new Date().toISOString() })
+          .eq('id', metadata.order_id).eq('payment_reference', reference).eq('status', 'pending_payment')
+          .select('id,buyer_id,order_number').maybeSingle();
+        if (failedOrderError) throw failedOrderError;
+        if (failedOrder) {
+          await db.from('marketplace_order_events').insert({ order_id: failedOrder.id, event_type: 'payment_failed' });
+          try {
+            await notifyMarketplaceUser({
+              userId: failedOrder.buyer_id, kind: 'order_payment_failed', title: 'Braverton Market payment was not completed',
+              body: `Payment for order ${failedOrder.order_number} was not completed. Check Orders before trying again.`,
+              href: '/store/orders', preference: 'order_updates',
+              idempotencyKey: `order:${failedOrder.id}:payment-failed`,
+            });
+          } catch (noticeError) { reportFailure(noticeError, 'marketplace_notification'); }
+        }
+      }
       const failedUpdate: Record<string, string> = { status: 'failed', verified_at: new Date().toISOString() };
       if (providerEventColumnAvailable && providerEventId) failedUpdate.provider_event_id = providerEventId;
       const { error: paymentError } = await db.from('payments')
@@ -326,9 +375,22 @@ export async function POST(req: NextRequest) {
           const { error: refundUpdateError } = await db.from('marketplace_refunds').update({ status: refundStatus, updated_at: new Date().toISOString() }).eq('id', marketplaceRefund.id).neq('status', refundStatus);
           if (refundUpdateError) throw refundUpdateError;
           if (refundStatus === 'processed') {
-            const { error: orderUpdateError } = await db.from('marketplace_orders').update({ status: 'refunded', updated_at: new Date().toISOString() }).eq('id', marketplaceRefund.order_id).eq('status', 'refund_pending');
+            const { data: refundedOrder, error: orderUpdateError } = await db.from('marketplace_orders')
+              .update({ status: 'refunded', updated_at: new Date().toISOString() })
+              .eq('id', marketplaceRefund.order_id).eq('status', 'refund_pending')
+              .select('id,buyer_id,order_number').maybeSingle();
             if (orderUpdateError) throw orderUpdateError;
-            await db.from('marketplace_order_events').insert({ order_id: marketplaceRefund.order_id, event_type: 'refund_processed' });
+            if (refundedOrder) {
+              await db.from('marketplace_order_events').insert({ order_id: refundedOrder.id, event_type: 'refund_processed' });
+              try {
+                await notifyMarketplaceUser({
+                  userId: refundedOrder.buyer_id, kind: 'order_refund', title: 'Braverton Market refund processed',
+                  body: `Your refund for order ${refundedOrder.order_number} has been processed by the payment provider.`,
+                  href: '/store/orders', preference: 'order_updates',
+                  idempotencyKey: `order:${refundedOrder.id}:refund-processed`,
+                });
+              } catch (noticeError) { reportFailure(noticeError, 'marketplace_notification'); }
+            }
           }
         }
         const refundUpdate: Record<string, string> = { status: 'refunded', refunded_at: new Date().toISOString() };

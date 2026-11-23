@@ -1,10 +1,10 @@
-# LeoX Store policy drafts — legal review required
+# Braverton Market policy drafts — legal review required
 
 These drafts are product notes, not approved legal terms. Do not publish them as binding terms until counsel adapts them for each operating jurisdiction and confirms the actual payment, delivery, privacy, and dispute processes. Current application code includes buyer/seller, moderation, data-export/deletion-request, consent-record, and notification-preference workflows, but those mechanisms do not themselves constitute an approved legal policy or establish complete compliance.
 
 ## Marketplace use and prohibited listings
 
-LeoX Store is a marketplace for buyers and independent sellers. Sellers are responsible for accurate item descriptions, lawful ownership, pricing, delivery promises, and compliance with applicable laws. Listings for illegal goods, stolen property, counterfeit goods, regulated goods offered without required authorization, unsafe goods, or deceptive services may be rejected or removed. LeoX may restrict accounts or listings while investigating a credible safety or fraud report. The final prohibited-item taxonomy and appeal timescale require legal and operational approval.
+Braverton Market is a marketplace for buyers and independent sellers. Sellers are responsible for accurate item descriptions, lawful ownership, pricing, delivery promises, and compliance with applicable laws. Listings for illegal goods, stolen property, counterfeit goods, regulated goods offered without required authorization, unsafe goods, or deceptive services may be rejected or removed. LeoX may restrict accounts or listings while investigating a credible safety or fraud report. The final prohibited-item taxonomy and appeal timescale require legal and operational approval.
 
 ## Privacy and marketplace data
 

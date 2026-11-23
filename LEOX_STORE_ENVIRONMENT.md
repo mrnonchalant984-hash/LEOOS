@@ -1,4 +1,4 @@
-# LeoX Store environment
+# Braverton Market environment
 
 Required application configuration:
 

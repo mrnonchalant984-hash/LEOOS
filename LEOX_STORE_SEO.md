@@ -1,4 +1,4 @@
-# LeoX Store SEO
+# Braverton Market SEO
 
 Implemented public surfaces include Store discovery, active product detail, and verified seller pages. Product details include canonical metadata, Open Graph title/description, and Product/Offer JSON-LD; public listing images are rendered when present. Active listing URLs are included in the existing sitemap with a bounded recent-item limit. Non-active listings and seller tools are not intended for indexing.
 

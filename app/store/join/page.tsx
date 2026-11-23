@@ -1,13 +1,13 @@
 import Link from 'next/link';
 
-export const metadata = { title: 'Join LeoX Store' };
+export const metadata = { title: 'Join Braverton Market' };
 
 const signupHref = (accountType: 'buyer' | 'seller') =>
   `/auth?mode=signup&store=1&account_type=${accountType}&next=${encodeURIComponent(accountType === 'seller' ? '/store/seller' : '/store/account')}`;
 
 export default function StoreJoinPage() {
   return <main className="mx-auto min-h-[70vh] max-w-5xl px-5 py-14 sm:px-8">
-    <p className="text-xs font-bold uppercase tracking-[.2em] text-[#c8501c]">LeoX Store accounts</p>
+    <p className="text-xs font-bold uppercase tracking-[.2em] text-[#c8501c]">Braverton Market accounts</p>
     <h1 className="mt-3 text-4xl font-black tracking-tight text-stone-900 sm:text-5xl">Choose your Store experience</h1>
     <p className="mt-4 max-w-2xl leading-7 text-stone-600">Start with the workspace that fits you. You can shop as a buyer and apply to sell later from the seller dashboard.</p>
     <div className="mt-9 grid gap-5 md:grid-cols-2">

@@ -1,4 +1,4 @@
-# LeoX Store database
+# Braverton Market database
 
 Store schema is delivered by additive migrations under `supabase/migrations/`:
 

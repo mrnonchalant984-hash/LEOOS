@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getUserFromRequest } from '@/lib/auth';
+import { notifyMarketplaceUser } from '@/lib/store-notifications';
 export const runtime = 'nodejs'; export const dynamic = 'force-dynamic';
 export async function PATCH(request: NextRequest) {
   if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Request origin is invalid.' }, { status: 403 });
@@ -8,5 +9,18 @@ export async function PATCH(request: NextRequest) {
   if (typeof body?.requestId !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.requestId) || !['accepted','rejected','processing','shipped','delivered','cancelled','failed'].includes(String(body.status)) || (body.supplierReference !== undefined && (typeof body.supplierReference !== 'string' || body.supplierReference.length > 200)) || (body.trackingReference !== undefined && (typeof body.trackingReference !== 'string' || body.trackingReference.length > 200)) || (body.trackingUrl !== undefined && (typeof body.trackingUrl !== 'string' || body.trackingUrl.length > 1000 || (body.trackingUrl.trim() !== '' && !/^https:\/\//.test(body.trackingUrl))))) return NextResponse.json({ error: 'Invalid supplier fulfilment update.' }, { status: 400 });
   const { data, error } = await adminSupabase().rpc('update_marketplace_supplier_fulfillment', { p_request_id: body.requestId, p_supplier_id: user.id, p_status: body.status, p_supplier_reference: typeof body.supplierReference === 'string' ? body.supplierReference.trim() : null, p_tracking_reference: typeof body.trackingReference === 'string' ? body.trackingReference.trim() : null, p_tracking_url: typeof body.trackingUrl === 'string' && body.trackingUrl.trim() ? body.trackingUrl.trim() : null });
   if (error) return NextResponse.json({ error: /not found/i.test(error.message) ? 'Fulfilment request not found.' : /terminal|invalid|tracking/i.test(error.message) ? error.message : 'Supplier fulfilment update could not be saved.' }, { status: /not found/i.test(error.message) ? 404 : /terminal|invalid|tracking/i.test(error.message) ? 409 : 503 });
+  try {
+    const { data: order, error: orderError } = await adminSupabase().from('marketplace_orders')
+      .select('buyer_id,order_number').eq('id', data.order_id).maybeSingle();
+    if (orderError) throw orderError;
+    if (order) await notifyMarketplaceUser({
+      userId: order.buyer_id, kind: 'supplier_fulfillment', title: 'Supplier delivery update',
+      body: `The supplier updated fulfilment for order ${order.order_number}: ${String(body.status).replaceAll('_',' ')}.`,
+      href: '/store/orders', preference: 'order_updates',
+      idempotencyKey: `supplier-fulfillment:${data.id}:${String(body.status)}:${data.updated_at}`,
+    });
+  } catch (noticeError) {
+    console.error('Buyer supplier-fulfilment notification failed:', noticeError instanceof Error ? noticeError.message : 'unknown error');
+  }
   return NextResponse.json({ fulfillment: data }, { headers: { 'Cache-Control': 'no-store' } });
 }

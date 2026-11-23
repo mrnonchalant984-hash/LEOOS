@@ -1,7 +1,7 @@
 self.addEventListener('push', event => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch { payload = { body: event.data?.text() ?? '' }; }
-  const title = typeof payload.title === 'string' ? payload.title : 'LeoX Store';
+  const title = typeof payload.title === 'string' ? payload.title : 'Braverton Market';
   const options = {
     body: typeof payload.body === 'string' ? payload.body : '',
     data: { href: typeof payload.href === 'string' && payload.href.startsWith('/store/') ? payload.href : '/store/account' },

@@ -1,4 +1,4 @@
-# LeoX Store implementation and release status
+# Braverton Market implementation and release status
 
 This is the authoritative implementation-status document for every `LEOX_STORE_*.md` file at the repository root and under `docs/`. It compares repository code and migration files with the recorded remote Supabase migration history. It does not assert that production has been deployed or that live RLS behavior has been tested.
 

@@ -12,13 +12,34 @@ export async function sendOwnerWhatsApp(text: string) {
 }
 
 export async function sendClientEmail(input:{to:string; subject:string; text:string; html?:string}) {
-  const apiKey=process.env.RESEND_API_KEY;
-  const from=process.env.CONTACT_FROM_EMAIL;
-  if(!apiKey || !from || !input.to) return false;
-  const r=await fetch('https://api.resend.com/emails',{
-    method:'POST',
-    headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
-    body:JSON.stringify({from,to:[input.to],subject:input.subject,text:input.text,html:input.html})
+  // Web3Forms calls this an Access Key. There is no separate Form ID; when
+  // using the optional /submit/{FORM_ID} route, the Access Key is that ID.
+  const accessKey = process.env.WEB3FORMS_ACCESS_KEY || process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY;
+  if (!accessKey || !input.to) return false;
+
+  // Web3Forms requires an active paid plan and deployment egress-IP
+  // allowlisting for server-side submissions. The free endpoint is client-side.
+  const response = await fetch('https://api.web3forms.com/submit', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({
+      access_key: accessKey,
+      from_name: 'Braverton Market',
+      subject: input.subject.slice(0, 160),
+      email: input.to,
+      message: input.text.slice(0, 12000),
+    }),
+    signal: AbortSignal.timeout(15000),
   });
-  return r.ok;
+
+  if (response.status !== 200) return false;
+  const result = await response.json().catch(() => null) as {
+    success?: boolean;
+    message?: string;
+    body?: { message?: string };
+  } | null;
+  return result?.success === true;
 }

@@ -1,4 +1,4 @@
-# LeoX Store API
+# Braverton Market API
 
 This is an API map, not the complete release gate. See [LEOX_STORE_RELEASE_GAPS.md](./LEOX_STORE_RELEASE_GAPS.md) for the authoritative feature and production status. Routes use the existing Leo session/auth helpers and server-side Supabase service client; individual endpoints apply their own ownership, verified-seller, rate-limit, and owner/2FA checks.
 

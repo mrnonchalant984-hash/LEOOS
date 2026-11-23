@@ -1,6 +1,6 @@
-# LeoX Store architecture
+# Braverton Market architecture
 
-LeoX Store is an existing feature inside the LeonardX Next.js App Router application, not a separate replacement application. It reuses the site's auth/session helpers, server-side Supabase client, Postgres migrations, navigation, and UI conventions.
+Braverton Market is an existing feature inside the LeonardX Next.js App Router application, not a separate replacement application. It reuses the site's auth/session helpers, server-side Supabase client, Postgres migrations, navigation, and UI conventions.
 
 ## Main surfaces
 

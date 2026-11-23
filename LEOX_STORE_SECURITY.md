@@ -1,4 +1,4 @@
-# LeoX Store security status
+# Braverton Market security status
 
 Implemented controls found in source include session-based authentication, same-origin checks on sensitive writes, verified-seller gates for seller operations, owner + verified-2FA gates for moderation/refunds, request limits, bounded/validated inputs, participant and ownership checks, signed Paystack webhook verification, and migration-defined RLS/grants/storage policies. Product images and private message attachments have upload/storage paths; the older claim that image upload is absent is incorrect.
 

@@ -5,8 +5,9 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
 type Order = { id: string; order_number: string; status: string; currency: string; created_at: string; buyer_id: string; total_kobo: number };
 type Fulfillment = { status: string; method: string; courier_name: string | null; tracking_reference: string | null; tracking_url: string | null; delivery_notes: string; issue_details: string | null; buyer_confirmed_at: string | null } | null;
-type Row = { order_id: string; title: string; quantity: number; line_total_kobo: number; order: Order | Order[]; fulfillment: Fulfillment; delivery: { name: string; details: string; fee_kobo: number } | null };
-type Group = { order: Order; rows: Row[]; fulfillment: Fulfillment; delivery: Row['delivery'] };
+type Event = { event_type: string; created_at: string };
+type Row = { order_id: string; title: string; quantity: number; line_total_kobo: number; order: Order | Order[]; fulfillment: Fulfillment; delivery: { name: string; details: string; fee_kobo: number } | null; events?: Event[] };
+type Group = { order: Order; rows: Row[]; fulfillment: Fulfillment; delivery: Row['delivery']; events: Event[] };
 
 const money = (kobo: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(kobo / 100);
 
@@ -22,10 +23,11 @@ export function SellerOrdersClient() {
     for (const row of result.orders as Row[]) {
       const order = Array.isArray(row.order) ? row.order[0] : row.order;
       if (!order) continue;
-      const group = map.get(order.id) ?? { order, rows: [], fulfillment: row.fulfillment, delivery: row.delivery };
+      const group = map.get(order.id) ?? { order, rows: [], fulfillment: row.fulfillment, delivery: row.delivery, events: [] };
       group.rows.push(row);
       if (row.fulfillment) group.fulfillment = row.fulfillment;
       if (row.delivery) group.delivery = row.delivery;
+      for (const item of row.events ?? []) if (!group.events.some(existing => existing.event_type === item.event_type && existing.created_at === item.created_at)) group.events.push(item);
       map.set(order.id, group);
     }
     setGroups([...map.values()]); setError('');
@@ -52,7 +54,7 @@ export function SellerOrdersClient() {
   }
 
   return <><Link href="/store/seller" className="text-sm text-white/55">← Seller dashboard</Link>
-    <p className="mt-5 text-xs font-semibold uppercase tracking-[.2em] text-amber-200">LeoX Store · Seller workspace</p>
+    <p className="mt-5 text-xs font-semibold uppercase tracking-[.2em] text-amber-200">Braverton Market · Seller workspace</p>
     <h1 className="mt-2 text-3xl font-semibold">Orders and delivery</h1>
     <p className="mt-2 text-sm leading-6 text-white/55">Arrange delivery with your buyer, then enter the courier and tracking details. Seller payout starts only after the buyer confirms receipt.</p>
     {error && <p role="alert" className="mt-5 text-sm text-rose-200">{error}</p>}
@@ -60,6 +62,7 @@ export function SellerOrdersClient() {
       <header className="flex flex-wrap justify-between gap-3"><div><h2 className="font-semibold">{group.order.order_number}</h2><p className="text-xs text-white/50">{new Date(group.order.created_at).toLocaleString()} · {group.order.status.replaceAll('_', ' ')}</p></div><span className="text-sm text-amber-100">{group.delivery?.name ?? 'Delivery'} · {money(group.delivery?.fee_kobo ?? 0)}</span></header>
       <ul className="mt-4 space-y-2 text-sm text-white/70">{group.rows.map((row, index) => <li key={`${row.order_id}-${index}`} className="flex justify-between gap-3"><span>{row.title} × {row.quantity}</span><span>{money(row.line_total_kobo)}</span></li>)}</ul>
       <p className="mt-3 text-xs text-white/45">Buyer ID {group.order.buyer_id}</p>
+      {group.events.length > 0 && <section className="mt-4 rounded-xl border border-white/10 p-4"><h3 className="text-sm font-semibold">Tracking timeline</h3><ol className="mt-3 space-y-2">{group.events.map((event,index) => <li key={`${event.event_type}-${event.created_at}-${index}`} className="text-sm"><span className="capitalize">{event.event_type.replaceAll('_',' ')}</span><span className="ml-2 text-xs text-white/45">{new Date(event.created_at).toLocaleString()}</span></li>)}</ol></section>}
       {group.fulfillment?.buyer_confirmed_at && <p className="mt-3 text-sm text-emerald-200">Buyer confirmed receipt · payout {group.fulfillment.status === 'delivered' ? 'is being processed' : 'status available in seller payouts'}.</p>}
       {['paid', 'cancellation_requested'].includes(group.order.status) && <form onSubmit={event => void save(event, group.order.id)} className="mt-5 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-2">
         <label className="text-sm">Delivery status<select name="status" defaultValue={group.fulfillment?.status ?? 'processing'} className="mt-2 w-full rounded-xl border border-white/10 px-4 py-3"><option value="processing">Processing</option><option value="shipped">Shipped</option><option value="delivered">Delivered — buyer confirmation required for payout</option><option value="delivery_issue">Delivery issue</option><option value="cancelled">Cancelled</option></select></label>
