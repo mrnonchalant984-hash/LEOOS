@@ -22,8 +22,15 @@ export async function POST(request: NextRequest) {
     .eq('status', 'pending').order('created_at', { ascending: true }).limit(20);
   if (error) return NextResponse.json({ error: 'Seller verification queue is unavailable.' }, { status: 503 });
 
+  const requestIds = (requests ?? []).map(item => item.id);
+  const { data: priorDecisions, error: priorError } = requestIds.length
+    ? await db.from('marketplace_seller_verification_decisions').select('request_id').in('request_id', requestIds).eq('engine_version', ENGINE_VERSION)
+    : { data: [], error: null };
+  if (priorError) return NextResponse.json({ error: 'Bram decision history is unavailable.' }, { status: 503 });
+  const alreadyReviewed = new Set((priorDecisions ?? []).map(row => row.request_id));
   const results: Array<{ requestId: string; outcome: string; riskScore: number }> = [];
   for (const item of requests ?? []) {
+    if (alreadyReviewed.has(item.id)) continue;
     const signals: string[] = [];
     let score = 0;
     const [{ data: authResult, error: authError }, { data: profile, error: profileError }, { data: existingSeller, error: sellerError }, { data: duplicateRequest, error: duplicateError }] = await Promise.all([
