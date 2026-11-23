@@ -1,4 +1,4 @@
-# LeoX Store — provider-dependent settlement boundary
+# Braverton Market — provider-dependent settlement boundary
 
 ## Current implementation
 
