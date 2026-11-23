@@ -182,7 +182,7 @@ begin
     'dropship-' || replace(gen_random_uuid()::text,'-',''),
     left(v_supplier_product.title,120),
     left(coalesce(nullif(v_supplier_product.description,''),v_supplier_product.title),5000),
-    v_app.category,v_app.proposed_selling_price_kobo::numeric / 100,'NGN','new',
+    v_app.category,v_app.proposed_selling_price_kobo::numeric / 100,v_supplier_product.currency,'new',
     v_app.country_code,v_app.region,v_app.city,'pending_review','{}','{}',
     v_supplier_product.available_quantity,0
   ) returning * into v_product;
