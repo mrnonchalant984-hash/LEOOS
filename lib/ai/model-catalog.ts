@@ -15,7 +15,7 @@ export class ModelProviderError extends Error {
 // is the default general-purpose agent model.
 const MODEL_PRESETS: Record<string, { name: string; provider: ModelProvider; model: string; capabilities: string[] }> = {
   'google/gemini-3.5-flash-lite': { name: 'Gemini 3.5 Flash-Lite (Free tier)', provider: 'google', model: 'gemini-3.5-flash-lite', capabilities: ['text', 'tools', 'multimodal'] },
-  'google/gemini-2.5-flash-lite': { name: 'Gemini 2.5 Flash-Lite (Free tier + Search)', provider: 'google', model: 'gemini-2.5-flash-lite', capabilities: ['text', 'tools', 'multimodal', 'web_search'] },
+  'google/gemini-2.5-flash-lite': { name: 'Gemini 2.5 Flash-Lite (Free tier)', provider: 'google', model: 'gemini-2.5-flash-lite', capabilities: ['text', 'tools', 'multimodal', 'web_search'] },
 };
 
 export function normalizeGeminiModelId(modelName: string) { return modelName.trim(); }
@@ -52,10 +52,7 @@ export function resolveModel(modelName: string): { provider: ModelProvider; mode
 }
 
 export function getDefaultTextModel(mode: 'chat' | 'reasoning' | 'research' = 'chat') {
-  if (mode === 'research') {
-    if (!configuredProvider('google')) throw new ModelProviderError('Gemini is not configured. Set GEMINI_API_KEY or GOOGLE_API_KEY before using Research.', 503);
-    return 'google/gemini-2.5-flash-lite';
-  }
+  if (mode === 'research') mode = 'chat';
   const configured = mode === 'reasoning'
     ? process.env.LEO_REASONING_MODEL?.trim() || process.env.LEO_CHAT_MODEL?.trim()
     : process.env.LEO_CHAT_MODEL?.trim();
