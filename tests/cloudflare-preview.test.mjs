@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import { WORKER_WRANGLER_VERSION } from '../scripts/cloudflare-preview-versions.mjs';
 import {
   MAX_CLOUDFLARE_PREVIEW_FILE_BYTES,
   MAX_CLOUDFLARE_PREVIEW_FILES,
@@ -81,7 +82,8 @@ test('preview API is owner- and plan-scoped and the deployment queue has hard ca
 test('preview worker stores no credentials in job payloads and verifies project-scoped Worker deployment', async () => {
   const worker = await source('scripts/cloudflare-preview-worker.mjs');
   const resultRoute = await source('app/api/internal/previews/result/route.ts');
-  assert.match(worker, /wrangler@4\.159\.0/);
+  assert.equal(WORKER_WRANGLER_VERSION, '4.164.0');
+  assert.match(worker, /wrangler@' \+ WORKER_WRANGLER_VERSION/);
   assert.match(worker, /wrangler\.preview\.jsonc/);
   assert.match(worker, /workers\.dev/);
   assert.match(worker, /SECRET_PATTERNS/);
