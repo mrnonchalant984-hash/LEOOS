@@ -618,6 +618,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: message }, { status: 503 });
       }
     } else {
+      // Normalize stale client selections (for example Gemini 2.5 Flash-Lite)
+      // before checking the current model catalog.
+      try {
+        const normalized = resolveModel(selectedModel);
+        selectedModel = `${normalized.provider}/${normalized.model}`;
+      } catch {
+        return NextResponse.json({ error: "That model is no longer supported. Refresh the model list and try again." }, { status: 400 });
+      }
       const advertised = getModelProviderStatus().find(item => item.id === selectedModel);
       if (!advertised) return NextResponse.json({ error: "Choose a model from the available model list." }, { status: 400 });
       if (!advertised.configured || !isProviderConfigured(advertised.provider)) {
