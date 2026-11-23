@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { getOpenNextVersionForNext, WORKER_WRANGLER_VERSION } from '../scripts/cloudflare-preview-versions.mjs';
+import {
+  getOpenNextVersionForNext,
+  getSupportedNextVersionForPreview,
+  WORKER_WRANGLER_VERSION,
+} from '../scripts/cloudflare-preview-versions.mjs';
 import { readFile } from 'node:fs/promises';
 import {
   getCloudflarePreviewWorkerName,
@@ -80,11 +84,13 @@ test('Cloudflare preview runner is valid JavaScript and the API passes/verifies 
   assert.match(migration, /preview_worker_configuration_failed/);
 });
 
-test('selects a verified OpenNext adapter for the installed Next.js version', () => {
-  assert.equal(getOpenNextVersionForNext('16.4.5'), '1.20.17');
-  assert.equal(getOpenNextVersionForNext('16.4.4'), '1.20.12');
-  assert.equal(getOpenNextVersionForNext('16.3.8'), '1.20.10');
-  assert.equal(getOpenNextVersionForNext('15.5.0'), '1.19.11');
+test('selects the current secure OpenNext adapter and upgrades legacy Next.js preview versions', () => {
+  assert.equal(getSupportedNextVersionForPreview('14.2.5'), '15.5.29');
+  assert.equal(getSupportedNextVersionForPreview('15.5.0'), '15.5.29');
+  assert.equal(getSupportedNextVersionForPreview('16.3.8'), '16.4.5');
+  assert.equal(getOpenNextVersionForNext('15.5.29'), '1.20.18');
+  assert.equal(getOpenNextVersionForNext('16.4.5'), '1.20.18');
   assert.equal(WORKER_WRANGLER_VERSION, '4.164.0');
-  assert.throws(() => getOpenNextVersionForNext('17.0.0'), /No verified OpenNext adapter/);
+  assert.throws(() => getOpenNextVersionForNext('14.2.5'), /below the supported OpenNext security floor/);
+  assert.throws(() => getSupportedNextVersionForPreview('17.0.0'), /No supported Cloudflare preview runtime/);
 });
