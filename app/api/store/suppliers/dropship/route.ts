@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   const db = adminSupabase();
   const [{ data: seller, error: sellerError }, { data: supplierProduct, error: productError }] = await Promise.all([
     db.from('marketplace_sellers').select('is_verified').eq('user_id', user.id).maybeSingle(),
-    db.from('marketplace_supplier_products').select('id,supplier_id,cost_kobo,available_quantity,status').eq('id', body.supplierProductId).maybeSingle(),
+    db.from('marketplace_supplier_products').select('id,supplier_id,cost_kobo,currency,available_quantity,status').eq('id', body.supplierProductId).maybeSingle(),
   ]);
   if (sellerError || productError) return NextResponse.json({ error: 'Seller and supplier access could not be checked.' }, { status: 503 });
   if (!seller?.is_verified) return NextResponse.json({ error: 'Seller verification is required before applying for dropship inventory.' }, { status: 403 });
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   if (supplier?.verification_status !== 'approved') return NextResponse.json({ error: 'Only approved suppliers can accept dropship applications.' }, { status: 403 });
   const { data, error } = await db.from('marketplace_dropship_applications').insert({
     supplier_product_id: supplierProduct.id, supplier_id: supplierProduct.supplier_id,
-    seller_id: user.id, proposed_selling_price_kobo: body.sellingPriceKobo,
+    seller_id: user.id, proposed_selling_price_kobo: body.sellingPriceKobo, currency: supplierProduct.currency,
     category: body.category.trim(), country_code: body.countryCode.toUpperCase(),
     city: body.city.trim(), region: typeof body.region === 'string' ? body.region.trim() || null : null,
     terms_version: TERMS_VERSION, seller_agreed_at: new Date().toISOString(),
