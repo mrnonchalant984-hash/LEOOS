@@ -312,3 +312,25 @@ after update of status on public.marketplace_products
 for each row when (old.status is distinct from new.status)
 execute function public.sync_braverton_dropship_listing_moderation();
 revoke all on function public.sync_braverton_dropship_listing_moderation() from public,anon,authenticated;
+
+create or replace function public.sync_braverton_supplier_verification_to_listings()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  update public.marketplace_dropship_listings l
+     set status = case
+       when new.verification_status='approved' and sp.status='active' and sp.available_quantity > 0 and p.status='active' then 'active'
+       else 'supplier_unavailable'
+     end,
+     updated_at=now()
+    from public.marketplace_supplier_products sp
+    join public.marketplace_products p on p.id=l.marketplace_product_id
+   where sp.supplier_id=new.user_id and l.supplier_product_id=sp.id and l.status <> 'removed';
+  return new;
+end;
+$$;
+drop trigger if exists marketplace_supplier_verification_listing_sync on public.marketplace_suppliers;
+create trigger marketplace_supplier_verification_listing_sync
+after update of verification_status on public.marketplace_suppliers
+for each row when (old.verification_status is distinct from new.verification_status)
+execute function public.sync_braverton_supplier_verification_to_listings();
+revoke all on function public.sync_braverton_supplier_verification_to_listings() from public,anon,authenticated;
