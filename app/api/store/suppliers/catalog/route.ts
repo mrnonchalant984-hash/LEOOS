@@ -22,9 +22,14 @@ export async function GET(request: NextRequest) {
     db.from('marketplace_dropship_applications').select('id,supplier_product_id,supplier_status,proposed_selling_price_kobo,currency,supplier_note,created_at').eq('seller_id', user.id).order('created_at', { ascending: false }).limit(200),
   ]);
   if (productsError || applicationsError) return NextResponse.json({ error: 'Supplier catalogue could not be loaded.' }, { status: 503 });
+  const applicationIds = (applications ?? []).map(item => item.id);
+  const { data: events, error: eventsError } = applicationIds.length
+    ? await db.from('marketplace_dropship_application_events').select('application_id,event_type,details,created_at').in('application_id', applicationIds).order('created_at', { ascending: true })
+    : { data: [], error: null };
+  if (eventsError) return NextResponse.json({ error: 'Dropship application history is unavailable.' }, { status: 503 });
   const supplierById = new Map((suppliers ?? []).map(item => [item.user_id, item]));
   return NextResponse.json({
     products: (products ?? []).map(product => ({ ...product, supplier: supplierById.get(product.supplier_id) ?? null })),
-    applications: applications ?? [],
+    applications: (applications ?? []).map(item => ({ ...item, events: (events ?? []).filter(event => event.application_id === item.id) })),
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
