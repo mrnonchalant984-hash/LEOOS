@@ -36,11 +36,11 @@ export function getTextOpenAI(){
   });
 }
 
-export function getConfiguredModel(fallback = 'gemini-3.8-flash') {
+export function getConfiguredModel(fallback = 'gemini-3.5-flash-lite') {
   if (process.env.LEO_LOCAL_MODEL_URL?.trim()) return process.env.LEO_LOCAL_MODEL_NAME?.trim() || 'local-model';
   const preferred = process.env.LEO_CHAT_MODEL?.trim() || process.env.LEO_MEETING_MODEL?.trim() || process.env.LEO_AGENT_MODEL?.trim() || process.env.LEO_REASONING_MODEL?.trim();
   if (preferred) return preferred;
-  if (process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim()) return 'gemini-3.8-flash';
+  if (process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim()) return 'gemini-3.5-flash-lite';
   return fallback;
 }
 
