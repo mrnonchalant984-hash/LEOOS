@@ -14,7 +14,12 @@ export async function GET(request: NextRequest) {
     db.from('marketplace_dropship_applications').select('id,supplier_product_id,seller_id,proposed_selling_price_kobo,currency,category,country_code,city,region,supplier_status,supplier_note,terms_version,seller_agreed_at,created_at,product:marketplace_supplier_products(title,supplier_sku,cost_kobo,available_quantity)').eq('supplier_id', user.id).eq('supplier_status', 'pending').order('created_at', { ascending: true }).limit(100),
   ]);
   if (error || productsError || fulfillmentError || applicationsError) return NextResponse.json({ error: 'Supplier workspace is unavailable. Apply the supplier foundation migration.' }, { status: 503 });
-  return NextResponse.json({ supplier: supplier ?? null, products: products ?? [], fulfillments: fulfillments ?? [], applications: applications ?? [] }, { headers: { 'Cache-Control': 'private, no-store' } });
+  const applicationIds = (applications ?? []).map(item => item.id);
+  const { data: applicationEvents, error: applicationEventsError } = applicationIds.length
+    ? await db.from('marketplace_dropship_application_events').select('application_id,event_type,details,created_at').in('application_id', applicationIds).order('created_at', { ascending: true })
+    : { data: [], error: null };
+  if (applicationEventsError) return NextResponse.json({ error: 'Dropship application history is unavailable.' }, { status: 503 });
+  return NextResponse.json({ supplier: supplier ?? null, products: products ?? [], fulfillments: fulfillments ?? [], applications: (applications ?? []).map(item => ({ ...item, events: (applicationEvents ?? []).filter(event => event.application_id === item.id) })) }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
 export async function POST(request: NextRequest) {
