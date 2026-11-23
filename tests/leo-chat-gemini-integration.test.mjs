@@ -4,6 +4,7 @@ import { test } from 'node:test';
 
 const route = await readFile(new URL('../app/api/chat/route.ts', import.meta.url), 'utf8');
 const streamRoute = await readFile(new URL('../app/api/chat/stream/route.ts', import.meta.url), 'utf8');
+const voiceRoute = await readFile(new URL('../app/api/voice/route.ts', import.meta.url), 'utf8');
 const envExample = await readFile(new URL('../.env.example', import.meta.url), 'utf8');
 const provider = await readFile(new URL('../lib/ai/provider-registry.ts', import.meta.url), 'utf8');
 const fallback = await readFile(new URL('../lib/ai/provider-fallback.ts', import.meta.url), 'utf8');
@@ -25,6 +26,18 @@ test('Bram sends browser date, time, timezone and only permission-approved coord
   assert.match(route, /USER-APPROVED LOCAL CONTEXT/);
   assert.match(route, /Browser local date\/time: \$\{localDateTime\}/);
   assert.match(route, /Browser timezone: \$\{localTimezone\}/);
+});
+
+test('explicit web searches use the authenticated Tavily research tool instead of Gemini native grounding', () => {
+  assert.match(route, /explicitWebSearch/);
+  assert.match(route, /allowWebResearch: webResearchWorkflow/);
+  assert.match(route, /!webResearchWorkflow && mode !== 'tools'/);
+  assert.match(voiceRoute, /domain\|web\|internet\|online/);
+});
+
+test('legacy Gemini 2.5 model selections are normalized before catalog validation', () => {
+  assert.match(route, /const normalized = resolveModel\(selectedModel\)/);
+  assert.match(route, /selectedModel = `\$\{normalized\.provider\}\/\$\{normalized\.model\}`/);
 });
 
 test('Leo chat validates caller-selected models against the authenticated model catalog', () => {
