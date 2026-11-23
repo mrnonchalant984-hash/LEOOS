@@ -152,7 +152,7 @@ The configured platform owner (`OWNER_EMAIL` plus the matching owner role in the
 See [`LEONARDX_CUSTOMER_CONNECTIONS_AND_DOMAIN_MANAGEMENT.md`](./LEONARDX_CUSTOMER_CONNECTIONS_AND_DOMAIN_MANAGEMENT.md) for the new encrypted per-user integration registry, GitHub/Vercel account-aware builds, custom-domain management, rollout steps, and explicit provider capability boundaries. Apply the new Supabase migration and configure `MCP_CREDENTIAL_ENCRYPTION_KEY` before using customer-owned credentials.
 ## Standalone research
 
-Bram's Web Search action uses the authenticated `/api/research` endpoint. It grounds answers with configured Gemini Google Search and can fetch up to five explicitly supplied public URLs through the DNS-pinned safe-site fetcher. Reports return source URLs and save owner-scoped history. Apply `supabase/migrations/20261111160000_research_reports.sql`; configure server-only `GEMINI_API_KEY` or `GOOGLE_API_KEY`. See [`LEONARDX_PRODUCTION_READINESS_20261111.md`](./reports/LEONARDX_PRODUCTION_READINESS_20261111.md) for verified boundaries and remaining deployment work.
+Bram's Web Search action uses the authenticated `/api/research` endpoint. Query-based web research uses the configured Tavily adapter; direct public-URL research can run through the DNS-pinned safe-site fetcher without Tavily. Reports return source URLs and save owner-scoped history. Apply `supabase/migrations/20261111160000_research_reports.sql`; configure server-only `GEMINI_API_KEY` or `GOOGLE_API_KEY`. See [`LEONARDX_PRODUCTION_READINESS_20261111.md`](./reports/LEONARDX_PRODUCTION_READINESS_20261111.md) for verified boundaries and remaining deployment work.
 
 ## Skills
 
