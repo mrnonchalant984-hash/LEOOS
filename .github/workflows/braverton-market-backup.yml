@@ -1,5 +1,7 @@
 name: Braverton Market encrypted backups
 on:
+  push:
+    branches: [braverton-market-launch-readiness]
   schedule:
     - cron: '30 2 * * *'
   workflow_dispatch:
@@ -42,8 +44,11 @@ jobs:
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
+      - name: Report readiness-branch configuration only
+        if: steps.config.outputs.configured == 'true' && github.ref != 'refs/heads/main'
+        run: echo "Backup credentials are present. No production backup was run from the readiness branch; the scheduled backup job runs on main only." >> "$GITHUB_STEP_SUMMARY"
       - name: Create and upload encrypted database and Storage backup
-        if: steps.config.outputs.configured == 'true'
+        if: steps.config.outputs.configured == 'true' && github.ref == 'refs/heads/main'
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_STORAGE_S3_ENDPOINT: ${{ secrets.SUPABASE_STORAGE_S3_ENDPOINT }}
