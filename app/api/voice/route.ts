@@ -39,8 +39,11 @@ async function geminiTranscribe(audio: File) {
   if (!SUPPORTED_AUDIO_TYPES.has(mimeType)) throw new Error('Use a supported audio format: WebM, OGG, WAV, MP3, MP4, AAC, or FLAC.');
   const bytes = Buffer.from(await audio.arrayBuffer());
   const client = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 30_000 } });
+  const configuredAudioModel = process.env.LEO_GEMINI_AUDIO_MODEL?.trim() || '';
+  const freeAudioModels = new Set(['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite']);
+  const audioModel = freeAudioModels.has(configuredAudioModel) ? configuredAudioModel : 'gemini-2.5-flash-lite';
   const response = await client.models.generateContent({
-    model: normalizeGeminiModelId(process.env.LEO_GEMINI_AUDIO_MODEL?.trim() || 'gemini-2.5-flash'),
+    model: normalizeGeminiModelId(audioModel),
     contents: [{ role: 'user', parts: [
       { inlineData: { mimeType, data: bytes.toString('base64') } },
       { text: 'Transcribe the spoken words accurately. Return only the transcript, without commentary.' },
@@ -59,7 +62,7 @@ async function geminiSpeak(text: string) {
   if (!key) throw new Error('Gemini is not configured.');
   const client = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 30_000 } });
   const response = await client.models.generateContent({
-    model: process.env.LEO_GEMINI_TTS_MODEL?.trim() || 'gemini-2.5-flash-preview-tts',
+    model: 'gemini-2.5-flash-preview-tts',
     contents: [{ role: 'user', parts: [{ text }] }],
     config: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } },
   });

@@ -1,15 +1,14 @@
 import { leoCreatorProfile } from '@/data/leo-profile';
 
-export function getConfiguredModel(fallback = 'gemini-3.8-flash') {
+export function getConfiguredModel(fallback = 'gemini-3.5-flash-lite') {
   const preferred = process.env.LEO_CHAT_MODEL?.trim()
     || process.env.LEO_MEETING_MODEL?.trim()
     || process.env.LEO_REASONING_MODEL?.trim();
-  if (preferred) {
-    const candidate = preferred.startsWith('google/') ? preferred.slice('google/'.length) : preferred;
-    if (/^gemini-[A-Za-z0-9._:-]{1,120}$/.test(candidate)) return candidate;
-  }
-  if (process.env.GEMINI_API_KEY?.trim()) return 'gemini-3.8-flash';
-  return fallback;
+  const freeGeminiModels = new Set(['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite']);
+  const candidate = preferred?.replace(/^google\//, '');
+  if (candidate && freeGeminiModels.has(candidate)) return candidate;
+  if (process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim()) return 'gemini-3.5-flash-lite';
+  return freeGeminiModels.has(fallback) ? fallback : 'gemini-3.5-flash-lite';
 }
 
 export const LEO_PLAN_TERMINOLOGY = "Customer-facing plan names are Free, Standard, Pro, and Business. The legacy stored ID 'unlimited' maps to Business and must not be shown as a plan name.";

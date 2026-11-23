@@ -536,7 +536,8 @@ export async function POST(request: NextRequest) {
         if (customAgent) {
           const chars = customAgent.instructions.length + input.task.length + (input.context || '').length;
           if (chars > 40_000) return { data: null, error: 'Custom-agent requests are limited to 40,000 input characters.' };
-          const model = 'google/gemini-3.8-flash';
+          const model = getDefaultTextModel('chat');
+          const modelId = model.split('/').pop() || 'gemini-3.5-flash-lite';
           const billable = !platformOwner;
           if (!isProviderConfigured('google')) return { data: null, error: 'No supported AI provider is configured for Developer Agent execution.' };
           const { tools, execute } = await createUserAssistantTools(userId);
@@ -546,7 +547,7 @@ export async function POST(request: NextRequest) {
           }
           const maxOutputTokens = 1200;
           const inputTokenCeiling = Math.ceil(chars / 3) + 256;
-          const reservedCredits = billable ? calculateApiCredits('gemini-3.8-flash', inputTokenCeiling, maxOutputTokens) : 0;
+          const reservedCredits = billable ? calculateApiCredits(modelId, inputTokenCeiling, maxOutputTokens) : 0;
           if (reservedCredits === null) return { data: null, error: 'No verified provider rate is available for this agent model.' };
           const { data: run, error: runError } = await db.from('agent_runs').insert({
             user_id: userId, agent_id: input.agent_id, task: input.task, status: 'running',
@@ -592,7 +593,7 @@ export async function POST(request: NextRequest) {
             return { data: null, error: 'Provider did not return measurable usage. The credit reservation remains held pending reconciliation.' };
           }
           const actualCredits = billable && response.usage
-            ? calculateApiCredits('gemini-3.8-flash', response.usage.inputTokens, response.usage.outputTokens)
+            ? calculateApiCredits(modelId, response.usage.inputTokens, response.usage.outputTokens)
             : 0;
           if (actualCredits === null) {
             await db.rpc('settle_api_request_credit', { p_usage_id: usageId, p_actual_credits: reservedCredits });

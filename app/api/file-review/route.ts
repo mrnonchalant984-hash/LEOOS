@@ -4,6 +4,7 @@ import JSZip from 'jszip';
 import pdf from 'pdf-parse';
 import { getProfile } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { getDefaultTextModel } from '@/lib/ai/model-catalog';
 
 export const runtime = 'nodejs';
 
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
       parts.push({ text: `${prompt}\n\n${text}` });
     }
     if (!parts.length || file.type.startsWith('image/')) parts.push({ text: prompt });
-    const result = await client.models.generateContent({ model: process.env.LEO_CHAT_MODEL?.trim() || 'gemini-3.8-flash', contents: [{ role: 'user', parts }] });
+    const result = await client.models.generateContent({ model: getDefaultTextModel().replace(/^google\//, ''), contents: [{ role: 'user', parts }] });
     return NextResponse.json({ reply: result.text?.trim() || 'Gemini returned an empty review.' }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('Gemini file review failed:', error instanceof Error ? error.message : 'unknown error');
