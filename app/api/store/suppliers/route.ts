@@ -6,13 +6,14 @@ export const runtime = 'nodejs'; export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const user = await getUserFromRequest(request); if (!user) return NextResponse.json({ error: 'Sign in to view supplier operations.' }, { status: 401 });
   const db = adminSupabase();
-  const [{ data: supplier, error }, { data: products, error: productsError }, { data: fulfillments, error: fulfillmentError }] = await Promise.all([
+  const [{ data: supplier, error }, { data: products, error: productsError }, { data: fulfillments, error: fulfillmentError }, { data: applications, error: applicationsError }] = await Promise.all([
     db.from('marketplace_suppliers').select('user_id,business_name,country_code,verification_status,verification_note,created_at,reviewed_at').eq('user_id', user.id).maybeSingle(),
     db.from('marketplace_supplier_products').select('id,supplier_sku,title,description,cost_kobo,currency,available_quantity,status,source_updated_at,created_at,updated_at').eq('supplier_id', user.id).order('updated_at', { ascending: false }).limit(100),
     db.from('marketplace_supplier_fulfillment_requests').select('id,order_id,order_item_id,supplier_product_id,quantity,status,supplier_reference,tracking_reference,tracking_url,last_error,created_at,updated_at').eq('supplier_id', user.id).order('created_at', { ascending: false }).limit(100),
+    db.from('marketplace_dropship_applications').select('id,supplier_product_id,seller_id,proposed_selling_price_kobo,category,country_code,city,region,supplier_status,supplier_note,terms_version,seller_agreed_at,created_at,product:marketplace_supplier_products(title,supplier_sku,cost_kobo,available_quantity)').eq('supplier_id', user.id).eq('supplier_status', 'pending').order('created_at', { ascending: true }).limit(100),
   ]);
-  if (error || productsError || fulfillmentError) return NextResponse.json({ error: 'Supplier workspace is unavailable. Apply the supplier foundation migration.' }, { status: 503 });
-  return NextResponse.json({ supplier: supplier ?? null, products: products ?? [], fulfillments: fulfillments ?? [] }, { headers: { 'Cache-Control': 'private, no-store' } });
+  if (error || productsError || fulfillmentError || applicationsError) return NextResponse.json({ error: 'Supplier workspace is unavailable. Apply the supplier foundation migration.' }, { status: 503 });
+  return NextResponse.json({ supplier: supplier ?? null, products: products ?? [], fulfillments: fulfillments ?? [], applications: applications ?? [] }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
 export async function POST(request: NextRequest) {
@@ -44,7 +45,19 @@ export async function PUT(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Request origin is invalid.' }, { status: 403 });
   const user = await getUserFromRequest(request); if (!user) return NextResponse.json({ error: 'Sign in to manage supplier products.' }, { status: 401 });
-  const body = await request.json().catch(() => null) as { productId?: unknown; status?: unknown; quantity?: unknown } | null;
+  const body = await request.json().catch(() => null) as { applicationId?: unknown; decision?: unknown; note?: unknown; productId?: unknown; status?: unknown; quantity?: unknown } | null;
+  if (typeof body?.applicationId === 'string') {
+    if (!/^[0-9a-f-]{36}$/i.test(body.applicationId) || !['approved','rejected'].includes(String(body.decision)) || (body.note !== undefined && (typeof body.note !== 'string' || body.note.length > 1000))) return NextResponse.json({ error: 'Invalid dropship application review.' }, { status: 400 });
+    const { data: supplier, error: supplierError } = await adminSupabase().from('marketplace_suppliers').select('verification_status').eq('user_id', user.id).maybeSingle();
+    if (supplierError) return NextResponse.json({ error: 'Supplier verification could not be checked.' }, { status: 503 });
+    if (supplier?.verification_status !== 'approved') return NextResponse.json({ error: 'Only approved suppliers can review dropship applications.' }, { status: 403 });
+    const { data, error } = await adminSupabase().rpc('review_marketplace_dropship_application', {
+      p_application_id: body.applicationId, p_supplier_id: user.id, p_decision: body.decision,
+      p_note: typeof body.note === 'string' ? body.note.trim() : null,
+    });
+    if (error) return NextResponse.json({ error: /not found/i.test(error.message) ? 'Application not found.' : 'Supplier decision could not be saved.' }, { status: /not found/i.test(error.message) ? 404 : 409 });
+    return NextResponse.json({ decision: data, message: body.decision === 'approved' ? 'Application approved. The reseller listing remains paused until marketplace moderation approves it.' : 'Application rejected.' });
+  }
   if (typeof body?.productId !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.productId) || !['active','paused','discontinued'].includes(String(body.status)) || (body.quantity !== undefined && (!Number.isSafeInteger(body.quantity) || Number(body.quantity) < 0 || Number(body.quantity) > 1_000_000))) return NextResponse.json({ error: 'Invalid supplier product update.' }, { status: 400 });
   const db = adminSupabase();
   const { data: supplier, error: supplierError } = await db.from('marketplace_suppliers').select('verification_status').eq('user_id', user.id).maybeSingle();
