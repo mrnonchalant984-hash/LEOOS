@@ -103,13 +103,14 @@ test('preview worker uses a pinned compatible OpenNext adapter and rejects unkno
 test('scheduled preview worker fails visibly when credentials are missing', async () => {
   const workflow = await source('.github/workflows/cloudflare-preview-worker.yml');
   assert.match(workflow, /cron: '\*\/5 \* \* \* \*'/);
+  assert.match(workflow, /push:\n    branches:\n      - main/);
   assert.match(workflow, /Required Cloudflare preview worker secrets are missing/);
   assert.doesNotMatch(workflow, /ready=false/);
   assert.match(workflow, /timeout-minutes: 30/);
 });
 
 test('preview queue supports bounded retries, lease recovery, and persistent heartbeats', async () => {
-  const migration = await source('supabase/migrations/20261123150000_cloudflare_preview_retries_and_heartbeats.sql');
+  const migration = await source('supabase/migrations/20261123124237_cloudflare_preview_retries_and_heartbeats.sql');
   const workerRoute = await source('app/api/internal/previews/worker/route.ts');
   const resultRoute = await source('app/api/internal/previews/result/route.ts');
   const worker = await source('scripts/cloudflare-preview-worker.mjs');
