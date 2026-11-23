@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   if (!owner) return NextResponse.json({ error: 'Owner access with a trusted device and verified two-factor authentication is required.' }, { status: 403 });
   const { data, error } = await adminSupabase().from('marketplace_seller_verification_requests')
     .select('id,seller_id,business_name,country_code,details,evidence_url,evidence_notes,status,reviewer_note,created_at,updated_at')
-    .eq('status', 'pending').order('created_at', { ascending: true }).limit(100);
+    .order('created_at', { ascending: false }).limit(100);
   if (error) return NextResponse.json({ error: 'Seller review queue is unavailable.' }, { status: 503 });
   const ids = (data ?? []).map(item => item.id);
   const { data: decisions, error: decisionError } = ids.length
