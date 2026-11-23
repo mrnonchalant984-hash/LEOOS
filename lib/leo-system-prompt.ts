@@ -1,6 +1,6 @@
 import { leoCreatorProfile } from '@/data/leo-profile';
 
-export function getConfiguredModel(fallback = 'gemini-3.8-flash') {
+export function getConfiguredModel(fallback = 'gemini-3.5-flash-lite') {
   const preferred = process.env.LEO_CHAT_MODEL?.trim()
     || process.env.LEO_MEETING_MODEL?.trim()
     || process.env.LEO_REASONING_MODEL?.trim();
@@ -8,7 +8,7 @@ export function getConfiguredModel(fallback = 'gemini-3.8-flash') {
     const candidate = preferred.startsWith('google/') ? preferred.slice('google/'.length) : preferred;
     if (/^gemini-[A-Za-z0-9._:-]{1,120}$/.test(candidate)) return candidate;
   }
-  if (process.env.GEMINI_API_KEY?.trim()) return 'gemini-3.8-flash';
+  if (process.env.GEMINI_API_KEY?.trim()) return 'gemini-3.5-flash-lite';
   return fallback;
 }
 
