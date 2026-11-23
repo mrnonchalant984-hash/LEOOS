@@ -7,6 +7,8 @@ type VerificationRequest = {
   business_name: string;
   country_code: string;
   details: string;
+  evidence_url: string | null;
+  evidence_notes: string | null;
   status: 'pending' | 'approved' | 'rejected';
   reviewer_note: string | null;
   created_at: string;
@@ -52,6 +54,8 @@ export function SellerVerificationPanel({ verified, businessName, countryCode }:
         businessName: form.get('businessName'),
         countryCode: form.get('countryCode'),
         details: form.get('details'),
+        evidenceUrl: form.get('evidenceUrl'),
+        evidenceNotes: form.get('evidenceNotes'),
       }),
     });
     const result = await response.json().catch(() => ({}));
@@ -82,7 +86,7 @@ export function SellerVerificationPanel({ verified, businessName, countryCode }:
           {request?.status === 'rejected' && <p className="rounded-xl border border-rose-300/20 bg-rose-300/5 p-4 text-sm text-rose-100 sm:col-span-2">The last request was not approved.{request.reviewer_note ? ` Review note: ${request.reviewer_note}` : ' You may update your details and submit again.'}</p>}
           <label className="text-sm">Business or storefront name<input required name="businessName" minLength={2} maxLength={120} defaultValue={businessName || request?.business_name || ''} className="mt-2 w-full rounded-xl border border-white/10 px-4 py-3" /></label>
           <label className="text-sm">Country code<input required name="countryCode" minLength={2} maxLength={2} pattern="[A-Za-z]{2}" defaultValue={countryCode || request?.country_code || 'NG'} className="mt-2 w-full rounded-xl border border-white/10 px-4 py-3 uppercase" /><span className="mt-1 block text-xs text-white/45">Use your two-letter country code, such as NG or GH.</span></label>
-          <label className="text-sm sm:col-span-2">Store and product details<textarea name="details" maxLength={2000} rows={4} placeholder="Tell reviewers what you sell and how your business operates." className="mt-2 w-full rounded-xl border border-white/10 px-4 py-3" /></label>
+          <label className="text-sm sm:col-span-2">Store and product details<textarea name="details" required minLength={30} maxLength={2000} rows={4} placeholder="Tell reviewers what you sell and how your business operates." className="mt-2 w-full rounded-xl border border-white/10 px-4 py-3" /></label><label className="text-sm sm:col-span-2">Public business evidence URL (optional)<input name="evidenceUrl" type="url" pattern="https://.*" maxLength={500} placeholder="https://your-business-or-social-profile.example" className="mt-2 w-full rounded-xl border border-white/10 px-4 py-3" /><span className="mt-1 block text-xs text-white/45">Provide a public business website or social profile. Do not upload identity documents, passwords, bank details or private records.</span></label><label className="text-sm sm:col-span-2">Evidence context (optional)<textarea name="evidenceNotes" maxLength={1000} rows={2} placeholder="Explain what the evidence link demonstrates." className="mt-2 w-full rounded-xl border border-white/10 px-4 py-3" /></label>
           <button type="submit" disabled={busy} className="w-fit rounded-xl bg-amber-200 px-4 py-2.5 font-semibold text-neutral-950 disabled:opacity-50 sm:col-span-2">{busy ? 'Submitting…' : 'Submit for verification'}</button>
         </form>}
     {(error || notice) && <p role={error ? 'alert' : 'status'} className={`mt-4 text-sm ${error ? 'text-rose-200' : 'text-emerald-200'}`}>{error || notice}</p>}
