@@ -40,8 +40,7 @@ async function geminiTranscribe(audio: File) {
   const bytes = Buffer.from(await audio.arrayBuffer());
   const client = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 30_000 } });
   const configuredAudioModel = process.env.LEO_GEMINI_AUDIO_MODEL?.trim() || '';
-  const freeAudioModels = new Set(['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite']);
-  const audioModel = freeAudioModels.has(configuredAudioModel) ? configuredAudioModel : 'gemini-2.5-flash-lite';
+  const audioModel = configuredAudioModel === 'gemini-3.5-flash-lite' ? configuredAudioModel : 'gemini-3.5-flash-lite';
   const response = await client.models.generateContent({
     model: normalizeGeminiModelId(audioModel),
     contents: [{ role: 'user', parts: [
