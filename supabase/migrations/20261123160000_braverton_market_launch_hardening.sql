@@ -1,6 +1,8 @@
 -- Braverton Market launch hardening: seller decision audit, human-readable order refs,
 -- notification delivery evidence, and supplier-approved dropship applications.
 create sequence if not exists public.marketplace_order_number_seq;
+revoke all on sequence public.marketplace_order_number_seq from public,anon,authenticated;
+grant usage, select on sequence public.marketplace_order_number_seq to service_role;
 
 create or replace function public.assign_braverton_order_number()
 returns trigger language plpgsql set search_path = public as $$
@@ -267,3 +269,5 @@ end;
 $$;
 revoke all on function public.owner_review_marketplace_seller_verification(uuid,uuid,text,text) from public,anon,authenticated;
 grant execute on function public.owner_review_marketplace_seller_verification(uuid,uuid,text,text) to service_role;
+
+revoke all on function public.assign_braverton_order_number() from public,anon,authenticated;
