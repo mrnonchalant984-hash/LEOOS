@@ -47,7 +47,7 @@ export function resolveModel(modelName: string): { provider: ModelProvider; mode
     const provider = normalized.slice(0, separator);
     const model = normalized.slice(separator + 1);
     if (provider === 'google' && SUPPORTED_GEMINI_TEXT_MODELS.has(model)) return { provider: 'google', model: normalizeGeminiModelId(model) };
-    throw new ModelProviderError('Only Gemini free-tier models are enabled. Choose a supported model: gemini-3.5-flash-lite or gemini-2.5-flash-lite.', 400);
+    throw new ModelProviderError('Only Gemini free-tier models are enabled. Choose the supported model: gemini-3.5-flash-lite.', 400);
   }
   if (SUPPORTED_GEMINI_TEXT_MODELS.has(normalized)) return { provider: 'google', model: normalizeGeminiModelId(normalized) };
   throw new ModelProviderError('Choose a supported model from the free-tier Gemini registry.', 400);
