@@ -2,7 +2,11 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { getOpenNextVersionForNext, WORKER_WRANGLER_VERSION } from './cloudflare-preview-versions.mjs';
+import {
+  getOpenNextVersionForNext,
+  getSupportedNextVersionForPreview,
+  WORKER_WRANGLER_VERSION,
+} from './cloudflare-preview-versions.mjs';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -194,6 +198,23 @@ async function buildNextProject(directory, workerName, usesTypeScript) {
       '@types/react': currentDevDependencies['@types/react'] || '^19.2.0',
       '@types/react-dom': currentDevDependencies['@types/react-dom'] || '^19.2.0',
     };
+  }
+  const nextDependencySection = packageJson.dependencies?.next
+    ? 'dependencies'
+    : packageJson.devDependencies?.next
+      ? 'devDependencies'
+      : null;
+  if (!nextDependencySection) throw new Error('A Next.js dependency must be declared in package.json.');
+  const declaredNext = packageJson[nextDependencySection].next;
+  const normalizedDeclaredNext = String(declaredNext).replace(/^[~^<>=\s]*/, '');
+  const targetNext = getSupportedNextVersionForPreview(normalizedDeclaredNext);
+  if (targetNext !== normalizedDeclaredNext) {
+    packageJson[nextDependencySection].next = targetNext;
+    console.log(
+      'Preview build copy: upgrading Next.js ' + normalizedDeclaredNext + ' to ' + targetNext +
+      ' because current OpenNext releases no longer support the older Next.js line. ' +
+      'The submitted workspace files are not modified.'
+    );
   }
   await writeFile(packagePath, JSON.stringify(packageJson, null, 2), 'utf8');
 
