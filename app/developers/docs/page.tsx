@@ -85,13 +85,13 @@ export default function DeveloperDocsPage() {
 
     <Section id="sdk" title="TypeScript SDK">
       <p><code>@braverton/sdk@2.0.0</code> is available as repository source. It wraps the API with typed errors and a webhook verifier, has no runtime dependencies, and needs Node 18 or newer.</p>
-      <Code>{`import { BravertonClient, verifyWebhookSignature } from '@braverton/sdk';\n\nconst leo = new BravertonClient({ apiKey: process.env.BRAVERTON_API_KEY! });\nconst { data } = await leo.projects.list();\n\n// In your webhook handler (rawBody is the unparsed request body string):\nconst ok = verifyWebhookSignature(secret, req.headers['leo-signature'], rawBody);`}</Code>
+      <Code>{`import { BravertonClient, verifyWebhookSignature } from '@braverton/sdk';\n\nconst braverton = new BravertonClient({ apiKey: process.env.BRAVERTON_API_KEY! });\nconst { data } = await braverton.projects.list();\n\n// In your webhook handler (rawBody is the unparsed request body string):\nconst ok = verifyWebhookSignature(secret, req.headers['leo-signature'], rawBody);`}</Code>
     </Section>
 
     <Section id="cli" title="Command-line client">
-      <p><code>@leo-os/cli@1.0.0</code> is published on npm. Login validates credentials against <code>/api/v1/me</code>; project list/create and linked-project status use the v1 API.</p>
-      <Code>{`node packages/cli/src/index.mjs login --api-key "$BRAVERTON_API_KEY" --base-url https://your-leonardx-domain\nnode packages/cli/src/index.mjs projects list\nnode packages/cli/src/index.mjs projects create "My app" --type web_app`}</Code>
-      <p><code>leo deploy --brief</code> and <code>leo ship</code> call the authenticated project deployment endpoint. They reuse the existing builder pipeline and only return a deployment result after Vercel confirms the deployment state.</p>
+      <p>The existing npm package <code>@leo-os/cli@1.0.0</code> retains its legacy package name for compatibility; the executable is branded <code>braverton</code> (with <code>leo</code> and <code>leonardx</code> aliases). Login validates credentials against <code>/api/v1/me</code>; project list/create and linked-project status use the v1 API.</p>
+      <Code>{`braverton login --api-key "$BRAVERTON_API_KEY" --base-url https://your-braverton-domain\nbraverton projects list\nbraverton projects create "My app" --type web_app`}</Code>
+      <p>The current CLI does not dispatch production builds or deployments. <code>braverton deploy --brief</code> and <code>braverton ship</code> return an explicit unsupported-workflow message; use the authenticated Braverton workspace deployment flow instead. The CLI does not claim a deployment succeeded.</p>
       <p><Link href="/cli" className="text-yellow-300">Open the interactive CLI guide</Link>.</p>
     </Section>
 
