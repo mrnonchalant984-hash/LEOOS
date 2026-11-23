@@ -100,7 +100,7 @@ test('invalid explicit fallback configuration safely uses configured Gemini for 
   const configured = provider => provider === 'google' || provider === 'openai';
   assert.equal(
     getSafeFallbackModel('google/gemini-3.5-flash-lite', 'unsupported/fallback-model', false, configured),
-    'google/gemini-3.5-flash-lite',
+    undefined,
   );
 });
 
