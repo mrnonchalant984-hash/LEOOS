@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
   if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Request origin is invalid.' }, { status: 403 });
   const user = await getUserFromRequest(request);
   if (!user) return NextResponse.json({ error: 'Sign in to apply for the affiliate programme.' }, { status: 401 });
+  if (!user.email_confirmed_at) return NextResponse.json({ error: 'Verify your account email before applying to the affiliate programme.' }, { status: 403 });
   const limited = await enforceUserRateLimit(user.id, 'store-affiliate-apply', 2, 86_400);
   if (limited) return limited;
   const code = randomBytes(7).toString('hex').toUpperCase();
