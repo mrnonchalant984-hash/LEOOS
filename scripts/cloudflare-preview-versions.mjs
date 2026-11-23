@@ -52,10 +52,10 @@ export function getOpenNextVersionForNext(nextVersion) {
 }
 
 export function getStaticRobotsTextFromLegacySource(source) {
-  if (typeof source !== 'string' || !/export\\s+default\\s+function/.test(source)) return null;
-  const match = /\\breturn\\s+`([\\s\\S]*?)`/.exec(source);
-  if (!match || match[1].includes('${')) return null;
-  const robotsText = match[1].replace(/\\r\\n/g, '\\n');
-  if (!/^\\s*User-agent\\s*:/im.test(robotsText)) return null;
-  return robotsText.endsWith('\\n') ? robotsText : robotsText + '\\n';
+  if (typeof source !== 'string' || !/export\s+default\s+function/.test(source)) return null;
+  const match = /\breturn\s+\`([\s\S]*?)\`/.exec(source);
+  if (!match || match[1].includes(' + '{')) return null;
+  const robotsText = match[1].replace(/\r\n/g, '\n');
+  if (!/^\s*User-agent\s*:/im.test(robotsText)) return null;
+  return robotsText.endsWith('\n') ? robotsText : robotsText + '\n';
 }
