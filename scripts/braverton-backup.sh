@@ -11,6 +11,12 @@ set -euo pipefail
 : "${BACKUP_S3_ACCESS_KEY_ID:?Set off-site backup access key}"
 : "${BACKUP_S3_SECRET_ACCESS_KEY:?Set off-site backup secret}"
 
+retention="${BACKUP_RETENTION_DAYS:-90}"
+if [[ ! "$retention" =~ ^[0-9]+$ ]] || (( retention < 30 )); then
+  echo "BACKUP_RETENTION_DAYS must be at least 30." >&2
+  exit 1
+fi
+
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
@@ -40,20 +46,39 @@ object_key="braverton/$timestamp/braverton-$timestamp.tar.gz.age"
 checksum="$(sha256sum "$workdir/braverton-$timestamp.tar.gz.age" | awk '{print $1}')"
 aws --endpoint-url "$BACKUP_S3_ENDPOINT" s3 cp "$workdir/braverton-$timestamp.tar.gz.age" \
   "s3://$BACKUP_S3_BUCKET/$object_key" --metadata "sha256=$checksum" --only-show-errors
-remote_checksum="$(aws --endpoint-url "$BACKUP_S3_ENDPOINT" s3api head-object --bucket "$BACKUP_S3_BUCKET" --key "$object_key" --query 'Metadata.sha256' --output text)"
+
+# Verify the bytes stored remotely, not merely the metadata sent with the upload.
+aws --endpoint-url "$BACKUP_S3_ENDPOINT" s3 cp "s3://$BACKUP_S3_BUCKET/$object_key" \
+  "$workdir/remote-verification.age" --only-show-errors
+remote_checksum="$(sha256sum "$workdir/remote-verification.age" | awk '{print $1}')"
 if [[ "$remote_checksum" != "$checksum" ]]; then
-  echo "Off-site backup checksum verification failed." >&2
+  echo "Off-site backup content checksum verification failed." >&2
   exit 1
 fi
 
-retention="${BACKUP_RETENTION_DAYS:-90}"
-if [[ ! "$retention" =~ ^[0-9]+$ ]] || (( retention < 30 )); then
-  echo "BACKUP_RETENTION_DAYS must be at least 30." >&2
-  exit 1
+# Preserve unrelated lifecycle rules on the shared backup bucket.
+if aws --endpoint-url "$BACKUP_S3_ENDPOINT" s3api get-bucket-lifecycle-configuration \
+  --bucket "$BACKUP_S3_BUCKET" > "$workdir/lifecycle-existing.json" 2>/dev/null; then
+  jq --argjson days "$retention" '
+    .Rules = ((.Rules // []) | map(select(.ID != "braverton-market-backup-retention")) + [{
+      "ID":"braverton-market-backup-retention",
+      "Status":"Enabled",
+      "Filter":{"Prefix":"braverton/"},
+      "Expiration":{"Days":$days},
+      "NoncurrentVersionExpiration":{"NoncurrentDays":30}
+    }])
+  ' "$workdir/lifecycle-existing.json" > "$workdir/lifecycle.json"
+else
+  jq -n --argjson days "$retention" '{
+    "Rules":[{
+      "ID":"braverton-market-backup-retention",
+      "Status":"Enabled",
+      "Filter":{"Prefix":"braverton/"},
+      "Expiration":{"Days":$days},
+      "NoncurrentVersionExpiration":{"NoncurrentDays":30}
+    }]
+  }' > "$workdir/lifecycle.json"
 fi
-cat > "$workdir/lifecycle.json" <<JSON
-{"Rules":[{"ID":"braverton-market-backup-retention","Status":"Enabled","Filter":{"Prefix":"braverton/"},"Expiration":{"Days":$retention},"NoncurrentVersionExpiration":{"NoncurrentDays":30}}]}
-JSON
 aws --endpoint-url "$BACKUP_S3_ENDPOINT" s3api put-bucket-lifecycle-configuration \
   --bucket "$BACKUP_S3_BUCKET" --lifecycle-configuration "file://$workdir/lifecycle.json"
 
