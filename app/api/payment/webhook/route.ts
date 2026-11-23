@@ -250,7 +250,7 @@ export async function POST(req: NextRequest) {
           userId: payout.seller_id,
           kind: 'payout',
           title: payoutStatus === 'paid' ? 'Seller payout sent' : payoutStatus === 'failed' ? 'Seller payout needs review' : 'Seller payout reversed',
-          body: payoutStatus === 'paid' ? 'Your LeoX Store payout has been sent to your saved bank account.' : 'Your LeoX Store payout requires review. Contact support before changing your payout account.',
+          body: payoutStatus === 'paid' ? 'Your Braverton Market payout has been sent to your saved bank account.' : 'Your Braverton Market payout requires review. Contact support before changing your payout account.',
           href: '/store/seller',
           preference: 'order_updates',
         });
