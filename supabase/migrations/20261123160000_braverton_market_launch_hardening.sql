@@ -221,3 +221,49 @@ create trigger marketplace_fulfillment_timeline
 after insert or update of status,buyer_confirmed_at on public.marketplace_fulfillments
 for each row execute function public.record_marketplace_fulfillment_timeline();
 revoke all on function public.record_marketplace_fulfillment_timeline() from public,anon,authenticated;
+
+alter table public.marketplace_seller_verification_decisions
+  drop constraint if exists marketplace_seller_verification_decisions_outcome_check;
+alter table public.marketplace_seller_verification_decisions
+  add constraint marketplace_seller_verification_decisions_outcome_check
+  check(outcome in ('auto_approved','manual_review','rejected','owner_approved','owner_rejected'));
+
+create or replace function public.owner_review_marketplace_seller_verification(
+  p_request_id uuid, p_reviewer_id uuid, p_decision text, p_note text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_request public.marketplace_seller_verification_requests%rowtype;
+  v_profile public.profiles%rowtype;
+  v_outcome text;
+begin
+  if p_decision not in ('approved','rejected') or length(btrim(coalesce(p_note,''))) < 3 or length(p_note) > 2000 then
+    raise exception 'valid owner decision and review note are required';
+  end if;
+  select * into v_profile from public.profiles where id=p_reviewer_id and role='owner' and twofa_verified=true;
+  if not found then raise exception 'owner authorization and verified two-factor authentication required'; end if;
+  select * into v_request from public.marketplace_seller_verification_requests where id=p_request_id for update;
+  if not found then raise exception 'verification request not found'; end if;
+  if v_request.status <> 'pending' then raise exception 'verification request is no longer pending'; end if;
+  v_outcome := case when p_decision='approved' then 'owner_approved' else 'owner_rejected' end;
+  if p_decision='approved' then
+    insert into public.marketplace_sellers(user_id,display_name,bio,country_code,is_verified,updated_at)
+    values(v_request.seller_id,v_request.business_name,v_request.details,v_request.country_code,true,now())
+    on conflict(user_id) do update set display_name=excluded.display_name,bio=excluded.bio,
+      country_code=excluded.country_code,is_verified=true,updated_at=now();
+  else
+    update public.marketplace_sellers set is_verified=false,updated_at=now()
+      where user_id=v_request.seller_id;
+  end if;
+  update public.marketplace_seller_verification_requests
+    set status=p_decision,reviewer_id=p_reviewer_id,reviewer_note=p_note,updated_at=now()
+    where id=v_request.id;
+  insert into public.marketplace_seller_verification_decisions(
+    request_id,seller_id,decision_source,outcome,risk_score,risk_signals,rationale,engine_version,reviewer_id
+  ) values(v_request.id,v_request.seller_id,'owner',v_outcome,
+    case when p_decision='approved' then 0 else 100 end,'[]'::jsonb,p_note,
+    'owner-manual-' || gen_random_uuid()::text,p_reviewer_id);
+  return jsonb_build_object('request_id',v_request.id,'status',p_decision,'seller_id',v_request.seller_id);
+end;
+$$;
+revoke all on function public.owner_review_marketplace_seller_verification(uuid,uuid,text,text) from public,anon,authenticated;
+grant execute on function public.owner_review_marketplace_seller_verification(uuid,uuid,text,text) to service_role;
