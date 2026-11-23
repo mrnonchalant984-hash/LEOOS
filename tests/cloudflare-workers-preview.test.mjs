@@ -96,6 +96,7 @@ test('selects the current secure OpenNext adapter and upgrades legacy Next.js pr
   assert.throws(() => getSupportedNextVersionForPreview('17.0.0'), /No supported Cloudflare preview runtime/);
 });
 
+
 test('converts only static string-returning legacy robots metadata routes', () => {
   const source = [
     'export default function Robots() {',
@@ -112,8 +113,10 @@ test('converts only static string-returning legacy robots metadata routes', () =
     getStaticRobotsTextFromLegacySource('export default function robots() { return { rules: { userAgent: "*" } }; }'),
     null
   );
-  assert.equal(
-    getStaticRobotsTextFromLegacySource('export default function robots() { return \`User-agent: ' + ' + '{process.env.BOT}\\nAllow: /\`; }'),
-    null
-  );
+  const dynamicSource = [
+    'export default function robots() {',
+    '  return \`User-agent: ' + String.fromCharCode(36) + '{process.env.BOT}\\nAllow: /\`;',
+    '}',
+  ].join('\n');
+  assert.equal(getStaticRobotsTextFromLegacySource(dynamicSource), null);
 });
