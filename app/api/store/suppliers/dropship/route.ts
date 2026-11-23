@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   if (supplier?.verification_status !== 'approved') return NextResponse.json({ error: 'Only approved suppliers can accept dropship applications.' }, { status: 403 });
   const { data, error } = await db.from('marketplace_dropship_applications').insert({
     supplier_product_id: supplierProduct.id, supplier_id: supplierProduct.supplier_id,
-    seller_id: user.id, proposed_selling_price_kobo: body.sellingPriceKobo, currency: supplierProduct.currency,
+    seller_id: user.id, proposed_selling_price_kobo: Number(body.sellingPriceKobo), currency: supplierProduct.currency,
     category: body.category.trim(), country_code: body.countryCode.toUpperCase(),
     city: body.city.trim(), region: typeof body.region === 'string' ? body.region.trim() || null : null,
     terms_version: TERMS_VERSION, seller_agreed_at: new Date().toISOString(),
