@@ -52,7 +52,10 @@ export function resolveModel(modelName: string): { provider: ModelProvider; mode
 }
 
 export function getDefaultTextModel(mode: 'chat' | 'reasoning' | 'research' = 'chat') {
-  if (mode === 'research') mode = 'chat';
+  if (mode === 'research') {
+    if (!configuredProvider('google')) throw new ModelProviderError('Gemini is not configured. Set GEMINI_API_KEY or GOOGLE_API_KEY before using Research.', 503);
+    return 'google/gemini-3.5-flash-lite';
+  }
   const configured = mode === 'reasoning'
     ? process.env.LEO_REASONING_MODEL?.trim() || process.env.LEO_CHAT_MODEL?.trim()
     : process.env.LEO_CHAT_MODEL?.trim();
