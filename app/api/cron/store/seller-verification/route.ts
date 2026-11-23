@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
   const db = adminSupabase();
   const { data: requests, error } = await db.from('marketplace_seller_verification_requests')
-    .select('id,seller_id,business_name,country_code,details,status')
+    .select('id,seller_id,business_name,country_code,details,evidence_url,evidence_notes,status')
     .eq('status', 'pending').order('created_at', { ascending: true }).limit(20);
   if (error) return NextResponse.json({ error: 'Seller verification queue is unavailable.' }, { status: 503 });
 
@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
       businessName: item.business_name,
       details: item.details,
       duplicateBusiness: Boolean((existingSeller ?? []).length || (duplicateRequest ?? []).length),
+      evidenceUrl: item.evidence_url,
     });
     const signals = risk.signals;
     const score = risk.riskScore;
