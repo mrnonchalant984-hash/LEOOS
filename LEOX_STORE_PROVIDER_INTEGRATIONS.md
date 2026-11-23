@@ -1,4 +1,4 @@
-# LeoX Store provider integrations
+# Braverton Market provider integrations
 
 This release adds provider-gated settlement and supplier dispatch adapters. It does not activate any production money movement or connect an external supplier until the deployment owner configures and verifies the required providers.
 
