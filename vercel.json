@@ -1,40 +1,10 @@
 {
   "crons": [
-    {
-      "path": "/api/cron/hosting",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/webhooks",
-      "schedule": "0 10 * * *"
-    },
-    {
-      "path": "/api/internal/agents/worker",
-      "schedule": "0 11 * * *"
-    },
-    {
-      "path": "/api/internal/workflow-worker",
-      "schedule": "0 12 * * *"
-    },
-    {
-      "path": "/api/internal/workforce/worker",
-      "schedule": "0 13 * * *"
-    },
-    {
-      "path": "/api/cron/build-artifacts",
-      "schedule": "0 14 * * *"
-    },
-    {
-      "path": "/api/cron/store/seller-verification",
-      "schedule": "0 15 * * *"
-    },
-    {
-      "path": "/api/cron/store/notification-retries",
-      "schedule": "0 16 * * *"
-    },
-    {
-      "path": "/api/cron/store/affiliate-commission-release",
-      "schedule": "0 17 * * *"
-    }
+    { "path": "/api/cron/hosting", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/webhooks", "schedule": "0 10 * * *" },
+    { "path": "/api/internal/agents/worker", "schedule": "0 11 * * *" },
+    { "path": "/api/internal/workflow-worker", "schedule": "0 12 * * *" },
+    { "path": "/api/internal/workforce/worker", "schedule": "0 13 * * *" },
+    { "path": "/api/cron/build-artifacts", "schedule": "0 14 * * *" }
   ]
 }
