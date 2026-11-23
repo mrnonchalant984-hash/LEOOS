@@ -19,7 +19,7 @@ test('provider registry accepts Gemini models and rejects alternative model prov
   assert.throws(() => resolveModel('gemini-2.0-flash'), /supported model/i);
 });
 
-test('LEO model options resolve to distinct catalogued Google models', () => {
+test('LEO model options expose the single current catalogued Google model', () => {
   const models = getModelProviderStatus();
   assert.deepEqual(models.map(({ model }) => model), ['gemini-3.5-flash-lite']);
   assert.deepEqual(models.map(({ name }) => name), ['Gemini 3.5 Flash-Lite (Free tier)']);
