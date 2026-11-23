@@ -12,40 +12,34 @@ export async function sendOwnerWhatsApp(text: string) {
 }
 
 export async function sendClientEmail(input:{to:string; subject:string; text:string; html?:string}) {
-  const apiKey = process.env.WEB3FORMS_API_KEY;
-  const formId = process.env.WEB3FORMS_FORM_ID;
-  if (!apiKey || !formId || !input.to) return false;
+  // Web3Forms calls this an Access Key. There is no separate Form ID; when
+  // using the optional /submit/{FORM_ID} route, the Access Key is that ID.
+  const accessKey = process.env.WEB3FORMS_ACCESS_KEY || process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY;
+  if (!accessKey || !input.to) return false;
 
-  // Web3Forms' server-side Submissions API. Recipient delivery requires the
-  // form's autoresponder to be enabled for the submitted email address.
-  const response = await fetch('https://api.web3forms.com/v1/submissions', {
+  // Web3Forms requires an active paid plan and deployment egress-IP
+  // allowlisting for server-side submissions. The free endpoint is client-side.
+  const response = await fetch('https://api.web3forms.com/submit', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
     },
     body: JSON.stringify({
-      form_id: formId,
+      access_key: accessKey,
       from_name: 'Braverton Market',
       subject: input.subject.slice(0, 160),
-      fields: {
-        email: input.to,
-        subject: input.subject.slice(0, 160),
-        message: input.text.slice(0, 12000),
-      },
+      email: input.to,
+      message: input.text.slice(0, 12000),
     }),
     signal: AbortSignal.timeout(15000),
   });
 
-  if (!response.ok) return false;
+  if (response.status !== 200) return false;
   const result = await response.json().catch(() => null) as {
     success?: boolean;
-    data?: { id?: string; form_id?: string };
-    error?: { code?: string; message?: string };
+    message?: string;
+    body?: { message?: string };
   } | null;
-
-  // The Web3Forms Submissions API returns 201 Created with data.id.
-  // The legacy /submit endpoint returns { success: true }; accept either
-  // response shape, but never treat an empty or malformed response as sent.
-  return result?.success === true || (response.status === 201 && typeof result?.data?.id === 'string' && result.data.id.length > 0);
+  return result?.success === true;
 }
