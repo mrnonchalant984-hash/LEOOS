@@ -38,7 +38,8 @@ test('Developer API exposes only free-tier Gemini models and charges the platfor
   assert.equal(calculateApiCredits('gemini-3.5-flash-lite', 1_000_000, 0, new Date('2027-01-01T00:00:00Z')), 1);
   assert.equal(calculateApiCredits('unpriced-model', 1_000_000, 1_000_000), null);
   assert.deepEqual(getSupportedApiModels('gemini-3.5-flash-lite,unpriced-model'), ['gemini-3.5-flash-lite']);
-  assert.deepEqual(getSupportedApiModels('unpriced-model'), []);
+  assert.deepEqual(getSupportedApiModels('unpriced-model'), ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite']);
+  assert.deepEqual(getSupportedApiModels(''), []);
   assert.equal(isApiModel('gemini-3.5-flash-lite'), true);
   assert.equal(isApiModel('gpt-4o-mini'), false);
   assert.ok(calculateApiCredits('gemini-3.5-flash-lite', 160_000 + 50 * 16, 4096) === 1);
