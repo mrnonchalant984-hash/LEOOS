@@ -12,13 +12,32 @@ export async function sendOwnerWhatsApp(text: string) {
 }
 
 export async function sendClientEmail(input:{to:string; subject:string; text:string; html?:string}) {
-  const apiKey=process.env.RESEND_API_KEY;
-  const from=process.env.CONTACT_FROM_EMAIL;
-  if(!apiKey || !from || !input.to) return false;
-  const r=await fetch('https://api.resend.com/emails',{
-    method:'POST',
-    headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
-    body:JSON.stringify({from,to:[input.to],subject:input.subject,text:input.text,html:input.html})
+  const apiKey = process.env.WEB3FORMS_API_KEY;
+  const formId = process.env.WEB3FORMS_FORM_ID;
+  if (!apiKey || !formId || !input.to) return false;
+
+  // Web3Forms' server-side Submissions API. Recipient delivery requires the
+  // form's autoresponder to be enabled for the submitted email address.
+  const response = await fetch('https://api.web3forms.com/v1/submissions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      form_id: formId,
+      from_name: 'Braverton Market',
+      subject: input.subject.slice(0, 160),
+      fields: {
+        email: input.to,
+        subject: input.subject.slice(0, 160),
+        message: input.text.slice(0, 12000),
+      },
+    }),
+    signal: AbortSignal.timeout(15000),
   });
-  return r.ok;
+
+  if (!response.ok) return false;
+  const result = await response.json().catch(() => null) as { success?: boolean } | null;
+  return result?.success === true;
 }
