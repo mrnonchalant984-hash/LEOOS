@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata = createPublicMetadata({
   title: "Developer Documentation",
-  description: "Explore LeonardX API endpoints, authentication scopes, request identifiers, SDK usage, webhook events and agent boundaries.",
+  description: "Explore Braverton API endpoints, authentication scopes, request identifiers, SDK usage, webhook events and agent boundaries.",
   path: "/developers/docs",
   type: "website",
 });
@@ -18,7 +18,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
 }
 
 const errors: [string, string, string][] = [
-  ['401', 'UNAUTHORIZED', 'The Authorization header is missing, malformed, or does not contain a valid LEO key.'],
+  ['401', 'UNAUTHORIZED', 'The Authorization header is missing, malformed, or does not contain a valid Braverton API key.'],
   ['401', 'INVALID_API_KEY', 'The key is unknown, revoked, or expired. Create a replacement key.'],
   ['403', 'INSUFFICIENT_SCOPE', 'The key does not have the scope required by this endpoint.'],
   ['429', 'RATE_LIMITED', 'The configured per-key limit was exceeded. Wait for Retry-After seconds.'],
@@ -76,9 +76,9 @@ export default function DeveloperDocsPage() {
     </Section>
 
     <Section id="webhooks" title="Webhooks">
-      <p>Add an HTTPS endpoint on the <Link href="/webhooks" className="text-yellow-300">Webhooks page</Link>. LEO OS sends a signed <code>POST</code> with a JSON body when an event occurs. Endpoints must be public HTTPS URLs on the default port. Localhost, private networks, and redirects are not supported.</p>
+      <p>Add an HTTPS endpoint on the <Link href="/webhooks" className="text-yellow-300">Webhooks page</Link>. Braverton sends a signed <code>POST</code> with a JSON body when an event occurs. Endpoints must be public HTTPS URLs on the default port. Localhost, private networks, and redirects are not supported.</p>
       <p><strong>Available events:</strong> <code>project.created</code> after a v1 project is created, <code>project.deployed</code> after deployment completes, and <code>api.usage.completed</code> after a metered API request completes. <code>webhook.test</code> is sent only when you press &quot;Send test&quot;.</p>
-      <Code>{`POST /your-endpoint\ncontent-type: application/json\nleo-event: webhook.test\nleo-delivery-id: 6f1c...\nleo-signature: t=1790000000,v1=9a3b...\n\n{\n  "id": "6f1c...",\n  "type": "webhook.test",\n  "created": 1790000000,\n  "data": { "message": "This is a test event from LEO OS." }\n}`}</Code>
+      <Code>{`POST /your-endpoint\ncontent-type: application/json\nleo-event: webhook.test\nleo-delivery-id: 6f1c...\nleo-signature: t=1790000000,v1=9a3b...\n\n{\n  "id": "6f1c...",\n  "type": "webhook.test",\n  "created": 1790000000,\n  "data": { "message": "This is a test event from Braverton." }\n}`}</Code>
       <p><strong>Verify the signature.</strong> Compute HMAC-SHA256 of <code>{'{t}.{raw body}'}</code> with your signing secret and compare it to <code>v1</code> using a constant-time comparison. Reject requests whose timestamp is more than 5 minutes old. Use the raw body, not re-serialised JSON.</p>
       <p><strong>Delivery and retries.</strong> Respond with any <code>2xx</code> status within 8 seconds to confirm receipt. Anything else, or a timeout, counts as a failure. The delivery record schedules up to five retries after 1 minute, 5 minutes, 30 minutes, 2 hours, and 6 hours. However, the currently configured Vercel cron invokes the retry worker once daily, so these times are eligibility delays—not a promise that a retry runs at that exact time. Delivery status and errors are shown on the Webhooks page. Because retries can repeat an event, use the <code>id</code> field to ignore duplicates.</p>
     </Section>
