@@ -125,3 +125,14 @@ test('backup workflow encrypts database and Storage archives and restore is stag
   assert.match(restore, /pg_restore/);
   assert.match(runbook, /not operationally verified/);
 });
+
+test('buyer checkout and marketplace partner applications require a confirmed account email', async () => {
+  const [checkout, affiliate, supplier] = await Promise.all([
+    read('../app/api/store/checkout/route.ts'),
+    read('../app/api/store/affiliates/route.ts'),
+    read('../app/api/store/suppliers/route.ts'),
+  ]);
+  assert.match(checkout, /user\.email_confirmed_at/);
+  assert.match(affiliate, /user\.email_confirmed_at/);
+  assert.match(supplier, /user\.email_confirmed_at/);
+});
