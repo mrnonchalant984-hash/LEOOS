@@ -1249,14 +1249,17 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
     try {
       const fd = new FormData();
       fd.append("file", file);
+      const userPrompt = input.trim();
+      if (userPrompt) fd.append("prompt", userPrompt);
       const r = await fetch("/api/file-review", { method: "POST", body: fd });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "File review failed");
       setMessages((m) => [
         ...m,
-        { role: "user", content: `Uploaded ${file.name}` },
+        { role: "user", content: userPrompt ? `${userPrompt}\\n\\nUploaded ${file.name}` : `Uploaded ${file.name}` },
         { role: "assistant", content: d.reply || "File received." },
       ]);
+      if (userPrompt) setInput("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "File upload failed");
     } finally {
