@@ -532,3 +532,63 @@ after update of verification_status on public.marketplace_suppliers
 for each row when (old.verification_status is distinct from new.verification_status)
 execute function public.sync_braverton_supplier_verification_to_listings();
 revoke all on function public.sync_braverton_supplier_verification_to_listings() from public,anon,authenticated;
+
+create table if not exists public.marketplace_dropship_application_events (
+  id uuid primary key default gen_random_uuid(),
+  application_id uuid not null references public.marketplace_dropship_applications(id) on delete cascade,
+  actor_id uuid references public.profiles(id) on delete set null,
+  actor_type text not null check(actor_type in ('seller','supplier','system')),
+  event_type text not null check(length(event_type) between 3 and 60),
+  details jsonb not null default '{}'::jsonb check(jsonb_typeof(details)='object'),
+  created_at timestamptz not null default now()
+);
+create index if not exists marketplace_dropship_application_events_timeline_idx
+  on public.marketplace_dropship_application_events(application_id,created_at asc);
+alter table public.marketplace_dropship_application_events enable row level security;
+revoke all on public.marketplace_dropship_application_events from public,anon,authenticated;
+grant all on public.marketplace_dropship_application_events to service_role;
+
+create or replace function public.record_braverton_dropship_application_event()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if tg_op='INSERT' then
+    insert into public.marketplace_dropship_application_events(application_id,actor_id,actor_type,event_type,details)
+    values(new.id,new.seller_id,'seller','application_submitted',
+      jsonb_build_object('supplier_product_id',new.supplier_product_id,'proposed_selling_price_kobo',new.proposed_selling_price_kobo,
+        'currency',new.currency,'terms_version',new.terms_version,'seller_agreed_at',new.seller_agreed_at));
+  elsif old.supplier_status is distinct from new.supplier_status then
+    insert into public.marketplace_dropship_application_events(application_id,actor_id,actor_type,event_type,details)
+    values(new.id,new.reviewed_by,'supplier','supplier_' || new.supplier_status,
+      jsonb_build_object('supplier_status',new.supplier_status,'supplier_note',new.supplier_note,
+        'marketplace_product_id',new.marketplace_product_id,'dropship_listing_id',new.dropship_listing_id));
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists marketplace_dropship_application_event_log on public.marketplace_dropship_applications;
+create trigger marketplace_dropship_application_event_log
+after insert or update of supplier_status on public.marketplace_dropship_applications
+for each row execute function public.record_braverton_dropship_application_event();
+
+create or replace function public.record_braverton_dropship_listing_event()
+returns trigger language plpgsql set search_path = public as $$
+declare v_application_id uuid;
+begin
+  if tg_op='INSERT' or old.status is distinct from new.status then
+    select id into v_application_id from public.marketplace_dropship_applications
+      where dropship_listing_id=new.id limit 1;
+    if v_application_id is not null then
+      insert into public.marketplace_dropship_application_events(application_id,actor_type,event_type,details)
+      values(v_application_id,'system','listing_status_changed',
+        jsonb_build_object('listing_status',new.status,'marketplace_product_id',new.marketplace_product_id));
+    end if;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists marketplace_dropship_listing_event_log on public.marketplace_dropship_listings;
+create trigger marketplace_dropship_listing_event_log
+after insert or update of status on public.marketplace_dropship_listings
+for each row execute function public.record_braverton_dropship_listing_event();
+revoke all on function public.record_braverton_dropship_application_event() from public,anon,authenticated;
+revoke all on function public.record_braverton_dropship_listing_event() from public,anon,authenticated;
