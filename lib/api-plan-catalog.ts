@@ -1,4 +1,4 @@
-/** Developer API tiers. Built-in inference uses free-tier Gemini Developer API models. */
+/** Developer API tiers. Built-in inference uses free-tier Gemini Developer API models; metadata endpoints do not consume usage credits. */
 export const API_PLAN_CATALOG = [
   { key: 'developer', audience: 'developer', name: 'Free Developer', monthlyNgn: 0, monthlyUsd: 0, includedCredits: 0, rpm: 5, concurrency: 1, maxKeys: 2, maxProjects: 1, features: ['Create and manage API keys', 'Read documentation and SDK examples', 'No billable API execution until a paid plan is active'] },
   { key: 'builder', audience: 'developer', name: 'Builder', monthlyNgn: 9_900, monthlyUsd: 9, includedCredits: 2_000, rpm: 30, concurrency: 3, maxKeys: 5, maxProjects: 3, features: ['API execution and usage dashboard', '2,000 usage credits each month', 'Custom agents with approved read-only tools', 'Standard support'] },
