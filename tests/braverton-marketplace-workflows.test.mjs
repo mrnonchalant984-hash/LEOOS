@@ -91,7 +91,7 @@ test('owner can override escalated seller decisions only through the audited two
     read('../app/api/admin/store/seller-verification/route.ts'),
     read('../supabase/migrations/20261123160000_braverton_market_launch_hardening.sql'),
   ]);
-  assert.match(api, /twofa_verified/);
+  assert.match(api, /requireOwner\(request\)/);
   assert.match(api, /owner_review_marketplace_seller_verification/);
   assert.match(migration, /role='owner' and twofa_verified=true/);
   assert.match(migration, /decision_source,outcome/);
