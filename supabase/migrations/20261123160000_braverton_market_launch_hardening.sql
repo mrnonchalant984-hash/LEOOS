@@ -199,3 +199,25 @@ end;
 $$;
 revoke all on function public.review_marketplace_dropship_application(uuid,uuid,text,text) from public,anon,authenticated;
 grant execute on function public.review_marketplace_dropship_application(uuid,uuid,text,text) to service_role;
+
+create or replace function public.record_marketplace_fulfillment_timeline()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if tg_op = 'INSERT' or old.status is distinct from new.status then
+    insert into public.marketplace_order_events(order_id,actor_id,event_type,details)
+    values(new.order_id,new.seller_id,'fulfillment_status_changed',
+      jsonb_build_object('seller_id',new.seller_id,'status',new.status,'method',new.method,
+        'tracking_reference',new.tracking_reference,'courier_name',new.courier_name));
+  end if;
+  if new.buyer_confirmed_at is not null and (tg_op = 'INSERT' or old.buyer_confirmed_at is distinct from new.buyer_confirmed_at) then
+    insert into public.marketplace_order_events(order_id,event_type,details)
+    values(new.order_id,'buyer_delivery_confirmed',jsonb_build_object('seller_id',new.seller_id));
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists marketplace_fulfillment_timeline on public.marketplace_fulfillments;
+create trigger marketplace_fulfillment_timeline
+after insert or update of status,buyer_confirmed_at on public.marketplace_fulfillments
+for each row execute function public.record_marketplace_fulfillment_timeline();
+revoke all on function public.record_marketplace_fulfillment_timeline() from public,anon,authenticated;
