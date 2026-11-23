@@ -1,4 +1,4 @@
-# LeoX Store known issues and launch blockers
+# Braverton Market known issues and launch blockers
 
 The earlier “foundation slice” issue list is obsolete. The application now contains broader buyer, seller, moderation, messaging, and payment code; presence in source does not prove a feature is complete or release-ready.
 
