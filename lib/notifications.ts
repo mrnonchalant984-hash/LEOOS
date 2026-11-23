@@ -38,6 +38,14 @@ export async function sendClientEmail(input:{to:string; subject:string; text:str
   });
 
   if (!response.ok) return false;
-  const result = await response.json().catch(() => null) as { success?: boolean } | null;
-  return result?.success === true;
+  const result = await response.json().catch(() => null) as {
+    success?: boolean;
+    data?: { id?: string; form_id?: string };
+    error?: { code?: string; message?: string };
+  } | null;
+
+  // The Web3Forms Submissions API returns 201 Created with data.id.
+  // The legacy /submit endpoint returns { success: true }; accept either
+  // response shape, but never treat an empty or malformed response as sent.
+  return result?.success === true || (response.status === 201 && typeof result?.data?.id === 'string' && result.data.id.length > 0);
 }
