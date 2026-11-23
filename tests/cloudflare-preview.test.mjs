@@ -103,6 +103,7 @@ test('preview worker uses a pinned compatible OpenNext adapter and rejects unkno
 test('scheduled preview worker fails visibly when credentials are missing', async () => {
   const workflow = await source('.github/workflows/cloudflare-preview-worker.yml');
   assert.match(workflow, /cron: '\*\/5 \* \* \* \*'/);
+  assert.match(workflow, /push:\n    branches:\n      - main/);
   assert.match(workflow, /Required Cloudflare preview worker secrets are missing/);
   assert.doesNotMatch(workflow, /ready=false/);
   assert.match(workflow, /timeout-minutes: 30/);
