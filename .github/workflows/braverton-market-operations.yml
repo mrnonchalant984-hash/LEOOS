@@ -1,0 +1,49 @@
+name: Braverton Market scheduled operations
+on:
+  schedule:
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: braverton-market-operations
+  cancel-in-progress: false
+jobs:
+  operations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      BRAVERTON_BASE_URL: ${{ vars.BRAVERTON_CRON_BASE_URL || 'https://leoos-omega.vercel.app' }}
+      BRAM_ENABLED: ${{ vars.BRAM_STORE_VERIFICATION_ENABLED || 'false' }}
+    steps:
+      - name: Check scheduler configuration
+        id: config
+        run: |
+          if [[ -z "$CRON_SECRET" ]]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Scheduled marketplace operations were skipped because the CRON_SECRET repository secret is missing." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Retry failed marketplace notifications
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 5 \
+            -X POST "$BRAVERTON_BASE_URL/api/cron/store/notification-retries" \
+            -H "Authorization: Bearer $CRON_SECRET" -H "Content-Type: application/json"
+      - name: Release affiliate commissions after dispute window
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 5 \
+            -X POST "$BRAVERTON_BASE_URL/api/cron/store/affiliate-commission-release" \
+            -H "Authorization: Bearer $CRON_SECRET" -H "Content-Type: application/json"
+      - name: Run Bram seller verification when explicitly enabled
+        if: steps.config.outputs.configured == 'true' && env.BRAM_ENABLED == 'true'
+        run: |
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 5 \
+            -X POST "$BRAVERTON_BASE_URL/api/cron/store/seller-verification" \
+            -H "Authorization: Bearer $CRON_SECRET" -H "Content-Type: application/json"
+      - name: Report Bram feature gate
+        if: steps.config.outputs.configured == 'true' && env.BRAM_ENABLED != 'true'
+        run: echo "Bram seller verification was not invoked because the repository variable BRAM_STORE_VERIFICATION_ENABLED is not true." >> "$GITHUB_STEP_SUMMARY"
