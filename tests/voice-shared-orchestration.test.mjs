@@ -38,7 +38,7 @@ test('voice UI no longer displays the obsolete Gemini quota and five-minute disc
 
 
 test('Leo voice uses the Gemini TTS model compatible with the configured generateContent audio response shape', () => {
-  assert.match(voice, /LEO_GEMINI_TTS_MODEL\?\.trim\(\) \|\| 'gemini-2\.5-flash-preview-tts'/);
+  assert.match(voice, /model: 'gemini-2\.5-flash-preview-tts'/);
   assert.match(voice, /responseModalities: \['AUDIO'\]/);
   assert.match(voice, /speechConfig:/);
 });
