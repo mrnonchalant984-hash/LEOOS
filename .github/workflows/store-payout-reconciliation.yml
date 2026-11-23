@@ -1,0 +1,37 @@
+name: LeoX Store payout reconciliation
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leox-store-payout-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate deployment configuration
+        env:
+          BRAVERTON_BASE_URL: ${{ vars.BRAVERTON_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$BRAVERTON_BASE_URL" || { echo "BRAVERTON_BASE_URL repository variable is required"; exit 1; }
+          test -n "$CRON_SECRET" || { echo "CRON_SECRET repository secret is required"; exit 1; }
+          case "$BRAVERTON_BASE_URL" in https://*) ;; *) echo "BRAVERTON_BASE_URL must use HTTPS"; exit 1;; esac
+      - name: Reconcile provider-confirmed seller payout states
+        env:
+          BRAVERTON_BASE_URL: ${{ vars.BRAVERTON_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --max-time 90 \
+            --request POST "${BRAVERTON_BASE_URL%/}/api/cron/store-payout-reconcile" \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            --header "Content-Type: application/json"

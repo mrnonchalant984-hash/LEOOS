@@ -24,3 +24,11 @@ The current implementation and production status are maintained in [LEOX_STORE_R
 - [ ] Enable both `STORE_CHECKOUT_ENABLED=true` and `STORE_PAYOUTS_ENABLED=true` only after written approval in the intended environment.
 
 No production deployment or migration was performed for this reconciliation. See [docs/LEOX_STORE_LAUNCH_CHECKLIST.md](./docs/LEOX_STORE_LAUNCH_CHECKLIST.md) for the operator checklist.
+
+
+## Payout reconciliation code gate
+
+- [ ] Review and apply `20261119120000_leox_store_payout_reconciliation.sql` in the confirmed staging database before deploying the matching code.
+- [ ] Configure repository variable `BRAVERTON_BASE_URL` and repository secret `CRON_SECRET`; confirm the scheduled reconciliation workflow succeeds.
+- [ ] Test Paystack sandbox transfer success, failed, reversed, pending, not-found and timeout-after-acceptance scenarios. Confirm the same reference is used for reconciliation and no duplicate transfer is created.
+- [ ] Confirm webhook and scheduled reconciliation races are safe and idempotent; inspect the payout ledger and operator alerts.
