@@ -92,7 +92,7 @@ test('dedicated Gemini Live transcription endpoint issues a constrained token wi
   assert.match(liveTranscription, /gemini-3\.5-transcribe-live/);
   assert.match(liveTranscription, /authTokens\.create/);
   assert.match(liveTranscription, /liveConnectConstraints/);
-  assert.match(liveTranscription, /responseModalities: \[Modality\.TEXT\]/);
+  assert.match(liveTranscription, /responseModalities: \[Modality\.TEXT as Modality\]/);
   assert.match(liveTranscription, /inputAudioTranscription/);
   assert.match(liveTranscription, /Cache-Control': 'private, no-store'/);
   assert.doesNotMatch(liveTranscription, /return NextResponse\.json\(\{[^}]*key,/);
