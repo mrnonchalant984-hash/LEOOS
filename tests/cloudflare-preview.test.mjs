@@ -84,7 +84,7 @@ test('preview worker stores no credentials in job payloads and verifies project-
   const resultRoute = await source('app/api/internal/previews/result/route.ts');
   assert.equal(WORKER_WRANGLER_VERSION, '4.164.0');
   assert.match(worker, /wrangler@' \+ WORKER_WRANGLER_VERSION/);
-  assert.match(worker, /wrangler\.preview\.jsonc/);
+  assert.match(worker, /wrangler\.jsonc/);
   assert.match(worker, /workers\.dev/);
   assert.match(worker, /SECRET_PATTERNS/);
   assert.match(worker, /redirect: 'manual'/);
