@@ -1,7 +1,7 @@
 import {AgentDefinition} from './types';
 import {validateAgentDefinition} from './contracts';
 const rawDefs = ([
-['leo-manager','Leo Manager','Coordinates Leo tasks and specialist handoffs','core','Classify the task, choose the minimum specialist capabilities, preserve truthfulness, and report only verified actions.',false,[],['read'],false],
+['leo-manager','Bram Manager','Coordinates Bram tasks and specialist handoffs','core','Classify the task, choose the minimum specialist capabilities, preserve truthfulness, and report only verified actions.',false,[],['read'],false],
 ['ceo-strategy','CEO / Strategy Agent','Strategy, planning and decisions','core','Provide practical strategy and decision support. Do not execute sensitive actions.',true,[],['read'],false],
 ['project-manager','Project Manager Agent','Project planning and coordination','core','Break work into explicit tasks, dependencies and acceptance criteria.',false,[],['read','write'],false],
 ['decision','Decision Agent','Decision analysis','core','Compare options, tradeoffs and risks using supplied evidence.',false,[],['read'],false],
@@ -36,7 +36,7 @@ const rawDefs = ([
 ['content','Content Agent','Content creation','creative','Create accurate content for approved channels.',false,[],['read','write'],false],
 ['copywriting','Copywriting Agent','Marketing copy','creative','Write concise conversion-focused copy without fabricated claims.',false,[],['read','write'],false],
 ['knowledge','Knowledge Agent','Knowledge retrieval','knowledge','Retrieve relevant LEO knowledge and identify conflicts.',true,['knowledge_read'],['read'],false],
-['training','Training Agent','Train Leo knowledge','knowledge','Use the existing Admin Train Leo system. Changes require owner authorization.',true,['knowledge_write'],['read','write','sensitive'],true],
+['training','Training Agent','Train Bram knowledge','knowledge','Use the existing Admin Train Bram system. Changes require owner authorization.',true,['knowledge_write'],['read','write','sensitive'],true],
 ['document','Document Agent','Document analysis','knowledge','Analyze authorized uploaded documents.',true,['file_read'],['read'],false],
 ['tutor','Tutor Agent','Education support','knowledge','Teach and explain clearly without fabricating facts.',false,[],['read'],false],
 ['writing','Writing Agent','Writing assistance','knowledge','Draft and revise supplied text.',false,[],['read','write'],false],
@@ -47,7 +47,7 @@ const rawDefs = ([
 ['calendar','Calendar Agent','Calendar operations','productivity','Manage authorized calendar data only when an integration is connected.',true,['calendar_read','calendar_write'],['read','write'],true],
 ['notes','Notes Agent','Notes','productivity','Manage authorized notes.',true,['notes_read','notes_write'],['read','write'],false],
 ['file-manager','File Manager Agent','Files','productivity','Manage authorized files only.',true,['file_read','file_write'],['read','write'],true],
-['memory','Memory Agent','Persistent Leo memory','productivity','Manage user-approved persistent memory and privacy.',true,['memory_read','memory_write'],['read','write'],false],
+['memory','Memory Agent','Persistent Bram memory','productivity','Manage user-approved persistent memory and privacy.',true,['memory_read','memory_write'],['read','write'],false],
 ['customer-support','Customer Support Agent','Customer support','business','Answer using approved knowledge and account context.',true,['knowledge_read'],['read'],false],
 ['sales','Sales Agent','Sales support','business','Support sales workflows using verified pricing and product data.',true,['knowledge_read'],['read'],false],
 ['lead','Lead Agent','Lead analysis','business','Analyze authorized leads and prioritize them.',true,['database_read'],['read','write'],false],

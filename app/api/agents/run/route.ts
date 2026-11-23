@@ -192,12 +192,20 @@ export async function POST(req: NextRequest) {
         });
         const parsed = parseAgentExecutionResult(result);
         const verifiedOutput = parsed?.result || result;
+        const { data: latestRun, error: metadataReadError } = await db.from('agent_runs')
+          .select('metadata')
+          .eq('id', run.id)
+          .eq('user_id', ctx.user.id)
+          .maybeSingle();
+        if (metadataReadError || !latestRun) {
+          throw new Error('Agent execution diagnostics could not be preserved.');
+        }
         const { error: updateError } = await db.from('agent_runs').update({
           status: parsed?.status === 'waiting_owner_input' ? 'waiting_approval' : 'completed',
           result: verifiedOutput,
           completed_at: parsed?.status === 'waiting_owner_input' ? null : new Date().toISOString(),
           metadata: {
-            ...(run.metadata || {}),
+            ...(latestRun.metadata || {}),
             browser_session_id: parsed?.session_id || null,
             browser_approvals: parsed?.approvals || [],
             dag_dependencies: node.dependsOn,

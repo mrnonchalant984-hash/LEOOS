@@ -33,7 +33,7 @@ export default function WebIde({ workspaceId, initialSessionId = '' }: { workspa
   const [selected, setSelected] = useState('');
   const [fileSearch, setFileSearch] = useState('');
   const [terminalInput, setTerminalInput] = useState('help');
-  const [terminal, setTerminal] = useState<TerminalLine[]>([{ kind: 'output', text: 'LEO workspace console · safe preview mode\nType "help" to see available commands.' }]);
+  const [terminal, setTerminal] = useState<TerminalLine[]>([{ kind: 'output', text: 'Bram workspace console · safe preview mode\nType "help" to see available commands.' }]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -362,9 +362,9 @@ export default function WebIde({ workspaceId, initialSessionId = '' }: { workspa
           <div className="flex min-h-[50vh] min-w-0 flex-col"><div className="flex h-10 items-center gap-2 border-b border-white/10 px-4 font-mono text-xs text-white/55"><span className="truncate">{selected || 'No file selected'}</span>{selected && /\.json$/i.test(selected) && <button onClick={formatSelectedFile} className="ml-auto rounded px-2 py-1 hover:bg-white/10">Format JSON</button>}</div>{selected ? <textarea aria-label={`Edit ${selected}`} spellCheck={false} value={files[selected] || ''} onChange={event => setFiles(previous => ({ ...previous, [selected]: event.target.value }))} className="min-h-[48vh] flex-1 resize-y bg-transparent p-4 font-mono text-[13px] leading-6 text-[#e6e7e9] outline-none focus:ring-1 focus:ring-inset focus:ring-[#d7aa70]/40" /> : <div className="grid flex-1 place-items-center p-8 text-center text-sm text-white/40">Choose a project file to start editing.</div>}</div>
         </div>
       </div>
-      <aside aria-label="Leo chat and workspace terminal" className="flex min-h-[45vh] min-w-0 flex-col overflow-hidden bg-[#0b0c0e]">
+      <aside aria-label="Bram chat and workspace terminal" className="flex min-h-[45vh] min-w-0 flex-col overflow-hidden bg-[#0b0c0e]">
         <div className="flex h-11 shrink-0 items-center gap-2 border-b border-white/10 px-3 text-xs text-white/60">
-          <button type="button" onClick={() => setRightPanel('leo')} aria-pressed={rightPanel === 'leo'} className={`rounded-md px-3 py-2 font-semibold ${rightPanel === 'leo' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>Leo chat</button>
+          <button type="button" onClick={() => setRightPanel('leo')} aria-pressed={rightPanel === 'leo'} className={`rounded-md px-3 py-2 font-semibold ${rightPanel === 'leo' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>Bram chat</button>
           <button type="button" onClick={() => setRightPanel('terminal')} aria-pressed={rightPanel === 'terminal'} className={`rounded-md px-3 py-2 font-semibold ${rightPanel === 'terminal' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>Terminal</button>
           <span className="ml-auto rounded bg-white/5 px-2 py-1 text-[10px] uppercase tracking-wide">{rightPanel === 'leo' ? '35% assistant' : 'Safe mode'}</span>
         </div>

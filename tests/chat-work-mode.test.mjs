@@ -15,7 +15,7 @@ test('Work mode is passed to and validated by the chat API', () => {
   assert.match(ui, /work_mode: workspaceMode === "work"/);
   assert.match(api, /work_mode: requestedWorkMode/);
   assert.match(api, /typeof requestedWorkMode !== "boolean"/);
-  assert.match(api, /WORK MODE: Stay in this same Leo conversation/);
+  assert.match(api, /WORK MODE: Stay in this same Bram conversation/);
 });
 
 test('Work mode keeps normal chat attachments and avoids streaming path', () => {

@@ -98,7 +98,12 @@ export async function POST(req: NextRequest) {
         approval.metadata?.task || "",
         approval.metadata?.context || "",
         owner,
-        { runId: approval.run_id, userId: ctx.user.id },
+        {
+          runId: approval.run_id,
+          userId: ctx.user.id,
+          request: req,
+          persistAgentRun: true,
+        },
       );
       const parsed = parseAgentExecutionResult(result);
       if (parsed?.status === "waiting_owner_input") {
