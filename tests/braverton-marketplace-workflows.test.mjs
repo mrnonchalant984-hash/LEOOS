@@ -84,3 +84,44 @@ test('dropship application requires seller terms acceptance and supplier approva
   assert.match(migration, /'pending_review'/);
   assert.match(migration, /'paused'/);
 });
+
+test('owner can override escalated seller decisions only through the audited two-factor-protected RPC', async () => {
+  const [api, migration] = await Promise.all([
+    read('../app/api/admin/store/seller-verification/route.ts'),
+    read('../supabase/migrations/20261123160000_braverton_market_launch_hardening.sql'),
+  ]);
+  assert.match(api, /twofa_verified/);
+  assert.match(api, /owner_review_marketplace_seller_verification/);
+  assert.match(migration, /role='owner' and twofa_verified=true/);
+  assert.match(migration, /decision_source,outcome/);
+  assert.match(migration, /'owner_approved'/);
+});
+
+test('payment and fulfilment events send deduplicated buyer, seller and affiliate notifications', async () => {
+  const [webhook, supplierFulfillment, buyerOrders] = await Promise.all([
+    read('../app/api/payment/webhook/route.ts'),
+    read('../app/api/store/suppliers/fulfillment/route.ts'),
+    read('../app/api/store/orders/route.ts'),
+  ]);
+  assert.match(webhook, /order:.*payment-confirmed:buyer/);
+  assert.match(webhook, /payment-confirmed:seller/);
+  assert.match(webhook, /affiliate-payout:/);
+  assert.match(supplierFulfillment, /supplier-fulfillment:/);
+  assert.match(buyerOrders, /cancellation-request:/);
+});
+
+test('backup workflow encrypts database and Storage archives and restore is staging-only', async () => {
+  const [workflow, backup, restore, runbook] = await Promise.all([
+    read('../.github/workflows/braverton-market-backup.yml'),
+    read('../scripts/braverton-backup.sh'),
+    read('../scripts/braverton-restore-staging.sh'),
+    read('../docs/BRAVERTON_MARKET_BACKUP_RUNBOOK.md'),
+  ]);
+  assert.match(workflow, /schedule:/);
+  assert.match(backup, /pg_dump/);
+  assert.match(backup, /aws .* s3 sync/);
+  assert.match(backup, /age --recipient/);
+  assert.match(restore, /RESTORE_TARGET_ENV.*staging/);
+  assert.match(restore, /pg_restore/);
+  assert.match(runbook, /not operationally verified/);
+});
