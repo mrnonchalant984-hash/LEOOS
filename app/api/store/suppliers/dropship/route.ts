@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getUserFromRequest } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { notifyMarketplaceUser } from '@/lib/store-notifications';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -59,5 +60,14 @@ export async function POST(request: NextRequest) {
     terms_version: TERMS_VERSION, seller_agreed_at: new Date().toISOString(),
   }).select('id,supplier_product_id,proposed_selling_price_kobo,supplier_status,terms_version,created_at').single();
   if (error) return NextResponse.json({ error: error.code === '23505' ? 'You already have an application for this supplier product.' : 'Dropship application could not be submitted.' }, { status: error.code === '23505' ? 409 : 503 });
+  try {
+    await notifyMarketplaceUser({
+      userId: supplierProduct.supplier_id, kind: 'dropship_application',
+      title: 'New Braverton reseller application',
+      body: 'A verified reseller has applied to list one of your supplier products. Review the application in your supplier workspace.',
+      href: '/store/suppliers', preference: 'support_updates',
+      idempotencyKey: `dropship-application:${data.id}:submitted`,
+    });
+  } catch (noticeError) { console.error('Supplier dropship application notification failed:', noticeError instanceof Error ? noticeError.message : 'unknown error'); }
   return NextResponse.json({ application: data, message: 'Application sent to the supplier. No product listing is published until the supplier approves and Braverton moderation is complete.' }, { status: 201 });
 }
