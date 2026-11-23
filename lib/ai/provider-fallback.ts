@@ -18,7 +18,7 @@ function isTransientNetworkError(error: unknown) {
 
 export function isRetryableProviderFailure(error: unknown) {
   const status = providerStatus(error);
-  return status === 401 || status === 403 || status === 408 || status === 409 || status === 429 || status === 404 || (status !== null && status >= 500) || (status === null && isTransientNetworkError(error));
+  return status === 408 || status === 409 || status === 429 || (status !== null && status >= 500) || (status === null && isTransientNetworkError(error));
 }
 
 function isRetryableFallbackFailure(error: unknown) {
@@ -57,9 +57,9 @@ export function getSafeFallbackModel(
   }
 
   if (!configured('google')) return undefined;
-  const fallbackModel = primary.model === 'gemini-3.5-flash-lite'
-    ? 'gemini-2.5-flash-lite'
-    : 'gemini-3.5-flash-lite';
+  const fallbackModel = primary.model === 'gemini-3.1-flash-lite'
+    ? 'gemini-2.5-flash'
+    : 'gemini-3.1-flash-lite';
   return `google/${fallbackModel}`;
 }
 
@@ -97,7 +97,7 @@ export async function generateWithExplicitFallback<T>(
     }
     let resolvedFallback: ReturnType<typeof resolveModel>;
     try { resolvedFallback = resolveModel(fallbackModel); }
-    catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use a free-tier Google AI Studio model ID such as gemini-3.5-flash-lite.', 503); }
+    catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use an approved free-tier Google AI Studio model ID such as gemini-3.1-flash-lite.', 503); }
     const normalizedFallback = `${resolvedFallback.provider}/${resolvedFallback.model}`;
     const fallbackProvider = resolvedFallback.provider;
     if (normalizedFallback === normalizedPrimary || !configured(fallbackProvider)) {
@@ -133,7 +133,7 @@ export async function generateWithExplicitFallback<T>(
         !isRetryableProviderFailure(primaryError) || !shouldFallbackOnError(primaryError)) throw primaryError;
     let resolvedFallback: ReturnType<typeof resolveModel>;
     try { resolvedFallback = resolveModel(fallbackModel); }
-    catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use a free-tier Google AI Studio model ID such as gemini-3.5-flash-lite.', 503); }
+    catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use a free-tier Google AI Studio model ID such as gemini-3.1-flash-lite.', 503); }
     const normalizedFallback = `${resolvedFallback.provider}/${resolvedFallback.model}`;
     const fallbackProvider = resolvedFallback.provider;
     if (normalizedFallback === normalizedPrimary || !configured(fallbackProvider)) throw primaryError;
@@ -161,7 +161,14 @@ export async function generateWithExplicitFallback<T>(
           status_code: safeErrorStatus(fallbackError),
           error_type: fallbackError instanceof Error ? fallbackError.name : 'unknown',
         });
-        if (attempt >= maxFallbackAttempts || !isRetryableFallbackFailure(fallbackError) || !shouldFallbackOnError(fallbackError)) throw fallbackError;
+        if (attempt >= maxFallbackAttempts || !isRetryableFallbackFailure(fallbackError) || !shouldFallbackOnError(fallbackError)) {
+          const primaryStatus = safeErrorStatus(primaryError);
+          const fallbackStatus = safeErrorStatus(fallbackError);
+          throw new ModelProviderError(
+            `Gemini primary model ${primary.model} failed${primaryStatus ? ` (HTTP ${primaryStatus})` : ''}; fallback model ${resolvedFallback.model} also failed${fallbackStatus ? ` (HTTP ${fallbackStatus})` : ''}. Latest provider error: ${fallbackError instanceof Error ? fallbackError.message : 'unknown provider error'}`,
+            fallbackStatus || primaryStatus || 503,
+          );
+        }
       }
     }
     throw lastError;

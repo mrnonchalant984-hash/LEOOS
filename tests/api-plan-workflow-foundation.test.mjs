@@ -28,21 +28,21 @@ test('API checkout is enabled and all non-free tiers use monthly subscriptions w
 });
 
 test('Developer API exposes only free-tier Gemini models and charges the platform minimum credit', () => {
-  assert.equal(API_MODEL_PRICING_REVIEWED_ON, '2026-11-23');
-  assert.deepEqual(API_MODEL_PRICING['gemini-3.5-flash-lite'], { inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 });
-  assert.deepEqual(API_MODEL_PRICING['gemini-2.5-flash-lite'], { inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 });
+  assert.equal(API_MODEL_PRICING_REVIEWED_ON, '2026-11-24');
+  assert.deepEqual(API_MODEL_PRICING['gemini-3.1-flash-lite'], { inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 });
+  assert.deepEqual(API_MODEL_PRICING['gemini-2.5-flash'], { inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 });
   assert.equal(API_CREDIT_PROVIDER_COST_USD, 0.0006);
-  assert.equal(calculateApiCredits('gemini-3.5-flash-lite', 1_000_000, 0, new Date('2026-10-29T00:00:00Z')), 1);
-  assert.equal(calculateApiCredits('gemini-3.5-flash-lite', 0, 1_000_000, new Date('2026-10-29T00:00:00Z')), 1);
-  assert.equal(calculateApiCredits('gemini-3.5-flash-lite', 1_000_000, 1_000_000, new Date('2026-10-29T00:00:00Z')), 1);
-  assert.equal(calculateApiCredits('gemini-3.5-flash-lite', 1_000_000, 0, new Date('2027-01-01T00:00:00Z')), 1);
+  assert.equal(calculateApiCredits('gemini-3.1-flash-lite', 1_000_000, 0, new Date('2026-10-29T00:00:00Z')), 1);
+  assert.equal(calculateApiCredits('gemini-3.1-flash-lite', 0, 1_000_000, new Date('2026-10-29T00:00:00Z')), 1);
+  assert.equal(calculateApiCredits('gemini-3.1-flash-lite', 1_000_000, 1_000_000, new Date('2026-10-29T00:00:00Z')), 1);
+  assert.equal(calculateApiCredits('gemini-3.1-flash-lite', 1_000_000, 0, new Date('2027-01-01T00:00:00Z')), 1);
   assert.equal(calculateApiCredits('unpriced-model', 1_000_000, 1_000_000), null);
-  assert.deepEqual(getSupportedApiModels('gemini-3.5-flash-lite,unpriced-model'), ['gemini-3.5-flash-lite']);
-  assert.deepEqual(getSupportedApiModels('unpriced-model'), ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite']);
+  assert.deepEqual(getSupportedApiModels('gemini-3.1-flash-lite,unpriced-model'), ['gemini-3.1-flash-lite']);
+  assert.deepEqual(getSupportedApiModels('unpriced-model'), ['gemini-3.1-flash-lite', 'gemini-2.5-flash']);
   assert.deepEqual(getSupportedApiModels(''), []);
-  assert.equal(isApiModel('gemini-3.5-flash-lite'), true);
+  assert.equal(isApiModel('gemini-3.1-flash-lite'), true);
   assert.equal(isApiModel('gpt-4o-mini'), false);
-  assert.ok(calculateApiCredits('gemini-3.5-flash-lite', 160_000 + 50 * 16, 4096) === 1);
+  assert.ok(calculateApiCredits('gemini-3.1-flash-lite', 160_000 + 50 * 16, 4096) === 1);
 });
 
 test('provider-priced monthly usage remains below each plan price under a conservative NGN FX stress rate', () => {

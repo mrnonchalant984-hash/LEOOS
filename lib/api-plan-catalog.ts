@@ -19,14 +19,14 @@ export type ApiPlanCurrency = typeof API_PLAN_CURRENCIES[number];
 export const API_PLAN_BILLING_PERIOD = 'monthly' as const;
 export const API_PLAN_CHECKOUT_ENABLED = true;
 export const API_MODEL_PRICING_SOURCE = 'https://ai.google.dev/gemini-api/docs/pricing';
-export const API_MODEL_PRICING_REVIEWED_ON = '2026-11-23';
+export const API_MODEL_PRICING_REVIEWED_ON = '2026-11-24';
 export const API_CREDIT_PROVIDER_COST_USD = 0.0006;
 
 // Free-tier inference has no Gemini token charge. The platform still uses a
 // one-credit minimum per billable API request to retain usage accounting.
 export const API_MODEL_PRICING = {
-  'gemini-3.5-flash-lite': { inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 },
-  'gemini-2.5-flash-lite': { inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 },
+  'gemini-3.1-flash-lite': { inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 },
+  'gemini-2.5-flash': { inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 },
 } as const;
 
 export type ApiModel = keyof typeof API_MODEL_PRICING;
@@ -34,10 +34,10 @@ export function isApiModel(model: string): model is ApiModel { return Object.has
 
 export function getSupportedApiModels(configured = process.env.LEONARDX_API_MODELS): ApiModel[] {
   const requested = configured === undefined
-    ? ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite']
+    ? ['gemini-3.1-flash-lite', 'gemini-2.5-flash']
     : configured.split(',').map(model => model.trim()).filter(Boolean);
   const supported = [...new Set(requested.filter(isApiModel))];
-  return supported.length || !requested.length ? supported : ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
+  return supported.length || !requested.length ? supported : ['gemini-3.1-flash-lite', 'gemini-2.5-flash'];
 }
 
 export function getApiModelPricing(model: string, _now = new Date()) {
