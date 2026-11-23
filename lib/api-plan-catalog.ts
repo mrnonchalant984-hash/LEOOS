@@ -19,7 +19,7 @@ export type ApiPlanCurrency = typeof API_PLAN_CURRENCIES[number];
 export const API_PLAN_BILLING_PERIOD = 'monthly' as const;
 export const API_PLAN_CHECKOUT_ENABLED = true;
 export const API_MODEL_PRICING_SOURCE = 'https://ai.google.dev/gemini-api/docs/pricing';
-export const API_MODEL_PRICING_REVIEWED_ON = '2026-11-23';
+export const API_MODEL_PRICING_REVIEWED_ON = '2026-11-24';
 export const API_CREDIT_PROVIDER_COST_USD = 0.0006;
 
 // Free-tier inference has no Gemini token charge. The platform still uses a
