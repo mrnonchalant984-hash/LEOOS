@@ -18,7 +18,7 @@ function isTransientNetworkError(error: unknown) {
 
 export function isRetryableProviderFailure(error: unknown) {
   const status = providerStatus(error);
-  return status === 401 || status === 403 || status === 408 || status === 409 || status === 429 || status === 404 || (status !== null && status >= 500) || (status === null && isTransientNetworkError(error));
+  return status === 408 || status === 409 || status === 429 || (status !== null && status >= 500) || (status === null && isTransientNetworkError(error));
 }
 
 function isRetryableFallbackFailure(error: unknown) {
@@ -97,7 +97,7 @@ export async function generateWithExplicitFallback<T>(
     }
     let resolvedFallback: ReturnType<typeof resolveModel>;
     try { resolvedFallback = resolveModel(fallbackModel); }
-    catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use a free-tier Google AI Studio model ID such as gemini-3.5-flash-lite.', 503); }
+    catch { throw new ModelProviderError('The configured fallback model is invalid. Check LEO_FALLBACK_MODEL; use an approved free-tier Google AI Studio model ID such as gemini-3.1-flash-lite.', 503); }
     const normalizedFallback = `${resolvedFallback.provider}/${resolvedFallback.model}`;
     const fallbackProvider = resolvedFallback.provider;
     if (normalizedFallback === normalizedPrimary || !configured(fallbackProvider)) {
@@ -161,7 +161,7 @@ export async function generateWithExplicitFallback<T>(
           status_code: safeErrorStatus(fallbackError),
           error_type: fallbackError instanceof Error ? fallbackError.name : 'unknown',
         });
-        if (attempt >= maxFallbackAttempts || !isRetryableFallbackFailure(fallbackError) || !shouldFallbackOnError(fallbackError)) throw fallbackError;
+        if (attempt >= maxFallbackAttempts || !isRetryableFallbackFailure(fallbackError) || !shouldFallbackOnError(fallbackError)) {\n          const primaryStatus = safeErrorStatus(primaryError);\n          const fallbackStatus = safeErrorStatus(fallbackError);\n          throw new ModelProviderError(\n            `Gemini primary model ${primary.model} failed${primaryStatus ? ` (HTTP ${primaryStatus})` : ''}; fallback model ${resolvedFallback.model} also failed${fallbackStatus ? ` (HTTP ${fallbackStatus})` : ''}. Latest provider error: ${fallbackError instanceof Error ? fallbackError.message : 'unknown provider error'}`,\n            fallbackStatus || primaryStatus || 503,\n          );\n        }
       }
     }
     throw lastError;
