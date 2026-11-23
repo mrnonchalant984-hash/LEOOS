@@ -13,12 +13,12 @@ permissions:
 
 concurrency:
   group: leonardx-cloudflare-preview-worker
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   poll:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
