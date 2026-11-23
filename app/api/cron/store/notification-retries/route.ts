@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     try {
       await notifyMarketplaceUser({
         userId: item.user_id, kind: item.kind, title: item.title, body: item.body,
-        href: item.href || '/store', preference: item.preference_key,
+        href: item.href || '/store', preference: item.preference_key as 'messages' | 'order_updates' | 'support_updates',
         idempotencyKey: item.dedupe_key,
       });
       retried += 1;
