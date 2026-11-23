@@ -28,6 +28,7 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   if (toolName === 'list_projects' || toolName === 'get_project_status') return permissions.has('project_read');
   if (toolName === 'get_project_files') return permissions.has('project_read') || permissions.has('file_read');
   if (toolName === 'get_build_status') return permissions.has('deployment') || permissions.has('devops');
+  if (toolName === 'web_research') return permissions.has('web_search');
   if (toolName === 'create_project') return permissions.has('website_builder') && /\b(build|create|make)\b/i.test(task);
   if (toolName === 'save_project_files') return permissions.has('file_write');
   if (toolName === 'build_and_deploy_project' || toolName === 'publish_browser_game') {
@@ -154,6 +155,7 @@ export async function runAgent(
       allowRepositoryAccess: repositoryAccess,
       allowRepositoryWrites: repositoryWrites,
       allowImageGeneration: imageRequested,
+      allowWebResearch: agent.allowedTools.includes('web_search'),
     } : undefined;
     available = await createUserAssistantTools(meta.userId, options, {
       agentId: agent.id,
