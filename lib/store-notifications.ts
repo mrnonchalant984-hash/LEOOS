@@ -51,7 +51,7 @@ export async function notifyMarketplaceUser(input: NotificationInput) {
   let notificationId: string | null = null;
   const { data: inserted, error: insertError } = await db.from('marketplace_notifications').insert({
     user_id: input.userId, kind: input.kind, title: input.title.slice(0, 160),
-    body: input.body.slice(0, 1000), href: input.href, dedupe_key: dedupeKey,
+    body: input.body.slice(0, 1000), href: input.href, dedupe_key: dedupeKey, preference_key: input.preference,
   }).select('id').single();
   if (insertError?.code === '23505') {
     const { data: existing, error } = await db.from('marketplace_notifications').select('id')
