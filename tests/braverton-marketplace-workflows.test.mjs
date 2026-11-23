@@ -176,3 +176,14 @@ test('marketplace landing shows all active seller categories by default and filt
   assert.match(page, /if \(category\) query = query\.eq\('category', category\)/);
   assert.match(page, /href="\/store"/);
 });
+
+test('owner can inspect notification delivery evidence without exposing delivery logs publicly', async () => {
+  const [api, page] = await Promise.all([
+    read('../app/api/admin/store/notification-deliveries/route.ts'),
+    read('../app/admin/store/notification-deliveries/page.tsx'),
+  ]);
+  assert.match(api, /requireOwner\(request\)/);
+  assert.match(api, /marketplace_notification_deliveries/);
+  assert.match(page, /Notification delivery evidence/);
+  assert.match(page, /attempts/);
+});
