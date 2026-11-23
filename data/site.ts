@@ -21,15 +21,15 @@ export const projects = big12Projects
 export const profileImage = '/profile.png'
 
 export const siteData = {
-  owner: 'Codernard Udoh', title: 'Software & AI Services', description: 'Website concepts, software builds, and practical code reviews for businesses and creators.', tagline: 'Practical website and software services, powered by thoughtful design and AI-assisted development.', price: 'Practical services for software teams', location: 'Remote — Worldwide', email: 'leonardudoh5@gmail.com', phone: '+2349115936466', phoneDisplay: '+234 911 593 6466', brand: '#FFD700', cv: '/documents/Codernard-Udoh-CV.pdf',
+  owner: 'Leonard Udoh', title: 'Founder · Developer', description: 'Website concepts, software builds, and practical code reviews for businesses and creators.', tagline: 'Practical website and software services, powered by thoughtful design and AI-assisted development.', price: 'Practical services for software teams', location: 'Remote — Worldwide', email: 'leonardudoh5@gmail.com', phone: '+2349115936466', phoneDisplay: '+234 911 593 6466', brand: '#FFD700', cv: '/documents/Codernard-Udoh-CV.pdf',
   liveProjects: [
     {name:'Qveli',description:'A social media platform for creators.',url:process.env.NEXT_PUBLIC_LIVE_QVELI_URL||'',image:'/qveli-logo.svg'},
-    {name:'Braverton',description:'A freelancing platform connecting clients with freelancers.',url:process.env.NEXT_PUBLIC_LIVE_CoderNARDX_URL||'',image:'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1600&q=85'}
+    {name:'Braverton',description:'An AI software creation platform for planning, building, testing and deploying software.',url:process.env.NEXT_PUBLIC_LIVE_CoderNARDX_URL||'',image:'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1600&q=85'}
   ],
   demoProjects: big12Projects,
   services: [
     {name:'AI Mockup',price:'₦50,000',description:'Turn a business idea into a polished visual website direction before development.',href:'/app',details:'You get a visual concept, page direction, section ideas, content direction, and a clearer blueprint for the final website.'},
     {name:'Braverton Builder',price:'Included with plan',description:'Build websites, web apps, and SaaS projects within your plan limits.',href:'/pricing',details:'Your plan controls project types, project capacity, and monthly build limits. Each successful deployment includes a 90-day hosting trial; hosting is separate after the trial.'},
-    {name:'Code Review',price:'₦20,000',description:'A practical review of your codebase with prioritized problems, explanations, and fixes.',href:'/app',details:'Coder can inspect structure, bugs, responsiveness, performance, security risks, accessibility, SEO, and code quality, then give practical fixes.'}
+    {name:'Code Review',price:'₦20,000',description:'A practical review of your codebase with prioritized problems, explanations, and fixes.',href:'/app',details:'Braverton's code-review workflow can assess structure, bugs, responsiveness, performance, security risks, accessibility, SEO and code quality, then recommend practical fixes.'}
   ]
 };
