@@ -4,8 +4,8 @@ import { getDefaultTextModel, getModelProviderStatus, resolveModel } from '../li
 import { getSafeFallbackModel } from '../lib/ai/provider-fallback.ts';
 
 test('model registry accepts supported Gemini models and rejects other providers', () => {
-  assert.deepEqual(resolveModel('google/gemini-3.5-flash-lite'), { provider: 'google', model: 'gemini-3.5-flash-lite' });
-  assert.deepEqual(resolveModel('gemini-2.5-flash-lite'), { provider: 'google', model: 'gemini-2.5-flash-lite' });
+  assert.deepEqual(resolveModel('google/gemini-3.1-flash-lite'), { provider: 'google', model: 'gemini-3.1-flash-lite' });
+  assert.deepEqual(resolveModel('gemini-2.5-flash'), { provider: 'google', model: 'gemini-2.5-flash' });
   assert.throws(() => resolveModel('openai/gpt-4o-mini'), /only Gemini/i);
   assert.throws(() => resolveModel('anthropic/claude-3-5-haiku-latest'), /only Gemini/i);
   assert.throws(() => resolveModel('gemini-2.0-flash'), /supported model/i);
@@ -18,7 +18,7 @@ test('unsupported configured default falls back only to configured Gemini', () =
     process.env.LEO_CHAT_MODEL = 'provider-model-that-is-not-registered';
     process.env.GEMINI_API_KEY = 'test-key';
     delete process.env.GOOGLE_API_KEY;
-    assert.equal(getDefaultTextModel('chat'), 'google/gemini-3.5-flash-lite');
+    assert.equal(getDefaultTextModel('chat'), 'google/gemini-3.1-flash-lite');
   } finally {
     for (const name of names) previous[name] === undefined ? delete process.env[name] : process.env[name] = previous[name];
   }
@@ -40,11 +40,11 @@ test('model defaults ignore local and alternative-provider settings', () => {
     process.env.LEO_LOCAL_MODEL_NAME = 'qwen-local';
     process.env.GEMINI_API_KEY = 'test-key';
     delete process.env.GOOGLE_API_KEY;
-    assert.equal(getDefaultTextModel(), 'google/gemini-3.5-flash-lite');
-    process.env.LEO_CHAT_MODEL = 'google/gemini-2.5-flash-lite';
-    assert.equal(getDefaultTextModel(), 'google/gemini-2.5-flash-lite');
+    assert.equal(getDefaultTextModel(), 'google/gemini-3.1-flash-lite');
+    process.env.LEO_CHAT_MODEL = 'google/gemini-2.5-flash';
+    assert.equal(getDefaultTextModel(), 'google/gemini-2.5-flash');
     process.env.LEO_CHAT_MODEL = 'openai/gpt-4o-mini';
-    assert.equal(getDefaultTextModel(), 'google/gemini-3.5-flash-lite');
+    assert.equal(getDefaultTextModel(), 'google/gemini-3.1-flash-lite');
   } finally {
     for (const name of names) previous[name] === undefined ? delete process.env[name] : process.env[name] = previous[name];
   }
@@ -52,7 +52,7 @@ test('model defaults ignore local and alternative-provider settings', () => {
 
 test('Gemini fallback selection never invokes non-Gemini providers', () => {
   const configured = provider => provider === 'google';
-  assert.equal(getSafeFallbackModel('google/gemini-3.5-flash-lite', 'unsupported/fallback-model', false, configured), 'google/gemini-2.5-flash-lite');
-  assert.equal(getSafeFallbackModel('google/gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', false, configured), 'google/gemini-2.5-flash-lite');
-  assert.equal(getSafeFallbackModel('google/gemini-2.5-flash-lite', undefined, false, configured), 'google/gemini-3.5-flash-lite');
+  assert.equal(getSafeFallbackModel('google/gemini-3.1-flash-lite', 'unsupported/fallback-model', false, configured), 'google/gemini-2.5-flash');
+  assert.equal(getSafeFallbackModel('google/gemini-3.1-flash-lite', 'gemini-2.5-flash', false, configured), 'google/gemini-2.5-flash');
+  assert.equal(getSafeFallbackModel('google/gemini-2.5-flash', undefined, false, configured), 'google/gemini-3.1-flash-lite');
 });
