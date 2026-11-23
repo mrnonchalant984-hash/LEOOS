@@ -42,9 +42,9 @@ test('Gemini provider forwards system instructions and maps assistant history to
 test('Gemini API key and fallback configuration are server-side environment variables', () => {
   assert.match(envExample, /^GEMINI_API_KEY=$/m);
   assert.match(envExample, /^LEO_FALLBACK_MODEL=$/m);
-  assert.match(envExample, /^LEO_GEMINI_IMAGE_MODEL=gemini-2\.5-flash-image$/m);
-  assert.match(envExample, /^LEO_GEMINI_AUDIO_MODEL=gemini-2\.5-flash$/m);
-  assert.match(envExample, /^LEO_GEMINI_TTS_MODEL=gemini-2\.5-flash-preview-tts$/m);
+  assert.match(envExample, /^LEO_GEMINI_IMAGE_MODEL=gemini-2\.5-flash-lite-image$/m);
+  assert.match(envExample, /^LEO_GEMINI_AUDIO_MODEL=gemini-2\.5-flash-lite$/m);
+  assert.match(envExample, /^LEO_GEMINI_TTS_MODEL=gemini-2\.5-flash-lite-preview-tts$/m);
   assert.doesNotMatch(envExample, /^NEXT_PUBLIC_GEMINI_API_KEY=/m);
 });
 
