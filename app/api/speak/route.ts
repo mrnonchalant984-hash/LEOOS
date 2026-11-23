@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (!key) return NextResponse.json({ error: 'Gemini speech is not configured. Set GEMINI_API_KEY or GOOGLE_API_KEY.' }, { status: 503 });
   try {
     const response = await new GoogleGenAI({ apiKey: key }).models.generateContent({
-      model: process.env.LEO_GEMINI_TTS_MODEL?.trim() || 'gemini-3.8-flash-tts',
+      model: process.env.LEO_GEMINI_TTS_MODEL?.trim() || 'gemini-2.5-flash-preview-tts',
       contents: [{ role: 'user', parts: [{ text: parsed.data.text }] }],
       config: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } },
     });
