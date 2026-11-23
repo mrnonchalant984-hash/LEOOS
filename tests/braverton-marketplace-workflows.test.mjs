@@ -85,6 +85,9 @@ test('dropship application requires seller terms acceptance and supplier approva
   assert.match(migration, /v_seller\.is_verified/);
   assert.match(migration, /'pending_review'/);
   assert.match(migration, /'paused'/);
+  assert.match(migration, /marketplace_dropship_application_events/);
+  assert.match(migration, /application_submitted/);
+  assert.match(migration, /listing_status_changed/);
   assert.match(migration, /sync_braverton_dropship_listing_moderation/);
   assert.match(migration, /sync_braverton_supplier_verification_to_listings/);
 });
