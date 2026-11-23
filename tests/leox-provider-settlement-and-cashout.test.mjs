@@ -15,7 +15,7 @@ test('Paystack seller multi-split is feature-gated and uses verified seller suba
   assert.match(payoutAccount, /api\.paystack\.co\/subaccount/);
   assert.match(payoutAccount, /subaccount_code/);
   assert.match(checkout, /STORE_PAYSTACK_SPLIT_ENABLED === 'true'/);
-  assert.match(checkout, /type: 'flat', bearer_type: 'account', subaccounts/);
+  assert.match(checkout, /name: order\.order_number, type: 'flat', currency: 'NGN', bearer_type: 'account', subaccounts/);
   assert.match(checkout, /marketplace_order_items/);
 });
 
