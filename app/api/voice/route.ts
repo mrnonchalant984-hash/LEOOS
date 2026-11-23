@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
       const asksDeploy = /\b(deploy|publish|redeploy)\b/i.test(transcript);
       const asksAgentRun = /\b(run|execute|start|launch)\b.{0,60}\b(agent|specialist)\b/i.test(transcript);
       const asksWebsiteResearch = /\b(search|research|browse|read|inspect|summari[sz]e|analy[sz]e)\b/i.test(transcript)
-        && (/\b(website|web\s?site|webpage|web\s?page|domain|online)\b/i.test(transcript) || /https?:\/\//i.test(transcript));
+        && (/\b(website|web\s?site|webpage|web\s?page|domain|web|internet|online)\b/i.test(transcript) || /https?:\/\//i.test(transcript));
       const tools = await createUserAssistantTools(ctx.user.id, {
         request: req,
         userMessage: transcript,
