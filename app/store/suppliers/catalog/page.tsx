@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
 type Product = { id: string; supplier_id: string; title: string; description: string; cost_kobo: number; currency: string; available_quantity: number; supplier: { business_name: string; country_code: string } | null };
-type Application = { id: string; supplier_product_id: string; supplier_status: string; proposed_selling_price_kobo: number; supplier_note: string | null };
+type Application = { id: string; supplier_product_id: string; supplier_status: string; proposed_selling_price_kobo: number; currency: string; supplier_note: string | null };
 type Catalog = { products: Product[]; applications: Application[] };
 
 export default function SupplierCatalogPage() {
@@ -54,8 +54,8 @@ export default function SupplierCatalogPage() {
           <p className="text-xs text-amber-100">{product.supplier?.business_name ?? 'Approved supplier'} · {product.supplier?.country_code}</p>
           <h2 className="mt-2 text-lg font-semibold">{product.title}</h2>
           <p className="mt-2 line-clamp-3 text-sm text-white/55">{product.description}</p>
-          <p className="mt-3 text-sm">Supplier cost: ₦{(product.cost_kobo / 100).toLocaleString('en-NG')} · Stock {product.available_quantity}</p>
-          {application ? <div className="mt-4 rounded-xl bg-white/[.05] p-3"><p className="text-sm font-medium capitalize">Application: {application.supplier_status}</p><p className="mt-1 text-xs text-white/45">Proposed price ₦{(application.proposed_selling_price_kobo/100).toLocaleString('en-NG')}</p>{application.supplier_note && <p className="mt-2 text-xs text-amber-100">{application.supplier_note}</p>}</div> : <>
+          <p className="mt-3 text-sm">Supplier cost: {product.currency} {(product.cost_kobo / 100).toLocaleString('en-NG')} · Stock {product.available_quantity}</p>
+          {application ? <div className="mt-4 rounded-xl bg-white/[.05] p-3"><p className="text-sm font-medium capitalize">Application: {application.supplier_status}</p><p className="mt-1 text-xs text-white/45">Proposed price {application.currency} {(application.proposed_selling_price_kobo/100).toLocaleString('en-NG')}</p>{application.supplier_note && <p className="mt-2 text-xs text-amber-100">{application.supplier_note}</p>}</div> : <>
             <label className="mt-4 block text-sm">Your selling price (kobo)<input type="number" min={product.cost_kobo + 1} step="1" value={prices[product.id] ?? ''} onChange={event => setPrices(old => ({ ...old, [product.id]: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2" /></label>
             <label className="mt-3 block text-sm">Category<input maxLength={80} value={categories[product.id] ?? ''} onChange={event => setCategories(old => ({ ...old, [product.id]: event.target.value }))} placeholder="e.g. Fashion" className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2" /></label>
             <label className="mt-3 block text-sm">Country code<input maxLength={2} value={countries[product.id] ?? 'NG'} onChange={event => setCountries(old => ({ ...old, [product.id]: event.target.value.toUpperCase() }))} className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2" /></label><label className="mt-3 block text-sm">Your listing city<input maxLength={100} value={cities[product.id] ?? ''} onChange={event => setCities(old => ({ ...old, [product.id]: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2" /></label>
