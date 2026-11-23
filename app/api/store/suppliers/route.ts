@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getUserFromRequest } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { notifyMarketplaceUser } from '@/lib/store-notifications';
 export const runtime = 'nodejs'; export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
@@ -52,11 +53,26 @@ export async function PATCH(request: NextRequest) {
     const { data: supplier, error: supplierError } = await adminSupabase().from('marketplace_suppliers').select('verification_status').eq('user_id', user.id).maybeSingle();
     if (supplierError) return NextResponse.json({ error: 'Supplier verification could not be checked.' }, { status: 503 });
     if (supplier?.verification_status !== 'approved') return NextResponse.json({ error: 'Only approved suppliers can review dropship applications.' }, { status: 403 });
+    const { data: application, error: applicationError } = await adminSupabase().from('marketplace_dropship_applications')
+      .select('seller_id').eq('id', body.applicationId).eq('supplier_id', user.id).maybeSingle();
+    if (applicationError) return NextResponse.json({ error: 'Application details are unavailable.' }, { status: 503 });
+    if (!application) return NextResponse.json({ error: 'Application not found.' }, { status: 404 });
     const { data, error } = await adminSupabase().rpc('review_marketplace_dropship_application', {
       p_application_id: body.applicationId, p_supplier_id: user.id, p_decision: body.decision,
       p_note: typeof body.note === 'string' ? body.note.trim() : null,
     });
     if (error) return NextResponse.json({ error: /not found/i.test(error.message) ? 'Application not found.' : 'Supplier decision could not be saved.' }, { status: /not found/i.test(error.message) ? 404 : 409 });
+    if (data?.processed === true) {
+      try {
+        await notifyMarketplaceUser({
+          userId: application.seller_id, kind: 'dropship_application_decision',
+          title: body.decision === 'approved' ? 'Supplier accepted your Braverton dropship application' : 'Supplier declined your Braverton dropship application',
+          body: body.decision === 'approved' ? 'Your reseller listing has been created in paused moderation status. Braverton must approve the product before it appears in the marketplace.' : 'The supplier declined this application. You can contact the supplier for clarification.',
+          href: '/store/suppliers/catalog', preference: 'support_updates',
+          idempotencyKey: `dropship-application:${body.applicationId}:${String(body.decision)}`,
+        });
+      } catch (noticeError) { console.error('Reseller application decision notification failed:', noticeError instanceof Error ? noticeError.message : 'unknown error'); }
+    }
     return NextResponse.json({ decision: data, message: body.decision === 'approved' ? 'Application approved. The reseller listing remains paused until marketplace moderation approves it.' : 'Application rejected.' });
   }
   if (typeof body?.productId !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.productId) || !['active','paused','discontinued'].includes(String(body.status)) || (body.quantity !== undefined && (!Number.isSafeInteger(body.quantity) || Number(body.quantity) < 0 || Number(body.quantity) > 1_000_000))) return NextResponse.json({ error: 'Invalid supplier product update.' }, { status: 400 });
