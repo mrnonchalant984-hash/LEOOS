@@ -68,7 +68,7 @@ export async function PUT(request: NextRequest) {
       payoutStatus = payout.status;
     } catch (error) {
       console.error('Marketplace seller payout initiation failed:', error instanceof Error ? error.message : 'unknown error');
-      payoutStatus = 'failed';
+      payoutStatus = error instanceof Error && error.message.includes('outcome is unknown') ? 'unknown' : 'failed';
     }
   }
   return NextResponse.json({ confirmed: true, payout: payoutStatus });

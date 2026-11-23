@@ -43,7 +43,7 @@ This is the authoritative implementation-status document for every `LEOX_STORE_*
 | Area | Status | Current evidence / gap |
 |---|---|---|
 | Commission calculation | IMPLEMENTED (5% configured in code) | 5% is calculated against seller item gross, excluding delivery; the delivery fee is passed through to the seller. Financial policy must be approved for launch. |
-| Automated seller payouts | PARTIALLY IMPLEMENTED / PRODUCTION BLOCKED | Paystack recipient setup, buyer-confirmation-gated transfer initiation, unique payout ledger, and transfer event handling exist. Failed or ambiguous transfers do not have an automated retry/reconciliation worker and require an operations procedure. Transfers stay disabled unless `STORE_PAYOUTS_ENABLED=true`; provider account approval and reconciliation are unverified. |
+| Automated seller payouts | PARTIALLY IMPLEMENTED / PRODUCTION BLOCKED | Paystack recipient setup, buyer-confirmation-gated transfer initiation, unique payout ledger, and transfer event handling exist. An authenticated, scheduled Paystack transfer-reference reconciliation worker is now implemented on the payout-hardening branch. It records provider-confirmed terminal/pending states and leaves missing or inconclusive responses unresolved; it deliberately does not issue a new transfer. Staging execution, webhook delivery, and operator procedures remain unverified. Transfers stay disabled unless `STORE_PAYOUTS_ENABLED=true`; provider account approval and reconciliation are unverified. |
 | Product image lifecycle | IMPLEMENTED / PARTIALLY RELEASE-READY | Upload, initial attachment, listing edit/removal, and storage cleanup exist. Upload cap is 2 MB and optimized WebP cap is 700 KB. Scanning and retention remain gaps. |
 | Seller order management | IMPLEMENTED (seller-arranged delivery) | Seller UI/API supports order status and tracking entry. It does not book shipments with an external carrier. |
 | Notifications | PARTIALLY IMPLEMENTED | In-app and optional email plus opt-in VAPID Web Push code exist. Push uses the browser Web Push standard (no paid intermediary required) but requires VAPID keys and service-worker/browser end-to-end testing; no delivery guarantee or full event coverage. |
@@ -75,3 +75,8 @@ Record only results from commands run against the audit worktree in `LEOX_STORE_
 ## Rollback and migration safety
 
 Do not roll back by dropping marketplace records or storage. Stop checkout/writes first, preserve payment/order evidence, and use a separately reviewed forward migration or approved recovery plan. Do not apply or reverse production migrations as part of this documentation reconciliation.
+
+
+## Payout reconciliation implementation update (2026-11-19)
+
+The `feat/leox-store-payout-reconciliation` branch adds an explicit `unknown` state for ambiguous transfer initiation, a cron-protected worker that queries Paystack using the original reference, webhook transitions from `unknown`, a 15-minute GitHub Actions schedule, and focused regression tests. This is source implementation only: the additive migration is unapplied, repository variables/secrets are not verified, and no Paystack sandbox or live transfer was executed. The worker intentionally does not retry or create another transfer automatically.

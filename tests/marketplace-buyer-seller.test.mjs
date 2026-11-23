@@ -88,7 +88,7 @@ test('seller commission is 5 percent and payout waits for buyer-confirmed delive
   assert.match(accountApi, /transferrecipient/);
   assert.match(transferHelper, /api\.paystack\.co\/transfer/);
   assert.match(buyerOrders, /prepare_marketplace_seller_payout/);
-  assert.match(source('app/api/payment/webhook/route.ts'), /eventName === 'transfer\.reversed' \? \['initiating', 'pending', 'paid'\]/);
+  assert.match(source('app/api/payment/webhook/route.ts'), /const allowedStatuses = eventName === 'transfer\.reversed' \? \['initiating', 'pending', 'unknown', 'paid'\] : \['initiating', 'pending', 'unknown'\]/);
   assert.match(source('app/store/seller/seller-payout-settings.tsx'), /5% commission/);
 });
 
@@ -126,4 +126,78 @@ test('web push is user-opt-in, VAPID-configured, and prunes expired subscription
   assert.match(notifications, /webPush\.sendNotification/);
   assert.match(notifications, /statusCode === 404 \|\| statusCode === 410/);
   assert.match(serviceWorker, /showNotification/);
+});
+
+test('seller payout preparation serializes against dispute creation and blocks open or reviewing disputes', () => {
+  const migration = source('supabase/migrations/20261119110000_leox_store_payout_dispute_guard.sql');
+  assert.match(migration, /before insert or update of order_id, status/i);
+  assert.match(migration, /for update/i);
+  assert.match(migration, /status in \('open', 'reviewing'\)/i);
+  assert.match(migration, /order has an open dispute/i);
+  assert.match(migration, /status = 'initiating'[\s\S]*seller payout initiation already in progress/i);
+  assert.match(migration, /select status[\s\S]*from public\.marketplace_orders[\s\S]*for update/i);
+  assert.match(migration, /on conflict \(order_id, seller_id\) do nothing/i);
+  assert.match(migration, /grant execute on function public\.prepare_marketplace_seller_payout\(uuid, uuid\) to service_role/i);
+});
+
+test('refund provider acceptance checks local state writes and webhook can reconcile cancellation_requested orders', () => {
+  const refund = source('app/api/admin/store/orders/[id]/refund/route.ts');
+  const webhook = source('app/api/payment/webhook/route.ts');
+  assert.match(refund, /refundStateError/);
+  assert.match(refund, /orderStateError/);
+  assert.match(refund, /reconciliation_required: true/);
+  assert.match(refund, /do not submit another refund/i);
+  assert.match(webhook, /\.in\('status', \['refund_pending', 'cancellation_requested'\]\)/);
+});
+
+test('Paystack provider-managed seller splits pass each seller delivery fee through after item commission', () => {
+  const checkout = source('app/api/store/checkout/route.ts');
+  assert.match(checkout, /marketplace_order_deliveries/);
+  assert.match(checkout, /deliveryBySeller/);
+  assert.match(checkout, /gross - platformCommission \+ sellerDeliveryFee/);
+  assert.match(checkout, /subaccounts\.reduce\(\(sum, item\) => sum \+ item\.share, 0\) > Number\(order\.total_kobo\)/);
+});
+
+test('checkout and payment confirmation enforce buyer ownership, amount, currency, metadata, and idempotent stock transitions', () => {
+  const checkout = source('app/api/store/checkout/route.ts');
+  const verify = source('app/api/store/orders/verify/route.ts');
+  const migration = source('supabase/migrations/20261111120000_leox_store_buying.sql');
+  assert.match(checkout, /STORE_CHECKOUT_ENABLED !== 'true'/);
+  assert.match(checkout, /STORE_PAYOUTS_ENABLED !== 'true'/);
+  assert.match(verify, /order\.buyer_id !== user\.id/);
+  assert.match(verify, /Number\(tx\.amount\) !== Number\(order\.total_kobo\)/);
+  assert.match(verify, /currency\)\.toUpperCase\(\) !== 'NGN'/);
+  assert.match(verify, /metadata\.order_id !== order\.id/);
+  assert.match(migration, /for update of p/);
+  assert.match(migration, /p\.stock_quantity - p\.reserved_quantity < c\.quantity/);
+  assert.match(migration, /if v_order\.status = 'paid' then return false/);
+  assert.match(migration, /late_payment_review_required/);
+});
+
+test('Paystack webhook authenticates raw request body with timing-safe HMAC verification', () => {
+  const webhook = source('app/api/payment/webhook/route.ts');
+  assert.match(webhook, /x-paystack-signature/);
+  assert.match(webhook, /createHmac\('sha512', secret\)\.update\(body\)/);
+  assert.match(webhook, /timingSafeEqual\(expectedSignature, suppliedSignature\)/);
+  assert.match(webhook, /verifyPaystackTransaction\(reference\)/);
+});
+
+test('seller verification, order ledgers, and payout tables do not grant client-side write privileges', () => {
+  const commerce = source('supabase/migrations/20261111100000_leox_store_commerce.sql');
+  const buying = source('supabase/migrations/20261111120000_leox_store_buying.sql');
+  const payout = source('supabase/migrations/20261112100000_leox_store_delivery_payout_push.sql');
+  assert.match(commerce, /grant select on public\.marketplace_sellers[\s\S]*to anon, authenticated/);
+  assert.match(commerce, /revoke all on public\.marketplace_sellers[\s\S]*from public, anon, authenticated/);
+  assert.match(buying, /grant select on public\.marketplace_orders, public\.marketplace_order_items, public\.marketplace_order_events, public\.marketplace_refunds to authenticated/);
+  assert.match(buying, /grant all on public\.marketplace_cart_items, public\.marketplace_orders[\s\S]*to service_role/);
+  assert.match(payout, /revoke all on public\.marketplace_order_deliveries, public\.marketplace_seller_payout_accounts[\s\S]*from public, anon, authenticated/);
+  assert.match(payout, /grant all on public\.marketplace_order_deliveries, public\.marketplace_seller_payout_accounts[\s\S]*to service_role/);
+});
+
+test('uncertain Paystack transfer network outcomes stay non-retryable and reconcile as unknown', () => {
+  const transfer = source('lib/store-payouts.ts');
+  assert.match(transfer, /markPayoutUnknown\(payout\.id/);
+  assert.match(transfer, /status: 'unknown'/);
+  assert.match(transfer, /eq\('id', payoutId\)[\s\S]*eq\('status', 'initiating'\)/);
+  assert.match(transfer, /Transfer outcome is unknown and requires provider reconciliation/);
 });
