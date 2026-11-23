@@ -9,9 +9,10 @@ import {
 import { getExternalModelBuilderAvailability } from '../lib/builders/providers.ts';
 
 test('provider registry accepts Gemini models and rejects alternative model providers', () => {
-  assert.deepEqual(resolveModel('google/gemini-2.5-flash'), { provider: 'google', model: 'gemini-2.5-flash' });
-  assert.deepEqual(resolveModel('gemini-2.5-flash'), { provider: 'google', model: 'gemini-2.5-flash' });
-  assert.deepEqual(resolveModel('gemini-3.8-flash'), { provider: 'google', model: 'gemini-3.8-flash' });
+  assert.deepEqual(resolveModel('google/gemini-2.5-flash-lite'), { provider: 'google', model: 'gemini-2.5-flash-lite' });
+  assert.deepEqual(resolveModel('gemini-2.5-flash-lite'), { provider: 'google', model: 'gemini-2.5-flash-lite' });
+  assert.deepEqual(resolveModel('gemini-3.5-flash-lite'), { provider: 'google', model: 'gemini-3.5-flash-lite' });
+  assert.throws(() => resolveModel('gemini-3.8-flash'), /free-tier/i);
   assert.throws(() => resolveModel('openai/gpt-4o-mini'), /only Gemini/i);
   assert.throws(() => resolveModel('anthropic/claude-3-5-haiku-latest'), /only Gemini/i);
   assert.throws(() => resolveModel('local/qwen-local'), /only Gemini/i);
@@ -21,22 +22,15 @@ test('provider registry accepts Gemini models and rejects alternative model prov
 test('LEO model options resolve to distinct catalogued Google models', () => {
   const models = getModelProviderStatus();
   assert.deepEqual(models.map(({ model }) => model), [
-    'gemini-4-argon',
-    'gemini-3.8-flash',
-    'gemini-3.1-pro-preview',
-    'gemini-3.1-flash-lite',
     'gemini-3.5-flash-lite',
-    'gemini-2.5-pro',
+    'gemini-2.5-flash-lite',
   ]);
   assert.deepEqual(models.map(({ name }) => name), [
-    'LEO Argon',
-    'LEO Flash',
-    'LEO Pro',
-    'LEO Flash Lite',
-    'Gemini 3.5 Flash Lite',
-    'LEO Classic Pro',
+    'Gemini 3.5 Flash-Lite (Free tier)',
+    'Gemini 2.5 Flash-Lite (Free tier + Search)',
   ]);
-  assert.equal(new Set(models.map(({ model }) => model)).size, 6);
+  assert.equal(new Set(models.map(({ model }) => model)).size, 2);
+  assert.ok(models.every(({ tier }) => tier === 'free'));
   for (const model of models) {
     assert.deepEqual(resolveModel(model.id), { provider: 'google', model: model.model });
     assert.ok(model.capabilities.includes('text'));
@@ -55,7 +49,7 @@ test('unsupported configured default falls back to the single Gemini default whe
   try {
     process.env.LEO_CHAT_MODEL = 'provider-model-that-is-not-registered';
     process.env.GEMINI_API_KEY = 'test-key';
-    assert.equal(getDefaultTextModel('chat'), 'google/gemini-3.8-flash');
+    assert.equal(getDefaultTextModel('chat'), 'google/gemini-3.5-flash-lite');
   } finally {
     if (previous === undefined) delete process.env.LEO_CHAT_MODEL;
     else process.env.LEO_CHAT_MODEL = previous;
@@ -66,7 +60,7 @@ test('unsupported configured default falls back to the single Gemini default whe
 
 test('provider status advertises only Gemini and never returns configured secrets', () => {
   const status = getModelProviderStatus();
-  assert.equal(status.length, 6);
+  assert.equal(status.length, 2);
   assert.ok(status.every(({ provider }) => provider === 'google'));
   assert.ok(status.every(({ configured }) => typeof configured === 'boolean'));
   assert.doesNotMatch(JSON.stringify(status), /sk-[A-Za-z0-9_-]{12,}|api.?key/i);
@@ -112,14 +106,14 @@ test('invalid explicit fallback configuration safely uses configured Gemini for 
   const configured = provider => provider === 'google' || provider === 'openai';
   assert.equal(
     getSafeFallbackModel('google/gemini-3.8-flash', 'unsupported/fallback-model', false, configured),
-    'google/gemini-3.1-flash-lite',
+    'google/gemini-2.5-flash-lite',
   );
 });
 
 test('valid explicit fallback is normalized and requires a configured provider', () => {
   const configured = provider => provider === 'google';
   assert.equal(
-    getSafeFallbackModel('google/gemini-3.8-flash', 'gemini-2.5-flash', false, configured),
+    getSafeFallbackModel('google/gemini-3.8-flash', 'gemini-2.5-flash-lite', false, configured),
     'google/gemini-3.1-flash-lite',
   );
   assert.equal(
