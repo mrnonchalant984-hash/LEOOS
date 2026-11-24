@@ -46,7 +46,7 @@ test('API usage ledger can reconcile reservations and credit metadata endpoints 
 test('CLI exposes the public model, chat, and usage commands without a self dependency', async () => {
   const cli = await read('packages/cli/src/index.mjs');
   const pkg = JSON.parse(await read('packages/cli/package.json'));
-  assert.match(cli, /leo models list/);
+  assert.match(cli, /braverton models list/);
   assert.match(cli, /\/api\/v1\/messages/);
   assert.match(cli, /\/api\/v1\/usage/);
   assert.equal(pkg.dependencies['@leo-os/cli'], undefined);

@@ -2115,7 +2115,7 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] text-zinc-500">
           <span>{Intl.DateTimeFormat().resolvedOptions().timeZone || "Local timezone"} · {new Date().toLocaleString()}</span>
-          <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={localContextEnabled} onChange={event => setLocalContextEnabled(event.target.checked)} /> Include approved location</label>
+          <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={localContextEnabled} onChange={event => setLocalContextEnabled(event.target.checked)} /> Include location when browser permission is granted</label>
           {locationPermissionStatus === "granted" && <span className="text-emerald-400">GPS permission granted</span>}
           {locationPermissionStatus === "denied" && <span className="text-amber-400">Location permission denied by browser</span>}
           {locationPermissionStatus === "unavailable" && <span className="text-amber-400">Location unavailable on this device</span>}

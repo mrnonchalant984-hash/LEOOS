@@ -52,7 +52,7 @@ export const openApiV1 = {
     '/v1/messages': {
       post: {
         operationId: 'createMessage', tags: ['Messages'], summary: 'Create a text message response, optionally streamed as server-sent events',
-        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['messages'], properties: { model: { type: 'string', default: 'gemini-3.5-flash-lite' }, messages: { type: 'array', minItems: 1, maxItems: 50, items: { type: 'object', required: ['role', 'content'], properties: { role: { type: 'string', enum: ['system', 'user', 'assistant'] }, content: { type: 'string', minLength: 1 } } } }, max_tokens: { type: 'integer', minimum: 1, maximum: 4096, default: 1024 }, stream: { type: 'boolean', default: false } }, additionalProperties: false } } } },
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['messages'], properties: { model: { type: 'string', default: 'gemini-3.1-flash-lite' }, messages: { type: 'array', minItems: 1, maxItems: 50, items: { type: 'object', required: ['role', 'content'], properties: { role: { type: 'string', enum: ['system', 'user', 'assistant'] }, content: { type: 'string', minLength: 1 } } } }, max_tokens: { type: 'integer', minimum: 1, maximum: 4096, default: 1024 }, stream: { type: 'boolean', default: false } }, additionalProperties: false } } } },
         responses: { '200': { description: 'Model response JSON when stream=false, or server-sent message events when stream=true.' }, '402': { description: 'An active API plan or sufficient credits are required.', content: errorContent }, '502': { description: 'The model provider could not complete the request.', content: errorContent }, ...commonErrors },
       },
     },

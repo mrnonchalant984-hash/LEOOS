@@ -118,11 +118,11 @@ test('CLI and OpenAPI default to the supported Gemini API model', async () => {
   const cliReadme = await readFile(new URL('../packages/cli/README.md', import.meta.url), 'utf8');
   const openapi = await readFile(new URL('../lib/openapi-v1.ts', import.meta.url), 'utf8');
   const envExample = await readFile(new URL('../.env.example', import.meta.url), 'utf8');
-  assert.match(cli, /option\(args, '--model'\) \|\| 'gemini-3\.5-flash-lite'/);
-  assert.match(cliReadme, /--model gemini-3\.5-flash-lite/);
-  assert.match(openapi, /default: 'gemini-3\.5-flash-lite'/);
+  assert.match(cli, /option\(args, '--model'\) \|\| 'gemini-3\.1-flash-lite'/);
+  assert.match(cliReadme, /--model gemini-3\.1-flash-lite/);
+  assert.match(openapi, /default: 'gemini-3\.1-flash-lite'/);
   assert.equal((envExample.match(/^LEONARDX_API_MODELS=/gm) || []).length, 1);
-  assert.match(envExample, /^LEONARDX_API_MODELS=gemini-3\.5-flash-lite,gemini-2\.5-flash-lite$/m);
+  assert.match(envExample, /^LEONARDX_API_MODELS=gemini-3\.1-flash-lite,gemini-2\.5-flash$/m);
 });
 
 test('API key journey keeps free key creation separate from paid execution and offers pricing after copying', async () => {
