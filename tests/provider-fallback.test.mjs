@@ -61,6 +61,7 @@ test('does not retry the same fallback after an authorization failure', async ()
     'google/gemini-2.5-flash',
     async model => {
       calls.push(model);
+      if (calls.length === 1) throw new ModelProviderError('primary temporarily unavailable', 503);
       throw new ModelProviderError('fallback credential rejected', 403);
     },
     () => true,
