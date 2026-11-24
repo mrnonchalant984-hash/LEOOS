@@ -6,15 +6,15 @@ import { ApiPlanChooser } from './ApiPlanChooser';
 
 export const metadata = createPublicMetadata({
   title: "Developer API Pricing",
-  description: "Review Developer API plan options, usage limits and billing terms for the LeonardX developer platform.",
+  description: "Review Developer API plan options, usage limits and billing terms for the Braverton developer platform.",
   path: "/developers/pricing",
   type: "website",
 });
 
 export default function DeveloperPricingPage() {
-  return <LEOAppShell title="Developer API pricing" subtitle="Choose the API capacity that fits your application.">
+  return <LEOAppShell title="Braverton Developer API pricing" subtitle="Choose the API capacity that fits your application.">
     <section className="page-hero">
-      <span className="mini-label">LEONARDX DEVELOPER PLATFORM</span>
+      <span className="mini-label">BRAVERTON DEVELOPER PLATFORM</span>
       <h2>One API key. Access when your plan is active.</h2>
       <p>Create and keep your API key for free. Choose a plan to activate API execution and receive included usage credits. Your key does not need to be recreated after payment.</p>
       <div className="hero-actions">
