@@ -99,7 +99,7 @@ Set a staging key and a short test recording (WAV or WebM, <=5 MB), then explici
 LEONARDX_LIVE_TESTS=true \
 GEMINI_API_KEY=... \
 LEO_GEMINI_IMAGE_MODEL=gemini-2.5-flash-image \
-LEO_GEMINI_AUDIO_MODEL=gemini-2.5-flash \
+LEO_GEMINI_AUDIO_MODEL=gemini-3.5-flash-lite \
 LEONARDX_TEST_AUDIO_FILE=./qa-audio.wav \
 npm run verify:gemini:live
 ```
