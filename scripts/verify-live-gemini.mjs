@@ -2,7 +2,7 @@
 import { readFileSync, statSync } from 'node:fs';
 const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 const imageModel = process.env.LEO_GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
-const audioModel = process.env.LEO_GEMINI_AUDIO_MODEL || 'gemini-2.5-flash';
+const audioModel = process.env.LEO_GEMINI_AUDIO_MODEL || 'gemini-3.5-flash-lite';
 const audioPath = process.env.LEONARDX_TEST_AUDIO_FILE;
 if (process.env.LEONARDX_LIVE_TESTS !== 'true') {
   console.error('Set LEONARDX_LIVE_TESTS=true to explicitly enable billable live Gemini smoke tests.'); process.exit(2);
