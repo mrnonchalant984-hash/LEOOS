@@ -22,7 +22,7 @@ Login validates the key against the public `/api/v1/me` endpoint. The token is s
 - `braverton agents strategy <strategy>` selects a local coordination strategy. `check-path` enforces explicit directory fences. Git worktree operations use a separate checkout, allowlisted npm validation scripts, a serialized merge lock, and revalidation after rebase.
 - `braverton agents scratchpad read|add` stores bounded metadata in `.leo/scratchpad.json`; it does not store code blobs or credentials.
 - `braverton models list` lists model IDs exposed by the deployment without consuming model credits.
-- `braverton chat --message "Hello" [--model gemini-3.5-flash-lite]` calls the public Gemini text inference endpoint and requires an active API plan and sufficient credits.
+- `braverton chat --message "Hello" [--model gemini-3.1-flash-lite]` calls the public Gemini text inference endpoint and requires an active API plan and sufficient credits.
 - `braverton usage` reads recent token and credit usage.
 
 The API currently uses the historical `leo_live_` key prefix and existing `.leo/` local configuration directory for backward compatibility. These identifiers are protocol/storage details, not the public product brand. Do not rename them in client code until a versioned migration is available.
