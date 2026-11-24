@@ -52,7 +52,7 @@ test('Leo chat wires transient provider fallback and defaults to Gemini when con
   assert.match(route, /generateWithExplicitFallback/);
   assert.match(route, /getSafeFallbackModel/);
   assert.match(fallback, /const primary = resolveModel\(primaryModel\)/);
-  assert.match(fallback, /gemini-3\.5-flash-lite/);
+  assert.match(fallback, /gemini-3\.1-flash-lite/);
   assert.doesNotMatch(fallback, /gemini-2\\.5-flash-lite/);
   assert.doesNotMatch(fallback, /gemini-3\.8-flash|gemini-4-argon|gemini-3\.1-pro-preview/);
   assert.doesNotMatch(fallback, /openai|anthropic|local\//i);
