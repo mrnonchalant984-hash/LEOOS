@@ -22,7 +22,6 @@ const TOOL_CAPABILITIES = new Set([
 
 const EXPLICIT_IMAGE_REQUEST = /\b(generate|create|make|render)\b.{0,48}\b(image|picture|photo|visual|mockup|logo)\b/i;
 const EXPLICIT_DEPLOYMENT_REQUEST = /\b(deploy|publish|release)\b/i;
-const EXPLICIT_COMMIT_REQUEST = /\b(commit|push)\b/i;
 
 function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   const permissions = new Set(agent.allowedTools);
