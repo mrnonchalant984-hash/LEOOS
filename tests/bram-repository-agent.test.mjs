@@ -17,6 +17,7 @@ test('repository write intent requires a direct instruction, not advice or expla
 test('commit intent is narrower than general file-change intent', () => {
   assert.equal(hasExplicitRepositoryCommitIntent('Please commit these changes to the feature branch'), true);
   assert.equal(hasExplicitRepositoryCommitIntent('Could you push the changes?'), true);
+  assert.equal(hasExplicitRepositoryCommitIntent('Please implement this feature and commit it to a branch'), true);
   assert.equal(hasExplicitRepositoryCommitIntent('Please fix the file in my repo'), false);
 });
 
