@@ -23,7 +23,7 @@ type RemoteToolReference = {
   accessLevel: 'read' | 'write';
 };
 
-type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'run_specialist_team' } | { kind: 'gmail_list_messages' } | { kind: 'gmail_get_message' } | { kind: 'gmail_send_message' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -166,6 +166,10 @@ type LeoBuildToolOptions = {
   allowRemoteWrites?: boolean;
   allowBrowserGame?: boolean;
   allowAgentExecution?: boolean;
+  allowSpecialistExecution?: boolean;
+  runSpecialists?: (task: string, agentIds?: string[]) => Promise<string>;
+  allowEmailRead?: boolean;
+  allowEmailSend?: boolean;
   sessionId?: string;
 };
 
@@ -189,6 +193,23 @@ export async function createUserAssistantTools(
     const tool = { name: 'run_agent', description: 'Start an authorized LeonardX specialist-agent run for the user’s explicitly requested task. Existing plan, entitlement, approval, rate-limit and user-ownership checks remain enforced by the agent execution API. This queues work; it does not mean the work is completed.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, agent_id: { type: 'string' } }, required: ['task'], additionalProperties: false } };
     tools.push(tool as AssistantTool);
     references.set('run_agent', { kind: 'run_agent' });
+  }
+  if (options?.allowSpecialistExecution && options.runSpecialists) {
+    const tool = { name: 'run_specialist_team', description: 'Delegate a read-only analysis task to up to four relevant specialist agents, wait for their actual outputs, and return each specialist result to Bram. Specialist handoffs are isolated, read-only, audited as child runs, and cannot merge, deploy, send messages, or write to connected systems.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, agent_ids: { type: 'array', items: { type: 'string' } } }, required: ['task'], additionalProperties: false } };
+    tools.push(tool as AssistantTool);
+    references.set('run_specialist_team', { kind: 'run_specialist_team' });
+  }
+  if (options?.allowEmailRead) {
+    const list = { name: 'gmail_list_messages', description: 'Search the owner’s connected Gmail mailbox and return bounded message IDs and headers. Requires a verified Gmail OAuth connection.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, maxResults: { type: 'integer' } }, additionalProperties: false } };
+    const get = { name: 'gmail_get_message', description: 'Read the full content of one message from the owner’s connected Gmail mailbox by message ID.', inputSchema: { type: 'object', properties: { messageId: { type: 'string' } }, required: ['messageId'], additionalProperties: false } };
+    tools.push(list as AssistantTool, get as AssistantTool);
+    references.set('gmail_list_messages', { kind: 'gmail_list_messages' });
+    references.set('gmail_get_message', { kind: 'gmail_get_message' });
+  }
+  if (options?.allowEmailSend) {
+    const send = { name: 'gmail_send_message', description: 'Send an email through the owner’s connected Gmail account. Only use when the user explicitly requested sending; include confirm=true and the exact reviewed recipient, subject and body.', inputSchema: { type: 'object', properties: { to: { type: 'string' }, subject: { type: 'string' }, message: { type: 'string' }, confirm: { type: 'boolean' } }, required: ['to', 'subject', 'message', 'confirm'], additionalProperties: false } };
+    tools.push(send as AssistantTool);
+    references.set('gmail_send_message', { kind: 'gmail_send_message' });
   }
   if (options?.allowBuildActions) {
     const buildTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [
@@ -288,6 +309,31 @@ export async function createUserAssistantTools(
       } catch (error) {
         return { text: error instanceof Error ? error.message : 'The specialist agent could not be started.', isError: true };
       }
+    }
+    if (reference.kind === 'run_specialist_team') {
+      if (!options?.runSpecialists) return { text: 'Specialist execution is not enabled for this request.', isError: true };
+      const task = typeof args.task === 'string' ? args.task.trim().slice(0, 8000) : '';
+      const agentIds = Array.isArray(args.agent_ids) ? args.agent_ids.filter((id): id is string => typeof id === 'string').slice(0, 4) : undefined;
+      if (!task) return { text: 'Provide a concrete specialist task.', isError: true };
+      try { return { text: await options.runSpecialists(task, agentIds) }; }
+      catch (error) { return { text: error instanceof Error ? error.message : 'Specialist execution failed.', isError: true }; }
+    }
+    if (reference.kind === 'gmail_list_messages') {
+      if (!options?.request || !options.allowEmailRead) return { text: 'Gmail read access is not enabled for this request.', isError: true };
+      const result = await postAsUser(options.request, '/api/integrations/gmail/list-messages', { query: typeof args.query === 'string' ? args.query : '', maxResults: args.maxResults });
+      return { text: JSON.stringify(result) };
+    }
+    if (reference.kind === 'gmail_get_message') {
+      if (!options?.request || !options.allowEmailRead) return { text: 'Gmail read access is not enabled for this request.', isError: true };
+      const messageId = typeof args.messageId === 'string' ? args.messageId : '';
+      if (!messageId) return { text: 'A Gmail message ID is required.', isError: true };
+      const result = await postAsUser(options.request, '/api/integrations/gmail/get-message', { messageId });
+      return { text: JSON.stringify(result) };
+    }
+    if (reference.kind === 'gmail_send_message') {
+      if (!options?.request || !options.allowEmailSend) return { text: 'Gmail sending is not enabled for this request. The user must explicitly request sending.', isError: true };
+      const result = await postAsUser(options.request, '/api/integrations/gmail/send-message', args);
+      return { text: JSON.stringify(result) };
     }
     if (reference.kind === 'get_project_files') {
       const projectId = typeof args.project_id === 'string' ? args.project_id : '';
