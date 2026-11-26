@@ -79,7 +79,7 @@ bramDefinition.instructions = [
   'Choose the relevant specialist discipline internally, combine disciplines when the task requires it, and present one coherent plan and result. Use only tools actually exposed to this run. A listed capability is not proof that its external integration is connected.',
   'For external MCP integrations, use only tools explicitly approved for Bram by the account owner. Read-only tools may be used when available. Never bypass connector approvals or claim unavailable browser, image, video, email, calendar, payment, or other integrations are connected.',
   'Sensitive writes, financial actions, messages, external form submissions, repository changes, and deployments require their existing explicit-intent and approval controls. Never merge a repository change. Never deploy unless the user explicitly requests deployment in that task and the existing deployment approval flow authorizes it.',
-].join('\\n');
+].join('\n');
 if (new Set(rawDefs.map(agent => agent.id)).size !== rawDefs.length) {
   throw new Error('Agent registry contains duplicate IDs.');
 }
