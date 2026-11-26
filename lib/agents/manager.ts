@@ -16,7 +16,7 @@ export { getAgent };
 
 const TOOL_CAPABILITIES = new Set([
   ...MCP_AGENT_CAPABILITIES, 'database_write', 'deployment', 'devops', 'file_read',
-  'file_write', 'github_write', 'image_generation', 'project_read',
+  'file_write', 'github_write', 'image_generation', 'project_read', 'email_send',
   'website_builder', 'web_search',
 ]);
 
@@ -29,6 +29,9 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   if (toolName === 'get_project_files') return permissions.has('project_read') || permissions.has('file_read');
   if (toolName === 'get_build_status') return permissions.has('deployment') || permissions.has('devops');
   if (toolName === 'web_research') return permissions.has('web_search');
+  if (toolName === 'gmail_list_messages' || toolName === 'gmail_get_message') return permissions.has('email_read');
+  if (toolName === 'gmail_send_message') return permissions.has('email_send') && EXPLICIT_EMAIL_SEND_REQUEST.test(task);
+  if (toolName === 'run_specialist_team') return agent.id === 'bram';
   if (toolName === 'create_project') return permissions.has('website_builder') && /\b(build|create|make)\b/i.test(task);
   if (toolName === 'save_project_files') return permissions.has('file_write');
   if (toolName === 'build_and_deploy_project' || toolName === 'publish_browser_game') {
@@ -113,6 +116,64 @@ export function classifyAgents(message: string, owner: boolean, allowedAgentIds?
   return [...new Set(picks)].map(id => getAgent(id)).filter((agent): agent is AgentDefinition => Boolean(agent));
 }
 
+async function executeBramSpecialistTeam(
+  task: string,
+  requestedAgentIds: string[] | undefined,
+  context: string,
+  owner: boolean,
+  meta: { runId?: string; userId?: string; request?: Request },
+) {
+  if (!owner || !meta.userId || !meta.request) throw new Error('Owner-authenticated specialist execution is required.');
+  const selected = requestedAgentIds?.length
+    ? requestedAgentIds.map(id => getAgent(id)).filter((agent): agent is AgentDefinition => Boolean(agent))
+    : classifyAgents(task, owner);
+  if (requestedAgentIds?.some(id => !getAgent(id))) throw new Error('One or more requested specialist IDs are unavailable.');
+  const candidates = [...new Map(selected
+    .filter(agent => !['bram','leo-manager','image','video'].includes(agent.id) && !isBrowserAgent(agent))
+    .map(agent => [agent.id, agent])).values()].slice(0, 4);
+  if (!candidates.length) throw new Error('No relevant specialist was selected for this task.');
+  const results = await Promise.all(candidates.map(async specialist => {
+    const db = adminSupabase();
+    const { data: child, error: insertError } = await db.from('agent_runs').insert({
+      user_id: meta.userId,
+      agent_id: specialist.id,
+      task,
+      status: 'running',
+      started_at: new Date().toISOString(),
+      metadata: { parent_run_id: meta.runId || null, delegated_by: 'bram', execution_mode: 'read_only_specialist_handoff' },
+    }).select('id').single();
+    if (insertError || !child) throw new Error(`Could not create an audited run for ${specialist.name}.`);
+    const readOnlyAgent: AgentDefinition = {
+      ...specialist,
+      allowedTools: specialist.allowedTools.filter(capability => READ_ONLY_CAPABILITIES.has(capability)),
+      permissions: ['read'],
+      approvalRequired: false,
+      instructions: `${specialist.instructions} This is a read-only delegated analysis from Bram. Do not modify files, write to databases, send messages, submit forms, make purchases, or deploy. Return findings, evidence, uncertainties, and recommended next steps to Bram.`,
+    };
+    try {
+      const raw = await runAgent(readOnlyAgent, task, `[Bram delegation: read-only specialist task]\n${context.slice(0, 12000)}`, owner, {
+        runId: child.id,
+        userId: meta.userId,
+        request: meta.request,
+        persistAgentRun: true,
+      });
+      const parsed = parseAgentExecutionResult(raw);
+      const output = parsed?.result || raw;
+      const { error: finishError } = await db.from('agent_runs').update({
+        status: 'completed',
+        result: String(output).slice(0, 12000),
+        completed_at: new Date().toISOString(),
+      }).eq('id', child.id).eq('user_id', meta.userId);
+      if (finishError) throw new Error(`Could not persist ${specialist.name}'s result.`);
+      return { agent_id: specialist.id, agent_name: specialist.name, run_id: child.id, status: 'completed', result: String(output).slice(0, 8000) };
+    } catch (error) {
+      await db.from('agent_runs').update({ status: 'failed', error: 'Delegated specialist execution failed.', completed_at: new Date().toISOString() }).eq('id', child.id).eq('user_id', meta.userId);
+      return { agent_id: specialist.id, agent_name: specialist.name, run_id: child.id, status: 'failed', error: error instanceof Error ? error.message : 'Specialist execution failed.' };
+    }
+  }));
+  return JSON.stringify({ delegated_count: candidates.length, results });
+}
+
 export async function runAgent(
   agent: AgentDefinition,
   task: string,
@@ -159,6 +220,12 @@ export async function runAgent(
       allowRepositoryWrites: repositoryWrites,
       allowImageGeneration: imageRequested,
       allowWebResearch: agent.allowedTools.includes('web_search'),
+      allowSpecialistExecution: agent.id === 'bram',
+      runSpecialists: agent.id === 'bram'
+        ? (specialistTask: string, agentIds?: string[]) => executeBramSpecialistTeam(specialistTask, agentIds, context, owner, { runId: meta.runId, userId: meta.userId, request: meta.request })
+        : undefined,
+      allowEmailRead: agent.allowedTools.includes('email_read'),
+      allowEmailSend: agent.allowedTools.includes('email_send') && EXPLICIT_EMAIL_SEND_REQUEST.test(task),
     } : undefined;
     available = await createUserAssistantTools(meta.userId, options, {
       agentId: agent.id,
@@ -169,7 +236,9 @@ export async function runAgent(
   const system = [
     `You are ${agent.name} inside LeonardX. ${agent.instructions}`,
     ...(agent.id === 'bram' ? [
-      'Bram is the primary orchestrator. Use the specialist capability catalogue in your agent instructions to select the relevant discipline and combine multiple disciplines for multi-step tasks.',
+      'Bram is the primary orchestrator. Use run_specialist_team for substantive multi-discipline tasks: wait for each read-only specialist result, inspect its evidence, and synthesize the findings. Do not merely queue a specialist and claim completion.',
+      'Use Tavily-backed web_research for public research whenever current information or external sources are needed. The configured Tavily server secret is not exposed to you; invoke the tool rather than claiming that research is unavailable.',
+      'Use the owner’s Gmail integration tools only when they appear in the available tools. Reading is limited to the connected mailbox. Sending is available only for an explicit send/reply/forward request and requires confirm=true after reviewing the exact recipient, subject, and content.',
       'Never write to the repository default branch; require an explicit feature branch for every file write. A run approval does not authorize merging. Deployment is available only when explicitly requested and separately authorized by its existing execution controls.',
       'Do not claim local command execution because this runtime has no shell. Do not claim a specialist integration is connected unless its tool is actually present in this run.',
       `Specialist directory: ${defs.filter(item => item.id !== 'bram' && item.id !== 'leo-manager').map(item => `${item.name} [${item.id}]: ${item.description} Guidance: ${item.instructions}`).join(' | ')}`,
