@@ -121,7 +121,7 @@ async function executeBramSpecialistTeam(
   requestedAgentIds: string[] | undefined,
   context: string,
   owner: boolean,
-  meta: { runId?: string; userId?: string; request?: Request },
+  meta: { runId?: string; userId?: string; request?: Request; delegatedBy?: 'bram' },
 ) {
   if (!owner || !meta.userId || !meta.request) throw new Error('Owner-authenticated specialist execution is required.');
   const selected = requestedAgentIds?.length
@@ -156,6 +156,7 @@ async function executeBramSpecialistTeam(
         userId: meta.userId,
         request: meta.request,
         persistAgentRun: true,
+        delegatedBy: 'bram',
       });
       const parsed = parseAgentExecutionResult(raw);
       const output = parsed?.result || raw;
@@ -179,7 +180,7 @@ export async function runAgent(
   task: string,
   context: string,
   owner: boolean,
-  meta?: { runId?: string; userId?: string; request?: Request; persistAgentRun?: boolean },
+  meta?: { runId?: string; userId?: string; request?: Request; persistAgentRun?: boolean; delegatedBy?: 'bram' },
 ) {
   const input = validateAgentInput(task, context);
   if (!input.success) throw new Error('Agent input did not match its execution schema.');
@@ -228,7 +229,7 @@ export async function runAgent(
       allowEmailSend: agent.allowedTools.includes('email_send') && EXPLICIT_EMAIL_SEND_REQUEST.test(task),
     } : undefined;
     available = await createUserAssistantTools(meta.userId, options, {
-      agentId: agent.id,
+      agentId: meta?.delegatedBy === 'bram' ? 'bram' : agent.id,
       allowMcpRead: agentHasMcpReadCapability(agent),
     });
   }
