@@ -39,3 +39,15 @@ test('Bram is owner-only and the approval continuation reconnects request-scoped
   assert.match(manager, /isSafeFeatureBranch\(branch\)/);
   assert.match(approval, /request: req, persistAgentRun: true/);
 });
+
+test('Bram inherits specialist capabilities and receives the internal specialist directory', async () => {
+  const fs = await import('node:fs/promises');
+  const registry = await fs.readFile(new URL('../lib/agents/registry.ts', import.meta.url), 'utf8');
+  const manager = await fs.readFile(new URL('../lib/agents/manager.ts', import.meta.url), 'utf8');
+  assert.match(registry, /specialistDefinitions = rawDefs\.filter/);
+  assert.match(registry, /bramDefinition\.allowedTools = \[\.\.\.new Set/);
+  assert.match(registry, /bramDefinition\.permissions = \[\.\.\.new Set/);
+  assert.match(manager, /Specialist directory:/);
+  assert.match(manager, /maxToolCalls: agent\.id === 'bram' \? 12 : 4/);
+  assert.match(manager, /Do not claim a specialist integration is connected/);
+});
