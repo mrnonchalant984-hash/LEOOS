@@ -98,7 +98,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
       const message = typeof body.message === 'string' ? body.message.trim() : '';
       if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(to) || !subject || subject.length > 250 || !message || message.length > 12000) throw new Error('Provide a valid recipient, subject, and message (maximum 12,000 characters).');
       if (body.confirm !== true) throw new Error('Sending email requires confirm=true after reviewing the exact recipient, subject, and message.');
-      const raw = Buffer.from(`To: ${to}\\r\\nSubject: ${subject.replace(/[\\r\\n]/g, ' ')}\\r\\nMIME-Version: 1.0\\r\\nContent-Type: text/plain; charset=UTF-8\\r\\n\\r\\n${message}`, 'utf8').toString('base64url');
+      const raw = Buffer.from(`To: ${to}\r\nSubject: ${subject.replace(/[\r\n]/g, ' ')}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n${message}`, 'utf8').toString('base64url');
       result = await providerFetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', c.access_token, { method: 'POST', body: JSON.stringify({ raw }) });
     } else if (provider === 'meta' && action === 'pages') {
       const pages = await providerFetch(`https://graph.facebook.com/${GRAPH}/me/accounts?fields=id,name,access_token,category,tasks`, c.access_token);
