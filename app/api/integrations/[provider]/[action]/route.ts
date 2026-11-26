@@ -33,7 +33,7 @@ async function getConnection(userId: string, provider: CustomerProvider, connect
     // Mint a short-lived installation token for this customer; never fall back to a platform owner's token.
     config = { ...config, token: await getGitHubAppInstallationTokenForId(installationId) };
   }
-  if ((provider === 'firebase' || provider === 'youtube') && config.refresh_token && Number(config.expires_at || 0) < Date.now() + 60_000) {
+  if ((provider === 'firebase' || provider === 'youtube' || provider === 'gmail') && config.refresh_token && Number(config.expires_at || 0) < Date.now() + 60_000) {
     const refreshed = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: process.env.GOOGLE_OAUTH_CLIENT_ID || '', client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || '', refresh_token: config.refresh_token, grant_type: 'refresh_token' }).toString(), cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15000) });
     const tokenData = await refreshed.json().catch(() => ({})) as Json;
     if (!refreshed.ok || typeof tokenData.access_token !== 'string') throw new Error('Google authorization expired. Reconnect this account to restore access.');
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
   if (limited) return limited;
   const { provider: providerParam, action } = await context.params;
   const body = await request.json().catch(() => ({})) as Json;
-  const providers = ['github','vercel','supabase','firebase','openai','anthropic','google_gemini','whatsapp_business','meta','youtube','custom_mcp'];
+  const providers = ['github','vercel','supabase','firebase','openai','anthropic','google_gemini','whatsapp_business','meta','youtube','gmail','custom_mcp'];
   if (!providers.includes(providerParam)) return NextResponse.json({ error: 'Unsupported integration provider.' }, { status: 400 });
   const provider = providerParam as CustomerProvider;
   try {
@@ -80,6 +80,26 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
       const url = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
       url.searchParams.set('ids', 'channel==MINE'); url.searchParams.set('startDate', startDate); url.searchParams.set('endDate', endDate); url.searchParams.set('metrics', metric); url.searchParams.set('dimensions', 'day'); url.searchParams.set('sort', 'day');
       result = await providerFetch(url.toString(), c.access_token);
+    } else if (provider === 'gmail' && action === 'list-messages') {
+      const query = typeof body.query === 'string' ? body.query.trim().slice(0, 500) : 'in:anywhere';
+      const maxResults = Number.isInteger(body.maxResults) ? Math.max(1, Math.min(25, Number(body.maxResults))) : 10;
+      const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
+      url.searchParams.set('q', query); url.searchParams.set('maxResults', String(maxResults));
+      result = await providerFetch(url.toString(), c.access_token);
+    } else if (provider === 'gmail' && action === 'get-message') {
+      const messageId = typeof body.messageId === 'string' ? body.messageId : '';
+      if (!/^[A-Za-z0-9_-]{8,200}$/.test(messageId)) throw new Error('Provide a valid Gmail message ID.');
+      const url = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}`);
+      url.searchParams.set('format', 'full');
+      result = await providerFetch(url.toString(), c.access_token);
+    } else if (provider === 'gmail' && action === 'send-message') {
+      const to = typeof body.to === 'string' ? body.to.trim() : '';
+      const subject = typeof body.subject === 'string' ? body.subject.trim() : '';
+      const message = typeof body.message === 'string' ? body.message.trim() : '';
+      if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(to) || !subject || subject.length > 250 || !message || message.length > 12000) throw new Error('Provide a valid recipient, subject, and message (maximum 12,000 characters).');
+      if (body.confirm !== true) throw new Error('Sending email requires confirm=true after reviewing the exact recipient, subject, and message.');
+      const raw = Buffer.from(`To: ${to}\\r\\nSubject: ${subject.replace(/[\\r\\n]/g, ' ')}\\r\\nMIME-Version: 1.0\\r\\nContent-Type: text/plain; charset=UTF-8\\r\\n\\r\\n${message}`, 'utf8').toString('base64url');
+      result = await providerFetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', c.access_token, { method: 'POST', body: JSON.stringify({ raw }) });
     } else if (provider === 'meta' && action === 'pages') {
       const pages = await providerFetch(`https://graph.facebook.com/${GRAPH}/me/accounts?fields=id,name,access_token,category,tasks`, c.access_token);
       result = { ...pages, data: Array.isArray(pages.data) ? (pages.data as Json[]).map(({ access_token: _secret, ...page }) => page) : [] };
