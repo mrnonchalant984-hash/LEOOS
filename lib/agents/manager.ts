@@ -97,6 +97,7 @@ export function classifyAgents(message: string, owner: boolean, allowedAgentIds?
     const agent = getAgent(id);
     if (agent && (!agent.ownerOnly || owner) && (owner || allowedAgentIds?.includes(id))) picks.push(id);
   };
+  if (/backend|api|server|route/.test(text)) add('backend');
   if (/research|latest|current|compare|sources|news/.test(text)) add('research');
   if (/code|bug|debug|error|typescript|next\.js|react|python|program/.test(text)) {
     add(/bug|error|debug/.test(text) ? 'debugging' : 'developer');
