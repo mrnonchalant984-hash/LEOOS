@@ -26,6 +26,7 @@ function providerUrl(provider: CustomerProvider, config: CustomerConnectionConfi
     }
     case 'meta': return `https://graph.facebook.com/${graphVersion}/me/permissions`;
     case 'youtube': return 'https://youtube.googleapis.com/youtube/v3/channels?part=id&mine=true';
+    case 'gmail': return 'https://gmail.googleapis.com/gmail/v1/users/me/profile';
     case 'custom_mcp': return '';
   }
 }
@@ -33,7 +34,7 @@ function providerUrl(provider: CustomerProvider, config: CustomerConnectionConfi
 function providerHeaders(provider: CustomerProvider, config: CustomerConnectionConfig) {
   const headers = new Headers({ Accept: 'application/json', 'User-Agent': 'LeonardX-Integration-Check' });
   if (provider === 'github' || provider === 'vercel') headers.set('Authorization', `Bearer ${config.token}`);
-  if (provider === 'supabase' || provider === 'firebase' || provider === 'youtube' || provider === 'meta' || provider === 'whatsapp_business') {
+  if (provider === 'supabase' || provider === 'firebase' || provider === 'youtube' || provider === 'gmail' || provider === 'meta' || provider === 'whatsapp_business') {
     headers.set('Authorization', `Bearer ${config.access_token}`);
   }
   if (provider === 'openai') headers.set('Authorization', `Bearer ${config.api_key}`);
