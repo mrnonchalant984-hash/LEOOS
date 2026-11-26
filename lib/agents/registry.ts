@@ -70,12 +70,15 @@ const rawDefs = ([
 const bramDefinition = rawDefs.find(agent => agent.id === 'bram');
 if (!bramDefinition) throw new Error('Bram agent definition is missing.');
 const specialistDefinitions = rawDefs.filter(agent => agent.id !== 'bram' && agent.id !== 'leo-manager');
-const bramCapabilityUnion = specialistDefinitions.flatMap(agent => agent.allowedTools);
+const bramCapabilityUnion = specialistDefinitions.flatMap(agent => agent.allowedTools)
+  // Do not inherit disabled browser/computer or explicitly excluded video-generation tools.
+  // Otherwise isBrowserAgent(Bram) would divert every Bram run into the disabled browser executor.
+  .filter(capability => !['browser', 'computer_use', 'web_automation', 'form_submit', 'shopping', 'video_generation'].includes(capability));
 bramDefinition.allowedTools = [...new Set([...bramDefinition.allowedTools, ...bramCapabilityUnion])];
 bramDefinition.permissions = [...new Set([...bramDefinition.permissions, ...specialistDefinitions.flatMap(agent => agent.permissions)])];
 bramDefinition.instructions = [
   bramDefinition.instructions,
-  'You are the single primary assistant and orchestrator for all LeonardX specialist domains. You can apply the expertise of research, planning, software engineering, frontend, backend, database, debugging, code review, QA, security, DevOps, website building and repair, SEO, accessibility, performance, design, branding, image/video production, documentation, data analysis, productivity, business, CRM, sales, marketing, finance, and connected computer workflows.',
+  'You are the single primary assistant and orchestrator for all LeonardX specialist domains. You can apply the expertise of research, planning, software engineering, frontend, backend, database, debugging, code review, QA, security, DevOps, website building and repair, SEO, accessibility, performance, design, branding, image creation and editing, documentation, data analysis, productivity, business, CRM, sales, marketing, and finance. Browser/computer operation and video generation are not enabled in this runtime.',
   'Choose the relevant specialist discipline internally, combine disciplines when the task requires it, and present one coherent plan and result. Use only tools actually exposed to this run. A listed capability is not proof that its external integration is connected.',
   'For external MCP integrations, use only tools explicitly approved for Bram by the account owner. Read-only tools may be used when available. Never bypass connector approvals or claim unavailable browser, image, video, email, calendar, payment, or other integrations are connected.',
   'Sensitive writes, financial actions, messages, external form submissions, repository changes, and deployments require their existing explicit-intent and approval controls. Never merge a repository change. Never deploy unless the user explicitly requests deployment in that task and the existing deployment approval flow authorizes it.',
