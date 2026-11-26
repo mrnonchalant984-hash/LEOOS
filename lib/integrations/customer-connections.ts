@@ -94,7 +94,9 @@ export async function verifyCustomerConnection(provider: CustomerProvider, confi
     headers.set('Authorization', `Bearer ${config.access_token}`);
   } else if (provider === 'google_gemini') {
     url = 'https://generativelanguage.googleapis.com/v1beta/models'; headers.set('x-goog-api-key', config.api_key);
-  } else if (provider === 'firebase' || provider === 'youtube' || provider === 'gmail') {
+  } else if (provider === 'gmail') {
+    url = 'https://gmail.googleapis.com/gmail/v1/users/me/profile'; headers.set('Authorization', `Bearer ${config.access_token}`);
+  } else if (provider === 'firebase' || provider === 'youtube') {
     url = 'https://www.googleapis.com/oauth2/v3/userinfo'; headers.set('Authorization', `Bearer ${config.access_token}`);
   } else if (provider === 'meta' || provider === 'whatsapp_business') {
     url = `https://graph.facebook.com/${process.env.META_GRAPH_VERSION || 'v23.0'}/me?fields=id,name`; headers.set('Authorization', `Bearer ${config.access_token}`);
