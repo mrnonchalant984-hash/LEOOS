@@ -26,9 +26,10 @@ test('Gmail is a customer-owned OAuth integration with scoped mailbox and send p
 });
 
 test('Bram waits for read-only specialist outputs instead of treating queued work as completed', async () => {
-  const [manager, tools] = await Promise.all([
+  const [manager, tools, registry] = await Promise.all([
     read('../lib/agents/manager.ts'),
     read('../lib/ai/tool-orchestrator.ts'),
+    read('../lib/agents/registry.ts'),
   ]);
   assert.match(manager, /executeBramSpecialistTeam/);
   assert.match(manager, /read_only_specialist_handoff/);
