@@ -52,7 +52,7 @@ export async function verifyProviderCredential(provider: CustomerProvider, confi
   }
   const requiredKey = provider === 'github' || provider === 'vercel' ? 'token'
     : provider === 'openai' || provider === 'anthropic' || provider === 'google_gemini' ? 'api_key'
-      : provider === 'supabase' || provider === 'firebase' || provider === 'youtube' || provider === 'meta' || provider === 'whatsapp_business' ? 'access_token'
+      : provider === 'supabase' || provider === 'firebase' || provider === 'youtube' || provider === 'gmail' || provider === 'meta' || provider === 'whatsapp_business' ? 'access_token'
         : '';
   if (requiredKey && !config[requiredKey]) throw new Error('The saved connection is missing a required credential.');
   const response = await fetch(providerUrl(provider, config), {
