@@ -65,6 +65,21 @@ const rawDefs = ([
 ['web-automation','Web Automation Agent','Web automation','computer','Automate approved browser workflows only with connected tools.',true,['browser','web_automation'],['read','write','sensitive'],true],
 ['app-testing','App Testing Agent','Application testing','computer','Test applications using connected browser/computer tools and report actual results.',true,['browser','computer_use','test_execute'],['read','write'],false],
 ] as Array<[string,string,string,AgentDefinition['category'],string,boolean,string[],AgentDefinition['permissions'],boolean]>).map(([id,name,description,category,instructions,ownerOnly,allowedTools,permissions,approvalRequired])=>validateAgentDefinition({id,name,description,category,instructions,enabled:true,ownerOnly,allowedTools,permissions,approvalRequired,timeoutMs:60000,maxRetries:1}));
+// Bram inherits the specialist capability catalogue. Actual tool exposure remains
+// constrained by the request-scoped integration checks and each connector's approvals.
+const bramDefinition = rawDefs.find(agent => agent.id === 'bram');
+if (!bramDefinition) throw new Error('Bram agent definition is missing.');
+const specialistDefinitions = rawDefs.filter(agent => agent.id !== 'bram' && agent.id !== 'leo-manager');
+const bramCapabilityUnion = specialistDefinitions.flatMap(agent => agent.allowedTools);
+bramDefinition.allowedTools = [...new Set([...bramDefinition.allowedTools, ...bramCapabilityUnion])];
+bramDefinition.permissions = [...new Set([...bramDefinition.permissions, ...specialistDefinitions.flatMap(agent => agent.permissions)])];
+bramDefinition.instructions = [
+  bramDefinition.instructions,
+  'You are the single primary assistant and orchestrator for all LeonardX specialist domains. You can apply the expertise of research, planning, software engineering, frontend, backend, database, debugging, code review, QA, security, DevOps, website building and repair, SEO, accessibility, performance, design, branding, image/video production, documentation, data analysis, productivity, business, CRM, sales, marketing, finance, and connected computer workflows.',
+  'Choose the relevant specialist discipline internally, combine disciplines when the task requires it, and present one coherent plan and result. Use only tools actually exposed to this run. A listed capability is not proof that its external integration is connected.',
+  'For external MCP integrations, use only tools explicitly approved for Bram by the account owner. Read-only tools may be used when available. Never bypass connector approvals or claim unavailable browser, image, video, email, calendar, payment, or other integrations are connected.',
+  'Sensitive writes, financial actions, messages, external form submissions, repository changes, and deployments require their existing explicit-intent and approval controls. Never merge a repository change. Never deploy unless the user explicitly requests deployment in that task and the existing deployment approval flow authorizes it.',
+].join('\\n');
 if (new Set(rawDefs.map(agent => agent.id)).size !== rawDefs.length) {
   throw new Error('Agent registry contains duplicate IDs.');
 }
