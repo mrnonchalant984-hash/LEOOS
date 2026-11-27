@@ -1,8 +1,8 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { adminSupabase } from '@/lib/auth';
 import { getMainWebsiteGitHubToken } from '@/lib/mcp/github-app-auth';
-export type RuntimeKind='workspace'|'leocode'|'skill'|'repository';
-const OPS:Record<RuntimeKind,Set<string>>={workspace:new Set(['inspect','install','test','typecheck','lint','build','git_status','git_diff']),leocode:new Set(['inspect','test','typecheck','lint','build']),skill:new Set(['run_skill_script']),repository:new Set(['git_status','git_diff','repo_test','repo_build','repo_install'])};
+export type RuntimeKind='workspace'|'leocode'|'skill'|'repository'|'browser';
+const OPS:Record<RuntimeKind,Set<string>>={workspace:new Set(['inspect','install','test','typecheck','lint','build','git_status','git_diff']),leocode:new Set(['inspect','test','typecheck','lint','build']),skill:new Set(['run_skill_script']),repository:new Set(['git_status','git_diff','repo_test','repo_build','repo_install']),browser:new Set(['computer_use'])};
 export async function queueGitHubRuntimeJob(input:{userId:string;projectId?:string|null;kind:RuntimeKind;operation:string;archive:Buffer;metadata?:Record<string,unknown>}){
  if(!OPS[input.kind].has(input.operation))throw new Error('Unsupported runtime operation.');
  const secret=process.env.CRON_SECRET||'';if(secret.length<32)throw new Error('Configure CRON_SECRET with at least 32 characters.');
