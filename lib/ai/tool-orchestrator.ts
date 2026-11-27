@@ -109,11 +109,13 @@ async function getAsUser(request: Request, path: string) {
   const headers = new Headers(request.headers);
   headers.delete('content-length');
   const url = new URL(path, request.url);
-  const match = url.pathname.match(/^\\/api\\/runtime\\/jobs\\/([0-9a-f-]+)$/i);
-  if (!match) throw new Error('Unsupported authenticated runtime status operation.');
+  const prefix = '/api/runtime/jobs/';
+  if (!url.pathname.startsWith(prefix)) throw new Error('Unsupported authenticated runtime status operation.');
+  const jobId = url.pathname.slice(prefix.length);
+  if (!/^[0-9a-f-]+$/i.test(jobId)) throw new Error('Invalid runtime job ID.');
   const internalRequest = new NextRequest(url, { method: 'GET', headers });
   const { GET } = await import('@/app/api/runtime/jobs/[id]/route');
-  const response = await GET(internalRequest, { params: Promise.resolve({ id: match[1] }) });
+  const response = await GET(internalRequest, { params: Promise.resolve({ id: jobId }) });
   const data = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Runtime job status could not be loaded.');
   return data;
