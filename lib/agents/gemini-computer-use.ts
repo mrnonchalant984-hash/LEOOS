@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 
-type BrowserState = { url: string; screenshot: string; title?: string };
+type BrowserState = { url: string; screenshot: string; title?: string; requiresApproval?: boolean; intent?: string };
 type BrowserAction = { type: string; x?: number; y?: number; text?: string; key?: string; url?: string; deltaX?: number; deltaY?: number; ms?: number };
 type BrowserBridge = {
   start(url: string, allowedDomains: string[]): Promise<{ sessionId: string; state: BrowserState }>;
