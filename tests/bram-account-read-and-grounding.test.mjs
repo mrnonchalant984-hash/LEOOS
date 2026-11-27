@@ -29,7 +29,7 @@ test('Knowledge Agent and Bram retrieve curated Braverton knowledge with explici
   const migration = await read('supabase/migrations/20261127170000_bram_knowledge_grounding_and_account_read.sql');
   assert.match(manager, /retrieveLeoKnowledge\(task, 8\)/);
   assert.match(manager, /KNOWLEDGE-GROUNDING CONTRACT/);
-  assert.match(manager, /Distinguish verified implementation status from requirements, proposals, and unknowns/);
+  assert.match(manager, /Separate verified implementation status from requirements, proposals, and unknowns/);
   assert.match(knowledge, /PERSISTENT BRAVERTON KNOWLEDGE/);
   assert.match(migration, /create table if not exists public\.leo_knowledge/);
   assert.match(migration, /alter table public\.leo_knowledge enable row level security/);
