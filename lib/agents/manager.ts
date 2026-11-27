@@ -202,7 +202,7 @@ export async function runAgent(
   if (agent.id === 'bram' || agent.allowedTools.includes('knowledge_read')) {
     try {
       const retrieved = formatKnowledgeContext(await retrieveLeoKnowledge(task, 8));
-      if (retrieved) groundedContext = `${context}\\n${retrieved}`.slice(-18000);
+      if (retrieved) groundedContext = `${context}\n${retrieved}`.slice(-18000);
     } catch {
       // Knowledge retrieval is additive; a missing/unavailable knowledge store must not break agent execution.
     }
@@ -246,7 +246,8 @@ export async function runAgent(
         : undefined,
       allowEmailRead: agent.allowedTools.includes('email_read'),
       allowEmailSend: agent.allowedTools.includes('email_send') && EXPLICIT_EMAIL_SEND_REQUEST.test(task),
-      allowComputerUse: agent.id === 'bram' && agent.allowedTools.includes('gemini_computer_use'),\n      allowAccountRead: agent.id === 'bram' && agent.allowedTools.includes('account_read'),
+      allowComputerUse: agent.id === 'bram' && agent.allowedTools.includes('gemini_computer_use'),
+      allowAccountRead: agent.id === 'bram' && agent.allowedTools.includes('account_read'),
     } : undefined;
     available = await createUserAssistantTools(meta.userId, options, {
       agentId: agent.id,
