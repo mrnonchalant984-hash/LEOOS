@@ -9,7 +9,7 @@ import { listSkills, loadSkill, readSkillFile } from '@/lib/skills/registry';
 import { getModelProviderStatus } from '@/lib/ai/model-catalog';
 import { getAccountBuilderAvailability } from '@/lib/builders/account-availability';
 import { getLeoKnowledgeCacheStatus } from '@/lib/leo-knowledge';
-import type { ProjectType } from '@/lib/pricing';
+import { getPlanPriceNgn, oneTimeServices, type ProjectType } from '@/lib/pricing';
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import { validateIdeFiles } from '@/lib/ide-files';
 import { POST as buildDeployPost } from '@/app/api/build-deploy/route';
@@ -23,7 +23,7 @@ type RemoteToolReference = {
   accessLevel: 'read' | 'write';
 };
 
-type LocalToolReference = { kind: 'run_agent' } | { kind: 'run_specialist_team' } | { kind: 'gmail_list_messages' } | { kind: 'gmail_get_message' } | { kind: 'gmail_send_message' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_computer_use' } | { kind: 'bram_computer_use_status' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'run_specialist_team' } | { kind: 'gmail_list_messages' } | { kind: 'gmail_get_message' } | { kind: 'gmail_send_message' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_computer_use' } | { kind: 'bram_computer_use_status' } | { kind: 'get_my_account_billing' } | { kind: 'list_braverton_prices' } | { kind: 'get_platform_status' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -148,6 +148,11 @@ const localTools: Array<{ name: string; description: string; inputSchema: Record
     inputSchema: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string' } }, required: ['name', 'path'], additionalProperties: false },
   },
   {
+    name: 'get_platform_status',
+    description: 'Owner-only read-only Braverton operations snapshot: database reachability and latency, total accounts, recent AI usage, active agent runs, recent system errors, and Gemini configuration/last-known health. Does not expose user prompts, personal payment details, credentials, or secrets.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
     name: 'get_observability_events',
     description: 'Read a bounded, account-scoped summary of recent system events, Leo usage, and agent run states. Never returns prompts, message bodies, credentials, or raw provider payloads.',
     inputSchema: { type: 'object', properties: { limit: { type: 'integer', description: 'Maximum rows per source, from 1 to 20.' } }, additionalProperties: false },
@@ -190,6 +195,9 @@ type LeoBuildToolOptions = {
   allowEmailRead?: boolean;
   allowEmailSend?: boolean;
   allowComputerUse?: boolean;
+  allowAccountRead?: boolean;
+  allowPriceRead?: boolean;
+  allowPlatformStatusRead?: boolean;
   sessionId?: string;
 };
 
@@ -218,6 +226,16 @@ export async function createUserAssistantTools(
     const tool = { name: 'run_specialist_team', description: 'Delegate a read-only analysis task to up to four relevant specialist agents, wait for their actual outputs, and return each specialist result to Bram. Specialist handoffs are isolated, read-only, audited as child runs, and cannot merge, deploy, send messages, or write to connected systems.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, agent_ids: { type: 'array', items: { type: 'string' } } }, required: ['task'], additionalProperties: false } };
     tools.push(tool as AssistantTool);
     references.set('run_specialist_team', { kind: 'run_specialist_team' });
+  }
+  if (options?.allowAccountRead) {
+    const tool = { name: 'get_my_account_billing', description: 'Read only the signed-in user’s own Braverton profile summary, subscription status and recent payment history. The server derives the user ID from the authenticated session; this tool cannot look up another account. It never returns card details, provider credentials, full payment references, or performs changes.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } };
+    tools.push(tool as AssistantTool);
+    references.set('get_my_account_billing', { kind: 'get_my_account_billing' } as LocalToolReference);
+  }
+  if (options?.allowPriceRead) {
+    const tool = { name: 'list_braverton_prices', description: 'List Braverton public subscription plan prices in NGN for monthly, quarterly and yearly billing, plus published one-time service prices. Use this for questions about Braverton platform pricing; do not invent marketplace product prices.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } };
+    tools.push(tool as AssistantTool);
+    references.set('list_braverton_prices', { kind: 'list_braverton_prices' } as LocalToolReference);
   }
   if (options?.allowComputerUse) {
     const tool = { name: 'bram_computer_use', description: 'Queue a bounded Gemini Computer Use browser task on a temporary GitHub-hosted runner. Requires an explicit browser task and starting URL. The browser is restricted to the starting host and any explicitly supplied allowed_domains. Sensitive actions are blocked; this runner does not yet support interactive approval or resuming a paused action. The tool returns a queued job ID, not a completed result.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, url: { type: 'string' }, allowed_domains: { type: 'array', items: { type: 'string' } } }, required: ['task','url'], additionalProperties: false } };
@@ -574,6 +592,34 @@ export async function createUserAssistantTools(
       if (body.status !== 'deployed' || typeof body.liveUrl !== 'string' || !/^https:\/\//.test(body.liveUrl)) return { text: JSON.stringify({ success: false, status: body.status || 'unknown', jobId: body.jobId || null, error: 'Deployment request completed, but a verified live URL was not returned. Do not claim the website is live.' }), isError: true };
       return { text: JSON.stringify({ success: true, status: 'deployed', project_id: projectId, jobId: body.jobId || null, liveUrl: body.liveUrl, githubUrl: body.githubUrl || null, message: 'Deployment endpoint confirmed deployed status and returned a live URL.' }) };
     }
+    if (reference.kind === 'list_braverton_prices') {
+      if (!options?.allowPriceRead || agentPolicy?.agentId && agentPolicy.agentId !== 'bram') return { text: 'Braverton pricing lookup is available only to Bram.', isError: true };
+      const plans = (['standard', 'pro', 'business'] as const).map(plan => ({
+        plan,
+        currency: 'NGN',
+        monthly: getPlanPriceNgn(plan, 'monthly'),
+        quarterly: getPlanPriceNgn(plan, 'quarterly'),
+        yearly: getPlanPriceNgn(plan, 'yearly'),
+      }));
+      const services = Object.entries(oneTimeServices).map(([key, service]) => ({
+        key, name: service.name, currency: 'NGN', price: service.priceKobo / 100,
+      }));
+      return { text: JSON.stringify({ source: 'lib/pricing.ts', currency: 'NGN', subscription_plans: plans, one_time_services: services, note: 'These are Braverton platform prices from the current code configuration, not live marketplace seller product prices.' }) };
+    }
+    if (reference.kind === 'get_my_account_billing') {
+      if (!options?.allowAccountRead || agentPolicy?.agentId && agentPolicy.agentId !== 'bram') return { text: 'Read-only account billing access is available only to Bram for the authenticated account.', isError: true };
+      const [profileResult, subscriptionResult, paymentResult] = await Promise.all([
+        db.from('profiles').select('email,full_name,created_at').eq('id', userId).maybeSingle(),
+        db.from('subscriptions').select('plan,billing_period,status,current_period_start,current_period_end,starts_at,ends_at,cancel_at_period_end,cancellation_requested_at,canceled_at,provider_status,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(5),
+        db.from('payments').select('amount,currency,plan,billing_period,reference,status,paid_at,verified_at,refunded_at,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(10),
+      ]);
+      if (profileResult.error || !profileResult.data || subscriptionResult.error || paymentResult.error) return { text: 'Your account billing summary is temporarily unavailable. No other account was queried.', isError: true };
+      const payments = (paymentResult.data || []).map(payment => ({
+        ...payment,
+        reference: typeof payment.reference === 'string' && payment.reference.length > 4 ? `••••${payment.reference.slice(-4)}` : payment.reference ? '••••' : null,
+      }));
+      return { text: JSON.stringify({ scope: 'authenticated_user_only', profile: profileResult.data, subscriptions: subscriptionResult.data || [], recent_payments: payments, privacy: 'Card details, payment credentials, provider subscription codes, and full payment references are not exposed. No changes were made.' }) };
+    }
     if (reference.kind === 'list_projects') {
       const limit = typeof args.limit === 'number' && Number.isInteger(args.limit) ? Math.min(50, Math.max(1, args.limit)) : 20;
       const { data, error } = await db.from('projects')
@@ -597,6 +643,31 @@ export async function createUserAssistantTools(
       if (error) return { text: 'Project status could not be loaded.', isError: true };
       if (!data) return { text: 'Project not found.', isError: true };
       return { text: JSON.stringify(data) };
+    }
+    if (reference.kind === 'get_platform_status') {
+      if (!options?.allowPlatformStatusRead || agentPolicy?.agentId && agentPolicy.agentId !== 'bram') return { text: 'Platform-wide status is restricted to the authenticated Braverton owner.', isError: true };
+      const checkedAt = new Date().toISOString();
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const startedAt = Date.now();
+      const [database, usage, running, events] = await Promise.all([
+        db.from('profiles').select('id', { count: 'exact', head: true }),
+        db.from('ai_usage').select('id', { count: 'exact', head: true }).gte('created_at', since),
+        db.from('agent_runs').select('id', { count: 'exact', head: true }).in('status', ['queued', 'running']),
+        db.from('system_events').select('kind,severity,created_at').gte('created_at', since).order('created_at', { ascending: false }).limit(100),
+      ]);
+      const dbLatencyMs = Date.now() - startedAt;
+      const recentEvents = events.data || [];
+      const errorEvents = recentEvents.filter(event => ['error', 'critical', 'fatal'].includes(String(event.severity || '').toLowerCase())).length;
+      const models = getModelProviderStatus().map(({ id, provider, model, configured, health_status, health_checked_at, health_status_code, operational }) => ({
+        id, provider, model, configured, health_status, health_checked_at, health_status_code, operational,
+      }));
+      return { text: JSON.stringify({
+        checked_at: checkedAt,
+        network: { supabase_database_reachable: !database.error, database_latency_ms: database.error ? null : dbLatencyMs },
+        platform: { total_accounts: database.count ?? null, ai_requests_last_24h: usage.error ? null : usage.count ?? 0, active_agent_runs: running.error ? null : running.count ?? 0, system_events_last_24h: events.error ? null : recentEvents.length, recent_error_events_last_24h: events.error ? null : errorEvents },
+        providers: models,
+        data_quality: { database_query_error: Boolean(database.error), usage_query_error: Boolean(usage.error), agent_run_query_error: Boolean(running.error), events_query_error: Boolean(events.error), note: 'Gemini health is last-known execution health, not a fresh billable probe. A configured key does not by itself mean the provider is operational.' },
+      }) };
     }
     if (reference.kind === 'get_observability_events') {
       const limit = typeof args.limit === 'number' && Number.isInteger(args.limit) ? Math.min(20, Math.max(1, args.limit)) : 10;

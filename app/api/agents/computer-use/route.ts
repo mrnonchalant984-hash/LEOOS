@@ -12,7 +12,7 @@ const MAX_TASK = 4000;
 function allowedHosts(value: unknown, startHost: string): string[] {
   if (!Array.isArray(value) || value.length > 19) return [startHost];
   const hosts = [...new Set(value.map(v => String(v).trim().toLowerCase()).filter(Boolean))];
-  if (hosts.some(host => host.length > 253 || !/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(host))) {
+  if (hosts.some(host => host.length > 253 || !/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(host))) {
     throw new Error('Allowed browser hosts must be exact public DNS hostnames.');
   }
   return [...new Set([startHost, ...hosts])];
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   try { url = new URL(rawUrl); } catch { return NextResponse.json({ error: 'A valid starting URL is required.' }, { status: 400 }); }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
       url.hostname === 'localhost' || url.hostname.endsWith('.local') || url.hostname.endsWith('.internal') ||
-      /^\\d{1,3}(?:\\.\\d{1,3}){3}$/.test(url.hostname) || url.hostname.includes(':')) {
+      /^\d{1,3}(?:\.\d{1,3}){3}$/.test(url.hostname) || url.hostname.includes(':')) {
     return NextResponse.json({ error: 'The starting URL must use a public DNS hostname.' }, { status: 400 });
   }
 

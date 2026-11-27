@@ -6,7 +6,7 @@ const OPS:Record<RuntimeKind,Set<string>>={workspace:new Set(['inspect','install
 export async function queueGitHubRuntimeJob(input:{userId:string;projectId?:string|null;kind:RuntimeKind;operation:string;archive:Buffer;metadata?:Record<string,unknown>}){
  if(!OPS[input.kind].has(input.operation))throw new Error('Unsupported runtime operation.');
  const secret=process.env.CRON_SECRET||'';if(secret.length<32)throw new Error('Configure CRON_SECRET with at least 32 characters.');
- const owner=(process.env.LEO_WORKSPACE_GITHUB_OWNER||'mrnonchalant984-hash').trim(),repository=(process.env.LEO_WORKSPACE_GITHUB_REPOSITORY||'LEOOS-RUNTIME').trim(),workflow=(process.env.LEO_WORKSPACE_GITHUB_WORKFLOW||'workspace-runtime.yml').trim(),ref=(process.env.LEO_WORKSPACE_GITHUB_REF||'main').trim();
+ const owner=(process.env.LEO_WORKSPACE_GITHUB_OWNER||'mrnonchalant984-hash').trim(),repository=(process.env.LEO_WORKSPACE_GITHUB_REPOSITORY||'LEOOSRUNTIME').trim(),workflow=(process.env.LEO_WORKSPACE_GITHUB_WORKFLOW||'workspace-runtime.yml').trim(),ref=(process.env.LEO_WORKSPACE_GITHUB_REF||'main').trim();
  const token=await getMainWebsiteGitHubToken({owner,repository,fallbackToken:process.env.GITHUB_TOKEN});
  const check=await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}`,{headers:{Authorization:`Bearer ${token}`,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'LeonardX-Runtime'},cache:'no-store',signal:AbortSignal.timeout(10000)});
  const info=await check.json().catch(()=>null) as {private?:boolean}|null;if(!check.ok||info?.private!==true)throw new Error('The configured GitHub Actions runtime repository must exist and be private.');
