@@ -24,7 +24,7 @@ const EXPLICIT_IMAGE_REQUEST = /\b(generate|create|make|render)\b.{0,48}\b(image
 const EXPLICIT_DEPLOYMENT_REQUEST = /\b(deploy|publish|release)\b/i;
 const EXPLICIT_EMAIL_SEND_REQUEST = /\b(send|email|reply to|forward)\b.{0,100}\b(email|message|reply|recipient|inbox)\b/i;
 const READ_ONLY_CAPABILITIES = new Set([
-  ...MCP_AGENT_CAPABILITIES.filter(capability => !/write|deploy|email_send/i.test(capability)),
+  ...[...MCP_AGENT_CAPABILITIES].filter(capability => !/write|deploy|email_send/i.test(capability)),
   'file_read', 'project_read', 'web_search', 'email_read', 'repository_read', 'github_read',
 ]);
 
