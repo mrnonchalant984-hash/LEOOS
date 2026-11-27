@@ -16,6 +16,7 @@ test('Bram browser tasks are owner-only and queued on the private GitHub Actions
   assert.match(orchestrator, /bram_computer_use_status/);
   assert.ok(orchestrator.includes("app/api/runtime/jobs/[id]/route"));
   assert.match(adapter, /browser:new Set\(\['computer_use'\]\)/);
+  assert.match(adapter, /\|\|'LEOOSRUNTIME'/);
   assert.doesNotMatch(route, /BRAM_BROWSER_RUNTIME_URL|BRAM_BROWSER_RUNTIME_TOKEN/);
 });
 
