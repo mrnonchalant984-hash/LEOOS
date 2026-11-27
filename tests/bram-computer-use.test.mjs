@@ -1,16 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 
 test('Bram browser tasks are owner-only and queued on the private GitHub Actions runtime', async () => {
   const route = await read('app/api/agents/computer-use/route.ts');
-  const adapter = await read('lib/runtime/github-actions.ts');\n  const orchestrator = await read('lib/ai/tool-orchestrator.ts');
+  const adapter = await read('lib/runtime/github-actions.ts');
+  const orchestrator = await read('lib/ai/tool-orchestrator.ts');
   assert.match(route, /isPlatformOwner/);
   assert.match(route, /queueGitHubRuntimeJob/);
   assert.match(route, /kind:\s*'browser'/);
   assert.match(route, /operation:\s*'computer_use'/);
-  assert.match(route, /poll_url/);\n  assert.match(orchestrator, /bram_computer_use_status/);\n  assert.match(orchestrator, /app\\/api\\/runtime\\/jobs\\/\\[id\\]\\/route/);
+  assert.match(route, /poll_url/);
+  assert.match(orchestrator, /bram_computer_use_status/);
+  assert.ok(orchestrator.includes("app/api/runtime/jobs/[id]/route"));
   assert.match(adapter, /browser:new Set\(\['computer_use'\]\)/);
   assert.doesNotMatch(route, /BRAM_BROWSER_RUNTIME_URL|BRAM_BROWSER_RUNTIME_TOKEN/);
 });
@@ -29,7 +33,13 @@ test('private runtime migration permits browser workload rows', async () => {
   assert.match(migration, /'browser'/);
 });
 
-test('signed runtime callback removes the private task archive after persisting the result', async () => {\n  const callback = await read('app/api/internal/runtime/result/route.ts');\n  assert.match(callback, /select\\('id,storage_path'\\)/);\n  assert.match(callback, /storage\\.from\\('leo-files'\\)\\.remove/);\n});\n\ntest('sensitive actions are blocked when the GitHub runtime cannot resume approvals', async () => {
+test('signed runtime callback removes the private task archive after persisting the result', async () => {
+  const callback = await read('app/api/internal/runtime/result/route.ts');
+  assert.ok(callback.includes("select('id,storage_path')"));
+  assert.ok(callback.includes("storage.from('leo-files').remove"));
+});
+
+test('sensitive actions are blocked when the GitHub runtime cannot resume approvals', async () => {
   const route = await read('app/api/agents/computer-use/route.ts');
   assert.match(route, /Sensitive actions are blocked rather than executed/);
   assert.match(route, /Interactive browser approval is not available/);
