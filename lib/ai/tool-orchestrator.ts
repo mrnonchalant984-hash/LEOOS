@@ -23,7 +23,7 @@ type RemoteToolReference = {
   accessLevel: 'read' | 'write';
 };
 
-type LocalToolReference = { kind: 'run_agent' } | { kind: 'run_specialist_team' } | { kind: 'gmail_list_messages' } | { kind: 'gmail_get_message' } | { kind: 'gmail_send_message' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_computer_use' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'run_specialist_team' } | { kind: 'gmail_list_messages' } | { kind: 'gmail_get_message' } | { kind: 'gmail_send_message' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_computer_use' } | { kind: 'bram_computer_use_status' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -102,6 +102,20 @@ async function postAsUser(request: Request, path: string, body: Record<string, u
   }
   const data = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : `The authorized operation failed with HTTP ${response.status}.`);
+  return data;
+}
+
+async function getAsUser(request: Request, path: string) {
+  const headers = new Headers(request.headers);
+  headers.delete('content-length');
+  const url = new URL(path, request.url);
+  const match = url.pathname.match(/^\\/api\\/runtime\\/jobs\\/([0-9a-f-]+)$/i);
+  if (!match) throw new Error('Unsupported authenticated runtime status operation.');
+  const internalRequest = new NextRequest(url, { method: 'GET', headers });
+  const { GET } = await import('@/app/api/runtime/jobs/[id]/route');
+  const response = await GET(internalRequest, { params: Promise.resolve({ id: match[1] }) });
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Runtime job status could not be loaded.');
   return data;
 }
 
@@ -206,6 +220,9 @@ export async function createUserAssistantTools(
     const tool = { name: 'bram_computer_use', description: 'Queue a bounded Gemini Computer Use browser task on a temporary GitHub-hosted runner. Requires an explicit browser task and starting URL. The browser is restricted to the starting host and any explicitly supplied allowed_domains. Sensitive actions are blocked; this runner does not yet support interactive approval or resuming a paused action. The tool returns a queued job ID, not a completed result.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, url: { type: 'string' }, allowed_domains: { type: 'array', items: { type: 'string' } } }, required: ['task','url'], additionalProperties: false } };
     tools.push(tool as AssistantTool);
     references.set('bram_computer_use', { kind: 'bram_computer_use' });
+    const status = { name: 'bram_computer_use_status', description: 'Check the owner-scoped status and result of a previously queued Bram browser job. A completed result is only available after GitHub Actions returns it.', inputSchema: { type: 'object', properties: { job_id: { type: 'string' } }, required: ['job_id'], additionalProperties: false } };
+    tools.push(status as AssistantTool);
+    references.set('bram_computer_use_status', { kind: 'bram_computer_use_status' });
 
   }
   if (options?.allowEmailRead) {
@@ -485,6 +502,13 @@ export async function createUserAssistantTools(
       } catch (error) {
         return { text: error instanceof Error ? error.message : 'Connected repository operation failed.', isError: true };
       }
+    }
+    if (reference.kind === 'bram_computer_use_status') {
+      if (!options?.request || !options.allowComputerUse || agentPolicy?.agentId !== 'bram') return { text: 'Browser job status is available only to Bram for the owner account.', isError: true };
+      const jobId = typeof args.job_id === 'string' ? args.job_id : '';
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) return { text: 'Provide a valid browser job UUID.', isError: true };
+      try { return { text: JSON.stringify(await getAsUser(options.request, `/api/runtime/jobs/${encodeURIComponent(jobId)}`)) }; }
+      catch (error) { return { text: error instanceof Error ? error.message : 'Browser job status could not be loaded.', isError: true }; }
     }
     if (reference.kind === 'bram_computer_use') {
       if (!options?.request || !options.allowComputerUse || agentPolicy?.agentId !== 'bram' || args.confirm === true) return { text: 'Gemini browser execution is available only to Bram for an explicit owner-authorized browser task.', isError: true };
