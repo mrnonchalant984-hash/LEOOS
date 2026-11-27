@@ -53,13 +53,17 @@ export async function POST(req: NextRequest) {
       archive,
       metadata: { source: 'bram_computer_use', url_host: url.hostname, task_summary: task.slice(0, 160) },
     });
-    await adminSupabase().from('agent_execution_events').insert({
-      user_id: ctx.user.id,
-      agent_id: 'bram',
-      event_type: 'computer_use_queued',
-      status: 'queued',
-      metadata: { runtime_job_id: job.job_id, url_host: url.hostname, provider: 'github_actions' },
-    }).then(() => undefined).catch(() => undefined);
+    try {
+      await adminSupabase().from('agent_execution_events').insert({
+        user_id: ctx.user.id,
+        agent_id: 'bram',
+        event_type: 'computer_use_queued',
+        status: 'queued',
+        metadata: { runtime_job_id: job.job_id, url_host: url.hostname, provider: 'github_actions' },
+      });
+    } catch {
+      // Queueing the runtime job is authoritative; diagnostics must not fail the request.
+    }
     return NextResponse.json({
       ...job,
       status: 'queued',
