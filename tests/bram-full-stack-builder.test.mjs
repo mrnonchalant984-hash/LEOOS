@@ -26,6 +26,14 @@ test('Bram chat injects the complete full-stack website engineering contract for
   ]) assert.ok(builder.includes(capability), 'missing engineering phase: ' + capability);
 });
 
+test('Bram checks GitHub and Vercel builder readiness before claiming publish capability', async () => {
+  const builder = await read('lib/agents/website-builder.ts');
+  const tools = await read('lib/ai/tool-orchestrator.ts');
+  assert.match(builder, /call get_provider_readiness/);
+  assert.match(builder, /missing integration\/environment names/);
+  assert.match(tools, /get_provider_readiness/);
+});
+
 test('Bram edits preserve existing project files and validate the merged project', async () => {
   const tools = await read('lib/ai/tool-orchestrator.ts');
   assert.match(tools, /save_mode: 'merge_preserving_existing_files'/);
