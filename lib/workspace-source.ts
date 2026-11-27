@@ -98,6 +98,28 @@ export async function getWorkspaceManifest(userId: string, projectId: string): P
   return { projectId, revision: Number(record.revision || 0), files, totalBytes: Number(record.total_bytes || 0), updatedAt: record.updated_at || null };
 }
 
+/**
+ * Merge generated chat files into the durable private workspace archive.
+ * This keeps project-file edits available to isolated GitHub Actions checks
+ * without replacing unrelated uploaded source files.
+ */
+export async function mergeWorkspaceTextFiles(userId: string, projectId: string, files: Record<string, string>) {
+  await loadProject(userId, projectId);
+  const entries = Object.entries(files);
+  if (!entries.length) return await getWorkspaceManifest(userId, projectId);
+  const current = await ensureRecord(userId, projectId);
+  const zip = await readArchive(current.storage_path);
+  for (const [rawPath, content] of entries) {
+    const path = safeSourcePath(rawPath);
+    if (typeof content !== 'string') throw new WorkspaceSourceError('Workspace source files must contain text content.', 415);
+    const bytes = Buffer.byteLength(content, 'utf8');
+    if (bytes > WORKSPACE_SOURCE_MAX_FILE_BYTES) throw new WorkspaceSourceError(`${path} exceeds the 5 MB per-file limit.`, 413);
+    zip.file(path, content);
+  }
+  await persistArchive(userId, projectId, current, zip);
+  return await getWorkspaceManifest(userId, projectId);
+}
+
 export async function importWorkspaceZip(userId: string, projectId: string, bytes: Buffer) {
   if (bytes.length < 4 || bytes.length > WORKSPACE_SOURCE_MAX_ARCHIVE_BYTES) throw new WorkspaceSourceError('ZIP uploads must be between 4 bytes and 25 MB.', 413);
   if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new WorkspaceSourceError('Upload a valid ZIP archive.', 415);
