@@ -98,7 +98,7 @@ async function postAsUser(request: Request, path: string, body: Record<string, u
     const match = url.pathname.match(/^\/api\/games\/([0-9a-f-]+)\/publish$/i);
     if (!match) throw new Error('Unsupported authenticated internal operation.');
     const { POST } = await import('@/app/api/games/[id]/publish/route');
-    response = await POST(internalRequest, { params: Promise.resolve({ id: match[1] }) });
+    response = await POST(internalRequest, { params: Promise.resolve({ id: jobId }) });
   }
   const data = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : `The authorized operation failed with HTTP ${response.status}.`);
