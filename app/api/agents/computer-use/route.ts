@@ -17,7 +17,7 @@ export async function POST(req:NextRequest){
  const domains=domainsFrom(body.allowedDomains,url.hostname),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),105000);let sessionId:string|undefined,keepSession=false;
  const bridge={
   async start(startUrl:string,allowed:string[]){const result=await browserRequest('/sessions',{url:startUrl,allowedDomains:allowed});sessionId=result.sessionId;return{sessionId:result.sessionId,state:{url:result.url,screenshot:result.screenshot}};},
-  async action(id:string,action:unknown){const result=await browserRequest('/sessions/'+id+'/action',{action});return{url:result.url,title:result.title,screenshot:result.screenshot};},
+  async action(id:string,action:unknown){const result=await browserRequest('/sessions/'+id+'/action',{action});await adminSupabase().from('agent_execution_events').insert({user_id:ctx.user.id,agent_id:'bram',event_type:'computer_use_action',status:result.requiresApproval?'waiting_approval':'executed',metadata:{action_type:typeof (action as any)?.type==='string'?(action as any).type:'unknown',url_host:new URL(result.url).hostname}}).then(()=>undefined).catch(()=>undefined);return{url:result.url,title:result.title,screenshot:result.screenshot,requiresApproval:result.requiresApproval,intent:result.intent};},
   async close(id:string){await browserRequest('/sessions/'+id+'/close');},
  };
  try{
@@ -41,6 +41,6 @@ export async function PUT(req:NextRequest){
  const expected=sign(payload),provided=parts[1];if(expected.length!==provided.length||!timingSafeEqual(Buffer.from(expected),Buffer.from(provided)))return NextResponse.json({error:'Approval token signature is invalid.'},{status:403});
  let approval:any;try{approval=JSON.parse(payload);}catch{return NextResponse.json({error:'Approval token is invalid.'},{status:400});}
  if(approval.userId!==ctx.user.id||!Number.isFinite(approval.exp)||approval.exp<Date.now())return NextResponse.json({error:'Approval token expired or belongs to another account.'},{status:403});
- try{const result=await browserRequest('/sessions/'+approval.sessionId+'/action',{action:approval.action,confirmed:true});await browserRequest('/sessions/'+approval.sessionId+'/close');return NextResponse.json({status:'approved_action_executed',url:result.url,title:result.title,screenshot:result.screenshot},{headers:{'cache-control':'no-store'}});}
+ try{const result=await browserRequest('/sessions/'+approval.sessionId+'/action',{action:approval.action,confirmed:true});await adminSupabase().from('agent_execution_events').insert({user_id:ctx.user.id,agent_id:'bram',event_type:'computer_use_approved_action',status:'executed',metadata:{action_type:approval.action?.type||'unknown',url_host:new URL(result.url).hostname}}).then(()=>undefined).catch(()=>undefined);await browserRequest('/sessions/'+approval.sessionId+'/close');return NextResponse.json({status:'approved_action_executed',url:result.url,title:result.title,screenshot:result.screenshot},{headers:{'cache-control':'no-store'}});}
  catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Approved action failed.'},{status:502});}
 }
