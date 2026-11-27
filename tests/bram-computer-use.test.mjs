@@ -29,7 +29,7 @@ test('private runtime migration permits browser workload rows', async () => {
   assert.match(migration, /'browser'/);
 });
 
-test('sensitive actions are blocked when the GitHub runtime cannot resume approvals', async () => {
+test('signed runtime callback removes the private task archive after persisting the result', async () => {\n  const callback = await read('app/api/internal/runtime/result/route.ts');\n  assert.match(callback, /select\\('id,storage_path'\\)/);\n  assert.match(callback, /storage\\.from\\('leo-files'\\)\\.remove/);\n});\n\ntest('sensitive actions are blocked when the GitHub runtime cannot resume approvals', async () => {
   const route = await read('app/api/agents/computer-use/route.ts');
   assert.match(route, /Sensitive actions are blocked rather than executed/);
   assert.match(route, /Interactive browser approval is not available/);
