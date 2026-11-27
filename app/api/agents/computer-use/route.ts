@@ -14,7 +14,7 @@ export async function POST(req:NextRequest){
  if(!task||task.length>MAX_TASK)return NextResponse.json({error:'A task of 1–4,000 characters is required.'},{status:400});
  let url:URL;try{url=new URL(rawUrl);}catch{return NextResponse.json({error:'A valid starting URL is required.'},{status:400});}
  if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.hostname==='localhost'||url.hostname.endsWith('.local'))return NextResponse.json({error:'The starting URL is not permitted.'},{status:400});
- const domains=domainsFrom(body.allowedDomains,url.hostname),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),105000);let sessionId:string|undefined;
+ const domains=domainsFrom(body.allowedDomains,url.hostname),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),105000);let sessionId:string|undefined,keepSession=false;
  const bridge={
   async start(startUrl:string,allowed:string[]){const result=await browserRequest('/sessions',{url:startUrl,allowedDomains:allowed});sessionId=result.sessionId;return{sessionId:result.sessionId,state:{url:result.url,screenshot:result.screenshot}};},
   async action(id:string,action:unknown){const result=await browserRequest('/sessions/'+id+'/action',{action});return{url:result.url,title:result.title,screenshot:result.screenshot};},
@@ -23,14 +23,14 @@ export async function POST(req:NextRequest){
  try{
   const result=await runGeminiComputerUse({task,url:url.href,allowedDomains:domains,bridge,signal:controller.signal});
   let approvalToken:string|undefined;
-  if(result.status==='waiting_approval'&&result.sessionId&&result.pendingAction){
+  if(result.status==='waiting_approval'&&result.sessionId&&result.pendingAction){\n   keepSession=true;
    const payload=JSON.stringify({userId:ctx.user.id,sessionId:result.sessionId,action:result.pendingAction,exp:Date.now()+5*60_000});
    approvalToken=Buffer.from(payload).toString('base64url')+'.'+sign(payload);
   }
   await adminSupabase().from('agent_execution_events').insert({user_id:ctx.user.id,agent_id:'bram',event_type:'computer_use',status:result.status,metadata:{steps:result.steps,url_host:url.hostname,summary:result.summary.slice(0,500)}}).then(()=>undefined).catch(()=>undefined);
   return NextResponse.json({...result,approvalToken},{status:result.status==='failed'?502:200,headers:{'cache-control':'no-store'}});
  }catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Computer use failed.'},{status:502});}
- finally{clearTimeout(timer);if(sessionId)await bridge.close(sessionId).catch(()=>{});}
+ finally{clearTimeout(timer);if(sessionId&&!keepSession)await bridge.close(sessionId).catch(()=>{});}
 }
 export async function PUT(req:NextRequest){
  const ctx=await getProfile(req);if(!ctx)return NextResponse.json({error:'Sign in required.'},{status:401});if(!isPlatformOwner(ctx.profile))return NextResponse.json({error:'Bram computer use is owner-only.'},{status:403});
