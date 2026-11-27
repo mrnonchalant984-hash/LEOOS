@@ -84,7 +84,10 @@ async function postAsUser(request: Request, path: string, body: Record<string, u
   } else if (url.pathname === '/api/research') {
     const { POST } = await import('@/app/api/research/route');
     response = await POST(internalRequest);
-  } else if (url.pathname === '/api/agents/computer-use') {\n    const { POST } = await import('@/app/api/agents/computer-use/route');\n    response = await POST(internalRequest);\n  } else if (url.pathname === '/api/agents/run') {
+  } else if (url.pathname === '/api/agents/computer-use') {
+    const { POST } = await import('@/app/api/agents/computer-use/route');
+    response = await POST(internalRequest);
+  } else if (url.pathname === '/api/agents/run') {
     const { POST } = await import('@/app/api/agents/run/route');
     response = await POST(internalRequest);
   } else if (url.pathname.startsWith('/api/integrations/')) {
