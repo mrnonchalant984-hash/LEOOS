@@ -29,7 +29,8 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   if (toolName === 'get_project_files') return permissions.has('project_read') || permissions.has('file_read');
   if (toolName === 'get_build_status') return permissions.has('deployment') || permissions.has('devops');
   if (toolName === 'web_research') return permissions.has('web_search');
-  if (toolName === 'bram_computer_use') return agent.id === 'bram' && permissions.has('gemini_computer_use') && /\b(browser|browse|website|webpage|navigate|click|interact|computer use)\b/i.test(task);\n  if (toolName === 'bram_computer_use_approve') return agent.id === 'bram' && permissions.has('gemini_computer_use') && /\b(approve|approved|confirm|confirmed|yes,? proceed)\b/i.test(task);
+  if (toolName === 'bram_computer_use') return agent.id === 'bram' && permissions.has('gemini_computer_use') && /\b(browser|browse|website|webpage|navigate|click|interact|computer use)\b/i.test(task);
+  if (toolName === 'bram_computer_use_approve') return agent.id === 'bram' && permissions.has('gemini_computer_use') && /\b(approve|approved|confirm|confirmed|yes,? proceed)\b/i.test(task);
   if (toolName === 'gmail_list_messages' || toolName === 'gmail_get_message') return permissions.has('email_read');
   if (toolName === 'gmail_send_message') return permissions.has('email_send') && EXPLICIT_EMAIL_SEND_REQUEST.test(task);
   if (toolName === 'run_specialist_team') return agent.id === 'bram';
