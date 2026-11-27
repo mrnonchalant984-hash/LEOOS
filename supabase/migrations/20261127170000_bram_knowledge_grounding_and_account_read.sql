@@ -65,6 +65,6 @@ insert into public.leo_knowledge (title,content,category,tags,source_type,author
 on conflict (category,title) do update set content=excluded.content,tags=excluded.tags,source_type=excluded.source_type,author=excluded.author,status=excluded.status,reliability=excluded.reliability,confidence=excluded.confidence,version=public.leo_knowledge.version+1,updated_at=now();
 
 insert into public.leo_knowledge_versions (knowledge_id,version,snapshot,change_type)
-select id,version,to_jsonb(leo_knowledge.*),'seeded_owner_brief'
-from public.leo_knowledge where category in ('braverton_platform','braverton_market')
+select k.id,k.version,to_jsonb(k),'seeded_owner_brief'
+from public.leo_knowledge as k where k.category in ('braverton_platform','braverton_market')
 on conflict (knowledge_id,version) do nothing;
