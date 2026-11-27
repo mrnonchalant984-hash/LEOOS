@@ -18,7 +18,7 @@ export { getAgent };
 const TOOL_CAPABILITIES = new Set([
   ...MCP_AGENT_CAPABILITIES, 'database_write', 'deployment', 'devops', 'file_read',
   'file_write', 'github_write', 'image_generation', 'project_read', 'email_send',
-  'website_builder', 'web_search', 'gemini_computer_use', 'account_read',
+  'website_builder', 'web_search', 'gemini_computer_use', 'account_read', 'price_read',
 ]);
 
 const EXPLICIT_IMAGE_REQUEST = /\b(generate|create|make|render)\b.{0,48}\b(image|picture|photo|visual|mockup|logo)\b/i;
@@ -32,6 +32,7 @@ const READ_ONLY_CAPABILITIES = new Set([
 function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   const permissions = new Set(agent.allowedTools);
   if (toolName === 'get_my_account_billing') return permissions.has('account_read');
+  if (toolName === 'list_braverton_prices') return permissions.has('price_read');
   if (toolName === 'list_projects' || toolName === 'get_project_status') return permissions.has('project_read');
   if (toolName === 'get_project_files') return permissions.has('project_read') || permissions.has('file_read');
   if (toolName === 'get_build_status') return permissions.has('deployment') || permissions.has('devops');
@@ -248,6 +249,7 @@ export async function runAgent(
       allowEmailSend: agent.allowedTools.includes('email_send') && EXPLICIT_EMAIL_SEND_REQUEST.test(task),
       allowComputerUse: agent.id === 'bram' && agent.allowedTools.includes('gemini_computer_use'),
       allowAccountRead: agent.id === 'bram' && agent.allowedTools.includes('account_read'),
+      allowPriceRead: agent.id === 'bram' && agent.allowedTools.includes('price_read'),
     } : undefined;
     available = await createUserAssistantTools(meta.userId, options, {
       agentId: agent.id,
@@ -261,6 +263,8 @@ export async function runAgent(
     ...(agent.id === 'bram' ? [
       'For questions about the signed-in user’s own Braverton profile, subscription, or payment history, use get_my_account_billing. This tool is read-only and is hard-scoped by the server to the authenticated user ID. Never request or query another person’s account, and never expose card data, provider secrets, or full payment references.',
       'Use retrieved Braverton knowledge as evidence. Separate verified implementation status from requirements, proposals, and unknowns. Never invent marketplace policies, payout timing, escrow, payment, logistics, or feature availability. Cite knowledge record titles and state when the knowledge base has no evidence.',
+      'When asked for Braverton subscription or service prices, call list_braverton_prices and report its NGN amounts and billing periods. Do not guess marketplace seller prices; use a connected Market catalog source only when one is available.',
+      'When asked about company/platform status, connectivity, network, AI providers, model health, integrations, queues, builds, or recent errors, inspect the available live status tools such as get_provider_readiness, get_model_router_status, get_knowledge_cache_status, get_observability_events, and get_build_status. Separate reachable/healthy checks from configured-but-unverified services. Do not infer that a whole network is healthy from a single successful request.',
       'Bram is the primary orchestrator. Use run_specialist_team for substantive multi-discipline tasks: wait for each read-only specialist result, inspect its evidence, and synthesize the findings. Do not merely queue a specialist and claim completion.',
       'Use Tavily-backed web_research for public research whenever current information or external sources are needed. The configured Tavily server secret is not exposed to you; invoke the tool rather than claiming that research is unavailable.',
       'Use bram_computer_use only when the owner explicitly requests browser/computer interaction and supplies a public starting URL. It queues a bounded, read-only task on a temporary private GitHub Actions runner using Gemini Computer Use and returns a job ID, not a completed result. Only the starting host is allowed unless the owner explicitly supplies additional hosts. Login, password, payment, form submission, purchase, deletion, publishing, and other sensitive actions remain blocked; no persistent browser session or interactive approval/resume is available.',
