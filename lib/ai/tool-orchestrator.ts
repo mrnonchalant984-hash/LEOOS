@@ -12,6 +12,7 @@ import { getLeoKnowledgeCacheStatus } from '@/lib/leo-knowledge';
 import { getPlanPriceNgn, oneTimeServices, type ProjectType } from '@/lib/pricing';
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import { validateIdeFiles } from '@/lib/ide-files';
+import { mergeWorkspaceTextFiles } from '@/lib/workspace-source';
 import { POST as buildDeployPost } from '@/app/api/build-deploy/route';
 import { mcpToolGrantedToAgent } from '@/lib/agents/mcp-capabilities';
 
@@ -586,7 +587,7 @@ export async function createUserAssistantTools(
     if (reference.kind === 'get_project_preview_status') {
       if (!options?.allowBuildActions || !options.request) return { text: 'Preview status is available within an authenticated chat build.', isError: true };
       const projectId = typeof args.project_id === 'string' ? args.project_id : '';
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(projectId)) return { text: 'Provide a valid project UUID.', isError: true };
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) return { text: 'Provide a valid project UUID.', isError: true };
       try { return { text: JSON.stringify(await getAsUser(options.request, `/api/workspaces/${encodeURIComponent(projectId)}/preview`)) }; }
       catch (error) { return { text: error instanceof Error ? error.message : 'Preview status could not be loaded.', isError: true }; }
     }
@@ -596,8 +597,13 @@ export async function createUserAssistantTools(
       const operation = typeof args.operation === 'string' ? args.operation : '';
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId) || !['inspect','typecheck','lint','test','build'].includes(operation)) return { text: 'Provide a valid project ID and supported check operation.', isError: true };
       try {
+        const { data: project, error: projectError } = await db.from('projects').select('files').eq('id', projectId).eq('user_id', userId).maybeSingle();
+        if (projectError || !project) return { text: 'Project source could not be loaded or is not owned by this account. No runtime job was queued.', isError: true };
+        const projectFiles = project.files && typeof project.files === 'object' && !Array.isArray(project.files) ? project.files as Record<string, unknown> : {};
+        const textFiles = Object.fromEntries(Object.entries(projectFiles).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+        if (Object.keys(textFiles).length) await mergeWorkspaceTextFiles(userId, projectId, textFiles);
         const result = await postAsUser(options.request, `/api/workspaces/${encodeURIComponent(projectId)}/runtime`, { operation });
-        return { text: JSON.stringify({ ...result, note: 'Queued on an isolated GitHub-hosted runner. Poll the returned job ID before reporting the result.' }) };
+        return { text: JSON.stringify({ ...result, note: 'Queued on an isolated GitHub-hosted runner using the current saved project source. Poll the returned job ID before reporting the result.' }) };
       } catch (error) { return { text: error instanceof Error ? error.message : 'The isolated project check could not be queued.', isError: true }; }
     }
     if (reference.kind === 'get_project_check_status') {
