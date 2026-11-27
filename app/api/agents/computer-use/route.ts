@@ -1,46 +1,81 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import JSZip from 'jszip';
 import { getProfile, isPlatformOwner, adminSupabase } from '@/lib/auth';
-import { runGeminiComputerUse } from '@/lib/agents/gemini-computer-use';
-export const runtime='nodejs';
-export const maxDuration=120;
-const MAX_TASK=4000;
-function domainsFrom(value:unknown,host:string){if(!Array.isArray(value)||value.length>20)return[host];const items=[...new Set(value.map(v=>String(v).trim().toLowerCase()).filter(Boolean))];return items.length?items:[host];}
-function sign(value:string){const secret=process.env.BRAM_BROWSER_RUNTIME_TOKEN||'';if(!secret)throw Error('Browser runtime signing secret is missing.');return createHmac('sha256',secret).update(value).digest('hex');}
-async function browserRequest(path:string,body?:unknown){const base=process.env.BRAM_BROWSER_RUNTIME_URL?.replace(/\/$/,'');const token=process.env.BRAM_BROWSER_RUNTIME_TOKEN;if(!base||!token)throw Error('The isolated browser runtime is not configured.');const response=await fetch(base+path,{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify(body||{}),cache:'no-store',signal:AbortSignal.timeout(25000)});const data=await response.json().catch(()=>({})) as any;if(!response.ok)throw Error(data.error||'Browser runtime returned HTTP '+response.status+'.');return data;}
-export async function POST(req:NextRequest){
- const ctx=await getProfile(req);if(!ctx)return NextResponse.json({error:'Sign in required.'},{status:401});if(!isPlatformOwner(ctx.profile))return NextResponse.json({error:'Bram computer use is owner-only.'},{status:403});
- const body=await req.json().catch(()=>null),task=typeof body?.task==='string'?body.task.trim():'',rawUrl=typeof body?.url==='string'?body.url:'';
- if(!task||task.length>MAX_TASK)return NextResponse.json({error:'A task of 1–4,000 characters is required.'},{status:400});
- let url:URL;try{url=new URL(rawUrl);}catch{return NextResponse.json({error:'A valid starting URL is required.'},{status:400});}
- if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.hostname==='localhost'||url.hostname.endsWith('.local'))return NextResponse.json({error:'The starting URL is not permitted.'},{status:400});
- const domains=domainsFrom(body.allowedDomains,url.hostname),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),105000);let sessionId:string|undefined,keepSession=false;
- const bridge={
-  async start(startUrl:string,allowed:string[]){const result=await browserRequest('/sessions',{url:startUrl,allowedDomains:allowed});sessionId=result.sessionId;return{sessionId:result.sessionId,state:{url:result.url,screenshot:result.screenshot}};},
-  async action(id:string,action:unknown){const result=await browserRequest('/sessions/'+id+'/action',{action});await adminSupabase().from('agent_execution_events').insert({user_id:ctx.user.id,agent_id:'bram',event_type:'computer_use_action',status:result.requiresApproval?'waiting_approval':'executed',metadata:{action_type:typeof (action as any)?.type==='string'?(action as any).type:'unknown',url_host:new URL(result.url).hostname}}).then(()=>undefined).catch(()=>undefined);return{url:result.url,title:result.title,screenshot:result.screenshot,requiresApproval:result.requiresApproval,intent:result.intent};},
-  async close(id:string){await browserRequest('/sessions/'+id+'/close');},
- };
- try{
-  const result=await runGeminiComputerUse({task,url:url.href,allowedDomains:domains,bridge,signal:controller.signal});
-  let approvalToken:string|undefined;
-  if(result.status==='waiting_approval'&&result.sessionId&&result.pendingAction){
-   keepSession=true;
-   const payload=JSON.stringify({userId:ctx.user.id,sessionId:result.sessionId,action:result.pendingAction,exp:Date.now()+5*60_000});
-   approvalToken=Buffer.from(payload).toString('base64url')+'.'+sign(payload);
+import { enforceUserRateLimit } from '@/lib/rate-limit';
+import { queueGitHubRuntimeJob } from '@/lib/runtime/github-actions';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+const MAX_TASK = 4000;
+
+function allowedHosts(value: unknown, startHost: string): string[] {
+  if (!Array.isArray(value) || value.length > 19) return [startHost];
+  const hosts = [...new Set(value.map(v => String(v).trim().toLowerCase()).filter(Boolean))];
+  if (hosts.some(host => host.length > 253 || !/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(host))) {
+    throw new Error('Allowed browser hosts must be exact public DNS hostnames.');
   }
-  await adminSupabase().from('agent_execution_events').insert({user_id:ctx.user.id,agent_id:'bram',event_type:'computer_use',status:result.status,metadata:{steps:result.steps,url_host:url.hostname,summary:result.summary.slice(0,500)}}).then(()=>undefined).catch(()=>undefined);
-  return NextResponse.json({...result,approvalToken},{status:result.status==='failed'?502:200,headers:{'cache-control':'no-store'}});
- }catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Computer use failed.'},{status:502});}
- finally{clearTimeout(timer);if(sessionId&&!keepSession)await bridge.close(sessionId).catch(()=>{});}
+  return [...new Set([startHost, ...hosts])];
 }
-export async function PUT(req:NextRequest){
- const ctx=await getProfile(req);if(!ctx)return NextResponse.json({error:'Sign in required.'},{status:401});if(!isPlatformOwner(ctx.profile))return NextResponse.json({error:'Bram computer use is owner-only.'},{status:403});
- const body=await req.json().catch(()=>null),token=typeof body?.approvalToken==='string'?body.approvalToken:'',parts=token.split('.');
- if(parts.length!==2)return NextResponse.json({error:'A valid approval token is required.'},{status:400});
- let payload:string;try{payload=Buffer.from(parts[0],'base64url').toString('utf8');}catch{return NextResponse.json({error:'Invalid approval token.'},{status:400});}
- const expected=sign(payload),provided=parts[1];if(expected.length!==provided.length||!timingSafeEqual(Buffer.from(expected),Buffer.from(provided)))return NextResponse.json({error:'Approval token signature is invalid.'},{status:403});
- let approval:any;try{approval=JSON.parse(payload);}catch{return NextResponse.json({error:'Approval token is invalid.'},{status:400});}
- if(approval.userId!==ctx.user.id||!Number.isFinite(approval.exp)||approval.exp<Date.now())return NextResponse.json({error:'Approval token expired or belongs to another account.'},{status:403});
- try{const result=await browserRequest('/sessions/'+approval.sessionId+'/action',{action:approval.action,confirmed:true});await adminSupabase().from('agent_execution_events').insert({user_id:ctx.user.id,agent_id:'bram',event_type:'computer_use_approved_action',status:'executed',metadata:{action_type:approval.action?.type||'unknown',url_host:new URL(result.url).hostname}}).then(()=>undefined).catch(()=>undefined);await browserRequest('/sessions/'+approval.sessionId+'/close');return NextResponse.json({status:'approved_action_executed',url:result.url,title:result.title,screenshot:result.screenshot},{headers:{'cache-control':'no-store'}});}
- catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Approved action failed.'},{status:502});}
+
+export async function POST(req: NextRequest) {
+  const ctx = await getProfile(req);
+  if (!ctx) return NextResponse.json({ error: 'Sign in required.' }, { status: 401 });
+  if (!isPlatformOwner(ctx.profile)) return NextResponse.json({ error: 'Bram computer use is owner-only.' }, { status: 403 });
+  const limited = await enforceUserRateLimit(ctx.user.id, 'bram-computer-use', 5, 3600);
+  if (limited) return limited;
+
+  const body = await req.json().catch(() => null);
+  const task = typeof body?.task === 'string' ? body.task.trim() : '';
+  const rawUrl = typeof body?.url === 'string' ? body.url.trim() : '';
+  if (!task || task.length > MAX_TASK) return NextResponse.json({ error: 'A task of 1–4,000 characters is required.' }, { status: 400 });
+
+  let url: URL;
+  try { url = new URL(rawUrl); } catch { return NextResponse.json({ error: 'A valid starting URL is required.' }, { status: 400 }); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
+      url.hostname === 'localhost' || url.hostname.endsWith('.local') || url.hostname.endsWith('.internal') ||
+      /^\\d{1,3}(?:\\.\\d{1,3}){3}$/.test(url.hostname) || url.hostname.includes(':')) {
+    return NextResponse.json({ error: 'The starting URL must use a public DNS hostname.' }, { status: 400 });
+  }
+
+  let domains: string[];
+  try { domains = allowedHosts(body?.allowedDomains, url.hostname.toLowerCase()); }
+  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid allowed host list.' }, { status: 400 }); }
+
+  try {
+    const zip = new JSZip();
+    zip.file('runtime-metadata.json', JSON.stringify({ task, url: url.href, allowedDomains: domains }));
+    const archive = Buffer.from(await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 5 } }));
+    const job = await queueGitHubRuntimeJob({
+      userId: ctx.user.id,
+      kind: 'browser',
+      operation: 'computer_use',
+      archive,
+      metadata: { source: 'bram_computer_use', url_host: url.hostname, task_summary: task.slice(0, 160) },
+    });
+    await adminSupabase().from('agent_execution_events').insert({
+      user_id: ctx.user.id,
+      agent_id: 'bram',
+      event_type: 'computer_use_queued',
+      status: 'queued',
+      metadata: { runtime_job_id: job.job_id, url_host: url.hostname, provider: 'github_actions' },
+    }).then(() => undefined).catch(() => undefined);
+    return NextResponse.json({
+      ...job,
+      status: 'queued',
+      poll_url: '/api/runtime/jobs/' + job.job_id,
+      message: 'Bram browser task was queued on a temporary GitHub-hosted runner. Poll the job URL for its result.',
+    }, { status: 202, headers: { 'Cache-Control': 'private, no-store' } });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Browser task could not be queued.' }, { status: 503 });
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  const ctx = await getProfile(req);
+  if (!ctx) return NextResponse.json({ error: 'Sign in required.' }, { status: 401 });
+  if (!isPlatformOwner(ctx.profile)) return NextResponse.json({ error: 'Bram computer use is owner-only.' }, { status: 403 });
+  return NextResponse.json({
+    error: 'Interactive browser approval is not available in the GitHub Actions runtime yet. Sensitive actions are blocked rather than executed.',
+  }, { status: 409 });
 }
