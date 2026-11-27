@@ -41,6 +41,6 @@ export async function PUT(req:NextRequest){
  const expected=sign(payload),provided=parts[1];if(expected.length!==provided.length||!timingSafeEqual(Buffer.from(expected),Buffer.from(provided)))return NextResponse.json({error:'Approval token signature is invalid.'},{status:403});
  let approval:any;try{approval=JSON.parse(payload);}catch{return NextResponse.json({error:'Approval token is invalid.'},{status:400});}
  if(approval.userId!==ctx.user.id||!Number.isFinite(approval.exp)||approval.exp<Date.now())return NextResponse.json({error:'Approval token expired or belongs to another account.'},{status:403});
- try{const result=await browserRequest('/sessions/'+approval.sessionId+'/action',{action:approval.action});await browserRequest('/sessions/'+approval.sessionId+'/close');return NextResponse.json({status:'approved_action_executed',url:result.url,title:result.title,screenshot:result.screenshot},{headers:{'cache-control':'no-store'}});}
+ try{const result=await browserRequest('/sessions/'+approval.sessionId+'/action',{action:approval.action,confirmed:true});await browserRequest('/sessions/'+approval.sessionId+'/close');return NextResponse.json({status:'approved_action_executed',url:result.url,title:result.title,screenshot:result.screenshot},{headers:{'cache-control':'no-store'}});}
  catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Approved action failed.'},{status:502});}
 }
