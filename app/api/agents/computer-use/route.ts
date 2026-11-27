@@ -23,7 +23,8 @@ export async function POST(req:NextRequest){
  try{
   const result=await runGeminiComputerUse({task,url:url.href,allowedDomains:domains,bridge,signal:controller.signal});
   let approvalToken:string|undefined;
-  if(result.status==='waiting_approval'&&result.sessionId&&result.pendingAction){\n   keepSession=true;
+  if(result.status==='waiting_approval'&&result.sessionId&&result.pendingAction){
+   keepSession=true;
    const payload=JSON.stringify({userId:ctx.user.id,sessionId:result.sessionId,action:result.pendingAction,exp:Date.now()+5*60_000});
    approvalToken=Buffer.from(payload).toString('base64url')+'.'+sign(payload);
   }
