@@ -13,7 +13,7 @@ production resource does not exist.
 | Priority | Gap | Current state | Required outcome / acceptance evidence |
 |---|---|---|---|
 | P0 | A bounded, tenant-scoped workspace execution and preview lifecycle | File editing exists; the web IDE disables arbitrary shell use. The isolated runner is a separate constrained service with deployment prerequisites. | Start/stop a compatible project in an isolated workspace; enforce ownership, resource/network/process limits, timeouts, cleanup, and logs; return a verified preview URL. Integration tests must demonstrate cross-tenant denial and failure handling. |
-| P0 | Preview separated from production deployment | Website build flow synchronizes GitHub and deploys to Vercel production. No generated-project preview route/provider is found. | Add an independently authorized, non-production preview provider and state model. Preview must not mutate production deployment state, GitHub production settings, or live URL fields. |
+| P0 | Preview separated from production deployment | Website build flow synchronizes GitHub and deploys to Vercel production; an owner-scoped Cloudflare Pages static preview queue and chat-native trigger/status tools now exist. A persistent isolated dynamic Next.js/server preview runtime is still missing. | Add an independently authorized, non-production preview provider and state model. Preview must not mutate production deployment state, GitHub production settings, or live URL fields. |
 | P0 | Provider-independent model routing | Gemini is the only enabled central execution provider. | Define capability metadata and provider adapters; test configured/unconfigured provider behavior, structured output, streaming/tool-call paths, rate limiting, and error normalization. Never fall back to an incompatible capability. |
 | P0 | Agent tool/permission contract | Agent APIs and manager exist, but complete per-agent schemas, least-privilege tool matrices, and validation rules are not verified. | Every agent has explicit input/output, allowed tools/skills, limits, and output validation. Tests prove denied tool calls cannot be bypassed through prompt or user-supplied role values. |
 | P0 | Reproducible external integration tests | Many capabilities depend on Supabase, Gemini, GitHub, Vercel, browser, or isolated-host configuration. | Mocked contract tests for normal and failure paths, plus a separately gated end-to-end environment that reports each unavailable dependency rather than a success-shaped fallback. |
@@ -70,6 +70,25 @@ includes finite free storage and request allowances; Queues Free has
 10,000 operations/day and 24-hour retention. See the linked official pricing
 and limits sources in [repository audit](./REPOSITORY_AUDIT.md). These
 provider-level allowances do not replace LeonardX's own budget enforcement.
+
+## Bram chat-native website engineering
+
+The website-builder PR adds a structured engineering contract to explicit
+Bram build requests, with discovery/planning, premium responsive frontend,
+full-stack behavior, owner-scoped source persistence, isolated checks,
+preview status, GitHub/Vercel readiness preflight, and evidence-based delivery.
+Project setup cards are no longer rendered in the chat transcript; source
+changes are merged into the authenticated project while preserving unrelated
+files. Chat can queue GitHub-hosted inspect/typecheck/lint/test/build jobs and
+Cloudflare static preview jobs.
+
+This is not yet proof of complete autonomous website delivery. The current
+Cloudflare preview provider is static-only, so it cannot host a live Next.js
+server, server actions, or a database-backed full-stack application. The
+dynamic isolated preview runtime, automatic browser interaction/visual
+regression testing, and live provider acceptance tests remain outstanding.
+GitHub/Vercel publish still requires verified account integrations, repository
+permissions, Vercel project linkage, and configured production environment.
 
 ## Remaining master specification gaps
 
