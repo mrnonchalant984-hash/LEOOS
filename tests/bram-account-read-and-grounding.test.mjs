@@ -20,7 +20,7 @@ test('Bram account billing tool is read-only and hard-scoped to the authenticate
   assert.doesNotMatch(executor, /paystack_subscription_code|card_number|cvv|authorization_code/);
   assert.match(executor, /No changes were made/);
   assert.match(manager, /allowAccountRead: agent\.id === 'bram'/);
-  assert.match(registry, /'account_read','knowledge_read'/);
+  assert.match(registry, /'account_read','knowledge_read','gemini_computer_use'/);
 });
 
 test('Knowledge Agent and Bram retrieve curated Braverton knowledge with explicit grounding rules', async () => {
