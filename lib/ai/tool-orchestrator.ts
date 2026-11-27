@@ -98,7 +98,7 @@ async function postAsUser(request: Request, path: string, body: Record<string, u
     const match = url.pathname.match(/^\/api\/games\/([0-9a-f-]+)\/publish$/i);
     if (!match) throw new Error('Unsupported authenticated internal operation.');
     const { POST } = await import('@/app/api/games/[id]/publish/route');
-    response = await POST(internalRequest, { params: Promise.resolve({ id: jobId }) });
+    response = await POST(internalRequest, { params: Promise.resolve({ id: match[1] }) });
   }
   const data = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : `The authorized operation failed with HTTP ${response.status}.`);
@@ -189,6 +189,7 @@ type LeoBuildToolOptions = {
   runSpecialists?: (task: string, agentIds?: string[]) => Promise<string>;
   allowEmailRead?: boolean;
   allowEmailSend?: boolean;
+  allowComputerUse?: boolean;
   sessionId?: string;
 };
 
@@ -205,7 +206,7 @@ export async function createUserAssistantTools(
   const db = adminSupabase();
   const references = new Map<string, ToolReference>();
   const tools: AssistantTool[] = localTools.map(tool => {
-    references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
+    references.set(tool.name, { kind: tool.name } as LocalToolReference);
     return tool;
   });
   if (options?.allowAgentExecution) {
@@ -250,7 +251,7 @@ export async function createUserAssistantTools(
     if (options.allowDeployment && options.allowBrowserGame) buildTools.push({ name: 'publish_browser_game', description: 'Publish an owned browser-game project through the connected GitHub and Vercel accounts. Available only for an explicit publish/deploy request in the user message; the server rechecks ownership, game type, connected credentials, file safety, and verified deployment state.', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, confirm: { type: 'boolean', const: true } }, required: ['project_id', 'confirm'], additionalProperties: false } });
     for (const tool of buildTools) {
       tools.push(tool as AssistantTool);
-      references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
+      references.set(tool.name, { kind: tool.name } as LocalToolReference);
     }
   }
 
