@@ -55,6 +55,10 @@ function isRepositoryTask(message: string) {
 }
 
 
+function isBrowserTaskIntent(message: string) {
+  return /\b(browser|browse|website|webpage|navigate|click|interact|computer use)\b/i.test(message) && /https?:\/\//i.test(message);
+}
+
 function isWebsiteResearchIntent(message: string) {
   const action = /\b(search|research|crawl|browse|read|fetch|inspect|summari[sz]e|analy[sz]e)\b/i.test(message);
   const site = /\b(websites?|web\s?sites?|site|webpage|web\s?page|pages|domain)\b/i.test(message);
@@ -736,6 +740,8 @@ export async function POST(req: NextRequest) {
           allowWebResearch: webResearchWorkflow,
           allowRemoteWrites: websiteWriteWorkflow,
           allowBrowserGame: requestedProjectType === 'game',
+          allowAccountRead: !customAgent,
+          allowComputerUse: owner && isBrowserTaskIntent(message),
         });
         const agentTools = customAgent
           ? available.tools.filter(tool => customAgent.allowed_tools.includes(tool.name))
