@@ -74,7 +74,7 @@ const bramCapabilityUnion = specialistDefinitions.flatMap(agent => agent.allowed
   // Do not inherit disabled browser/computer or explicitly excluded video-generation tools.
   // Otherwise isBrowserAgent(Bram) would divert every Bram run into the disabled browser executor.
   .filter(capability => !['browser', 'computer_use', 'web_automation', 'form_submit', 'shopping', 'video_generation'].includes(capability));
-bramDefinition.allowedTools = [...new Set([...bramDefinition.allowedTools, ...bramCapabilityUnion])];
+bramDefinition.allowedTools = [...new Set([...bramDefinition.allowedTools, ...bramCapabilityUnion, 'gemini_computer_use'])];
 bramDefinition.permissions = [...new Set([...bramDefinition.permissions, ...specialistDefinitions.flatMap(agent => agent.permissions)])];
 bramDefinition.instructions = [
   bramDefinition.instructions,
