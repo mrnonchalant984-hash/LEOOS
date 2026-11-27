@@ -57,6 +57,7 @@ export async function runGeminiComputerUse(input: {
         const intent=String(call.args?.intent||call.name||'Browser action');
         if(requiresApproval(response,call,input.task))return {status:'waiting_approval',summary:'A sensitive browser action needs your explicit confirmation. No sensitive action was executed.',steps:step,pendingAction:action,pendingIntent:intent,sessionId};
         const state=await input.bridge.action(sessionId,action);
+        if(state.requiresApproval)return {status:'waiting_approval',summary:'The browser detected a sensitive submission control. No action was executed; owner confirmation is required.',steps:step,pendingAction:action,pendingIntent:state.intent||intent,sessionId};
         contents.push({role:'user',parts:[
           {functionResponse:{name:call.name,response:{url:state.url,title:state.title||'',status:'executed'}}},
           {inlineData:{mimeType:'image/png',data:state.screenshot}},
