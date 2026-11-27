@@ -5,12 +5,12 @@ const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 
 test('Bram browser tasks are owner-only and queued on the private GitHub Actions runtime', async () => {
   const route = await read('app/api/agents/computer-use/route.ts');
-  const adapter = await read('lib/runtime/github-actions.ts');
+  const adapter = await read('lib/runtime/github-actions.ts');\n  const orchestrator = await read('lib/ai/tool-orchestrator.ts');
   assert.match(route, /isPlatformOwner/);
   assert.match(route, /queueGitHubRuntimeJob/);
   assert.match(route, /kind:\s*'browser'/);
   assert.match(route, /operation:\s*'computer_use'/);
-  assert.match(route, /poll_url/);
+  assert.match(route, /poll_url/);\n  assert.match(orchestrator, /bram_computer_use_status/);\n  assert.match(orchestrator, /app\\/api\\/runtime\\/jobs\\/\\[id\\]\\/route/);
   assert.match(adapter, /browser:new Set\(\['computer_use'\]\)/);
   assert.doesNotMatch(route, /BRAM_BROWSER_RUNTIME_URL|BRAM_BROWSER_RUNTIME_TOKEN/);
 });
