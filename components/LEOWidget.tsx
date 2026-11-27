@@ -2180,20 +2180,6 @@ export function LEOWidget({ full = false, initialSessionId = "", embedded = fals
               </button>;
             })}
           </div>}
-          {m.projectBuilder && (
-            <div className="mt-3 rounded-xl border border-white/10 bg-white/[.04] p-3">
-              <p className="text-xs font-semibold uppercase text-[var(--gold)]">
-                {m.projectBuilder.projectType.replaceAll("_", " ")} · {m.projectBuilder.status.replaceAll("_", " ")}
-              </p>
-              <p className="mt-1 text-xs text-zinc-400">{m.projectBuilder.message}</p>
-              {m.projectBuilder.href && (
-                <a href={m.projectBuilder.href} className="mt-3 inline-flex rounded-lg bg-[var(--gold)] px-3 py-2 text-xs font-bold text-black">
-                  {m.projectBuilder.status === "plan_upgrade" ? "View plans" : m.projectBuilder.status === "sign_in_required" ? "Sign in" : "Start project setup"}
-                </a>
-              )}
-              {m.projectBuilder.provider && <p className="mt-2 text-[10px] text-zinc-600">Provider: {m.projectBuilder.provider}</p>}
-            </div>
-          )}
           {m.image && (
             <a href={m.image} target="_blank" rel="noreferrer" aria-label="Open saved generated image">
               <Image
