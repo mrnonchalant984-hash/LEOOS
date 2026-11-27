@@ -32,6 +32,7 @@ test('Bram edits preserve existing project files and validate the merged project
   assert.match(tools, /const existingFiles = current\.files/);
   assert.match(tools, /const mergedFiles/);
   assert.match(tools, /validateIdeFiles\(mergedFiles\)/);
+  assert.match(tools, /mergeWorkspaceTextFiles/);
   assert.match(tools, /\.eq\('id', projectId\)\.eq\('user_id', userId\)/);
 });
 
