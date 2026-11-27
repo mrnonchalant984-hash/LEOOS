@@ -46,6 +46,7 @@ test('Hosted browser agent queues only through the owner-protected ephemeral run
   assert.match(route, /isPlatformOwner/);
   assert.match(route, /queueGitHubRuntimeJob/);
   assert.match(route, /public DNS hostname/);
-  assert.match(chat, /accountReadWorkflow = Boolean\(ctx/);\n  assert.match(chat, /allowComputerUse: browserWorkflow/);
+  assert.match(chat, /accountReadWorkflow = Boolean\(ctx/);
+  assert.match(chat, /allowComputerUse: browserWorkflow/);
   assert.match(chat, /allowAccountRead: !customAgent && \(accountReadWorkflow \|\| mode === 'tools'\)/);
 });
