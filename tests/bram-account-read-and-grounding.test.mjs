@@ -41,6 +41,7 @@ test('Hosted browser agent queues only through the owner-protected ephemeral run
   const browser = await read('lib/agents/browser-agent-disabled.ts');
   const route = await read('app/api/agents/computer-use/route.ts');
   const chat = await read('app/api/chat/route.ts');
+  const admin = await read('app/admin/agents/page.tsx');
   assert.match(browser, /api\/agents\/computer-use/);
   assert.match(browser, /meta\.request/);
   assert.match(route, /isPlatformOwner/);
@@ -49,4 +50,7 @@ test('Hosted browser agent queues only through the owner-protected ephemeral run
   assert.match(chat, /accountReadWorkflow = Boolean\(ctx/);
   assert.match(chat, /allowComputerUse: browserWorkflow/);
   assert.match(chat, /allowAccountRead: !customAgent && \(accountReadWorkflow \|\| mode === 'tools'\)/);
+  assert.match(admin, /const browserAgentAvailable = true/);
+  assert.match(admin, /pollBrowserJob/);
+  assert.doesNotMatch(admin, /Hosted computer-use execution is currently disabled/);
 });
