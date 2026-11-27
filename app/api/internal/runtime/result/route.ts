@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const stderr = typeof result.stderr === 'string' ? result.stderr.slice(0, 20000) : '';
   const safeResult = { stdout, stderr, exit_code: Number.isInteger(result.exit_code) ? result.exit_code : 1, duration_ms: Number.isFinite(result.duration_ms) ? Math.max(0, result.duration_ms) : 0, provider: 'github_actions' };
   const db = adminSupabase();
-  const { data, error } = await db.from('private_runtime_jobs').update({ status: body.status, result: safeResult, error: body.status === 'failed' ? (stderr.slice(0, 1000) || 'Runtime job failed.') : null, completed_at: new Date().toISOString() }).eq('id', body.job_id).eq('owner_id', body.user_id).in('status', ['running', 'queued']).select('id').maybeSingle();
+  const { data, error } = await db.from('private_runtime_jobs').update({ status: body.status, result: safeResult, error: body.status === 'failed' ? (stderr.slice(0, 1000) || 'Runtime job failed.') : null, completed_at: new Date().toISOString() }).eq('id', body.job_id).eq('owner_id', body.user_id).in('status', ['running', 'queued']).select('id,storage_path').maybeSingle();
   if (error || !data) return NextResponse.json({ error: 'Job result could not be saved; job may be expired or already completed.' }, { status: 409 });
-  return NextResponse.json({ ok: true });
+  if (data.storage_path) await db.storage.from('leo-files').remove([data.storage_path]).catch(() => undefined);\n  return NextResponse.json({ ok: true });
 }
