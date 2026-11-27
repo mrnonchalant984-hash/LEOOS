@@ -23,7 +23,7 @@ type RemoteToolReference = {
   accessLevel: 'read' | 'write';
 };
 
-type LocalToolReference = { kind: 'run_agent' } | { kind: 'run_specialist_team' } | { kind: 'gmail_list_messages' } | { kind: 'gmail_get_message' } | { kind: 'gmail_send_message' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'run_specialist_team' } | { kind: 'gmail_list_messages' } | { kind: 'gmail_get_message' } | { kind: 'gmail_send_message' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_computer_use' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -84,7 +84,7 @@ async function postAsUser(request: Request, path: string, body: Record<string, u
   } else if (url.pathname === '/api/research') {
     const { POST } = await import('@/app/api/research/route');
     response = await POST(internalRequest);
-  } else if (url.pathname === '/api/agents/run') {
+  } else if (url.pathname === '/api/agents/computer-use') {\n    const { POST } = await import('@/app/api/agents/computer-use/route');\n    response = await POST(internalRequest);\n  } else if (url.pathname === '/api/agents/run') {
     const { POST } = await import('@/app/api/agents/run/route');
     response = await POST(internalRequest);
   } else if (url.pathname.startsWith('/api/integrations/')) {
@@ -198,6 +198,11 @@ export async function createUserAssistantTools(
     const tool = { name: 'run_specialist_team', description: 'Delegate a read-only analysis task to up to four relevant specialist agents, wait for their actual outputs, and return each specialist result to Bram. Specialist handoffs are isolated, read-only, audited as child runs, and cannot merge, deploy, send messages, or write to connected systems.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, agent_ids: { type: 'array', items: { type: 'string' } } }, required: ['task'], additionalProperties: false } };
     tools.push(tool as AssistantTool);
     references.set('run_specialist_team', { kind: 'run_specialist_team' });
+  }
+  if (options?.allowComputerUse) {
+    const tool = { name: 'bram_computer_use', description: 'Operate a dedicated isolated browser with Gemini Computer Use. Requires an explicit browser task and starting URL. The browser is restricted to the starting host and any explicitly supplied allowed_domains. Sensitive actions stop and return a short-lived approval token; never claim they executed until separately approved.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, url: { type: 'string' }, allowed_domains: { type: 'array', items: { type: 'string' } } }, required: ['task','url'], additionalProperties: false } };
+    tools.push(tool as AssistantTool);
+    references.set('bram_computer_use', { kind: 'bram_computer_use' });
   }
   if (options?.allowEmailRead) {
     const list = { name: 'gmail_list_messages', description: 'Search the owner’s connected Gmail mailbox and return bounded message IDs and headers. Requires a verified Gmail OAuth connection.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, maxResults: { type: 'integer' } }, additionalProperties: false } };
@@ -475,6 +480,19 @@ export async function createUserAssistantTools(
         return { text: JSON.stringify(result) };
       } catch (error) {
         return { text: error instanceof Error ? error.message : 'Connected repository operation failed.', isError: true };
+      }
+    }
+    if (reference.kind === 'bram_computer_use') {
+      if (!options?.request || !options.allowComputerUse || agentPolicy?.agentId !== 'bram' || args.confirm === true) return { text: 'Gemini browser execution is available only to Bram for an explicit owner-authorized browser task.', isError: true };
+      const task = typeof args.task === 'string' ? args.task.trim().slice(0,4000) : '';
+      const url = typeof args.url === 'string' ? args.url.trim() : '';
+      const allowedDomains = Array.isArray(args.allowed_domains) ? args.allowed_domains.slice(0,20) : [];
+      if (!task || !/^https?:\\/\\//i.test(url)) return { text: 'Provide a browser task and a valid starting URL.', isError: true };
+      try {
+        const result = await postAsUser(options.request, '/api/agents/computer-use', { task, url, allowedDomains });
+        return { text: JSON.stringify(result) };
+      } catch (error) {
+        return { text: error instanceof Error ? error.message : 'Gemini computer use failed.', isError: true };
       }
     }
     if (reference.kind === 'publish_browser_game') {
