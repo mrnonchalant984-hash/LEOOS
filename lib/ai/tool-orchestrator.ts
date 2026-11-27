@@ -23,7 +23,7 @@ type RemoteToolReference = {
   accessLevel: 'read' | 'write';
 };
 
-type LocalToolReference = { kind: 'run_agent' } | { kind: 'run_specialist_team' } | { kind: 'gmail_list_messages' } | { kind: 'gmail_get_message' } | { kind: 'gmail_send_message' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_computer_use' } | { kind: 'bram_computer_use_status' } | { kind: 'get_my_account_billing' } | { kind: 'list_braverton_prices' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'run_specialist_team' } | { kind: 'gmail_list_messages' } | { kind: 'gmail_get_message' } | { kind: 'gmail_send_message' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_computer_use' } | { kind: 'bram_computer_use_status' } | { kind: 'get_my_account_billing' } | { kind: 'list_braverton_prices' } | { kind: 'get_platform_status' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -148,6 +148,11 @@ const localTools: Array<{ name: string; description: string; inputSchema: Record
     inputSchema: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string' } }, required: ['name', 'path'], additionalProperties: false },
   },
   {
+    name: 'get_platform_status',
+    description: 'Owner-only read-only Braverton operations snapshot: database reachability and latency, total accounts, recent AI usage, active agent runs, recent system errors, and Gemini configuration/last-known health. Does not expose user prompts, personal payment details, credentials, or secrets.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
     name: 'get_observability_events',
     description: 'Read a bounded, account-scoped summary of recent system events, Leo usage, and agent run states. Never returns prompts, message bodies, credentials, or raw provider payloads.',
     inputSchema: { type: 'object', properties: { limit: { type: 'integer', description: 'Maximum rows per source, from 1 to 20.' } }, additionalProperties: false },
@@ -192,6 +197,7 @@ type LeoBuildToolOptions = {
   allowComputerUse?: boolean;
   allowAccountRead?: boolean;
   allowPriceRead?: boolean;
+  allowPlatformStatusRead?: boolean;
   sessionId?: string;
 };
 
@@ -637,6 +643,31 @@ export async function createUserAssistantTools(
       if (error) return { text: 'Project status could not be loaded.', isError: true };
       if (!data) return { text: 'Project not found.', isError: true };
       return { text: JSON.stringify(data) };
+    }
+    if (reference.kind === 'get_platform_status') {
+      if (!options?.allowPlatformStatusRead || agentPolicy?.agentId && agentPolicy.agentId !== 'bram') return { text: 'Platform-wide status is restricted to the authenticated Braverton owner.', isError: true };
+      const checkedAt = new Date().toISOString();
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const startedAt = Date.now();
+      const [database, usage, running, events] = await Promise.all([
+        db.from('profiles').select('id', { count: 'exact', head: true }),
+        db.from('ai_usage').select('id', { count: 'exact', head: true }).gte('created_at', since),
+        db.from('agent_runs').select('id', { count: 'exact', head: true }).in('status', ['queued', 'running']),
+        db.from('system_events').select('kind,severity,created_at').gte('created_at', since).order('created_at', { ascending: false }).limit(100),
+      ]);
+      const dbLatencyMs = Date.now() - startedAt;
+      const recentEvents = events.data || [];
+      const errorEvents = recentEvents.filter(event => ['error', 'critical', 'fatal'].includes(String(event.severity || '').toLowerCase())).length;
+      const models = getModelProviderStatus().map(({ id, provider, model, configured, health_status, health_checked_at, health_status_code, operational }) => ({
+        id, provider, model, configured, health_status, health_checked_at, health_status_code, operational,
+      }));
+      return { text: JSON.stringify({
+        checked_at: checkedAt,
+        network: { supabase_database_reachable: !database.error, database_latency_ms: database.error ? null : dbLatencyMs },
+        platform: { total_accounts: database.count ?? null, ai_requests_last_24h: usage.error ? null : usage.count ?? 0, active_agent_runs: running.error ? null : running.count ?? 0, system_events_last_24h: events.error ? null : recentEvents.length, recent_error_events_last_24h: events.error ? null : errorEvents },
+        providers: models,
+        data_quality: { database_query_error: Boolean(database.error), usage_query_error: Boolean(usage.error), agent_run_query_error: Boolean(running.error), events_query_error: Boolean(events.error), note: 'Gemini health is last-known execution health, not a fresh billable probe. A configured key does not by itself mean the provider is operational.' },
+      }) };
     }
     if (reference.kind === 'get_observability_events') {
       const limit = typeof args.limit === 'number' && Number.isInteger(args.limit) ? Math.min(20, Math.max(1, args.limit)) : 10;
