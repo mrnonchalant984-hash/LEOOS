@@ -23,7 +23,7 @@ type RemoteToolReference = {
   accessLevel: 'read' | 'write';
 };
 
-type LocalToolReference = { kind: 'run_agent' } | { kind: 'run_specialist_team' } | { kind: 'gmail_list_messages' } | { kind: 'gmail_get_message' } | { kind: 'gmail_send_message' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_computer_use' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'run_specialist_team' } | { kind: 'gmail_list_messages' } | { kind: 'gmail_get_message' } | { kind: 'gmail_send_message' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_computer_use' } | { kind: 'bram_computer_use_approve' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -102,6 +102,20 @@ async function postAsUser(request: Request, path: string, body: Record<string, u
   }
   const data = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : `The authorized operation failed with HTTP ${response.status}.`);
+  return data;
+}
+
+async function putAsUser(request: Request, path: string, body: Record<string, unknown>) {
+  const headers = new Headers(request.headers);
+  headers.delete('content-length');
+  headers.set('content-type', 'application/json');
+  const url = new URL(path, request.url);
+  const internalRequest = new NextRequest(url, { method: 'PUT', headers, body: JSON.stringify(body) });
+  if (url.pathname !== '/api/agents/computer-use') throw new Error('Unsupported authenticated approval operation.');
+  const { PUT } = await import('@/app/api/agents/computer-use/route');
+  const response = await PUT(internalRequest);
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'The approved browser action failed.');
   return data;
 }
 
@@ -206,6 +220,9 @@ export async function createUserAssistantTools(
     const tool = { name: 'bram_computer_use', description: 'Operate a dedicated isolated browser with Gemini Computer Use. Requires an explicit browser task and starting URL. The browser is restricted to the starting host and any explicitly supplied allowed_domains. Sensitive actions stop and return a short-lived approval token; never claim they executed until separately approved.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, url: { type: 'string' }, allowed_domains: { type: 'array', items: { type: 'string' } } }, required: ['task','url'], additionalProperties: false } };
     tools.push(tool as AssistantTool);
     references.set('bram_computer_use', { kind: 'bram_computer_use' });
+    const approve = { name: 'bram_computer_use_approve', description: 'Execute exactly one browser action that Bram previously paused for, using its short-lived signed approval token. Only call this after the owner explicitly says approve or confirm. Requires confirm=true.', inputSchema: { type: 'object', properties: { approval_token: { type: 'string' }, confirm: { type: 'boolean' } }, required: ['approval_token','confirm'], additionalProperties: false } };
+    tools.push(approve as AssistantTool);
+    references.set('bram_computer_use_approve', { kind: 'bram_computer_use_approve' });
   }
   if (options?.allowEmailRead) {
     const list = { name: 'gmail_list_messages', description: 'Search the owner’s connected Gmail mailbox and return bounded message IDs and headers. Requires a verified Gmail OAuth connection.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, maxResults: { type: 'integer' } }, additionalProperties: false } };
@@ -484,6 +501,13 @@ export async function createUserAssistantTools(
       } catch (error) {
         return { text: error instanceof Error ? error.message : 'Connected repository operation failed.', isError: true };
       }
+    }
+    if (reference.kind === 'bram_computer_use_approve') {
+      if (!options?.request || !options.allowComputerUse || agentPolicy?.agentId !== 'bram' || args.confirm !== true) return { text: 'Browser action approval requires the owner’s explicit confirmation and confirm=true.', isError: true };
+      const approvalToken = typeof args.approval_token === 'string' ? args.approval_token : '';
+      if (!approvalToken || approvalToken.length > 4096) return { text: 'A valid short-lived browser approval token is required.', isError: true };
+      try { const result = await putAsUser(options.request, '/api/agents/computer-use', { approvalToken }); return { text: JSON.stringify(result) }; }
+      catch (error) { return { text: error instanceof Error ? error.message : 'Approved browser action failed.', isError: true }; }
     }
     if (reference.kind === 'bram_computer_use') {
       if (!options?.request || !options.allowComputerUse || agentPolicy?.agentId !== 'bram' || args.confirm === true) return { text: 'Gemini browser execution is available only to Bram for an explicit owner-authorized browser task.', isError: true };
