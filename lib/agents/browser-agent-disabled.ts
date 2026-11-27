@@ -7,7 +7,7 @@ import type { AgentDefinition } from './types';
  * payments, form submissions, publishing, deletion, and other sensitive actions.
  */
 export function isBrowserAgent(agent: AgentDefinition) {
-  return agent.allowedTools.some((tool) => ['browser', 'computer_use', 'web_automation'].includes(tool));
+  return ['browser', 'computer-use'].includes(agent.id) && agent.allowedTools.some((tool) => ['browser', 'computer_use'].includes(tool));
 }
 
 export async function runHostedBrowserAgent(agent: AgentDefinition, task: string, _context: string, meta: { runId?: string; userId?: string; request?: Request }) {
