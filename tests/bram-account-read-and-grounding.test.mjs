@@ -42,6 +42,7 @@ test('Hosted browser agent queues only through the owner-protected ephemeral run
   const route = await read('app/api/agents/computer-use/route.ts');
   const chat = await read('app/api/chat/route.ts');
   const admin = await read('app/admin/agents/page.tsx');
+  const registry = await read('lib/agents/registry.ts');
   assert.match(browser, /api\/agents\/computer-use/);
   assert.match(browser, /meta\.request/);
   assert.match(route, /isPlatformOwner/);
