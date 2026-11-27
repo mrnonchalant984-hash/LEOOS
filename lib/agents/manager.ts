@@ -17,7 +17,7 @@ export { getAgent };
 const TOOL_CAPABILITIES = new Set([
   ...MCP_AGENT_CAPABILITIES, 'database_write', 'deployment', 'devops', 'file_read',
   'file_write', 'github_write', 'image_generation', 'project_read', 'email_send',
-  'website_builder', 'web_search',
+  'website_builder', 'web_search', 'gemini_computer_use',
 ]);
 
 const EXPLICIT_IMAGE_REQUEST = /\b(generate|create|make|render)\b.{0,48}\b(image|picture|photo|visual|mockup|logo)\b/i;
@@ -28,7 +28,7 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   if (toolName === 'list_projects' || toolName === 'get_project_status') return permissions.has('project_read');
   if (toolName === 'get_project_files') return permissions.has('project_read') || permissions.has('file_read');
   if (toolName === 'get_build_status') return permissions.has('deployment') || permissions.has('devops');
-  if (toolName === 'web_research') return permissions.has('web_search');
+  if (toolName === 'web_research') return permissions.has('web_search');\n  if (toolName === 'bram_computer_use') return agent.id === 'bram' && permissions.has('gemini_computer_use') && /\\b(browser|browse|website|webpage|navigate|click|interact|computer use)\\b/i.test(task);
   if (toolName === 'gmail_list_messages' || toolName === 'gmail_get_message') return permissions.has('email_read');
   if (toolName === 'gmail_send_message') return permissions.has('email_send') && EXPLICIT_EMAIL_SEND_REQUEST.test(task);
   if (toolName === 'run_specialist_team') return agent.id === 'bram';
@@ -227,7 +227,7 @@ export async function runAgent(
         ? (specialistTask: string, agentIds?: string[]) => executeBramSpecialistTeam(specialistTask, agentIds, context, owner, { runId: meta.runId, userId: meta.userId, request: meta.request })
         : undefined,
       allowEmailRead: agent.allowedTools.includes('email_read'),
-      allowEmailSend: agent.allowedTools.includes('email_send') && EXPLICIT_EMAIL_SEND_REQUEST.test(task),
+      allowEmailSend: agent.allowedTools.includes('email_send') && EXPLICIT_EMAIL_SEND_REQUEST.test(task),\n      allowComputerUse: agent.id === 'bram' && agent.allowedTools.includes('gemini_computer_use'),
     } : undefined;
     available = await createUserAssistantTools(meta.userId, options, {
       agentId: meta?.delegatedBy === 'bram' ? 'bram' : agent.id,
@@ -240,7 +240,7 @@ export async function runAgent(
     ...(agent.id === 'bram' ? [
       'Bram is the primary orchestrator. Use run_specialist_team for substantive multi-discipline tasks: wait for each read-only specialist result, inspect its evidence, and synthesize the findings. Do not merely queue a specialist and claim completion.',
       'Use Tavily-backed web_research for public research whenever current information or external sources are needed. The configured Tavily server secret is not exposed to you; invoke the tool rather than claiming that research is unavailable.',
-      'Use the owner’s Gmail integration tools only when they appear in the available tools. Reading is limited to the connected mailbox. Sending is available only for an explicit send/reply/forward request and requires confirm=true after reviewing the exact recipient, subject, and content.',
+      'Use bram_computer_use only when the owner explicitly requests browser/computer interaction and the tool appears in the available tools. The browser runtime is isolated, domain-restricted, action-limited, and pauses for approval before sensitive actions. ' +\n      'Use the owner’s Gmail integration tools only when they appear in the available tools. Reading is limited to the connected mailbox. Sending is available only for an explicit send/reply/forward request and requires confirm=true after reviewing the exact recipient, subject, and content.',
       'Never write to the repository default branch; require an explicit feature branch for every file write. A run approval does not authorize merging. Deployment is available only when explicitly requested and separately authorized by its existing execution controls.',
       'Do not claim local command execution because this runtime has no shell. Do not claim a specialist integration is connected unless its tool is actually present in this run.',
       `Specialist directory: ${defs.filter(item => item.id !== 'bram' && item.id !== 'leo-manager').map(item => `${item.name} [${item.id}]: ${item.description} Guidance: ${item.instructions}`).join(' | ')}`,
