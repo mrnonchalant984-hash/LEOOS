@@ -28,7 +28,8 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   if (toolName === 'list_projects' || toolName === 'get_project_status') return permissions.has('project_read');
   if (toolName === 'get_project_files') return permissions.has('project_read') || permissions.has('file_read');
   if (toolName === 'get_build_status') return permissions.has('deployment') || permissions.has('devops');
-  if (toolName === 'web_research') return permissions.has('web_search');\n  if (toolName === 'bram_computer_use') return agent.id === 'bram' && permissions.has('gemini_computer_use') && /\\b(browser|browse|website|webpage|navigate|click|interact|computer use)\\b/i.test(task);
+  if (toolName === 'web_research') return permissions.has('web_search');
+  if (toolName === 'bram_computer_use') return agent.id === 'bram' && permissions.has('gemini_computer_use') && /\b(browser|browse|website|webpage|navigate|click|interact|computer use)\b/i.test(task);
   if (toolName === 'gmail_list_messages' || toolName === 'gmail_get_message') return permissions.has('email_read');
   if (toolName === 'gmail_send_message') return permissions.has('email_send') && EXPLICIT_EMAIL_SEND_REQUEST.test(task);
   if (toolName === 'run_specialist_team') return agent.id === 'bram';
@@ -227,7 +228,8 @@ export async function runAgent(
         ? (specialistTask: string, agentIds?: string[]) => executeBramSpecialistTeam(specialistTask, agentIds, context, owner, { runId: meta.runId, userId: meta.userId, request: meta.request })
         : undefined,
       allowEmailRead: agent.allowedTools.includes('email_read'),
-      allowEmailSend: agent.allowedTools.includes('email_send') && EXPLICIT_EMAIL_SEND_REQUEST.test(task),\n      allowComputerUse: agent.id === 'bram' && agent.allowedTools.includes('gemini_computer_use'),
+      allowEmailSend: agent.allowedTools.includes('email_send') && EXPLICIT_EMAIL_SEND_REQUEST.test(task),
+      allowComputerUse: agent.id === 'bram' && agent.allowedTools.includes('gemini_computer_use'),
     } : undefined;
     available = await createUserAssistantTools(meta.userId, options, {
       agentId: meta?.delegatedBy === 'bram' ? 'bram' : agent.id,
