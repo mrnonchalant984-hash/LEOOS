@@ -1,7 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-const read=path=>readFile(new URL('../'+path,import.meta.url),'utf8');
-test('Gemini computer use loop uses browser environment, prompt-injection detection, and bounded actions',async()=>{const s=await read('lib/agents/gemini-computer-use.ts');assert.match(s,/computerUse:\s*\{\s*environment:\s*'ENVIRONMENT_BROWSER'/);assert.match(s,/enablePromptInjectionDetection:\s*true/);assert.match(s,/MAX_STEPS/);assert.match(s,/waiting_approval/);assert.match(s,/state.requiresApproval/);});
-test('isolated browser runtime enforces domain allowlists and private-network blocking',async()=>{const s=await read('browser-runtime/server.mjs');assert.match(s,/allowedDomains/);assert.match(s,/metadata\.google\.internal/);assert.match(s,/blockedbyclient/);assert.match(s,/MAX_SESSIONS/);assert.match(s,/actions>30/);assert.match(s,/button\[type=submit\]/);});
-test('Bram computer-use route is owner-only and signs short-lived approvals',async()=>{const s=await read('app/api/agents/computer-use/route.ts');assert.match(s,/isPlatformOwner/);assert.match(s,/createHmac/);assert.match(s,/timingSafeEqual/);assert.match(s,/5\*60_000/);assert.match(s,/approved_action_executed/);});
+const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
+
+test('Bram browser tasks are owner-only and queued on the private GitHub Actions runtime', async () => {
+  const route = await read('app/api/agents/computer-use/route.ts');
+  const adapter = await read('lib/runtime/github-actions.ts');
+  assert.match(route, /isPlatformOwner/);
+  assert.match(route, /queueGitHubRuntimeJob/);
+  assert.match(route, /kind:\s*'browser'/);
+  assert.match(route, /operation:\s*'computer_use'/);
+  assert.match(route, /poll_url/);
+  assert.match(adapter, /browser:new Set\(\['computer_use'\]\)/);
+  assert.doesNotMatch(route, /BRAM_BROWSER_RUNTIME_URL|BRAM_BROWSER_RUNTIME_TOKEN/);
+});
+
+test('browser task archive is bounded to a public starting hostname and a short task', async () => {
+  const route = await read('app/api/agents/computer-use/route.ts');
+  assert.match(route, /MAX_TASK = 4000/);
+  assert.match(route, /public DNS hostname/);
+  assert.match(route, /allowedHosts/);
+  assert.match(route, /runtime-metadata\.json/);
+});
+
+test('private runtime migration permits browser workload rows', async () => {
+  const migration = await read('supabase/migrations/20261127120000_private_browser_runtime.sql');
+  assert.match(migration, /private_runtime_jobs_kind_check/);
+  assert.match(migration, /'browser'/);
+});
+
+test('sensitive actions are blocked when the GitHub runtime cannot resume approvals', async () => {
+  const route = await read('app/api/agents/computer-use/route.ts');
+  assert.match(route, /Sensitive actions are blocked rather than executed/);
+  assert.match(route, /Interactive browser approval is not available/);
+});
