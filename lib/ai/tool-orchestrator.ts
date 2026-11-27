@@ -190,6 +190,7 @@ type LeoBuildToolOptions = {
   allowEmailRead?: boolean;
   allowEmailSend?: boolean;
   allowComputerUse?: boolean;
+  allowAccountRead?: boolean;
   sessionId?: string;
 };
 
@@ -218,6 +219,11 @@ export async function createUserAssistantTools(
     const tool = { name: 'run_specialist_team', description: 'Delegate a read-only analysis task to up to four relevant specialist agents, wait for their actual outputs, and return each specialist result to Bram. Specialist handoffs are isolated, read-only, audited as child runs, and cannot merge, deploy, send messages, or write to connected systems.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, agent_ids: { type: 'array', items: { type: 'string' } } }, required: ['task'], additionalProperties: false } };
     tools.push(tool as AssistantTool);
     references.set('run_specialist_team', { kind: 'run_specialist_team' });
+  }
+  if (options?.allowAccountRead) {
+    const tool = { name: 'get_my_account_billing', description: 'Read only the signed-in user’s own Braverton profile summary, subscription status and recent payment history. The server derives the user ID from the authenticated session; this tool cannot look up another account. It never returns card details, provider credentials, full payment references, or performs changes.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } };
+    tools.push(tool as AssistantTool);
+    references.set('get_my_account_billing', { kind: 'get_my_account_billing' } as LocalToolReference);
   }
   if (options?.allowComputerUse) {
     const tool = { name: 'bram_computer_use', description: 'Queue a bounded Gemini Computer Use browser task on a temporary GitHub-hosted runner. Requires an explicit browser task and starting URL. The browser is restricted to the starting host and any explicitly supplied allowed_domains. Sensitive actions are blocked; this runner does not yet support interactive approval or resuming a paused action. The tool returns a queued job ID, not a completed result.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, url: { type: 'string' }, allowed_domains: { type: 'array', items: { type: 'string' } } }, required: ['task','url'], additionalProperties: false } };
@@ -573,6 +579,20 @@ export async function createUserAssistantTools(
       if (!response.ok || !body?.success) return { text: JSON.stringify({ success: false, status: body?.status || 'failed', error: typeof body?.error === 'string' ? body.error : `Deployment did not complete (HTTP ${response.status}).`, code: body?.code || 'BUILD_DEPLOY_FAILED', retryable: body?.retryable === true, jobId: body?.jobId || body?.job_id || null }), isError: true };
       if (body.status !== 'deployed' || typeof body.liveUrl !== 'string' || !/^https:\/\//.test(body.liveUrl)) return { text: JSON.stringify({ success: false, status: body.status || 'unknown', jobId: body.jobId || null, error: 'Deployment request completed, but a verified live URL was not returned. Do not claim the website is live.' }), isError: true };
       return { text: JSON.stringify({ success: true, status: 'deployed', project_id: projectId, jobId: body.jobId || null, liveUrl: body.liveUrl, githubUrl: body.githubUrl || null, message: 'Deployment endpoint confirmed deployed status and returned a live URL.' }) };
+    }
+    if (reference.kind === 'get_my_account_billing') {
+      if (!options?.allowAccountRead || agentPolicy?.agentId && agentPolicy.agentId !== 'bram') return { text: 'Read-only account billing access is available only to Bram for the authenticated account.', isError: true };
+      const [profileResult, subscriptionResult, paymentResult] = await Promise.all([
+        db.from('profiles').select('email,full_name,created_at').eq('id', userId).maybeSingle(),
+        db.from('subscriptions').select('plan,billing_period,status,current_period_start,current_period_end,starts_at,ends_at,cancel_at_period_end,cancellation_requested_at,canceled_at,provider_status,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(5),
+        db.from('payments').select('amount,currency,plan,billing_period,reference,status,paid_at,verified_at,refunded_at,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(10),
+      ]);
+      if (profileResult.error || !profileResult.data || subscriptionResult.error || paymentResult.error) return { text: 'Your account billing summary is temporarily unavailable. No other account was queried.', isError: true };
+      const payments = (paymentResult.data || []).map(payment => ({
+        ...payment,
+        reference: typeof payment.reference === 'string' && payment.reference.length > 4 ? `••••${payment.reference.slice(-4)}` : payment.reference ? '••••' : null,
+      }));
+      return { text: JSON.stringify({ scope: 'authenticated_user_only', profile: profileResult.data, subscriptions: subscriptionResult.data || [], recent_payments: payments, privacy: 'Card details, payment credentials, provider subscription codes, and full payment references are not exposed. No changes were made.' }) };
     }
     if (reference.kind === 'list_projects') {
       const limit = typeof args.limit === 'number' && Number.isInteger(args.limit) ? Math.min(50, Math.max(1, args.limit)) : 20;
