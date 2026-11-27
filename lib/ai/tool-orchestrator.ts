@@ -276,7 +276,7 @@ export async function createUserAssistantTools(
     );
     for (const tool of repositoryTools) {
       tools.push(tool as AssistantTool);
-      references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
+      references.set(tool.name, { kind: tool.name } as LocalToolReference);
     }
   }
 
