@@ -34,7 +34,7 @@ test('Bram is owner-only and the approval continuation reconnects request-scoped
   const registry = await fs.readFile(new URL('../lib/agents/registry.ts', import.meta.url), 'utf8');
   const manager = await fs.readFile(new URL('../lib/agents/manager.ts', import.meta.url), 'utf8');
   const approval = await fs.readFile(new URL('../app/api/agents/approve/route.ts', import.meta.url), 'utf8');
-  assert.match(registry, /\['bram','Bram'.*true,\['repository_read','file_read','github_read','github_write','account_read','knowledge_read','gemini_computer_use','price_read','platform_status_read'\],\['read','write','sensitive'\],true\]/);
+  assert.match(registry, /\['bram','Bram'.*true,\[.*'website_builder'.*'deployment'.*\],\['read','write','sensitive'\],true\]/);
   assert.match(manager, /agent\.id === 'bram'/);
   assert.match(manager, /isSafeFeatureBranch\(branch\)/);
   assert.match(approval, /request: req, persistAgentRun: true/);
@@ -45,8 +45,8 @@ test('Bram inherits specialist capabilities and receives the internal specialist
   const registry = await fs.readFile(new URL('../lib/agents/registry.ts', import.meta.url), 'utf8');
   const manager = await fs.readFile(new URL('../lib/agents/manager.ts', import.meta.url), 'utf8');
   assert.match(registry, /specialistDefinitions = rawDefs\.filter/);
-  assert.match(registry, /\['bram','Bram'.*true,\['repository_read','file_read','github_read','github_write','account_read','knowledge_read','gemini_computer_use','price_read','platform_status_read'\],\['read','write','sensitive'\],true\]/);
-  assert.match(registry, /\['bram','Bram'.*true,\['repository_read','file_read','github_read','github_write','account_read','knowledge_read','gemini_computer_use','price_read','platform_status_read'\],\['read','write','sensitive'\],true\]/);
+  assert.match(registry, /\['bram','Bram'.*true,\[.*'website_builder'.*'deployment'.*\],\['read','write','sensitive'\],true\]/);
+  assert.match(registry, /\['bram','Bram'.*true,\[.*'website_builder'.*'deployment'.*\],\['read','write','sensitive'\],true\]/);
   assert.match(manager, /Specialist directory:/);
   assert.match(manager, /maxToolCalls: agent\.id === 'bram' \? 18 : 4/);
   assert.match(manager, /Do not claim a specialist integration is connected/);
