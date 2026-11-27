@@ -56,6 +56,13 @@ test('Bram can queue and poll isolated inspect, typecheck, lint, test and build 
   assert.match(manager, /run_project_checks','get_project_check_status/);
 });
 
+test('the primary Bram agent has explicit least-privilege website build, file and deployment capabilities', async () => {
+  const registry = await read('lib/agents/registry.ts');
+  assert.match(registry, /\['bram','Bram'/);
+  assert.match(registry, /'file_write','project_read','website_builder','deployment'/);
+  assert.match(registry, /Production deployment is permitted only through the existing authorized deployment tool/);
+});
+
 test('chat does not render a project setup card that sends users out of Bram', async () => {
   const widget = await read('components/LEOWidget.tsx');
   assert.doesNotMatch(widget, /\{m\.projectBuilder && \(/);
