@@ -514,7 +514,7 @@ export async function createUserAssistantTools(
       const task = typeof args.task === 'string' ? args.task.trim().slice(0,4000) : '';
       const url = typeof args.url === 'string' ? args.url.trim() : '';
       const allowedDomains = Array.isArray(args.allowed_domains) ? args.allowed_domains.slice(0,20) : [];
-      if (!task || !/^https?:\\/\\//i.test(url)) return { text: 'Provide a browser task and a valid starting URL.', isError: true };
+      if (!task || !(url.startsWith('https://') || url.startsWith('http://'))) return { text: 'Provide a browser task and a valid starting URL.', isError: true };
       try {
         const result = await postAsUser(options.request, '/api/agents/computer-use', { task, url, allowedDomains });
         return { text: JSON.stringify(result) };
