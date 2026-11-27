@@ -2,7 +2,7 @@ import { decryptMcpCredential, encryptMcpCredential } from '@/lib/mcp/outbound-s
 
 export const CUSTOMER_PROVIDERS = [
   'github', 'vercel', 'supabase', 'firebase', 'openai', 'anthropic',
-  'google_gemini', 'whatsapp_business', 'meta', 'youtube', 'custom_mcp',
+  'google_gemini', 'whatsapp_business', 'meta', 'youtube', 'gmail', 'custom_mcp',
 ] as const;
 export type CustomerProvider = typeof CUSTOMER_PROVIDERS[number];
 export type CustomerConnectionConfig = Record<string, string>;
@@ -22,6 +22,7 @@ const CAPABILITY_CATALOG: Record<CustomerProvider, { id: string; label: string; 
   whatsapp_business: [{ id: 'whatsapp-messaging', label: 'WhatsApp messaging', requiredScopes: ['whatsapp_business_messaging'] }],
   meta: [{ id: 'pages-insights', label: 'Page insights', requiredScopes: ['pages_read_engagement', 'read_insights'] }],
   youtube: [{ id: 'youtube-analytics', label: 'YouTube analytics', requiredScopes: ['https://www.googleapis.com/auth/yt-analytics.readonly'] }],
+  gmail: [{ id: 'gmail-mailbox', label: 'Gmail mailbox', requiredScopes: ['https://www.googleapis.com/auth/gmail.readonly'] }, { id: 'gmail-send', label: 'Send email', requiredScopes: ['https://www.googleapis.com/auth/gmail.send'] }],
   custom_mcp: [{ id: 'mcp-tools', label: 'MCP tool discovery', requiredScopes: [] }],
 };
 
@@ -63,7 +64,7 @@ export function validateConnectionConfig(provider: CustomerProvider, config: unk
   if (provider === 'google_gemini') requireFields(['api_key']);
   if (provider === 'whatsapp_business') requireFields(['access_token', 'phone_number_id']);
   if (provider === 'meta') requireFields(['access_token']);
-  if (provider === 'youtube') requireFields(['access_token']);
+  if (provider === 'youtube' || provider === 'gmail') requireFields(['access_token']);
   if (provider === 'custom_mcp') {
     requireFields(['endpoint_url']);
     let url: URL;
@@ -93,6 +94,8 @@ export async function verifyCustomerConnection(provider: CustomerProvider, confi
     headers.set('Authorization', `Bearer ${config.access_token}`);
   } else if (provider === 'google_gemini') {
     url = 'https://generativelanguage.googleapis.com/v1beta/models'; headers.set('x-goog-api-key', config.api_key);
+  } else if (provider === 'gmail') {
+    url = 'https://gmail.googleapis.com/gmail/v1/users/me/profile'; headers.set('Authorization', `Bearer ${config.access_token}`);
   } else if (provider === 'firebase' || provider === 'youtube') {
     url = 'https://www.googleapis.com/oauth2/v3/userinfo'; headers.set('Authorization', `Bearer ${config.access_token}`);
   } else if (provider === 'meta' || provider === 'whatsapp_business') {

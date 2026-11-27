@@ -23,7 +23,7 @@ type RemoteToolReference = {
   accessLevel: 'read' | 'write';
 };
 
-type LocalToolReference = { kind: 'run_agent' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' };
+type LocalToolReference = { kind: 'run_agent' } | { kind: 'run_specialist_team' } | { kind: 'gmail_list_messages' } | { kind: 'gmail_get_message' } | { kind: 'gmail_send_message' } | { kind: 'list_projects' } | { kind: 'get_project_status' } | { kind: 'get_project_files' } | { kind: 'load_skill' } | { kind: 'read_skill_file' } | { kind: 'get_observability_events' } | { kind: 'get_provider_readiness' } | { kind: 'get_model_router_status' } | { kind: 'get_knowledge_cache_status' } | { kind: 'get_build_status' } | { kind: 'create_project' } | { kind: 'save_website_intake' } | { kind: 'create_website_from_intake' } | { kind: 'save_project_files' } | { kind: 'build_and_deploy_project' } | { kind: 'github_repository_tree' } | { kind: 'github_read_file' } | { kind: 'github_commit_status' } | { kind: 'github_commit_files' } | { kind: 'github_create_repository' } | { kind: 'github_create_branch' } | { kind: 'github_create_file' } | { kind: 'web_research' } | { kind: 'publish_browser_game' } | { kind: 'bram_computer_use' } | { kind: 'bram_computer_use_status' };
 type ToolReference = RemoteToolReference | LocalToolReference;
 
 function schemaObject(input: unknown, depth = 0): Record<string, unknown> | null {
@@ -84,6 +84,9 @@ async function postAsUser(request: Request, path: string, body: Record<string, u
   } else if (url.pathname === '/api/research') {
     const { POST } = await import('@/app/api/research/route');
     response = await POST(internalRequest);
+  } else if (url.pathname === '/api/agents/computer-use') {
+    const { POST } = await import('@/app/api/agents/computer-use/route');
+    response = await POST(internalRequest);
   } else if (url.pathname === '/api/agents/run') {
     const { POST } = await import('@/app/api/agents/run/route');
     response = await POST(internalRequest);
@@ -99,6 +102,22 @@ async function postAsUser(request: Request, path: string, body: Record<string, u
   }
   const data = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : `The authorized operation failed with HTTP ${response.status}.`);
+  return data;
+}
+
+async function getAsUser(request: Request, path: string) {
+  const headers = new Headers(request.headers);
+  headers.delete('content-length');
+  const url = new URL(path, request.url);
+  const prefix = '/api/runtime/jobs/';
+  if (!url.pathname.startsWith(prefix)) throw new Error('Unsupported authenticated runtime status operation.');
+  const jobId = url.pathname.slice(prefix.length);
+  if (!/^[0-9a-f-]+$/i.test(jobId)) throw new Error('Invalid runtime job ID.');
+  const internalRequest = new NextRequest(url, { method: 'GET', headers });
+  const { GET } = await import('@/app/api/runtime/jobs/[id]/route');
+  const response = await GET(internalRequest, { params: Promise.resolve({ id: jobId }) });
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Runtime job status could not be loaded.');
   return data;
 }
 
@@ -166,6 +185,11 @@ type LeoBuildToolOptions = {
   allowRemoteWrites?: boolean;
   allowBrowserGame?: boolean;
   allowAgentExecution?: boolean;
+  allowSpecialistExecution?: boolean;
+  runSpecialists?: (task: string, agentIds?: string[]) => Promise<string>;
+  allowEmailRead?: boolean;
+  allowEmailSend?: boolean;
+  allowComputerUse?: boolean;
   sessionId?: string;
 };
 
@@ -182,13 +206,39 @@ export async function createUserAssistantTools(
   const db = adminSupabase();
   const references = new Map<string, ToolReference>();
   const tools: AssistantTool[] = localTools.map(tool => {
-    references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
+    references.set(tool.name, { kind: tool.name } as LocalToolReference);
     return tool;
   });
   if (options?.allowAgentExecution) {
     const tool = { name: 'run_agent', description: 'Start an authorized LeonardX specialist-agent run for the user’s explicitly requested task. Existing plan, entitlement, approval, rate-limit and user-ownership checks remain enforced by the agent execution API. This queues work; it does not mean the work is completed.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, agent_id: { type: 'string' } }, required: ['task'], additionalProperties: false } };
     tools.push(tool as AssistantTool);
     references.set('run_agent', { kind: 'run_agent' });
+  }
+  if (options?.allowSpecialistExecution && options.runSpecialists) {
+    const tool = { name: 'run_specialist_team', description: 'Delegate a read-only analysis task to up to four relevant specialist agents, wait for their actual outputs, and return each specialist result to Bram. Specialist handoffs are isolated, read-only, audited as child runs, and cannot merge, deploy, send messages, or write to connected systems.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, agent_ids: { type: 'array', items: { type: 'string' } } }, required: ['task'], additionalProperties: false } };
+    tools.push(tool as AssistantTool);
+    references.set('run_specialist_team', { kind: 'run_specialist_team' });
+  }
+  if (options?.allowComputerUse) {
+    const tool = { name: 'bram_computer_use', description: 'Queue a bounded Gemini Computer Use browser task on a temporary GitHub-hosted runner. Requires an explicit browser task and starting URL. The browser is restricted to the starting host and any explicitly supplied allowed_domains. Sensitive actions are blocked; this runner does not yet support interactive approval or resuming a paused action. The tool returns a queued job ID, not a completed result.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, url: { type: 'string' }, allowed_domains: { type: 'array', items: { type: 'string' } } }, required: ['task','url'], additionalProperties: false } };
+    tools.push(tool as AssistantTool);
+    references.set('bram_computer_use', { kind: 'bram_computer_use' });
+    const status = { name: 'bram_computer_use_status', description: 'Check the owner-scoped status and result of a previously queued Bram browser job. A completed result is only available after GitHub Actions returns it.', inputSchema: { type: 'object', properties: { job_id: { type: 'string' } }, required: ['job_id'], additionalProperties: false } };
+    tools.push(status as AssistantTool);
+    references.set('bram_computer_use_status', { kind: 'bram_computer_use_status' });
+
+  }
+  if (options?.allowEmailRead) {
+    const list = { name: 'gmail_list_messages', description: 'Search the owner’s connected Gmail mailbox and return bounded message IDs and headers. Requires a verified Gmail OAuth connection.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, maxResults: { type: 'integer' } }, additionalProperties: false } };
+    const get = { name: 'gmail_get_message', description: 'Read the full content of one message from the owner’s connected Gmail mailbox by message ID.', inputSchema: { type: 'object', properties: { messageId: { type: 'string' } }, required: ['messageId'], additionalProperties: false } };
+    tools.push(list as AssistantTool, get as AssistantTool);
+    references.set('gmail_list_messages', { kind: 'gmail_list_messages' });
+    references.set('gmail_get_message', { kind: 'gmail_get_message' });
+  }
+  if (options?.allowEmailSend) {
+    const send = { name: 'gmail_send_message', description: 'Send an email through the owner’s connected Gmail account. Only use when the user explicitly requested sending; include confirm=true and the exact reviewed recipient, subject and body.', inputSchema: { type: 'object', properties: { to: { type: 'string' }, subject: { type: 'string' }, message: { type: 'string' }, confirm: { type: 'boolean' } }, required: ['to', 'subject', 'message', 'confirm'], additionalProperties: false } };
+    tools.push(send as AssistantTool);
+    references.set('gmail_send_message', { kind: 'gmail_send_message' });
   }
   if (options?.allowBuildActions) {
     const buildTools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [
@@ -201,7 +251,7 @@ export async function createUserAssistantTools(
     if (options.allowDeployment && options.allowBrowserGame) buildTools.push({ name: 'publish_browser_game', description: 'Publish an owned browser-game project through the connected GitHub and Vercel accounts. Available only for an explicit publish/deploy request in the user message; the server rechecks ownership, game type, connected credentials, file safety, and verified deployment state.', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, confirm: { type: 'boolean', const: true } }, required: ['project_id', 'confirm'], additionalProperties: false } });
     for (const tool of buildTools) {
       tools.push(tool as AssistantTool);
-      references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
+      references.set(tool.name, { kind: tool.name } as LocalToolReference);
     }
   }
 
@@ -226,7 +276,7 @@ export async function createUserAssistantTools(
     );
     for (const tool of repositoryTools) {
       tools.push(tool as AssistantTool);
-      references.set(tool.name, { kind: tool.name as LocalToolReference['kind'] });
+      references.set(tool.name, { kind: tool.name } as LocalToolReference);
     }
   }
 
@@ -288,6 +338,31 @@ export async function createUserAssistantTools(
       } catch (error) {
         return { text: error instanceof Error ? error.message : 'The specialist agent could not be started.', isError: true };
       }
+    }
+    if (reference.kind === 'run_specialist_team') {
+      if (!options?.runSpecialists) return { text: 'Specialist execution is not enabled for this request.', isError: true };
+      const task = typeof args.task === 'string' ? args.task.trim().slice(0, 8000) : '';
+      const agentIds = Array.isArray(args.agent_ids) ? args.agent_ids.filter((id): id is string => typeof id === 'string').slice(0, 4) : undefined;
+      if (!task) return { text: 'Provide a concrete specialist task.', isError: true };
+      try { return { text: await options.runSpecialists(task, agentIds) }; }
+      catch (error) { return { text: error instanceof Error ? error.message : 'Specialist execution failed.', isError: true }; }
+    }
+    if (reference.kind === 'gmail_list_messages') {
+      if (!options?.request || !options.allowEmailRead) return { text: 'Gmail read access is not enabled for this request.', isError: true };
+      const result = await postAsUser(options.request, '/api/integrations/gmail/list-messages', { query: typeof args.query === 'string' ? args.query : '', maxResults: args.maxResults });
+      return { text: JSON.stringify(result) };
+    }
+    if (reference.kind === 'gmail_get_message') {
+      if (!options?.request || !options.allowEmailRead) return { text: 'Gmail read access is not enabled for this request.', isError: true };
+      const messageId = typeof args.messageId === 'string' ? args.messageId : '';
+      if (!messageId) return { text: 'A Gmail message ID is required.', isError: true };
+      const result = await postAsUser(options.request, '/api/integrations/gmail/get-message', { messageId });
+      return { text: JSON.stringify(result) };
+    }
+    if (reference.kind === 'gmail_send_message') {
+      if (!options?.request || !options.allowEmailSend) return { text: 'Gmail sending is not enabled for this request. The user must explicitly request sending.', isError: true };
+      const result = await postAsUser(options.request, '/api/integrations/gmail/send-message', args);
+      return { text: JSON.stringify(result) };
     }
     if (reference.kind === 'get_project_files') {
       const projectId = typeof args.project_id === 'string' ? args.project_id : '';
@@ -429,6 +504,26 @@ export async function createUserAssistantTools(
         return { text: JSON.stringify(result) };
       } catch (error) {
         return { text: error instanceof Error ? error.message : 'Connected repository operation failed.', isError: true };
+      }
+    }
+    if (reference.kind === 'bram_computer_use_status') {
+      if (!options?.request || !options.allowComputerUse || agentPolicy?.agentId !== 'bram') return { text: 'Browser job status is available only to Bram for the owner account.', isError: true };
+      const jobId = typeof args.job_id === 'string' ? args.job_id : '';
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) return { text: 'Provide a valid browser job UUID.', isError: true };
+      try { return { text: JSON.stringify(await getAsUser(options.request, `/api/runtime/jobs/${encodeURIComponent(jobId)}`)) }; }
+      catch (error) { return { text: error instanceof Error ? error.message : 'Browser job status could not be loaded.', isError: true }; }
+    }
+    if (reference.kind === 'bram_computer_use') {
+      if (!options?.request || !options.allowComputerUse || agentPolicy?.agentId !== 'bram' || args.confirm === true) return { text: 'Gemini browser execution is available only to Bram for an explicit owner-authorized browser task.', isError: true };
+      const task = typeof args.task === 'string' ? args.task.trim().slice(0,4000) : '';
+      const url = typeof args.url === 'string' ? args.url.trim() : '';
+      const allowedDomains = Array.isArray(args.allowed_domains) ? args.allowed_domains.slice(0,20) : [];
+      if (!task || !(url.startsWith('https://') || url.startsWith('http://'))) return { text: 'Provide a browser task and a valid starting URL.', isError: true };
+      try {
+        const result = await postAsUser(options.request, '/api/agents/computer-use', { task, url, allowedDomains });
+        return { text: JSON.stringify(result) };
+      } catch (error) {
+        return { text: error instanceof Error ? error.message : 'Gemini computer use failed.', isError: true };
       }
     }
     if (reference.kind === 'publish_browser_game') {

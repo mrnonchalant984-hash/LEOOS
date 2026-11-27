@@ -4,13 +4,14 @@ import { adminSupabase, getProfile } from '@/lib/auth';
 import { enforceUserRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
-const providers = ['github', 'vercel', 'firebase', 'youtube', 'meta', 'whatsapp_business'] as const;
+const providers = ['github', 'vercel', 'firebase', 'youtube', 'gmail', 'meta', 'whatsapp_business'] as const;
 type OAuthProvider = typeof providers[number];
 const scopes: Record<OAuthProvider, string[]> = {
   github: ['read:user', 'user:email', 'repo'],
   vercel: ['openid', 'email', 'profile'],
   firebase: ['https://www.googleapis.com/auth/cloud-platform', 'https://www.googleapis.com/auth/firebase'],
   youtube: ['openid', 'email', 'profile', 'https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/yt-analytics.readonly'],
+  gmail: ['openid', 'email', 'profile', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send'],
   meta: ['public_profile', 'pages_show_list', 'pages_read_engagement', 'read_insights'],
   whatsapp_business: ['public_profile', 'business_management', 'whatsapp_business_management', 'whatsapp_business_messaging'],
 };

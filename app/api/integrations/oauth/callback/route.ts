@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
       const json = await tokenRequest('https://oauth2.googleapis.com/token', new URLSearchParams({ client_id: process.env.GOOGLE_OAUTH_CLIENT_ID || '', client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || '', redirect_uri: callback, grant_type: 'authorization_code', code }));
       config = { access_token: String(json.access_token), token_type: String(json.token_type || 'Bearer'), refresh_token: typeof json.refresh_token === 'string' ? json.refresh_token : '', expires_at: String(Date.now() + Number(json.expires_in || 3600) * 1000), scope: String(json.scope || '') };
     }
-    if (provider === 'youtube' && !config.refresh_token) {
+    if ((provider === 'youtube' || provider === 'gmail') && !config.refresh_token) {
       const { data: previous } = await db.from('user_integrations').select('credential_ciphertext').eq('user_id', stateRow.user_id).eq('provider', provider).eq('label', stateRow.label).maybeSingle();
       if (previous?.credential_ciphertext) { try { const { openConnectionConfig } = await import('@/lib/integrations/customer-connections'); const prior = openConnectionConfig(previous.credential_ciphertext); if (prior.refresh_token) config.refresh_token = prior.refresh_token; } catch { /* replace unusable old credentials with the new grant */ } }
     }
