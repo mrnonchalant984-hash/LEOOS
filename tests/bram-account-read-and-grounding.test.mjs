@@ -22,7 +22,9 @@ test('Bram account billing tool is read-only and hard-scoped to the authenticate
   assert.match(manager, /allowAccountRead: agent\.id === 'bram'/);
   assert.match(manager, /allowPriceRead: agent\.id === 'bram'/);
   assert.match(tools, /name: 'list_braverton_prices'/);
-  assert.match(registry, /'account_read','knowledge_read','gemini_computer_use','price_read','price_read'/);
+  assert.match(tools, /name: 'get_platform_status'/);
+  assert.match(manager, /allowPlatformStatusRead: agent\.id === 'bram' && owner/);
+  assert.match(registry, /'account_read','knowledge_read','gemini_computer_use','price_read','platform_status_read','price_read'/);
 });
 
 test('Knowledge Agent and Bram retrieve curated Braverton knowledge with explicit grounding rules', async () => {
