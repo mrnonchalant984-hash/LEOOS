@@ -18,7 +18,7 @@ export { getAgent };
 const TOOL_CAPABILITIES = new Set([
   ...MCP_AGENT_CAPABILITIES, 'database_write', 'deployment', 'devops', 'file_read',
   'file_write', 'github_write', 'image_generation', 'project_read', 'email_send',
-  'website_builder', 'web_search', 'gemini_computer_use', 'account_read', 'price_read',
+  'website_builder', 'web_search', 'gemini_computer_use', 'account_read', 'price_read', 'platform_status_read',
 ]);
 
 const EXPLICIT_IMAGE_REQUEST = /\b(generate|create|make|render)\b.{0,48}\b(image|picture|photo|visual|mockup|logo)\b/i;
@@ -33,6 +33,7 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   const permissions = new Set(agent.allowedTools);
   if (toolName === 'get_my_account_billing') return permissions.has('account_read');
   if (toolName === 'list_braverton_prices') return permissions.has('price_read');
+  if (['get_platform_status','get_provider_readiness','get_model_router_status','get_knowledge_cache_status','get_observability_events'].includes(toolName)) return permissions.has('platform_status_read');
   if (toolName === 'list_projects' || toolName === 'get_project_status') return permissions.has('project_read');
   if (toolName === 'get_project_files') return permissions.has('project_read') || permissions.has('file_read');
   if (toolName === 'get_build_status') return permissions.has('deployment') || permissions.has('devops');
@@ -250,6 +251,7 @@ export async function runAgent(
       allowComputerUse: agent.id === 'bram' && agent.allowedTools.includes('gemini_computer_use'),
       allowAccountRead: agent.id === 'bram' && agent.allowedTools.includes('account_read'),
       allowPriceRead: agent.id === 'bram' && agent.allowedTools.includes('price_read'),
+      allowPlatformStatusRead: agent.id === 'bram' && owner && agent.allowedTools.includes('platform_status_read'),
     } : undefined;
     available = await createUserAssistantTools(meta.userId, options, {
       agentId: agent.id,
