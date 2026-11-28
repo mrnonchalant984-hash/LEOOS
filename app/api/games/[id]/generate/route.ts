@@ -1,3 +1,4 @@
+import { recordAiUsageFinancials } from '@/lib/ai/usage-financials';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { getEffectiveUserPlan, planAllowsCloudProject } from '@/lib/plan-access';
@@ -81,7 +82,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     if (saveError || !saved) return NextResponse.json({ error: 'Generated code could not be saved to the owned project. No success is claimed.' }, { status: 503 });
     if (outcome.result.usage) {
       try {
-        await db.from('ai_usage').insert({ user_id: ctx.user.id, feature: mode === 'repair' ? 'browser_game_repair' : 'browser_game_generation', model: `${outcome.result.provider}/${outcome.result.model}`, prompt_tokens: outcome.result.usage.inputTokens, completion_tokens: outcome.result.usage.outputTokens, total_tokens: outcome.result.usage.totalTokens, credits_used: 0, metadata: { project_id: id, provider: outcome.result.provider, repair_attempt: mode === 'repair' } });
+        const { data: usageRow } = await db.from('ai_usage').insert({ user_id: ctx.user.id, feature: mode === 'repair' ? 'browser_game_repair' : 'browser_game_generation', model: `${outcome.result.provider}/${outcome.result.model}`, prompt_tokens: outcome.result.usage.inputTokens, completion_tokens: outcome.result.usage.outputTokens, total_tokens: outcome.result.usage.totalTokens, credits_used: 0, metadata: { project_id: id, provider: outcome.result.provider, repair_attempt: mode === 'repair', request_status: 'completed' } }).select('id').single();
+        if (usageRow) await recordAiUsageFinancials({ aiUsageId: usageRow.id, provider: outcome.result.provider, model: outcome.result.model, inputTokens: outcome.result.usage.inputTokens, outputTokens: outcome.result.usage.outputTokens });
       } catch {
         // Usage telemetry is best-effort; source persistence has already been verified.
       }

@@ -1,3 +1,4 @@
+import { recordAiUsageFinancials } from '@/lib/ai/usage-financials';
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from "next/server";
 import { getLeoSystemPrompt, LEO_PLAN_TERMINOLOGY } from "@/lib/leo-system-prompt";
@@ -845,18 +846,20 @@ export async function POST(req: NextRequest) {
       }
     }
     if (ctx && db && usage) {
-      await db
-        .from("ai_usage")
-        .insert({
-          user_id: ctx.user.id,
-          feature: mode === "deep" ? "deep_reasoning" : buildMode ? "website_build" : mode === "tools" ? "chat_tools" : "chat",
-          model: selectedModel,
-          prompt_tokens: usage.inputTokens,
-          completion_tokens: usage.outputTokens,
-          total_tokens: usage.totalTokens,
-          credits_used: customAgentCreditsUsed,
-          metadata: { session_id, provider: selectedModel.split('/')[0] },
-        });
+      const { data: usageRow } = await db.from("ai_usage").insert({
+        user_id: ctx.user.id,
+        feature: mode === "deep" ? "deep_reasoning" : buildMode ? "website_build" : mode === "tools" ? "chat_tools" : "chat",
+        model: selectedModel,
+        prompt_tokens: usage.inputTokens,
+        completion_tokens: usage.outputTokens,
+        total_tokens: usage.totalTokens,
+        credits_used: customAgentCreditsUsed,
+        metadata: { session_id, provider: selectedModel.split('/')[0], request_status: 'completed' },
+      }).select('id').single();
+      if (usageRow) {
+        const [provider, ...modelParts] = selectedModel.split('/');
+        await recordAiUsageFinancials({ aiUsageId: usageRow.id, provider: provider || 'unknown', model: modelParts.join('/') || selectedModel, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
+      }
     }
     if (ctx && db) {
       if (

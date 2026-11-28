@@ -1,3 +1,4 @@
+import { recordAiUsageFinancials } from '@/lib/ai/usage-financials';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { enforceLeoCodeDailyQuota } from '@/lib/leocode-entitlement';
@@ -94,19 +95,14 @@ function withUsageTracking(body: ReadableStream<Uint8Array>, userId: string, mod
           if (latestUsage) {
             const usage = latestUsage;
             void Promise.resolve(adminSupabase().from('ai_usage').insert({
-              user_id: userId,
-              feature: 'leocode_agent_host',
-              model,
-              prompt_tokens: usage.inputTokens,
-              completion_tokens: usage.outputTokens,
-              total_tokens: usage.inputTokens + usage.outputTokens,
-              credits_used: 0,
-              metadata: { source: 'vscode_ahp', provider: 'google' },
-            })).then(({ error }) => {
-              if (error) console.error('Leo Agent Host usage record could not be saved:', error.message);
-            }).catch(error => {
-              console.error('Leo Agent Host usage record could not be saved:', error instanceof Error ? error.message : 'unknown error');
-            });
+              user_id: userId, feature: 'leocode_agent_host', model,
+              prompt_tokens: usage.inputTokens, completion_tokens: usage.outputTokens,
+              total_tokens: usage.inputTokens + usage.outputTokens, credits_used: 0,
+              metadata: { source: 'vscode_ahp', provider: 'google', request_status: 'completed' },
+            }).select('id').single()).then(async ({ data, error }) => {
+              if (error) { console.error('Leo Agent Host usage record could not be saved:', error.message); return; }
+              if (data) await recordAiUsageFinancials({ aiUsageId: data.id, provider: 'google', model: model.startsWith('google/') ? model.slice(7) : model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
+            }).catch(error => { console.error('Leo Agent Host usage record could not be saved:', error instanceof Error ? error.message : 'unknown error'); });
           }
           return;
         }
@@ -242,17 +238,14 @@ export async function POST(req: NextRequest) {
           const outputTokens = Number(raw.usage.completion_tokens ?? raw.usage.output_tokens ?? 0);
           if (Number.isFinite(inputTokens) && Number.isFinite(outputTokens)) {
             void Promise.resolve(adminSupabase().from('ai_usage').insert({
-              user_id: ctx.user.id,
-              feature: 'leocode_agent_host',
-              model: `google/${resolved.model}`,
-              prompt_tokens: Math.max(0, Math.trunc(inputTokens)),
-              completion_tokens: Math.max(0, Math.trunc(outputTokens)),
-              total_tokens: Math.max(0, Math.trunc(inputTokens + outputTokens)),
-              credits_used: 0,
-              metadata: { source: 'vscode_ahp', provider: 'google' },
-            })).then(({ error }) => { if (error) console.error('Leo Agent Host usage record could not be saved:', error.message); }).catch(error => {
-              console.error('Leo Agent Host usage record could not be saved:', error instanceof Error ? error.message : 'unknown error');
-            });
+              user_id: ctx.user.id, feature: 'leocode_agent_host', model: `google/${resolved.model}`,
+              prompt_tokens: Math.max(0, Math.trunc(inputTokens)), completion_tokens: Math.max(0, Math.trunc(outputTokens)),
+              total_tokens: Math.max(0, Math.trunc(inputTokens + outputTokens)), credits_used: 0,
+              metadata: { source: 'vscode_ahp', provider: 'google', request_status: 'completed' },
+            }).select('id').single()).then(async ({ data, error }) => {
+              if (error) { console.error('Leo Agent Host usage record could not be saved:', error.message); return; }
+              if (data) await recordAiUsageFinancials({ aiUsageId: data.id, provider: 'google', model: resolved.model, inputTokens: Math.max(0, Math.trunc(inputTokens)), outputTokens: Math.max(0, Math.trunc(outputTokens)) });
+            }).catch(error => { console.error('Leo Agent Host usage record could not be saved:', error instanceof Error ? error.message : 'unknown error'); });
           }
         }
       }
