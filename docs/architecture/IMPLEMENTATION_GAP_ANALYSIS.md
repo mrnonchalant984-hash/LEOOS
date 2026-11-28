@@ -23,19 +23,26 @@ production resource does not exist.
 
 ### Current implementation and remaining gaps
 
-1. **Implemented, not activated:** A default-disabled, static-only Pages
-   preview queue, owner-scoped APIs, quota/admission migration, scheduled
+1. **Implemented, not activated:** A default-disabled Cloudflare Workers
+   preview queue, owner-scoped APIs, quota/admission migrations, scheduled
    GitHub Actions worker, and Web IDE status/preview UI are present. See
-   [Cloudflare onboarding](./CLOUDFLARE_ONBOARDING.md). The migration is not
-   applied and Cloudflare credentials are not configured.
-2. **Static-only compatibility:** Inputs require a root `index.html`, bounded
-   static text assets, allowed file types, and no recognized credential
-   patterns. This scan is not exhaustive. Framework compilation, server-side
-   code, binary assets, and arbitrary scripts are not executed.
-3. **Workspace and artifact lifecycle:** A preview job and stable branch alias
-   are associated with an owned project. There is no isolated dynamic runtime,
-   immutable per-request URL, preview TTL, or automated cleanup of historical
-   Cloudflare deployment records.
+   [Cloudflare onboarding](./CLOUDFLARE_ONBOARDING.md). Live account
+   configuration and end-to-end deployment acceptance still require
+   environment-backed verification.
+2. **Next.js runtime:** The worker auto-detects supported Next.js App Router or
+   Pages Router projects, builds them with the pinned OpenNext Cloudflare
+   adapter, and deploys a project-scoped Worker. OpenNext supports SSR, React
+   Server Components, route handlers, streaming, and Server Actions. The
+   build runner receives an allowlisted environment; preview Workers do not
+   receive production secrets or private database credentials.
+3. **Source and artifact limits:** The current preview transfer is bounded to
+   text-only source files (250 files, 256 KB per file, 2 MB total). Binary
+   assets such as images and fonts are not yet included. The credential scan
+   is pattern-based and not exhaustive.
+4. **Workspace and artifact lifecycle:** A preview job and deterministic
+   project Worker name are associated with an owned project. Preview URLs are
+   public to anyone who has the URL. Historical Worker TTL/deletion and
+   immutable per-build preview URLs are not yet implemented.
 4. **Preview routing and isolation:** The UI embeds only the verified HTTPS
    preview host using a sandboxed iframe. The URL is public and the preview
    host is not a confidential-data boundary; no comprehensive CSP/cookie or
@@ -44,25 +51,24 @@ production resource does not exist.
    a combined monthly build allowance, an account rolling-30-day cap, and one
    active job per project. Provider free quotas and historical deployment
    storage/cleanup still require operational monitoring.
-6. **Provider verification:** The worker checks the configured Pages project
-   and uses pinned Wrangler, but the project-source response shape, branch
-   readiness, account authorization, and end-to-end deployment remain
-   unverified.
+6. **Provider verification:** The worker checks the account's Workers
+   subdomain, uses pinned Wrangler/OpenNext versions, and health-checks the
+   deployed Worker. A live account-backed build including an actual Server
+   Action POST still needs a staging acceptance run.
 
 ### Safe implementation order
 
-1. Review and apply the preview migration only after explicit approval and a
-   safe database backup/verification plan.
-2. Pre-create a Cloudflare Pages Direct Upload project and configure the
-   documented server environment and GitHub Actions secrets; do not let the
-   worker create Cloudflare resources.
-3. Run account-backed tests for source-type verification, branch alias
-   readiness, result/lease handling, quotas, and cleanup after explicit
-   authorization.
-4. Add TTL and provider-side historical deployment cleanup with tested
-   retention limits before treating this as a managed preview lifecycle.
-5. Expand beyond static assets only with a separately isolated build/runtime
-   design, framework-specific validation, and explicit resource budgets.
+1. Verify the preview queue/retry migrations and configure the Workers account,
+   `workers.dev` subdomain, server environment, and GitHub Actions secrets.
+2. Run staging acceptance tests for static and Next.js builds, including a
+   real Server Action POST, SSR/route handlers, lease/retry handling, quotas,
+   and cross-tenant denial.
+3. Add binary asset transfer (images/fonts) with content-type and size
+   validation; do not weaken path or credential checks.
+4. Add TTL and provider-side historical Worker cleanup with tested retention
+   limits before treating this as a managed preview lifecycle.
+5. Add Playwright-based route/form checks and browser console/network
+   diagnostics against the isolated preview.
 
 Cloudflare documents Workers Free at 100,000 requests/day and 10 ms CPU per
 invocation; Pages Free at 500 builds/month with one concurrent build; R2
@@ -80,13 +86,16 @@ preview status, GitHub/Vercel readiness preflight, and evidence-based delivery.
 Project setup cards are no longer rendered in the chat transcript; source
 changes are merged into the authenticated project while preserving unrelated
 files. Chat can queue GitHub-hosted inspect/typecheck/lint/test/build jobs and
-Cloudflare static preview jobs.
+Cloudflare Worker previews. Static projects use the asset Worker; supported
+Next.js projects are built with OpenNext and run with SSR, route handlers,
+and Server Actions.
 
-This is not yet proof of complete autonomous website delivery. The current
-Cloudflare preview provider is static-only, so it cannot host a live Next.js
-server, server actions, or a database-backed full-stack application. The
-dynamic isolated preview runtime, automatic browser interaction/visual
-regression testing, and live provider acceptance tests remain outstanding.
+This is not yet proof of complete autonomous website delivery. The Next.js
+runtime path is implemented in the worker pipeline, but it has not yet passed
+a live account-backed staging run with a real Server Action POST. Binary
+asset transfer, preview-safe external service bindings, automatic browser
+interaction/visual regression testing, Worker TTL/cleanup, and live provider
+acceptance tests remain outstanding.
 GitHub/Vercel publish still requires verified account integrations, repository
 permissions, Vercel project linkage, and configured production environment.
 
