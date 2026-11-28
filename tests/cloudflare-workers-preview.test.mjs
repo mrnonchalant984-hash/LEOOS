@@ -39,7 +39,7 @@ test('Cloudflare Worker preview validator accepts static bundles and full Next.j
   if (nextResult.ok) {
     assert.equal(nextResult.framework, 'nextjs');
     assert.match(nextResult.files['app/actions.ts'], /use server/);
-    assert.match(nextResult.files['app/page.tsx'], /action=\\{saveMessage\\}/);
+    assert.ok(nextResult.files['app/page.tsx'].includes('action={saveMessage}'));
   }
 });
 
