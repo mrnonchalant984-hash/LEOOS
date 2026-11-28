@@ -59,10 +59,23 @@ Project dependencies and build scripts run without the Cloudflare deployment
 token, Braverton callback secret, GitHub credentials, or production API keys.
 The Cloudflare token is introduced only for the final Wrangler deployment
 step. Preview Workers do not receive Braverton production secrets or database
-credentials. Server Actions can execute in the Worker, but actions that depend
-on external databases or private services need separately provisioned,
-preview-safe environment bindings; production secrets are never copied into
-the preview.
+credentials. The GitHub build process also receives only a minimal
+allowlisted environment, and the Cloudflare deployment token is introduced
+only for the final deploy step. Do not copy production environment variables
+into a preview Worker or expose service-role keys, Gemini keys, payment keys,
+or private integration credentials to generated project code.
+
+Production data access must go through a Braverton-owned backend endpoint, not
+a direct Supabase connection from the preview. Such endpoints must authenticate
+the Braverton user, bind access to the owning project, expose fixed allowlisted
+read operations only, enforce row-level ownership, rate limits and audit
+logging, and reject writes, deletes, payments, account changes, publishing,
+arbitrary SQL, and caller-selected table/column names. Gemini and private
+integrations remain behind authenticated Braverton server endpoints. This PR
+does not provision preview credentials or enable a generic database proxy;
+an integration is unavailable until its specific read-only contract and
+cross-origin authentication flow are implemented and tested. No staging
+database is required for this security boundary.
 
 To enable the preview path after account setup:
 
@@ -94,9 +107,7 @@ monthly build allowance; the account also has a rolling 30-day preview cap of
 source snapshot is limited to 250 text files, 256 KB per file, and 2 MB total.
 Supported Next.js projects must include a valid `package.json` and a supported
 App Router or Pages Router entry. Static sites require a root `index.html`.
-The current transfer format is text-source only; binary files such as PNG,
-JPEG, WOFF, and PDF are not yet included in the preview snapshot. Common
-credential patterns are blocked, but that scan is not exhaustive. Preview
+PDF, video, audio, archives, executable files, and other unlisted binary types are not transferred. Common credential patterns are blocked in text source, but that scan is not exhaustive. Preview
 URLs are public to anyone who has the URL; do not include confidential data.
 Historical Worker TTL/deletion is not yet automated, so account retention and
 usage should be monitored.
