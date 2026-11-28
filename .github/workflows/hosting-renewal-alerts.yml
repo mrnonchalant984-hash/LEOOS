@@ -1,0 +1,31 @@
+name: Hosting renewal alerts
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+jobs:
+  send-renewal-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate server configuration
+        id: config
+        env:
+          APP_URL: ${{ secrets.BRAVERTON_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Hosting renewal alerts skipped: BRAVERTON_APP_URL or CRON_SECRET is not configured."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Send due hosting renewal alerts
+        if: steps.config.outputs.configured == 'true'
+        env:
+          APP_URL: ${{ secrets.BRAVERTON_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --request POST "${APP_URL%/}/api/cron/hosting-renewal-alerts" \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            --header "Content-Type: application/json"
