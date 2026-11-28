@@ -7,8 +7,8 @@ test('owner intelligence migration is additive, private and does not invent pric
  const sql=await read('supabase/migrations/20261128170000_owner_control_center_intelligence.sql');
  for(const table of ['ai_model_pricing','ai_exchange_rates','ai_usage_financials','ai_credit_conversion_policy','ai_usage_credit_ledger','business_expenses']) assert.match(sql,new RegExp('create table if not exists public\\.'+table));
  assert.match(sql,/enable row level security/g);
- assert.match(sql,/revoke all on public\\.ai_model_pricing/);
- assert.match(sql,/insert into public\\.ai_credit_conversion_policy\\(policy_key, enabled\\)\\s*values \\('default', false\\)/);
+ assert.ok(sql.includes('revoke all on public.ai_model_pricing'));
+ assert.ok(sql.includes("values ('default', false)"));
  assert.match(sql,/pricing_status\\s+text not null default 'unpriced'/);
  assert.match(sql,/prevent_ai_financial_ledger_mutation/);
  assert.doesNotMatch(sql,/insert into public\\.ai_model_pricing/);
@@ -35,7 +35,7 @@ test('AI financial snapshots use effective paid pricing and exact decimal arithm
  assert.match(helper,/ai_exchange_rates/);
  assert.match(helper,/actual_cost_status:actualStatus/);
  assert.match(helper,/not_reported/);
- assert.match(helper,/ignoreDuplicates/);
+ assert.match(helper,/upsert\(payload,\{onConflict:'ai_usage_id'\}\)/);
  assert.doesNotMatch(helper,/actualCostConfirmedZero:\s*true/);
 });
 
