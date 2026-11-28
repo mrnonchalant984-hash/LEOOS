@@ -35,10 +35,11 @@ production resource does not exist.
    Server Components, route handlers, streaming, and Server Actions. The
    build runner receives an allowlisted environment; preview Workers do not
    receive production secrets or private database credentials.
-3. **Source and artifact limits:** The current preview transfer is bounded to
-   text-only source files (250 files, 256 KB per file, 2 MB total). Binary
-   assets such as images and fonts are not yet included. The credential scan
-   is pattern-based and not exhaustive.
+3. **Source and artifact limits:** Preview transfer supports up to 250 files
+   and 20 MB total. Text source is limited to 256 KB per file; supported
+   images and fonts are base64-transferred with file-signature validation and
+   a 5 MB per-file limit. Other binary formats remain unsupported. The
+   credential scan is pattern-based and not exhaustive.
 4. **Workspace and artifact lifecycle:** A preview job and deterministic
    project Worker name are associated with an owned project. Preview URLs are
    public to anyone who has the URL. Historical Worker TTL/deletion and
@@ -89,10 +90,14 @@ Cloudflare Worker previews. Static projects use the asset Worker; supported
 Next.js projects are built with OpenNext and run with SSR, route handlers,
 and Server Actions.
 
-This is not yet proof of complete autonomous website delivery. The Next.js
-runtime path is implemented in the worker pipeline, but it has not yet passed
-a live account-backed staging run with a real Server Action POST. Binary
-asset transfer, preview-safe external service bindings, automatic browser
+This is not yet proof of complete autonomous website delivery. The Next.js runtime path and bounded image/font transfer are implemented in
+the worker pipeline, but this PR has not yet passed a live account-backed
+acceptance run with a real Server Action POST. A generic production database
+proxy is intentionally not enabled: preview code is public/untrusted, so
+production data must be exposed only through separately designed,
+authenticated, project-bound, fixed allowlist read endpoints. Production
+secrets are never copied into preview Workers. Gemini and private integrations
+remain behind authenticated Braverton backend endpoints. Automatic browser
 interaction/visual regression testing, Worker TTL/cleanup, and live provider
 acceptance tests remain outstanding.
 GitHub/Vercel publish still requires verified account integrations, repository
