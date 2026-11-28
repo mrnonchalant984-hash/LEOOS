@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
   const expenses = (expensesQ.data || []).filter((e: any) => inRange(e.incurred_at));
   const expenseTotal = sumMoney(expenses.filter((e: any) => e.currency === 'NGN' || e.amount_ngn).map((e: any) => e.amount_ngn ?? (e.currency === 'NGN' ? e.amount : 0)));
   const successfulHostingRenewals = (renewalsQ.data || []).filter((r: any) => r.status === 'succeeded');
-  const hostingRevenue = sumMoney(successfulHostingRenewals.filter((r: any) => r.currency === 'NGN').map((r: any) => String(num(r.amount_kobo) / 100)));
+  const hostingRevenue = sumMoney(successfulHostingRenewals.filter((r: any) => r.currency === 'NGN').map((r: any) => moneyText(moneyUnits(String(r.amount_kobo)) / 100n)));
 
   const upcoming7 = hosting.filter((h: any) => h.next_renewal_at && new Date(h.next_renewal_at) >= now && new Date(h.next_renewal_at) <= new Date(now.getTime() + 7 * 86400000));
   const upcoming30 = hosting.filter((h: any) => h.next_renewal_at && new Date(h.next_renewal_at) >= now && new Date(h.next_renewal_at) <= new Date(now.getTime() + 30 * 86400000));
