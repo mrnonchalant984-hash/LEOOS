@@ -41,6 +41,23 @@ test('Cloudflare Worker preview validator accepts static bundles and full Next.j
     assert.match(nextResult.files['app/actions.ts'], /use server/);
     assert.ok(nextResult.files['app/page.tsx'].includes('action={saveMessage}'));
   }
+
+  const png = Buffer.from([137,80,78,71,13,10,26,10]).toString('base64');
+  const woff2 = Buffer.from('wOF2font-data').toString('base64');
+  const binaryResult = validateCloudflareWorkerPreviewFiles({
+    'index.html': '<img src="/assets/brand.png"><style>@font-face{font-family:Brand;src:url(/fonts/brand.woff2)}</style>',
+    'assets/brand.png': { encoding: 'base64', data: png },
+    'fonts/brand.woff2': { encoding: 'base64', data: woff2 },
+  });
+  assert.equal(binaryResult.ok, true);
+  if (binaryResult.ok) {
+    assert.deepEqual(binaryResult.files['assets/brand.png'], { encoding: 'base64', data: png });
+    assert.deepEqual(binaryResult.files['fonts/brand.woff2'], { encoding: 'base64', data: woff2 });
+  }
+  assert.equal(validateCloudflareWorkerPreviewFiles({
+    'index.html': '<img src="/bad.png">',
+    'bad.png': { encoding: 'base64', data: Buffer.from('not a png').toString('base64') },
+  }).ok, false);
 });
 
 test('Cloudflare Worker preview validator rejects traversal, hidden files, secrets, and unsupported frameworks', () => {
@@ -67,6 +84,10 @@ test('Cloudflare preview runner is valid JavaScript and the API passes/verifies 
   assert.match(workerScript, /opennextjs-cloudflare/);
   assert.ok(workerScript.includes("['opennextjs-cloudflare', 'build']"));
   assert.ok(workerScript.includes('writeProjectFiles(directory, job.files)'));
+  assert.ok(workerScript.includes('MAX_BINARY_FILE_BYTES'));
+  assert.ok(workerScript.includes("content.encoding === 'base64'"));
+  assert.ok(workerScript.includes("Buffer.from(content.data, 'base64')"));
+  assert.ok(workerScript.includes('MAX_TOTAL_BYTES = 20 * 1024 * 1024'));
   assert.ok(workerScript.includes('const env = {};'));
   assert.ok(workerScript.includes('next.config.mjs'));
   assert.match(workerScript, /workers\.dev/);
