@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid reporting date range.' }, { status: 400 });
   }
 
-  const [usersQ, usageQ, paymentsQ, subsQ, hostingQ, buildsQ, previewsQ, runsQ, toolEventsQ, expensesQ, financialQ, renewalsQ, workflowQ] = await Promise.all([
+  const [usersQ, usageQ, paymentsQ, subsQ, hostingQ, buildsQ, previewsQ, runsQ, toolEventsQ, expensesQ, financialQ, renewalsQ, workflowQ, sitesQ, deployEventsQ, workerHeartbeatsQ, mcpAuditQ, errorsQ] = await Promise.all([
     loadAll<any>(db, 'profiles', 'id,email,full_name,role,created_at'),
     loadAll<Usage>(db, 'ai_usage', 'id,user_id,feature,model,prompt_tokens,completion_tokens,total_tokens,credits_used,metadata,created_at'),
     loadAll<Payment>(db, 'payments', 'id,user_id,reference,amount,amount_kobo,currency,plan,billing_period,status,paid_at,verified_at,refunded_at,created_at'),
@@ -78,9 +78,14 @@ export async function GET(req: NextRequest) {
     loadAll<Financial>(db, 'ai_usage_financials', 'ai_usage_id,provider,model,service_tier,estimated_usd,actual_usd,usd_ngn_rate,estimated_ngn,actual_ngn,pricing_status,actual_cost_status'),
     loadAll<any>(db, 'hosting_renewal_payments', 'reference,hosting_subscription_id,amount_kobo,currency,status,paid_at,created_at'),
     loadAll<any>(db, 'engineering_workflows', 'id,owner_user_id,website_project_id,mode,status,current_stage,title,created_at,updated_at'),
+    loadAll<any>(db, 'website_projects', 'id,owner_user_id,website_type,business_name,client_email,status,github_repo,vercel_project_id,live_url,build_provider,build_status,build_step,last_build_at,created_at,updated_at'),
+    loadAll<any>(db, 'deployment_events', 'id,website_project_id,event_type,status,message,metadata,created_at'),
+    loadAll<any>(db, 'workforce_worker_heartbeats', 'id,worker_id,status,job_id,error_code,started_at,finished_at,created_at'),
+    loadAll<any>(db, 'mcp_tool_audit', 'id,user_id,tool_name,outcome,duration_ms,request_id,created_at'),
+    loadAll<any>(db, 'error_events', 'id,user_id,route,severity,error_type,message,created_at'),
   ]);
 
-  const required = [usersQ, usageQ, paymentsQ, subsQ, hostingQ, buildsQ, previewsQ, runsQ, toolEventsQ, expensesQ, financialQ, renewalsQ, workflowQ];
+  const required = [usersQ, usageQ, paymentsQ, subsQ, hostingQ, buildsQ, previewsQ, runsQ, toolEventsQ, expensesQ, financialQ, renewalsQ, workflowQ, sitesQ, deployEventsQ, workerHeartbeatsQ, mcpAuditQ, errorsQ];
   const failed = required.find(item => item.error);
   if (failed) return NextResponse.json({ error: 'Owner intelligence data could not be loaded.', code: failed.error?.code || 'query_failed' }, { status: 503 });
 
@@ -102,7 +107,7 @@ export async function GET(req: NextRequest) {
   const financials = eligibleUsages.map(u => financialMap.get(u.id)).filter(Boolean) as Financial[];
   const actualCostRows = financials.filter(f => f.actual_cost_status === 'provider_reported' || f.actual_cost_status === 'zero_confirmed');
   const actualAiCost = sumMoney(actualCostRows.map(f => f.actual_ngn));
-  const actualCostComplete = actualCostRows.length === financials.length && financials.length > 0 && actualCostRows.every(f => f.actual_ngn !== null);
+  const actualCostComplete = eligibleUsages.length > 0 && financials.length === eligibleUsages.length && actualCostRows.length === eligibleUsages.length && actualCostRows.every(f => f.actual_ngn !== null);
   const estimatedRows = financials.filter(f => f.estimated_ngn !== null && f.estimated_ngn !== undefined);
   const estimatedAiValue = sumMoney(estimatedRows.map(f => f.estimated_ngn));
   const estimatedCostComplete = estimatedRows.length === eligibleUsages.length && eligibleUsages.length > 0;
@@ -160,6 +165,7 @@ export async function GET(req: NextRequest) {
   const runs = runsQ.data || [];
   const toolEvents = toolEventsQ.data || [];
   const expenses = (expensesQ.data || []).filter((e: any) => inRange(e.incurred_at));
+  const expenseCoverageComplete = expenses.every((e: any) => e.currency === 'NGN' || e.amount_ngn !== null);
   const expenseTotal = sumMoney(expenses.filter((e: any) => e.currency === 'NGN' || e.amount_ngn).map((e: any) => e.amount_ngn ?? (e.currency === 'NGN' ? e.amount : 0)));
   const successfulHostingRenewals = (renewalsQ.data || []).filter((r: any) => r.status === 'succeeded' && inRange(r.paid_at || r.created_at));
   const hostingRevenue = sumMoney(successfulHostingRenewals.filter((r: any) => r.currency === 'NGN').map((r: any) => moneyText(moneyUnits(String(r.amount_kobo)) / 100n)));
@@ -181,8 +187,8 @@ export async function GET(req: NextRequest) {
       actualAiSpendNgn: actualCostComplete ? moneyText(actualAiCost) : null, estimatedAiValueNgn: estimatedCostComplete ? moneyText(estimatedAiValue) : null,
       grossRevenueNgn: moneyText(grossRevenue), refundsNgn: moneyText(refundedRevenue), netRevenueNgn: moneyText(netRevenue),
       mrrNgn: moneyText(mrr), hostingRevenueNgn: moneyText(hostingRevenue),
-      recordedExpensesNgn: moneyText(expenseTotal),
-      netOperatingResultNgn: actualCostComplete ? moneyText(netRevenue - expenseTotal - actualAiCost) : null,
+      recordedExpensesNgn: expenseCoverageComplete ? moneyText(expenseTotal) : null,
+      netOperatingResultNgn: actualCostComplete && expenseCoverageComplete ? moneyText(netRevenue - expenseTotal - actualAiCost) : null,
       profitUsesActualCostsOnly: true,
       unpricedAiRequests: eligibleUsages.length - pricedRows,
       today: periodStats(startOfDay), week: periodStats(startOfWeek), month: periodStats(startOfMonth),
@@ -193,7 +199,7 @@ export async function GET(req: NextRequest) {
       byProvider: [...providerUsage.entries()].map(([name, value]) => ({ name, ...value })).sort((a, b) => b.tokens - a.tokens),
       daily: [...daily.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-60),
       averageTokensPerRequest: (() => { const eligible = usages.filter(u => !u.feature?.startsWith('image_')); return eligible.length ? Math.round(allTokens / eligible.length) : 0; })(),
-      users: [...userUsage.values()].map((u: any) => ({ ...u, ...(profileMap.get(u.userId) ? { name: profileMap.get(u.userId).full_name, email: profileMap.get(u.userId).email } : {}) })).sort((a: any, b: any) => b.tokens - a.tokens),
+      users: [...userUsage.values()].map((u: any) => { const profile = profileMap.get(u.userId); const sub = subscriptions.filter((s: any) => s.user_id === u.userId && s.status === 'active').sort((a: any,b: any) => String(b.created_at).localeCompare(String(a.created_at)))[0]; return { ...u, name: profile?.full_name || 'Unnamed account', email: profile?.email || 'Account email unavailable', subscriptionPlan: sub?.plan || 'free', subscriptionStatus: sub?.status || 'inactive' }; }).sort((a: any, b: any) => b.tokens - a.tokens),
       imageGenerationRequests: usages.filter(u => u.feature === 'image_generation' || u.feature?.startsWith('image_')).length,
     },
     revenue: {
@@ -221,11 +227,15 @@ export async function GET(req: NextRequest) {
       runStatuses: statusCounts(runs),
       tools: toolEvents.slice(0, 1000),
       toolCounts: statusCounts(toolEvents),
+      mcpToolAudit: mcpAuditQ.data || [],
       workflows: workflowQ.data || [],
       averageDurationMs: (() => { const done = runs.filter((r: any) => r.started_at && r.completed_at); return done.length ? Math.round(done.reduce((n: number, r: any) => n + new Date(r.completed_at).getTime() - new Date(r.started_at).getTime(), 0) / done.length) : null; })(),
       successRate: runs.length ? Math.round(runs.filter((r: any) => r.status === 'completed' || r.status === 'succeeded').length / runs.length * 10000) / 100 : null,
     },
     websites: {
+      projects: sitesQ.data || [],
+      deploymentEvents: (deployEventsQ.data || []).slice(0, 500),
+      productionProjects: (sitesQ.data || []).filter((p: any) => p.live_url || p.live_deployment_id),
       builds: builds.slice(0, 500),
       buildStatuses: statusCounts(builds),
       previews: previews.slice(0, 500),
@@ -234,7 +244,7 @@ export async function GET(req: NextRequest) {
       failedBuilds: builds.filter((b: any) => b.status === 'failed' || b.status === 'error').length,
     },
     expenses: { items: expenses, totalNgn: moneyText(expenseTotal), byCategory: Object.entries(expenses.reduce((acc: Record<string, bigint>, e: any) => { const v = e.amount_ngn ?? (e.currency === 'NGN' ? e.amount : '0'); acc[e.category] = (acc[e.category] || 0n) + moneyUnits(v); return acc; }, {})).map(([category, amount]) => ({ category, amountNgn: moneyText(amount) })) },
-    financialCoverage: { usageRows: usages.length, costRows: financials.length, pricedRows, actualCostRows: actualCostRows.length, actualCostComplete, estimatedCostComplete },
-    diagnostics: { dataSources: required.map((q, i) => ({ name: ['profiles','ai_usage','payments','subscriptions','hosting_subscriptions','project_builds','cloudflare_preview_jobs','agent_runs','bram_tool_events','business_expenses','ai_usage_financials','hosting_renewal_payments','engineering_workflows'][i], rows: q.data.length, truncated: q.truncated })), unknownStatuses: true },
+    financialCoverage: { usageRows: eligibleUsages.length, costRows: financials.length, pricedRows, actualCostRows: actualCostRows.length, actualCostComplete, estimatedCostComplete, unconvertedExpenses: expenses.filter((e: any) => e.currency !== 'NGN' && e.amount_ngn === null).length },
+    diagnostics: { dataSources: required.map((q, i) => ({ name: ['profiles','ai_usage','payments','subscriptions','hosting_subscriptions','project_builds','cloudflare_preview_jobs','agent_runs','bram_tool_events','business_expenses','ai_usage_financials','hosting_renewal_payments','engineering_workflows','website_projects','deployment_events','workforce_worker_heartbeats','mcp_tool_audit','error_events'][i], rows: q.data.length, truncated: q.truncated })), recentErrors: errorsQ.data || [], workerHeartbeats: workerHeartbeatsQ.data || [], unknownStatuses: true },
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
