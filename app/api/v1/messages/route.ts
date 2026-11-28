@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
       await settleBillableUsage(auth, actualCredits);
       const billedCredits = auth.owner ? 0 : actualCredits;
       const { data: usageRow } = await adminSupabase().from('ai_usage').insert({ user_id: auth.userId, feature: 'developer_api', model, prompt_tokens: input, completion_tokens: output, total_tokens: input + output, credits_used: billedCredits, metadata: { request_status: 'completed', provider: 'google' } }).select('id').single();
-      if (usageRow) await recordAiUsageFinancials({ aiUsageId: usageRow.id, provider: 'google', model: model.replace(/^google\\//, ''), inputTokens: input, outputTokens: output });
+       if (usageRow) await recordAiUsageFinancials({ aiUsageId: usageRow.id, provider: 'google', model: model.replace(/^google\//, ''), inputTokens: input, outputTokens: output });
       after(async () => { try { await emitWebhookEvent(auth.userId, 'api.usage.completed', { request_id: auth.requestId, model, input_tokens: input, output_tokens: output, total_tokens: input + output, credits_used: billedCredits, duration_ms: Date.now() - startedAt }); } catch { /* queued delivery retries handle transient failures */ } });
       const answer = completion.text || '';
       const finishReason = completion.candidates?.[0]?.finishReason;
