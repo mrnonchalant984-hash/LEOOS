@@ -4,9 +4,9 @@ import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import { getCloudflarePreviewConfig } from '@/lib/cloudflare-preview/config';
 import { getCloudflarePreviewWorkspaceFiles } from '@/lib/workspace-source';
 import {
-  MAX_CLOUDFLARE_PREVIEW_FILE_BYTES,
   MAX_CLOUDFLARE_PREVIEW_FILES,
-  MAX_CLOUDFLARE_PREVIEW_TOTAL_BYTES,
+  MAX_CLOUDFLARE_WORKER_PREVIEW_BINARY_FILE_BYTES,
+  MAX_CLOUDFLARE_WORKER_PREVIEW_TOTAL_BYTES,
   validateCloudflareWorkerPreviewFiles,
 } from '@/lib/cloudflare-preview/static-assets';
 
@@ -104,8 +104,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       error,
       limits: {
         files: MAX_CLOUDFLARE_PREVIEW_FILES,
-        fileBytes: MAX_CLOUDFLARE_PREVIEW_FILE_BYTES,
-        totalBytes: MAX_CLOUDFLARE_PREVIEW_TOTAL_BYTES,
+        textFileBytes: 256_000,
+        binaryFileBytes: MAX_CLOUDFLARE_WORKER_PREVIEW_BINARY_FILE_BYTES,
+        totalBytes: MAX_CLOUDFLARE_WORKER_PREVIEW_TOTAL_BYTES,
       },
     }, { status: 422 });
   }
