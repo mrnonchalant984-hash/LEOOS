@@ -42,6 +42,8 @@ test('preview data bridge is project-bound, short-lived, read-only and allowlist
   assert.doesNotMatch(data, /\.insert\(|\.update\(|\.delete\(|\.rpc\(/);
   assert.match(component, /braverton:preview-data-capability/);
   assert.match(component, /postMessage/);
+  assert.match(prompt, /Keep its token only/);
+  assert.match(prompt, /Never put/);
   assert.match(prompt, /Never copy production environment variables or private credentials into preview workers/);
   assert.match(prompt, /arbitrary SQL/);
 });
