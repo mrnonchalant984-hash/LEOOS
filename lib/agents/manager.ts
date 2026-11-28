@@ -45,6 +45,7 @@ function allowedTool(agent: AgentDefinition, toolName: string, task: string) {
   if (toolName === 'run_specialist_team') return agent.id === 'bram';
   if (toolName === 'create_project') return permissions.has('website_builder') && /\b(build|create|make)\b/i.test(task);
   if (toolName === 'save_project_files') return permissions.has('file_write');
+  if (['create_project_preview','get_project_preview_status','run_project_checks','get_project_check_status'].includes(toolName)) return permissions.has('website_builder') || permissions.has('devops');
   if (toolName === 'build_and_deploy_project' || toolName === 'publish_browser_game') {
     return permissions.has('deployment') && EXPLICIT_DEPLOYMENT_REQUEST.test(task);
   }
@@ -360,7 +361,7 @@ export async function runAgent(
         webSearch: false,
         tools,
         executeTool: executeAgentTool,
-        maxToolCalls: agent.id === 'bram' ? 12 : 4,
+        maxToolCalls: agent.id === 'bram' ? 18 : 4,
       }),
       undefined,
       {

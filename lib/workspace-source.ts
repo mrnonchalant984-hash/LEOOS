@@ -98,6 +98,75 @@ export async function getWorkspaceManifest(userId: string, projectId: string): P
   return { projectId, revision: Number(record.revision || 0), files, totalBytes: Number(record.total_bytes || 0), updatedAt: record.updated_at || null };
 }
 
+/**
+ * Merge generated chat files into the durable private workspace archive.
+ * This keeps project-file edits available to isolated GitHub Actions checks
+ * without replacing unrelated uploaded source files.
+ */
+export async function mergeWorkspaceTextFiles(userId: string, projectId: string, files: Record<string, string>) {
+  await loadProject(userId, projectId);
+  const entries = Object.entries(files);
+  if (!entries.length) return await getWorkspaceManifest(userId, projectId);
+  const current = await ensureRecord(userId, projectId);
+  const zip = await readArchive(current.storage_path);
+  for (const [rawPath, content] of entries) {
+    const path = safeSourcePath(rawPath);
+    if (typeof content !== 'string') throw new WorkspaceSourceError('Workspace source files must contain text content.', 415);
+    const bytes = Buffer.byteLength(content, 'utf8');
+    if (bytes > WORKSPACE_SOURCE_MAX_FILE_BYTES) throw new WorkspaceSourceError(`${path} exceeds the 5 MB per-file limit.`, 413);
+    zip.file(path, content);
+  }
+  await persistArchive(userId, projectId, current, zip);
+  return await getWorkspaceManifest(userId, projectId);
+}
+
+/**
+ * Build a bounded preview snapshot from the durable workspace archive and
+ * legacy project.files. Binary image/font assets are base64 encoded for the
+ * queue JSON payload; secrets and non-web workspace files are never copied.
+ */
+export async function getCloudflarePreviewWorkspaceFiles(
+  userId: string,
+  projectId: string,
+  legacyFiles: Record<string, unknown> | null | undefined,
+) {
+  await loadProject(userId, projectId);
+  const record = await ensureRecord(userId, projectId);
+  const zip = await readArchive(record.storage_path);
+  const output: Record<string, string | { encoding: 'base64'; data: string }> = {};
+
+  const textExtensions = new Set([
+    '.css', '.scss', '.sass', '.html', '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
+    '.json', '.md', '.mdx', '.svg', '.txt', '.xml', '.webmanifest', '.yaml', '.yml', '.toml',
+  ]);
+  const binaryExtensions = new Set([
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.ico', '.woff', '.woff2', '.ttf', '.otf',
+  ]);
+
+  for (const [rawPath, rawContent] of Object.entries(legacyFiles || {})) {
+    let path: string;
+    try { path = safeSourcePath(rawPath); } catch { continue; }
+    if (typeof rawContent !== 'string') continue;
+    const extension = path.slice(path.lastIndexOf('.')).toLowerCase();
+    if (textExtensions.has(extension)) output[path] = rawContent;
+  }
+
+  for (const entry of Object.values(zip.files) as any[]) {
+    if (entry.dir) continue;
+    let path: string;
+    try { path = safeSourcePath(entry.name); } catch { continue; }
+    const extension = path.slice(path.lastIndexOf('.')).toLowerCase();
+    if (!textExtensions.has(extension) && !binaryExtensions.has(extension)) continue;
+    const bytes = await entry.async('nodebuffer');
+    if (binaryExtensions.has(extension)) {
+      output[path] = { encoding: 'base64', data: bytes.toString('base64') };
+    } else {
+      output[path] = bytes.toString('utf8');
+    }
+  }
+  return output;
+}
+
 export async function importWorkspaceZip(userId: string, projectId: string, bytes: Buffer) {
   if (bytes.length < 4 || bytes.length > WORKSPACE_SOURCE_MAX_ARCHIVE_BYTES) throw new WorkspaceSourceError('ZIP uploads must be between 4 bytes and 25 MB.', 413);
   if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new WorkspaceSourceError('Upload a valid ZIP archive.', 415);

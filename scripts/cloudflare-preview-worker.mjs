@@ -13,11 +13,13 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const MAX_FILES = 250;
 const MAX_FILE_BYTES = 256_000;
-const MAX_TOTAL_BYTES = 2_000_000;
-const SUPPORTED_EXTENSIONS = new Set([
+const MAX_BINARY_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+const SUPPORTED_TEXT_EXTENSIONS = new Set([
   '.css', '.scss', '.sass', '.html', '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
   '.json', '.md', '.mdx', '.svg', '.txt', '.xml', '.webmanifest', '.yaml', '.yml', '.toml',
-]);
+ ]);
+const SUPPORTED_BINARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.ico', '.woff', '.woff2', '.ttf', '.otf']);
 const SECRET_PATTERNS = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
   /\bAKIA[0-9A-Z]{16}\b/,
@@ -27,6 +29,20 @@ const SECRET_PATTERNS = [
   /\bAIza[0-9A-Za-z_-]{30,}\b/,
   /\b(?:SUPABASE_SERVICE_ROLE_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|CLOUDFLARE_API_TOKEN)\s*[:=]\s*["']?[^"' \r\n]{12,}/i,
 ];
+
+function validBinaryAsset(extension, bytes) {
+  if (extension === '.png') return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+  if (extension === '.jpg' || extension === '.jpeg') return bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+  if (extension === '.gif') return /^GIF8[79]a$/.test(bytes.subarray(0, 6).toString('ascii'));
+  if (extension === '.webp') return bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP';
+  if (extension === '.avif') return bytes.length >= 12 && bytes.toString('ascii', 4, 8) === 'ftyp' && bytes.toString('ascii', 8, 12).startsWith('avi');
+  if (extension === '.ico') return bytes.length >= 4 && bytes[0] === 0 && bytes[1] === 0 && bytes[2] === 1 && bytes[3] === 0;
+  if (extension === '.woff') return bytes.toString('ascii', 0, 4) === 'wOFF';
+  if (extension === '.woff2') return bytes.toString('ascii', 0, 4) === 'wOF2';
+  if (extension === '.ttf') return bytes.length >= 4 && bytes.subarray(0, 4).equals(Buffer.from([0,1,0,0]));
+  if (extension === '.otf') return bytes.toString('ascii', 0, 4) === 'OTTO';
+  return false;
+}
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -66,14 +82,29 @@ function validateJob(value, expectedPrefix) {
       throw new Error('Preview source path is invalid.');
     }
     const extension = path.posix.extname(filePath).toLowerCase();
-    if (!SUPPORTED_EXTENSIONS.has(extension)) throw new Error('Preview bundle contains an unsupported source file type.');
+    if (!SUPPORTED_TEXT_EXTENSIONS.has(extension) && !SUPPORTED_BINARY_EXTENSIONS.has(extension)) throw new Error('Preview bundle contains an unsupported source file type.');
     const normalized = filePath.toLowerCase();
     if (seenPaths.has(normalized)) throw new Error('Preview bundle contains duplicate paths.');
     seenPaths.add(normalized);
-    if (typeof content !== 'string') throw new Error('Preview source file contents must be text.');
-    const bytes = Buffer.byteLength(content, 'utf8');
-    if (bytes > MAX_FILE_BYTES) throw new Error('A preview source file exceeds the per-file size limit.');
-    if (SECRET_PATTERNS.some(pattern => pattern.test(content))) throw new Error('Preview source contains a recognizable credential pattern.');
+    let bytes;
+    if (typeof content === 'string') {
+      if (!SUPPORTED_TEXT_EXTENSIONS.has(extension)) throw new Error('Text content was supplied for a binary preview asset.');
+      bytes = Buffer.byteLength(content, 'utf8');
+      if (bytes > MAX_FILE_BYTES) throw new Error('A preview source file exceeds the per-file size limit.');
+      if (SECRET_PATTERNS.some(pattern => pattern.test(content))) throw new Error('Preview source contains a recognizable credential pattern.');
+    } else if (content && typeof content === 'object' && content.encoding === 'base64' && typeof content.data === 'string' && SUPPORTED_BINARY_EXTENSIONS.has(extension)) {
+      if (!/\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf)$/i.test(filePath)
+        || !content.data || content.data.length % 4 !== 0
+        || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(content.data)) {
+        throw new Error('Preview binary asset encoding or file type is invalid.');
+      }
+      const decoded = Buffer.from(content.data, 'base64');
+      bytes = decoded.length;
+      if (bytes > MAX_BINARY_FILE_BYTES) throw new Error('A preview binary asset exceeds the per-file size limit.');
+      if (!validBinaryAsset(extension, decoded)) throw new Error('Preview binary asset signature does not match its extension.');
+    } else {
+      throw new Error('Preview source file contents have an unsupported encoding.');
+    }
     totalBytes += bytes;
     if (totalBytes > MAX_TOTAL_BYTES) throw new Error('Preview source exceeds the total size limit.');
   }
@@ -130,13 +161,16 @@ async function getWorkersSubdomain(accountId, token) {
 }
 
 function buildEnvironment() {
-  const env = { ...process.env };
+  // Never pass the GitHub runner's ambient environment to generated project
+  // scripts. Build code is untrusted and receives only the minimum process
+  // environment needed to install and compile a Next.js preview.
+  const env = {};
   for (const name of [
-    'CRON_SECRET', 'LEONARDX_BASE_URL', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID',
-    'CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_WORKER_PREFIX', 'GITHUB_TOKEN', 'VERCEL_TOKEN',
-    'SUPABASE_SERVICE_ROLE_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY',
-    'ANTHROPIC_API_KEY', 'NPM_TOKEN', 'NODE_AUTH_TOKEN',
-  ]) delete env[name];
+    'PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'LC_ALL',
+    'SYSTEMROOT', 'WINDIR', 'PATHEXT',
+  ]) {
+    if (process.env[name]) env[name] = process.env[name];
+  }
   env.CI = 'true';
   env.NODE_ENV = 'production';
   env.NEXT_TELEMETRY_DISABLED = '1';
@@ -162,7 +196,13 @@ async function writeProjectFiles(directory, files) {
     const destination = path.resolve(directory, ...filePath.split('/'));
     if (!destination.startsWith(directory + path.sep)) throw new Error('Preview source path escaped its workspace.');
     await mkdir(path.dirname(destination), { recursive: true });
-    await writeFile(destination, content, { encoding: 'utf8', flag: 'wx' });
+    if (typeof content === 'string') {
+      await writeFile(destination, content, { encoding: 'utf8', flag: 'wx' });
+    } else if (content && content.encoding === 'base64' && typeof content.data === 'string') {
+      await writeFile(destination, Buffer.from(content.data, 'base64'), { flag: 'wx' });
+    } else {
+      throw new Error('Preview source file has an unsupported encoding.');
+    }
   }
 }
 
@@ -253,13 +293,22 @@ async function buildNextProject(directory, workerName, usesTypeScript) {
   await writeFile(packagePath, JSON.stringify(packageJson, null, 2), 'utf8');
   await normalizeLegacyRobotsTextRoute(directory);
 
-  const nextConfigPath = path.join(directory, 'next.config.js');
-  try {
-    await (await import('node:fs/promises')).access(nextConfigPath);
-  } catch {
+  const nextConfigPaths = ['next.config.js', 'next.config.mjs', 'next.config.ts', 'next.config.cjs'];
+  let hasNextConfig = false;
+  for (const configName of nextConfigPaths) {
+    try {
+      await (await import('node:fs/promises')).access(path.join(directory, configName));
+      hasNextConfig = true;
+      break;
+    } catch {
+      // Try the next supported Next.js config extension.
+    }
+  }
+  if (!hasNextConfig) {
     const newline = String.fromCharCode(10);
+    const configName = packageJson.type === 'module' ? 'next.config.mjs' : 'next.config.js';
     const defaultConfig = packageJson.type === 'module' ? 'export default {};' + newline : 'module.exports = {};' + newline;
-    await writeFile(nextConfigPath, defaultConfig, 'utf8');
+    await writeFile(path.join(directory, configName), defaultConfig, 'utf8');
   }
 
   const openNextConfig = path.join(directory, 'open-next.config.ts');

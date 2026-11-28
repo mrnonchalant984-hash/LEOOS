@@ -13,7 +13,7 @@ production resource does not exist.
 | Priority | Gap | Current state | Required outcome / acceptance evidence |
 |---|---|---|---|
 | P0 | A bounded, tenant-scoped workspace execution and preview lifecycle | File editing exists; the web IDE disables arbitrary shell use. The isolated runner is a separate constrained service with deployment prerequisites. | Start/stop a compatible project in an isolated workspace; enforce ownership, resource/network/process limits, timeouts, cleanup, and logs; return a verified preview URL. Integration tests must demonstrate cross-tenant denial and failure handling. |
-| P0 | Preview separated from production deployment | Website build flow synchronizes GitHub and deploys to Vercel production. No generated-project preview route/provider is found. | Add an independently authorized, non-production preview provider and state model. Preview must not mutate production deployment state, GitHub production settings, or live URL fields. |
+| P0 | Preview separated from production deployment | Website publishing remains on GitHub/Vercel production; a separate owner-scoped Cloudflare Workers preview queue and chat-native trigger/status tools exist. The worker auto-detects static sites or builds Next.js with the pinned OpenNext adapter and deploys a project-scoped Worker. | Complete live acceptance, lifecycle cleanup, binary assets, and preview-safe integration bindings. Preview must not mutate production deployment state, GitHub production settings, or live URL fields. |
 | P0 | Provider-independent model routing | Gemini is the only enabled central execution provider. | Define capability metadata and provider adapters; test configured/unconfigured provider behavior, structured output, streaming/tool-call paths, rate limiting, and error normalization. Never fall back to an incompatible capability. |
 | P0 | Agent tool/permission contract | Agent APIs and manager exist, but complete per-agent schemas, least-privilege tool matrices, and validation rules are not verified. | Every agent has explicit input/output, allowed tools/skills, limits, and output validation. Tests prove denied tool calls cannot be bypassed through prompt or user-supplied role values. |
 | P0 | Reproducible external integration tests | Many capabilities depend on Supabase, Gemini, GitHub, Vercel, browser, or isolated-host configuration. | Mocked contract tests for normal and failure paths, plus a separately gated end-to-end environment that reports each unavailable dependency rather than a success-shaped fallback. |
@@ -23,53 +23,87 @@ production resource does not exist.
 
 ### Current implementation and remaining gaps
 
-1. **Implemented, not activated:** A default-disabled, static-only Pages
-   preview queue, owner-scoped APIs, quota/admission migration, scheduled
+1. **Implemented, not activated:** A default-disabled Cloudflare Workers
+   preview queue, owner-scoped APIs, quota/admission migrations, scheduled
    GitHub Actions worker, and Web IDE status/preview UI are present. See
-   [Cloudflare onboarding](./CLOUDFLARE_ONBOARDING.md). The migration is not
-   applied and Cloudflare credentials are not configured.
-2. **Static-only compatibility:** Inputs require a root `index.html`, bounded
-   static text assets, allowed file types, and no recognized credential
-   patterns. This scan is not exhaustive. Framework compilation, server-side
-   code, binary assets, and arbitrary scripts are not executed.
-3. **Workspace and artifact lifecycle:** A preview job and stable branch alias
-   are associated with an owned project. There is no isolated dynamic runtime,
-   immutable per-request URL, preview TTL, or automated cleanup of historical
-   Cloudflare deployment records.
-4. **Preview routing and isolation:** The UI embeds only the verified HTTPS
+   [Cloudflare onboarding](./CLOUDFLARE_ONBOARDING.md). Live account
+   configuration and end-to-end deployment acceptance still require
+   environment-backed verification.
+2. **Next.js runtime:** The worker auto-detects supported Next.js App Router or
+   Pages Router projects, builds them with the pinned OpenNext Cloudflare
+   adapter, and deploys a project-scoped Worker. OpenNext supports SSR, React
+   Server Components, route handlers, streaming, and Server Actions. The
+   build runner receives an allowlisted environment; preview Workers do not
+   receive production secrets or private database credentials.
+3. **Source and artifact limits:** Preview transfer supports up to 250 files
+   and 20 MB total. Text source is limited to 256 KB per file; supported
+   images and fonts are base64-transferred with file-signature validation and
+   a 5 MB per-file limit. Other binary formats remain unsupported. The
+   credential scan is pattern-based and not exhaustive.
+4. **Workspace and artifact lifecycle:** A preview job and deterministic
+   project Worker name are associated with an owned project. Preview URLs are
+   public to anyone who has the URL. Historical Worker TTL/deletion and
+   immutable per-build preview URLs are not yet implemented.
+5. **Preview routing and isolation:** The UI embeds only the verified HTTPS
    preview host using a sandboxed iframe. The URL is public and the preview
    host is not a confidential-data boundary; no comprehensive CSP/cookie or
    abuse-control layer is established.
-5. **Usage controls:** The migration defines per-user daily/monthly admission,
+6. **Usage controls:** The migration defines per-user daily/monthly admission,
    a combined monthly build allowance, an account rolling-30-day cap, and one
    active job per project. Provider free quotas and historical deployment
    storage/cleanup still require operational monitoring.
-6. **Provider verification:** The worker checks the configured Pages project
-   and uses pinned Wrangler, but the project-source response shape, branch
-   readiness, account authorization, and end-to-end deployment remain
-   unverified.
+7. **Provider verification:** The worker checks the account's Workers
+   subdomain, uses pinned Wrangler/OpenNext versions, and health-checks the
+   deployed Worker. A live account-backed build including an actual Server
+   Action POST still needs a staging acceptance run.
 
 ### Safe implementation order
 
-1. Review and apply the preview migration only after explicit approval and a
-   safe database backup/verification plan.
-2. Pre-create a Cloudflare Pages Direct Upload project and configure the
-   documented server environment and GitHub Actions secrets; do not let the
-   worker create Cloudflare resources.
-3. Run account-backed tests for source-type verification, branch alias
-   readiness, result/lease handling, quotas, and cleanup after explicit
-   authorization.
-4. Add TTL and provider-side historical deployment cleanup with tested
-   retention limits before treating this as a managed preview lifecycle.
-5. Expand beyond static assets only with a separately isolated build/runtime
-   design, framework-specific validation, and explicit resource budgets.
+1. Verify the preview queue/retry migrations and configure the Workers account,
+   `workers.dev` subdomain, server environment, and GitHub Actions secrets.
+2. Run staging acceptance tests for static and Next.js builds, including a
+   real Server Action POST, SSR/route handlers, lease/retry handling, quotas,
+   and cross-tenant denial.
+3. Add binary asset transfer (images/fonts) with content-type and size
+   validation; do not weaken path or credential checks.
+4. Add TTL and provider-side historical Worker cleanup with tested retention
+   limits before treating this as a managed preview lifecycle.
+5. Add Playwright-based route/form checks and browser console/network
+   diagnostics against the isolated preview.
 
-Cloudflare documents Workers Free at 100,000 requests/day and 10 ms CPU per
-invocation; Pages Free at 500 builds/month with one concurrent build; R2
-includes finite free storage and request allowances; Queues Free has
-10,000 operations/day and 24-hour retention. See the linked official pricing
+Cloudflare Workers and related storage/queue services have account- and plan-
+dependent quotas. Verify current limits in the target account before enabling
+previews; Braverton's own per-user and account caps remain enforced. See the linked official pricing
 and limits sources in [repository audit](./REPOSITORY_AUDIT.md). These
 provider-level allowances do not replace LeonardX's own budget enforcement.
+
+## Bram chat-native website engineering
+
+The website-builder PR adds a structured engineering contract to explicit
+Bram build requests, with discovery/planning, premium responsive frontend,
+full-stack behavior, owner-scoped source persistence, isolated checks,
+preview status, GitHub/Vercel readiness preflight, and evidence-based delivery.
+Project setup cards are no longer rendered in the chat transcript; source
+changes are merged into the authenticated project while preserving unrelated
+files. Chat can queue GitHub-hosted inspect/typecheck/lint/test/build jobs and
+Cloudflare Worker previews. Static projects use the asset Worker; supported
+Next.js projects are built with OpenNext and run with SSR, route handlers,
+and Server Actions.
+
+This is not yet proof of complete autonomous website delivery. The Next.js
+runtime path and bounded image/font transfer are implemented in the worker
+pipeline, but this PR has not yet passed a live account-backed acceptance run
+with a real Server Action POST. The authenticated preview data bridge now
+issues a five-minute, project-bound capability and exposes only the owner's
+project summary (ID, name, and type) through a fixed read-only backend route.
+It does not expose arbitrary SQL or generic table access. Other production
+data resources and private integrations remain unavailable until separately
+allowlisted and tested. Production secrets are never copied into preview
+Workers. Gemini and private integrations remain behind authenticated Braverton
+backend endpoints. Automatic browser interaction/visual regression testing,
+Worker TTL/cleanup, and live provider acceptance tests remain outstanding.
+GitHub/Vercel publish still requires verified account integrations, repository
+permissions, Vercel project linkage, and configured production environment.
 
 ## Remaining master specification gaps
 

@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 export const MAX_CLOUDFLARE_PREVIEW_FILES = 250;
 export const MAX_CLOUDFLARE_PREVIEW_FILE_BYTES = 256_000;
 export const MAX_CLOUDFLARE_PREVIEW_TOTAL_BYTES = 2_000_000;
@@ -85,14 +86,34 @@ export function isVerifiedCloudflarePreviewUrl(value: unknown, branch: string, p
 }
 
 
+export type CloudflarePreviewBinaryAsset = { encoding: 'base64'; data: string };
+export type CloudflarePreviewFile = string | CloudflarePreviewBinaryAsset;
+export const MAX_CLOUDFLARE_WORKER_PREVIEW_BINARY_FILE_BYTES = 5 * 1024 * 1024;
+export const MAX_CLOUDFLARE_WORKER_PREVIEW_TOTAL_BYTES = 20 * 1024 * 1024;
+
 export type CloudflareWorkerPreviewValidation =
-  | { ok: true; files: Record<string, string>; totalBytes: number; framework: 'static' | 'nextjs' }
+  | { ok: true; files: Record<string, CloudflarePreviewFile>; totalBytes: number; framework: 'static' | 'nextjs' }
   | { ok: false; code: 'invalid_files' | 'unsupported_file' | 'missing_index' | 'too_many_files' | 'file_too_large' | 'sensitive_credential' };
 
 const WORKER_SOURCE_EXTENSIONS = new Set([
   '.css', '.scss', '.sass', '.html', '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
   '.json', '.md', '.mdx', '.svg', '.txt', '.xml', '.webmanifest', '.yaml', '.yml', '.toml',
 ]);
+const WORKER_BINARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.ico', '.woff', '.woff2', '.ttf', '.otf']);
+
+function validBinarySignature(extension: string, bytes: Buffer) {
+  if (extension === '.png') return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+  if (extension === '.jpg' || extension === '.jpeg') return bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+  if (extension === '.gif') return bytes.subarray(0, 6).toString('ascii').match(/^GIF8[79]a$/) !== null;
+  if (extension === '.webp') return bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP';
+  if (extension === '.avif') return bytes.length >= 12 && bytes.toString('ascii', 4, 8) === 'ftyp' && bytes.toString('ascii', 8, 12).startsWith('avi');
+  if (extension === '.ico') return bytes.length >= 4 && bytes[0] === 0 && bytes[1] === 0 && bytes[2] === 1 && bytes[3] === 0;
+  if (extension === '.woff') return bytes.toString('ascii', 0, 4) === 'wOFF';
+  if (extension === '.woff2') return bytes.toString('ascii', 0, 4) === 'wOF2';
+  if (extension === '.ttf') return bytes.length >= 4 && bytes.subarray(0, 4).equals(Buffer.from([0,1,0,0]));
+  if (extension === '.otf') return bytes.toString('ascii', 0, 4) === 'OTTO';
+  return false;
+}
 
 export function validateCloudflareWorkerPreviewFiles(value: unknown): CloudflareWorkerPreviewValidation {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, code: 'invalid_files' };
@@ -102,7 +123,7 @@ export function validateCloudflareWorkerPreviewFiles(value: unknown): Cloudflare
   if (entries.length === 0) return { ok: false, code: 'invalid_files' };
   if (entries.length > MAX_CLOUDFLARE_PREVIEW_FILES) return { ok: false, code: 'too_many_files' };
 
-  const files: Record<string, string> = {};
+  const files: Record<string, CloudflarePreviewFile> = {};
   let totalBytes = 0;
   const normalizedPaths = new Set<string>();
   for (const [filePath, content] of entries) {
@@ -111,20 +132,34 @@ export function validateCloudflareWorkerPreviewFiles(value: unknown): Cloudflare
       || filePath.startsWith('/') || /^[a-zA-Z]:/.test(filePath)
       || parts.some(part => !part || part === '.' || part === '..' || part.startsWith('.')
         || part === '__proto__' || part === 'constructor' || part === 'prototype')
-      || /[\u0000-\u001f]/.test(filePath) || typeof content !== 'string') {
+      || /[\u0000-\u001f]/.test(filePath)) {
       return { ok: false, code: 'invalid_files' };
     }
     const extension = filePath.slice(filePath.lastIndexOf('/') + 1).toLowerCase().match(/\.[^.]+$/)?.[0] || '';
-    if (!WORKER_SOURCE_EXTENSIONS.has(extension)) return { ok: false, code: 'unsupported_file' };
     const normalizedKey = filePath.toLowerCase();
     if (normalizedPaths.has(normalizedKey)) return { ok: false, code: 'invalid_files' };
     normalizedPaths.add(normalizedKey);
-    const bytes = new TextEncoder().encode(content).byteLength;
-    if (bytes > MAX_CLOUDFLARE_PREVIEW_FILE_BYTES) return { ok: false, code: 'file_too_large' };
-    if (SECRET_PATTERNS.some(pattern => pattern.test(content))) return { ok: false, code: 'sensitive_credential' };
-    totalBytes += bytes;
-    if (totalBytes > MAX_CLOUDFLARE_PREVIEW_TOTAL_BYTES) return { ok: false, code: 'file_too_large' };
-    files[filePath] = content;
+    if (typeof content === 'string') {
+      if (!WORKER_SOURCE_EXTENSIONS.has(extension)) return { ok: false, code: 'unsupported_file' };
+      const bytes = new TextEncoder().encode(content).byteLength;
+      if (bytes > MAX_CLOUDFLARE_PREVIEW_FILE_BYTES) return { ok: false, code: 'file_too_large' };
+      if (SECRET_PATTERNS.some(pattern => pattern.test(content))) return { ok: false, code: 'sensitive_credential' };
+      totalBytes += bytes;
+      files[filePath] = content;
+    } else if (content && typeof content === 'object' && !Array.isArray(content)
+      && (content as CloudflarePreviewBinaryAsset).encoding === 'base64'
+      && typeof (content as CloudflarePreviewBinaryAsset).data === 'string'
+      && WORKER_BINARY_EXTENSIONS.has(extension)) {
+      const encoded = (content as CloudflarePreviewBinaryAsset).data;
+      if (!encoded || encoded.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) return { ok: false, code: 'invalid_files' };
+      const bytes = Buffer.from(encoded, 'base64');
+      if (bytes.length > MAX_CLOUDFLARE_WORKER_PREVIEW_BINARY_FILE_BYTES || !validBinarySignature(extension, bytes)) return { ok: false, code: 'file_too_large' };
+      totalBytes += bytes.length;
+      files[filePath] = { encoding: 'base64', data: encoded };
+    } else {
+      return { ok: false, code: 'unsupported_file' };
+    }
+    if (totalBytes > MAX_CLOUDFLARE_WORKER_PREVIEW_TOTAL_BYTES) return { ok: false, code: 'file_too_large' };
   }
 
   if (Object.hasOwn(files, 'index.html')) {
