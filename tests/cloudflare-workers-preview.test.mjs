@@ -31,7 +31,8 @@ test('Cloudflare Worker preview validator accepts static bundles and full Next.j
   const nextResult = validateCloudflareWorkerPreviewFiles({
     'package.json': JSON.stringify({ dependencies: { next: '14.1.0', react: '18.2.0', 'react-dom': '18.2.0' } }),
     'app/layout.tsx': 'export default function RootLayout({ children }) { return <html><body>{children}</body></html>; }',
-    'app/page.tsx': 'export default function Page() { return <main>Preview</main>; }',
+    'app/actions.ts': "'use server';\\nexport async function saveMessage(formData: FormData) { return String(formData.get('message') || ''); }",
+    'app/page.tsx': "import { saveMessage } from './actions';\\nexport default function Page() { return <form action={saveMessage}><input name='message'/><button>Save</button></form>; }",
     'tsconfig.json': '{}',
   });
   assert.equal(nextResult.ok, true);
