@@ -13,10 +13,12 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const MAX_FILES = 250;
 const MAX_FILE_BYTES = 256_000;
-const MAX_TOTAL_BYTES = 2_000_000;
+const MAX_BINARY_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 const SUPPORTED_EXTENSIONS = new Set([
   '.css', '.scss', '.sass', '.html', '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
   '.json', '.md', '.mdx', '.svg', '.txt', '.xml', '.webmanifest', '.yaml', '.yml', '.toml',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.ico', '.woff', '.woff2', '.ttf', '.otf',
 ]);
 const SECRET_PATTERNS = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
@@ -70,10 +72,22 @@ function validateJob(value, expectedPrefix) {
     const normalized = filePath.toLowerCase();
     if (seenPaths.has(normalized)) throw new Error('Preview bundle contains duplicate paths.');
     seenPaths.add(normalized);
-    if (typeof content !== 'string') throw new Error('Preview source file contents must be text.');
-    const bytes = Buffer.byteLength(content, 'utf8');
-    if (bytes > MAX_FILE_BYTES) throw new Error('A preview source file exceeds the per-file size limit.');
-    if (SECRET_PATTERNS.some(pattern => pattern.test(content))) throw new Error('Preview source contains a recognizable credential pattern.');
+    let bytes;
+    if (typeof content === 'string') {
+      bytes = Buffer.byteLength(content, 'utf8');
+      if (bytes > MAX_FILE_BYTES) throw new Error('A preview source file exceeds the per-file size limit.');
+      if (SECRET_PATTERNS.some(pattern => pattern.test(content))) throw new Error('Preview source contains a recognizable credential pattern.');
+    } else if (content && typeof content === 'object' && content.encoding === 'base64' && typeof content.data === 'string') {
+      if (!/\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf)$/i.test(filePath)
+        || !content.data || content.data.length % 4 !== 0
+        || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(content.data)) {
+        throw new Error('Preview binary asset encoding or file type is invalid.');
+      }
+      bytes = Buffer.from(content.data, 'base64').length;
+      if (bytes > MAX_BINARY_FILE_BYTES) throw new Error('A preview binary asset exceeds the per-file size limit.');
+    } else {
+      throw new Error('Preview source file contents have an unsupported encoding.');
+    }
     totalBytes += bytes;
     if (totalBytes > MAX_TOTAL_BYTES) throw new Error('Preview source exceeds the total size limit.');
   }
@@ -165,7 +179,13 @@ async function writeProjectFiles(directory, files) {
     const destination = path.resolve(directory, ...filePath.split('/'));
     if (!destination.startsWith(directory + path.sep)) throw new Error('Preview source path escaped its workspace.');
     await mkdir(path.dirname(destination), { recursive: true });
-    await writeFile(destination, content, { encoding: 'utf8', flag: 'wx' });
+    if (typeof content === 'string') {
+      await writeFile(destination, content, { encoding: 'utf8', flag: 'wx' });
+    } else if (content && content.encoding === 'base64' && typeof content.data === 'string') {
+      await writeFile(destination, Buffer.from(content.data, 'base64'), { flag: 'wx' });
+    } else {
+      throw new Error('Preview source file has an unsupported encoding.');
+    }
   }
 }
 
