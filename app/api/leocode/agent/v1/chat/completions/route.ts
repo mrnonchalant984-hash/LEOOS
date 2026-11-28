@@ -238,17 +238,14 @@ export async function POST(req: NextRequest) {
           const outputTokens = Number(raw.usage.completion_tokens ?? raw.usage.output_tokens ?? 0);
           if (Number.isFinite(inputTokens) && Number.isFinite(outputTokens)) {
             void Promise.resolve(adminSupabase().from('ai_usage').insert({
-              user_id: ctx.user.id,
-              feature: 'leocode_agent_host',
-              model: `google/${resolved.model}`,
-              prompt_tokens: Math.max(0, Math.trunc(inputTokens)),
-              completion_tokens: Math.max(0, Math.trunc(outputTokens)),
-              total_tokens: Math.max(0, Math.trunc(inputTokens + outputTokens)),
-              credits_used: 0,
-              metadata: { source: 'vscode_ahp', provider: 'google' },
-            })).then(({ error }) => { if (error) console.error('Leo Agent Host usage record could not be saved:', error.message); }).catch(error => {
-              console.error('Leo Agent Host usage record could not be saved:', error instanceof Error ? error.message : 'unknown error');
-            });
+              user_id: ctx.user.id, feature: 'leocode_agent_host', model: `google/${resolved.model}`,
+              prompt_tokens: Math.max(0, Math.trunc(inputTokens)), completion_tokens: Math.max(0, Math.trunc(outputTokens)),
+              total_tokens: Math.max(0, Math.trunc(inputTokens + outputTokens)), credits_used: 0,
+              metadata: { source: 'vscode_ahp', provider: 'google', request_status: 'completed' },
+            }).select('id').single()).then(async ({ data, error }) => {
+              if (error) { console.error('Leo Agent Host usage record could not be saved:', error.message); return; }
+              if (data) await recordAiUsageFinancials({ aiUsageId: data.id, provider: 'google', model: resolved.model, inputTokens: Math.max(0, Math.trunc(inputTokens)), outputTokens: Math.max(0, Math.trunc(outputTokens)) });
+            }).catch(error => { console.error('Leo Agent Host usage record could not be saved:', error instanceof Error ? error.message : 'unknown error'); });
           }
         }
       }
