@@ -104,6 +104,12 @@ PREVIEW
   tables or private integrations are connected. Runtime integrations requiring
   private API keys or production database credentials are not injected into
   preview Workers.
+- When a generated app needs the allowed project summary, listen for the
+  parent-frame `braverton:preview-data-capability` message. Keep its token only
+  in memory and call the supplied `apiBase` project preview data endpoint with
+  `Authorization: Bearer <token>` and `resource=project_summary`. Never put
+  the capability in localStorage, URLs, logs, or third-party requests. The
+  capability expires after five minutes and does not authorize other data.
 - Respect the provider's source limits and quotas. A queued job is not a
   running app, and a successful compile is not a verified preview URL.
 - Poll or check the preview status until it is deployed or failed. Return only
