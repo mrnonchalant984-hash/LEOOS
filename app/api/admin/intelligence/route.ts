@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
   const inRange = (date: string) => (!fromDate || new Date(date) >= fromDate) && (!toDate || new Date(date) <= toDate);
   const users = usersQ.data || [];
   const profileMap = new Map(users.map((u: any) => [u.id, u]));
-  const usages = (usageQ.data || []).filter((u: Usage) => inRange(u.created_at));
+  const usages = (usageQ.data || []).filter((u: Usage) => inRange(u.created_at) && u.metadata?.request_status !== 'failed' && u.metadata?.status !== 'failed');
   const payments = paymentsQ.data || [];
   const successfulPayments = payments.filter((p: Payment) => p.status === 'success' && p.verified_at && inRange(p.paid_at || p.created_at));
   const paymentNgN = (p: Payment) => p.currency?.toUpperCase() === 'NGN'
@@ -154,7 +154,7 @@ export async function GET(req: NextRequest) {
   const startOfWeek = new Date(startOfDay); startOfWeek.setUTCDate(startOfWeek.getUTCDate() - 6);
   const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const periodStats = (start: Date) => {
-    const set = usages.filter(u => new Date(u.created_at) >= start);
+    const set = usages.filter(u => !u.feature?.startsWith('image_') && new Date(u.created_at) >= start);
     return { requests: set.length, tokens: set.reduce((n, u) => n + num(u.total_tokens), 0), inputTokens: set.reduce((n, u) => n + num(u.prompt_tokens), 0), outputTokens: set.reduce((n, u) => n + num(u.completion_tokens), 0), credits: set.reduce((n, u) => n + num(u.credits_used), 0) };
   };
 
@@ -213,8 +213,8 @@ export async function GET(req: NextRequest) {
       imageGenerationRequests: usages.filter(u => u.feature === 'image_generation' || u.feature?.startsWith('image_')).length,
     },
     revenue: {
-      paymentStatuses: statusCounts(payments),
-      payments: payments.slice(0, 250),
+      paymentStatuses: statusCounts(payments.filter((p: Payment) => inRange(p.paid_at || p.created_at))),
+      payments: payments.filter((p: Payment) => inRange(p.paid_at || p.created_at)).slice(0, 250),
       subscriptions: subscriptions.map((s: any) => ({ ...s, payment: payments.find((p: Payment) => p.reference === s.payment_reference) || null })),
       subscriptionStatuses: statusCounts(subscriptions),
       recurringRevenueNgn: moneyText(mrr),
