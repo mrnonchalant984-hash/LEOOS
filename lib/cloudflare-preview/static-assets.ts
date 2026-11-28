@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 export const MAX_CLOUDFLARE_PREVIEW_FILES = 250;
 export const MAX_CLOUDFLARE_PREVIEW_FILE_BYTES = 256_000;
 export const MAX_CLOUDFLARE_PREVIEW_TOTAL_BYTES = 2_000_000;
