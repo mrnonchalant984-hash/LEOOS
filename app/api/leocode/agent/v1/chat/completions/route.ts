@@ -101,7 +101,7 @@ function withUsageTracking(body: ReadableStream<Uint8Array>, userId: string, mod
               metadata: { source: 'vscode_ahp', provider: 'google', request_status: 'completed' },
             }).select('id').single()).then(async ({ data, error }) => {
               if (error) { console.error('Leo Agent Host usage record could not be saved:', error.message); return; }
-              if (data) await recordAiUsageFinancials({ aiUsageId: data.id, provider: 'google', model: model.replace(/^google\\//, ''), inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
+              if (data) await recordAiUsageFinancials({ aiUsageId: data.id, provider: 'google', model: model.startsWith('google/') ? model.slice(7) : model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
             }).catch(error => { console.error('Leo Agent Host usage record could not be saved:', error instanceof Error ? error.message : 'unknown error'); });
           }
           return;
