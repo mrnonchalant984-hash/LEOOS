@@ -13,7 +13,7 @@ production resource does not exist.
 | Priority | Gap | Current state | Required outcome / acceptance evidence |
 |---|---|---|---|
 | P0 | A bounded, tenant-scoped workspace execution and preview lifecycle | File editing exists; the web IDE disables arbitrary shell use. The isolated runner is a separate constrained service with deployment prerequisites. | Start/stop a compatible project in an isolated workspace; enforce ownership, resource/network/process limits, timeouts, cleanup, and logs; return a verified preview URL. Integration tests must demonstrate cross-tenant denial and failure handling. |
-| P0 | Preview separated from production deployment | Website build flow synchronizes GitHub and deploys to Vercel production; an owner-scoped Cloudflare Pages static preview queue and chat-native trigger/status tools now exist. A persistent isolated dynamic Next.js/server preview runtime is still missing. | Add an independently authorized, non-production preview provider and state model. Preview must not mutate production deployment state, GitHub production settings, or live URL fields. |
+| P0 | Preview separated from production deployment | Website publishing remains on GitHub/Vercel production; a separate owner-scoped Cloudflare Workers preview queue and chat-native trigger/status tools exist. The worker auto-detects static sites or builds Next.js with the pinned OpenNext adapter and deploys a project-scoped Worker. | Complete live acceptance, lifecycle cleanup, binary assets, and preview-safe integration bindings. Preview must not mutate production deployment state, GitHub production settings, or live URL fields. |
 | P0 | Provider-independent model routing | Gemini is the only enabled central execution provider. | Define capability metadata and provider adapters; test configured/unconfigured provider behavior, structured output, streaming/tool-call paths, rate limiting, and error normalization. Never fall back to an incompatible capability. |
 | P0 | Agent tool/permission contract | Agent APIs and manager exist, but complete per-agent schemas, least-privilege tool matrices, and validation rules are not verified. | Every agent has explicit input/output, allowed tools/skills, limits, and output validation. Tests prove denied tool calls cannot be bypassed through prompt or user-supplied role values. |
 | P0 | Reproducible external integration tests | Many capabilities depend on Supabase, Gemini, GitHub, Vercel, browser, or isolated-host configuration. | Mocked contract tests for normal and failure paths, plus a separately gated end-to-end environment that reports each unavailable dependency rather than a success-shaped fallback. |
@@ -43,15 +43,15 @@ production resource does not exist.
    project Worker name are associated with an owned project. Preview URLs are
    public to anyone who has the URL. Historical Worker TTL/deletion and
    immutable per-build preview URLs are not yet implemented.
-4. **Preview routing and isolation:** The UI embeds only the verified HTTPS
+5. **Preview routing and isolation:** The UI embeds only the verified HTTPS
    preview host using a sandboxed iframe. The URL is public and the preview
    host is not a confidential-data boundary; no comprehensive CSP/cookie or
    abuse-control layer is established.
-5. **Usage controls:** The migration defines per-user daily/monthly admission,
+6. **Usage controls:** The migration defines per-user daily/monthly admission,
    a combined monthly build allowance, an account rolling-30-day cap, and one
    active job per project. Provider free quotas and historical deployment
    storage/cleanup still require operational monitoring.
-6. **Provider verification:** The worker checks the account's Workers
+7. **Provider verification:** The worker checks the account's Workers
    subdomain, uses pinned Wrangler/OpenNext versions, and health-checks the
    deployed Worker. A live account-backed build including an actual Server
    Action POST still needs a staging acceptance run.
@@ -70,10 +70,9 @@ production resource does not exist.
 5. Add Playwright-based route/form checks and browser console/network
    diagnostics against the isolated preview.
 
-Cloudflare documents Workers Free at 100,000 requests/day and 10 ms CPU per
-invocation; Pages Free at 500 builds/month with one concurrent build; R2
-includes finite free storage and request allowances; Queues Free has
-10,000 operations/day and 24-hour retention. See the linked official pricing
+Cloudflare Workers and related storage/queue services have account- and plan-
+dependent quotas. Verify current limits in the target account before enabling
+previews; Braverton's own per-user and account caps remain enforced. See the linked official pricing
 and limits sources in [repository audit](./REPOSITORY_AUDIT.md). These
 provider-level allowances do not replace LeonardX's own budget enforcement.
 
