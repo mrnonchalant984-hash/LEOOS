@@ -46,48 +46,60 @@ performed by this repository change.
 
 ## CLI and runtime
 
-Wrangler 4.159.0 is installed as a repository-local dev dependency and was
-verified with `npx wrangler --version`. The preview worker requires a
-pre-created Cloudflare Pages Direct Upload project. It checks that project
-exists before deploying and uses a unique preview branch per LeonardX project;
-it never creates a Pages project or targets the production branch. A preview
-is public to anyone who has its URL. Only saved static text assets are
-accepted; do not include credentials, private data, or confidential material.
+The preview provider deploys a separate Cloudflare Worker for each Braverton
+project. Static sites use a lightweight asset Worker. Next.js projects are
+built on a fresh GitHub-hosted runner with the pinned OpenNext Cloudflare
+adapter and run as an isolated Worker on a `workers.dev` preview hostname.
+This path supports Next.js App Router and Pages Router, SSR, React Server
+Components, route handlers, streaming, and Server Actions. It is not a Vercel
+production deployment and does not change the production branch or domain.
+
+The build runner receives only a minimal allowlisted process environment.
+Project dependencies and build scripts run without the Cloudflare deployment
+token, Braverton callback secret, GitHub credentials, or production API keys.
+The Cloudflare token is introduced only for the final Wrangler deployment
+step. Preview Workers do not receive Braverton production secrets or database
+credentials. Server Actions can execute in the Worker, but actions that depend
+on external databases or private services need separately provisioned,
+preview-safe environment bindings; production secrets are never copied into
+the preview.
 
 To enable the preview path after account setup:
 
-1. Apply `supabase/migrations/20261105120000_cloudflare_static_previews.sql`.
-2. Set `LEONARDX_CLOUDFLARE_PREVIEWS_ENABLED=true` and the matching
-   `CLOUDFLARE_PAGES_PROJECT` in the LeonardX server environment. Keep the
-   existing high-entropy `CRON_SECRET`.
-3. Configure GitHub Actions secrets: `LEONARDX_BASE_URL`, `CRON_SECRET`,
-   `CLOUDFLARE_API_TOKEN` (scoped to Pages read/edit on the intended account),
-   `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_PAGES_PROJECT`. The project name
-   must match the server setting. The API token belongs only in GitHub
-   Actions, never the app environment or browser.
-4. The action checks for a queued preview every five minutes. It transfers a
-   bounded static snapshot to the runner, uploads it with Wrangler to the
-   pre-created Pages project, verifies the branch URL responds, and records
-   only the verified preview result. It does not clone or update the user's
-   project repository.
+1. Confirm that the Cloudflare Worker account and `workers.dev` subdomain are
+   active. The preview worker creates uniquely named Workers under the
+   configured account; it does not create a production Worker or custom domain.
+2. Confirm the preview queue and retry migrations are applied:
+   `20261105120000_cloudflare_static_previews.sql` and
+   `20261123124237_cloudflare_preview_retries_and_heartbeats.sql`.
+3. Set `LEONARDX_CLOUDFLARE_PREVIEWS_ENABLED=true`,
+   `CLOUDFLARE_WORKER_PREFIX`, and the existing high-entropy
+   `CRON_SECRET` in the Braverton server environment. The former
+   `CLOUDFLARE_PAGES_PROJECT` name remains accepted as a compatibility alias.
+4. Configure GitHub Actions secrets: `LEONARDX_BASE_URL`, `CRON_SECRET`,
+   `CLOUDFLARE_API_TOKEN` (scoped to Worker deployment on the intended
+   account), `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_WORKER_PREFIX`.
+   The former `CLOUDFLARE_PAGES_PROJECT` secret is temporarily accepted as a
+   fallback. The API token belongs only in GitHub Actions, never in the app
+   environment or browser.
+5. The action checks for a queued preview every five minutes. It transfers a
+   bounded source snapshot to a fresh runner, auto-detects static or supported
+   Next.js source, builds Next.js through OpenNext, deploys the project-scoped
+   Worker, health-checks the resulting HTTPS URL, and records only a verified
+   preview result. It does not clone or update the user's project repository.
 
 Each user is limited to 3 preview jobs per 24 hours and the plan's existing
-monthly build allowance (counting current-month website builds and previews);
-the application also stops queueing at 400 preview jobs per rolling 30 days,
-below the documented Pages Free build allowance. A project can have only one
-queued/running job at a time. Each snapshot is limited to 250 text assets,
-256 KB per file, and 2 MB total; only HTML, CSS, JS, JSON, SVG, text, XML, and
-web manifests are accepted. Framework builds, server-side code, and binary
-assets are not executed or transformed. Re-creating a preview updates that
-project's stable branch alias. Automatic deletion of historical Cloudflare
-deployment records is not implemented; review Cloudflare retention before
-enabling the feature. Common credential patterns are blocked, but that scan is
-not exhaustive and does not replace checking the files yourself.
-
-Cloudflare's official Skills repository also documents the beta `cf` CLI; it
-was not installed. Do not run deploy, publish, or resource-creation commands
-until the target account, permissions, preview scope, and spending limits are
-explicitly confirmed.
+monthly build allowance; the account also has a rolling 30-day preview cap of
+400 jobs. A project can have only one queued/running job at a time. The current
+source snapshot is limited to 250 text files, 256 KB per file, and 2 MB total.
+Supported Next.js projects must include a valid `package.json` and a supported
+App Router or Pages Router entry. Static sites require a root `index.html`.
+The current transfer format is text-source only; binary files such as PNG,
+JPEG, WOFF, and PDF are not yet included in the preview snapshot. Common
+credential patterns are blocked, but that scan is not exhaustive. Preview
+URLs are public to anyone who has the URL; do not include confidential data.
+Historical Worker TTL/deletion is not yet automated, so account retention and
+usage should be monitored.
 
 ## References
 
