@@ -46,7 +46,7 @@ test('credit preview is idempotency-aware, excludes images and failed requests, 
  assert.match(route,/feature\.startsWith\('image_'/);
  assert.match(route,/request_status==='failed'/);
  assert.match(route,/Preview only/);
- assert.doesNotMatch(route,/\\.insert\\(|\\.update\\(|\\.delete\\(/);
+  assert.doesNotMatch(route,/\.insert\(|\.update\(|\.delete\(/);
 });
 
 test('expense recording is owner protected and uses integer decimal conversion for USD to NGN', async () => {
