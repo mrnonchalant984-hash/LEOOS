@@ -124,7 +124,7 @@ export async function GET(req: NextRequest) {
     const total = num(u.total_tokens), input = num(u.prompt_tokens), output = num(u.completion_tokens);
     const f = financialMap.get(u.id);
     const user = userUsage.get(u.user_id) || { userId: u.user_id, requests: 0, inputTokens: 0, outputTokens: 0, tokens: 0, credits: 0, estimatedNgn: null, actualNgn: null, lastUsedAt: null };
-    user.requests++; user.inputTokens += input; user.outputTokens += output; user.tokens += total; user.credits += num(u.credits_used);
+    user.requests++; user.inputTokens += input; user.outputTokens += output; user.tokens += total;
     if (f?.estimated_ngn !== null && f?.estimated_ngn !== undefined) user.estimatedNgn = moneyText(moneyUnits(user.estimatedNgn || '0') + moneyUnits(f.estimated_ngn));
     if (f?.actual_ngn !== null && f?.actual_ngn !== undefined) user.actualNgn = moneyText(moneyUnits(user.actualNgn || '0') + moneyUnits(f.actual_ngn));
     if (!user.lastUsedAt || u.created_at > user.lastUsedAt) user.lastUsedAt = u.created_at;
@@ -140,7 +140,14 @@ export async function GET(req: NextRequest) {
   const allTokens = usages.reduce((n, u) => n + num(u.total_tokens), 0);
   const inputTokens = usages.reduce((n, u) => n + num(u.prompt_tokens), 0);
   const outputTokens = usages.reduce((n, u) => n + num(u.completion_tokens), 0);
-  const totalCredits = usages.reduce((n, u) => n + num(u.credits_used), 0);
+  const creditLedgerRows = creditLedgerQ.data || [];
+  const ledgerDelta = creditLedgerRows.reduce((sum: bigint, row: any) => sum + BigInt(row.credits_delta || 0), 0n);
+  const tokenCreditsUsed = Number(ledgerDelta < 0n ? -ledgerDelta : 0n);
+  const legacyRecordedCredits = usages.reduce((n, u) => n + num(u.credits_used), 0);
+  const developerApiCreditsUsed = usages.filter(u => u.feature === 'developer_api').reduce((n,u)=>n+num(u.credits_used),0);
+  const platformFeatureCreditsUsed = usages.filter(u => num(u.total_tokens) === 0).reduce((n,u)=>n+num(u.credits_used),0);
+  const tokenCreditsByUser = new Map<string, number>();
+  for (const row of creditLedgerRows) tokenCreditsByUser.set(row.user_id, (tokenCreditsByUser.get(row.user_id)||0) - num(row.credits_delta));
 
   const now = new Date();
   const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -186,7 +193,7 @@ export async function GET(req: NextRequest) {
       successfulPayments: successfulPayments.length,
       activeSubscriptions: subscriptions.filter((s: any) => s.status === 'active' && (!s.current_period_end || new Date(s.current_period_end) > now)).length,
       aiRequests: usages.filter(u => !u.feature?.startsWith('image_')).length,
-      inputTokens, outputTokens, totalTokens: allTokens, creditsUsed: totalCredits,
+      inputTokens, outputTokens, totalTokens: allTokens, creditsUsed: tokenCreditsUsed, legacyRecordedCredits, developerApiCreditsUsed, platformFeatureCreditsUsed,
       actualAiSpendNgn: actualCostComplete ? moneyText(actualAiCost) : null, estimatedAiValueNgn: estimatedCostComplete ? moneyText(estimatedAiValue) : null,
       grossRevenueNgn: moneyText(grossRevenue), refundsNgn: moneyText(refundedRevenue), netRevenueNgn: moneyText(netRevenue),
       mrrNgn: moneyText(mrr), hostingRevenueNgn: moneyText(hostingRevenue),
@@ -202,7 +209,7 @@ export async function GET(req: NextRequest) {
       byProvider: [...providerUsage.entries()].map(([name, value]) => ({ name, ...value })).sort((a, b) => b.tokens - a.tokens),
       daily: [...daily.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-60),
       averageTokensPerRequest: (() => { const eligible = usages.filter(u => !u.feature?.startsWith('image_')); return eligible.length ? Math.round(allTokens / eligible.length) : 0; })(),
-      users: [...userUsage.values()].map((u: any) => { const profile = profileMap.get(u.userId); const sub = subscriptions.filter((s: any) => s.user_id === u.userId && s.status === 'active').sort((a: any,b: any) => String(b.created_at).localeCompare(String(a.created_at)))[0]; return { ...u, name: profile?.full_name || 'Unnamed account', email: profile?.email || 'Account email unavailable', subscriptionPlan: sub?.plan || 'free', subscriptionStatus: sub?.status || 'inactive' }; }).sort((a: any, b: any) => b.tokens - a.tokens),
+      users: [...userUsage.values()].map((u: any) => { const profile = profileMap.get(u.userId); const sub = subscriptions.filter((s: any) => s.user_id === u.userId && s.status === 'active').sort((a: any,b: any) => String(b.created_at).localeCompare(String(a.created_at)))[0]; return { ...u, credits: tokenCreditsByUser.get(u.userId)||0, name: profile?.full_name || 'Unnamed account', email: profile?.email || 'Account email unavailable', subscriptionPlan: sub?.plan || 'free', subscriptionStatus: sub?.status || 'inactive' }; }).sort((a: any, b: any) => b.tokens - a.tokens),
       imageGenerationRequests: usages.filter(u => u.feature === 'image_generation' || u.feature?.startsWith('image_')).length,
     },
     revenue: {
