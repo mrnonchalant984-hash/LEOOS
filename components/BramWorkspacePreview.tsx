@@ -159,18 +159,18 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
       <div className="flex min-h-[320px] flex-1 items-center justify-center overflow-auto p-3 sm:p-4">
         {url ? (
           <div className={'h-full min-h-[320px] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-lg ' + (viewport === 'mobile' ? 'w-[390px] max-w-full' : 'w-full')}>
-            <iframe title={projectName + ' live preview'} src={url} loading="lazy" sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" className="h-full min-h-[320px] w-full bg-white"/>
+            <iframe title={projectName + ' live preview'} src={url} loading="lazy" sandbox="allow-scripts allow-forms allow-same-origin" referrerPolicy="no-referrer" className="h-full min-h-[320px] w-full bg-white"/>
           </div>
         ) : (
           <div className="max-w-sm text-center">
             <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-indigo-100 text-indigo-600"><Monitor size={22}/></div>
-            <h3 className="mt-4 text-sm font-semibold">{pending ? 'Preparing your preview' : preview?.status === 'failed' ? 'Preview build failed' : 'Preview your project here'}</h3>
+            <h3 className="mt-4 text-sm font-semibold">{pending ? 'Preparing your preview' : preview?.status === 'failed' ? 'Preview build failed' : 'Preview your full-stack project here'}</h3>
             <p className="mt-2 text-xs leading-5 text-slate-500">
               {pending
                 ? 'The preview worker is processing your saved project. This panel will refresh automatically.'
-                : 'The current preview service publishes prebuilt static HTML, CSS and JavaScript. A dynamic Next.js/server runtime is not yet enabled.'}
+                : 'Build an isolated preview of your saved site. Next.js projects run with server rendering, route handlers and Server Actions; static sites use the lightweight Worker path. Private production credentials are never copied into previews.'}
             </p>
-            {!pending && <button type="button" onClick={() => void createPreview()} disabled={busy} className="mt-4 rounded-full bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-50">{busy ? 'Queueing…' : 'Create static preview'}</button>}
+            {!pending && <button type="button" onClick={() => void createPreview()} disabled={busy} className="mt-4 rounded-full bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-50">{busy ? 'Queueing…' : 'Create isolated preview'}</button>}
           </div>
         )}
       </div>
