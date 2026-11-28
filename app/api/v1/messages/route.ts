@@ -1,3 +1,4 @@
+import { recordAiUsageFinancials } from '@/lib/ai/usage-financials';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { GoogleGenAI, type Content } from '@google/genai';
@@ -110,7 +111,8 @@ export async function POST(req: NextRequest) {
               if (actualCredits === null) throw new Error('Provider usage returned an unpriced model.');
               await settleBillableUsage(auth, actualCredits);
               const billedCredits = auth.owner ? 0 : actualCredits;
-              await adminSupabase().from('ai_usage').insert({ user_id: auth.userId, feature: 'developer_api', model, total_tokens: inputTokens + outputTokens, credits_used: billedCredits });
+              const { data: usageRow } = await adminSupabase().from('ai_usage').insert({ user_id: auth.userId, feature: 'developer_api', model, prompt_tokens: inputTokens, completion_tokens: outputTokens, total_tokens: inputTokens + outputTokens, credits_used: billedCredits, metadata: { request_status: 'completed', provider: 'google' } }).select('id').single();
+              if (usageRow) await recordAiUsageFinancials({ aiUsageId: usageRow.id, provider: 'google', model: model.replace(/^google\\//, ''), inputTokens, outputTokens });
               after(async () => { try { await emitWebhookEvent(auth.userId, 'api.usage.completed', { request_id: auth.requestId, model, input_tokens: inputTokens, output_tokens: outputTokens, total_tokens: inputTokens + outputTokens, credits_used: billedCredits, duration_ms: Date.now() - startedAt }); } catch { /* queued delivery retries handle transient failures */ } });
               controller.enqueue(sse('content_block_stop', { type: 'content_block_stop', index: 0 }));
               controller.enqueue(sse('message_delta', { type: 'message_delta', delta: { stop_reason: mapFinishReason(finishReason), stop_sequence: null }, usage: { output_tokens: outputTokens, input_tokens: inputTokens, total_tokens: inputTokens + outputTokens, credits_used: billedCredits } }));
@@ -142,7 +144,8 @@ export async function POST(req: NextRequest) {
       if (actualCredits === null) throw new Error('Provider usage returned an unpriced model.');
       await settleBillableUsage(auth, actualCredits);
       const billedCredits = auth.owner ? 0 : actualCredits;
-      await adminSupabase().from('ai_usage').insert({ user_id: auth.userId, feature: 'developer_api', model, total_tokens: input + output, credits_used: billedCredits });
+      const { data: usageRow } = await adminSupabase().from('ai_usage').insert({ user_id: auth.userId, feature: 'developer_api', model, prompt_tokens: input, completion_tokens: output, total_tokens: input + output, credits_used: billedCredits, metadata: { request_status: 'completed', provider: 'google' } }).select('id').single();
+      if (usageRow) await recordAiUsageFinancials({ aiUsageId: usageRow.id, provider: 'google', model: model.replace(/^google\\//, ''), inputTokens: input, outputTokens: output });
       after(async () => { try { await emitWebhookEvent(auth.userId, 'api.usage.completed', { request_id: auth.requestId, model, input_tokens: input, output_tokens: output, total_tokens: input + output, credits_used: billedCredits, duration_ms: Date.now() - startedAt }); } catch { /* queued delivery retries handle transient failures */ } });
       const answer = completion.text || '';
       const finishReason = completion.candidates?.[0]?.finishReason;
