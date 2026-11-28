@@ -1,7 +1,7 @@
 # Cloudflare Workspace Onboarding
 
-This guide covers the optional developer tooling and the gated static preview
-path. It does not provision Cloudflare resources or authorize an account.
+This guide covers the optional developer tooling and the gated static and
+full-stack Next.js preview paths. It does not provision Cloudflare resources or authorize an account.
 
 ## MCP server
 
