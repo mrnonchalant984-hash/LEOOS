@@ -1,3 +1,4 @@
+import { recordAiUsageFinancials } from '@/lib/ai/usage-financials';
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash, randomUUID } from 'node:crypto';
 import { adminSupabase } from '@/lib/auth';
@@ -384,12 +385,15 @@ export async function POST(request: NextRequest) {
             status: 'completed', provider: result.provider, model: result.model, response_text: reply, updated_at: now,
           }).eq('id', createdRequest.id).eq('user_id', userId);
           if (completeError) return { data: null, error: 'Leo AI responded, but its idempotent result could not be persisted. Do not retry with a new key until checking chat history.' };
-          if (result.usage) await db.from('ai_usage').insert({
-            user_id: userId, feature: 'mcp_leo_ai_chat', model: `${result.provider}/${result.model}`,
-            prompt_tokens: result.usage.inputTokens, completion_tokens: result.usage.outputTokens,
-            total_tokens: result.usage.totalTokens, credits_used: 0,
-            metadata: { session_id: sessionId, mcp_request_id: createdRequest.id, provider: result.provider },
-          });
+          if (result.usage) {
+            const { data: usageRow } = await db.from('ai_usage').insert({
+              user_id: userId, feature: 'mcp_leo_ai_chat', model: `${result.provider}/${result.model}`,
+              prompt_tokens: result.usage.inputTokens, completion_tokens: result.usage.outputTokens,
+              total_tokens: result.usage.totalTokens, credits_used: 0,
+              metadata: { session_id: sessionId, mcp_request_id: createdRequest.id, provider: result.provider, request_status: 'completed' },
+            }).select('id').single();
+            if (usageRow) await recordAiUsageFinancials({ aiUsageId: usageRow.id, provider: result.provider, model: result.model, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens });
+          }
           return { data: { request_id: createdRequest.id, session_id: sessionId, status: 'completed', reply, provider: result.provider, model: result.model, fallback_used: outcome.fallback_used }, error: null };
         } catch (error) {
           const providerError = error instanceof ModelProviderError;
