@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
               await settleBillableUsage(auth, actualCredits);
               const billedCredits = auth.owner ? 0 : actualCredits;
               const { data: usageRow } = await adminSupabase().from('ai_usage').insert({ user_id: auth.userId, feature: 'developer_api', model, prompt_tokens: inputTokens, completion_tokens: outputTokens, total_tokens: inputTokens + outputTokens, credits_used: billedCredits, metadata: { request_status: 'completed', provider: 'google' } }).select('id').single();
-              if (usageRow) await recordAiUsageFinancials({ aiUsageId: usageRow.id, provider: 'google', model: model.replace(/^google\\//, ''), inputTokens, outputTokens });
+              if (usageRow) await recordAiUsageFinancials({ aiUsageId: usageRow.id, provider: 'google', model: model.startsWith('google/') ? model.slice(7) : model, inputTokens, outputTokens });
               after(async () => { try { await emitWebhookEvent(auth.userId, 'api.usage.completed', { request_id: auth.requestId, model, input_tokens: inputTokens, output_tokens: outputTokens, total_tokens: inputTokens + outputTokens, credits_used: billedCredits, duration_ms: Date.now() - startedAt }); } catch { /* queued delivery retries handle transient failures */ } });
               controller.enqueue(sse('content_block_stop', { type: 'content_block_stop', index: 0 }));
               controller.enqueue(sse('message_delta', { type: 'message_delta', delta: { stop_reason: mapFinishReason(finishReason), stop_sequence: null }, usage: { output_tokens: outputTokens, input_tokens: inputTokens, total_tokens: inputTokens + outputTokens, credits_used: billedCredits } }));
