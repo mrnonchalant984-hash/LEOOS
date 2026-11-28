@@ -9,9 +9,9 @@ test('owner intelligence migration is additive, private and does not invent pric
  assert.match(sql,/enable row level security/g);
  assert.ok(sql.includes('revoke all on public.ai_model_pricing'));
  assert.ok(sql.includes("values ('default', false)"));
- assert.match(sql,/pricing_status\\s+text not null default 'unpriced'/);
+  assert.match(sql,/pricing_status\s+text not null default 'unpriced'/);
  assert.match(sql,/prevent_ai_financial_ledger_mutation/);
- assert.doesNotMatch(sql,/insert into public\\.ai_model_pricing/);
+  assert.doesNotMatch(sql,/insert into public\.ai_model_pricing/);
 });
 
 test('owner intelligence API uses owner 2FA and trusted device and counts only verified payments as revenue', async () => {
@@ -20,7 +20,7 @@ test('owner intelligence API uses owner 2FA and trusted device and counts only v
  assert.match(route,/twofa_verified/);
  assert.match(route,/leo_admin_device/);
  assert.match(route,/token_hash/);
- assert.match(route,/p\\.status === 'success' && p\\.verified_at/);
+  assert.match(route,/p\.status === 'success' && p\.verified_at/);
  assert.match(route,/status === 'succeeded'/);
  assert.match(route,/netOperatingResultNgn/);
  assert.match(route,/moneyUnits/);
