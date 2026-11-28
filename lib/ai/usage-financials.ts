@@ -3,7 +3,7 @@ import { adminSupabase } from '@/lib/auth';
 function scaled(value:string|number,digits:number):bigint{const raw=String(value);if(!/^\d+(?:\.\d+)?$/.test(raw))return 0n;const [whole,fraction='']=raw.split('.');return BigInt(whole)*10n**BigInt(digits)+BigInt((fraction+'0'.repeat(digits)).slice(0,digits));}
 function decimal(value:bigint,digits:number){const base=10n**BigInt(digits);return (value/base).toString()+'.'+(value%base).toString().padStart(digits,'0');}
 /** Persist a per-request commercial value snapshot. Actual provider billing is never inferred from token counts. */
-export async function recordAiUsageFinancials(input:{aiUsageId:string;provider:string;model:string;inputTokens:number;outputTokens:number;cachedInputTokens?:number;serviceTier?:'free'|'paid'|'unknown';actualCostUsd?:string|null;actualCostConfirmedZero?:boolean;at?:string}){
+async function recordAiUsageFinancialsInternal(input:{aiUsageId:string;provider:string;model:string;inputTokens:number;outputTokens:number;cachedInputTokens?:number;serviceTier?:'free'|'paid'|'unknown';actualCostUsd?:string|null;actualCostConfirmedZero?:boolean;at?:string}){
  if(!input.aiUsageId||!input.provider||!input.model)return {recorded:false,reason:'missing_usage_identity'};
  const db=adminSupabase(),now=input.at||new Date().toISOString();
  const [priceQ,fxQ,existingQ]=await Promise.all([
@@ -31,4 +31,13 @@ export async function recordAiUsageFinancials(input:{aiUsageId:string;provider:s
  const write=await db.from('ai_usage_financials').upsert(payload,{onConflict:'ai_usage_id'});
  if(write.error)return {recorded:false,reason:'financial_snapshot_write_failed'};
  return {recorded:true,priced:estimatedUsd!==null,fxCaptured:fxId!==null,actualCostStatus:actualStatus};
+}
+
+export async function recordAiUsageFinancials(input: Parameters<typeof recordAiUsageFinancialsInternal>[0]) {
+  try {
+    return await recordAiUsageFinancialsInternal(input);
+  } catch {
+    // Financial telemetry must never turn a successful AI response into a failed request.
+    return { recorded: false, reason: 'financial_snapshot_unavailable' };
+  }
 }
