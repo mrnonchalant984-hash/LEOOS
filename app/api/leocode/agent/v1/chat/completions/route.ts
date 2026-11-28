@@ -1,3 +1,4 @@
+import { recordAiUsageFinancials } from '@/lib/ai/usage-financials';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { enforceLeoCodeDailyQuota } from '@/lib/leocode-entitlement';
@@ -94,19 +95,14 @@ function withUsageTracking(body: ReadableStream<Uint8Array>, userId: string, mod
           if (latestUsage) {
             const usage = latestUsage;
             void Promise.resolve(adminSupabase().from('ai_usage').insert({
-              user_id: userId,
-              feature: 'leocode_agent_host',
-              model,
-              prompt_tokens: usage.inputTokens,
-              completion_tokens: usage.outputTokens,
-              total_tokens: usage.inputTokens + usage.outputTokens,
-              credits_used: 0,
-              metadata: { source: 'vscode_ahp', provider: 'google' },
-            })).then(({ error }) => {
-              if (error) console.error('Leo Agent Host usage record could not be saved:', error.message);
-            }).catch(error => {
-              console.error('Leo Agent Host usage record could not be saved:', error instanceof Error ? error.message : 'unknown error');
-            });
+              user_id: userId, feature: 'leocode_agent_host', model,
+              prompt_tokens: usage.inputTokens, completion_tokens: usage.outputTokens,
+              total_tokens: usage.inputTokens + usage.outputTokens, credits_used: 0,
+              metadata: { source: 'vscode_ahp', provider: 'google', request_status: 'completed' },
+            }).select('id').single()).then(async ({ data, error }) => {
+              if (error) { console.error('Leo Agent Host usage record could not be saved:', error.message); return; }
+              if (data) await recordAiUsageFinancials({ aiUsageId: data.id, provider: 'google', model: model.replace(/^google\\//, ''), inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
+            }).catch(error => { console.error('Leo Agent Host usage record could not be saved:', error instanceof Error ? error.message : 'unknown error'); });
           }
           return;
         }
