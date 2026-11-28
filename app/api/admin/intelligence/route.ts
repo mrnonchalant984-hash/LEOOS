@@ -168,6 +168,10 @@ export async function GET(req: NextRequest) {
       return sum + paymentNgN(payment) / BigInt(months);
     }, 0n);
 
+  const subscriptionRevenueNgn = sumMoney(successfulPayments.filter((p: Payment) => Boolean(p.billing_period)).map(paymentNgN));
+  const oneTimeRevenueNgn = sumMoney(successfulPayments.filter((p: Payment) => !p.billing_period).map(paymentNgN));
+  const revenueByMonth = [...successfulPayments.reduce((map: Map<string,bigint>, payment: Payment) => { const month=(payment.paid_at||payment.created_at).slice(0,7); map.set(month,(map.get(month)||0n)+paymentNgN(payment)); return map; },new Map<string,bigint>()).entries()].map(([month,amount])=>({month,revenueNgn:moneyText(amount)})).sort((a,b)=>a.month.localeCompare(b.month));
+  const expenseByMonth = [...expenses.reduce((map: Map<string,bigint>, expense: any) => { const month=String(expense.incurred_at).slice(0,7); const amount=expense.amount_ngn??(expense.currency==='NGN'?expense.amount:'0'); map.set(month,(map.get(month)||0n)+moneyUnits(amount)); return map; },new Map<string,bigint>()).entries()].map(([month,amount])=>({month,expensesNgn:moneyText(amount)})).sort((a,b)=>a.month.localeCompare(b.month));
   const revenueByPlan = [...successfulPayments.reduce((map: Map<string,bigint>, payment: Payment) => { const key=payment.plan||'one_time_or_unknown'; map.set(key,(map.get(key)||0n)+paymentNgN(payment)); return map; },new Map<string,bigint>()).entries()].map(([plan,amount])=>({plan,revenueNgn:moneyText(amount)}));
   const hosting = hostingQ.data || [];
   const builds = buildsQ.data || [];
@@ -218,7 +222,8 @@ export async function GET(req: NextRequest) {
       subscriptions: subscriptions.map((s: any) => ({ ...s, payment: payments.find((p: Payment) => p.reference === s.payment_reference) || null })),
       subscriptionStatuses: statusCounts(subscriptions),
       recurringRevenueNgn: moneyText(mrr),
-      successfulRevenueNgn: moneyText(grossRevenue),
+      subscriptionRevenueNgn: moneyText(subscriptionRevenueNgn), oneTimeRevenueNgn: moneyText(oneTimeRevenueNgn),
+      revenueByMonth, successfulRevenueNgn: moneyText(grossRevenue),
       netRevenueNgn: moneyText(netRevenue),
       currencies: [...new Set(payments.map((p: Payment) => p.currency || 'unknown'))],
       revenueByPlan,
@@ -238,6 +243,8 @@ export async function GET(req: NextRequest) {
       runStatuses: statusCounts(runs),
       tools: toolEvents.slice(0, 1000),
       toolCounts: statusCounts(toolEvents),
+      toolInvocationsByName: [...toolEvents.reduce((map: Map<string,number>, event: any) => { const name=event.tool_name||'unknown'; map.set(name,(map.get(name)||0)+1); return map; },new Map<string,number>()).entries()].map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count),
+      planningWorkflows: (workflowQ.data||[]).filter((w:any)=>String(w.mode).includes('plan')||String(w.current_stage).includes('plan')).length,
       mcpToolAudit: mcpAuditQ.data || [],
       workflows: workflowQ.data || [],
       averageDurationMs: (() => { const done = runs.filter((r: any) => r.started_at && r.completed_at); return done.length ? Math.round(done.reduce((n: number, r: any) => n + new Date(r.completed_at).getTime() - new Date(r.started_at).getTime(), 0) / done.length) : null; })(),
@@ -254,7 +261,7 @@ export async function GET(req: NextRequest) {
       successfulBuilds: builds.filter((b: any) => ['deployed','success','succeeded','completed'].includes(b.status)).length,
       failedBuilds: builds.filter((b: any) => b.status === 'failed' || b.status === 'error').length,
     },
-    expenses: { items: expenses, totalNgn: moneyText(expenseTotal), byCategory: Object.entries(expenses.reduce((acc: Record<string, bigint>, e: any) => { const v = e.amount_ngn ?? (e.currency === 'NGN' ? e.amount : '0'); acc[e.category] = (acc[e.category] || 0n) + moneyUnits(v); return acc; }, {})).map(([category, amount]) => ({ category, amountNgn: moneyText(amount) })) },
+    expenses: { items: expenses, totalNgn: expenseCoverageComplete ? moneyText(expenseTotal) : null, byMonth: expenseByMonth, byCategory: Object.entries(expenses.reduce((acc: Record<string, bigint>, e: any) => { const v = e.amount_ngn ?? (e.currency === 'NGN' ? e.amount : '0'); acc[e.category] = (acc[e.category] || 0n) + moneyUnits(v); return acc; }, {})).map(([category, amount]) => ({ category, amountNgn: moneyText(amount) })) },
     audit: { adminLogs: (adminLogsQ.data||[]).slice(0,500), creditLedger: creditLedgerQ.data||[], mcpToolAudit: mcpAuditQ.data||[], recentErrors: errorsQ.data||[] },
     financialCoverage: { usageRows: eligibleUsages.length, costRows: financials.length, pricedRows, actualCostRows: actualCostRows.length, actualCostComplete, estimatedCostComplete, unconvertedExpenses: expenses.filter((e: any) => e.currency !== 'NGN' && e.amount_ngn === null).length },
     diagnostics: { dataSources: required.map((q, i) => ({ name: ['profiles','ai_usage','payments','subscriptions','hosting_subscriptions','project_builds','cloudflare_preview_jobs','agent_runs','bram_tool_events','business_expenses','ai_usage_financials','hosting_renewal_payments','engineering_workflows','website_projects','deployment_events','workforce_worker_heartbeats','mcp_tool_audit','error_events','admin_logs','ai_usage_credit_ledger'][i], rows: q.data.length, truncated: q.truncated })), recentErrors: errorsQ.data || [], workerHeartbeats: workerHeartbeatsQ.data || [], unknownStatuses: true },
