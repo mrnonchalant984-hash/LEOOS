@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
     loadAll<Financial>(db, 'ai_usage_financials', 'ai_usage_id,provider,model,service_tier,estimated_usd,actual_usd,usd_ngn_rate,estimated_ngn,actual_ngn,pricing_status,actual_cost_status'),
     loadAll<any>(db, 'hosting_renewal_payments', 'reference,hosting_subscription_id,amount_kobo,currency,status,paid_at,created_at'),
     loadAll<any>(db, 'engineering_workflows', 'id,owner_user_id,website_project_id,mode,status,current_stage,title,created_at,updated_at'),
-    loadAll<any>(db, 'website_projects', 'id,owner_user_id,website_type,business_name,client_email,status,github_repo,vercel_project_id,live_url,build_provider,build_status,build_step,last_build_at,created_at,updated_at'),
+    loadAll<any>(db, 'website_projects', 'id,owner_user_id,website_type,business_name,client_email,status,github_repo,vercel_project_id,live_url,live_deployment_id,build_provider,build_status,build_step,last_build_at,created_at,updated_at'),
     loadAll<any>(db, 'deployment_events', 'id,website_project_id,event_type,status,message,metadata,created_at'),
     loadAll<any>(db, 'workforce_worker_heartbeats', 'id,worker_id,status,job_id,error_code,started_at,finished_at,created_at'),
     loadAll<any>(db, 'mcp_tool_audit', 'id,user_id,tool_name,outcome,duration_ms,request_id,created_at'),
