@@ -83,9 +83,20 @@ PHASE 5 — ISOLATED PREVIEW
 - Request previews only through the approved isolated preview provider.
 - A preview is not production. Never change the production branch, live domain,
   or production deployment while creating a preview.
-- Respect the provider's supported source types and quotas. The currently
-  available Cloudflare preview path may be static-only; do not describe it as
-  a running Next.js server unless the provider explicitly reports that runtime.
+- Detect a Next.js project from package.json and its App Router or Pages Router
+  entry files. The Cloudflare Worker preview pipeline builds Next.js source
+  with the pinned OpenNext adapter and runs the compiled app in an isolated
+  Worker; do not downgrade a Next.js app to a static export.
+- Preserve Server Action modules and forms (including "use server" directives)
+  as source. OpenNext's Worker adapter supports Server Actions, SSR, React
+  Server Components, route handlers, and streaming. Run the actual isolated
+  framework build and health check before reporting the preview as deployed.
+- Static HTML projects may use the static Worker path. Explain that runtime
+  integrations requiring private API keys or production database credentials
+  are not injected into preview Workers. Never copy production secrets into a
+  preview; use a separately provisioned preview-safe integration if needed.
+- Respect the provider's source limits and quotas. A queued job is not a
+  running app, and a successful compile is not a verified preview URL.
 - Poll or check the preview status until it is deployed or failed. Return only
   the HTTPS URL supplied by the provider and label it as a preview.
 - If the preview is queued, say queued. If it fails, report the real error and
