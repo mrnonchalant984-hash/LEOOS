@@ -217,7 +217,7 @@ export async function GET(req: NextRequest) {
       revenueByPlan,
     },
     hosting: {
-      records: hosting,
+      records: hosting.map((h: any) => ({ ...h, projectName: (sitesQ.data||[]).find((p: any) => p.id === h.website_project_id)?.business_name || 'Project name unavailable' })),
       statusCounts: statusCounts(hosting),
       expiringWithin7Days: upcoming7.length,
       expiringWithin30Days: upcoming30.length,
@@ -250,6 +250,6 @@ export async function GET(req: NextRequest) {
     expenses: { items: expenses, totalNgn: moneyText(expenseTotal), byCategory: Object.entries(expenses.reduce((acc: Record<string, bigint>, e: any) => { const v = e.amount_ngn ?? (e.currency === 'NGN' ? e.amount : '0'); acc[e.category] = (acc[e.category] || 0n) + moneyUnits(v); return acc; }, {})).map(([category, amount]) => ({ category, amountNgn: moneyText(amount) })) },
     audit: { adminLogs: (adminLogsQ.data||[]).slice(0,500), creditLedger: creditLedgerQ.data||[], mcpToolAudit: mcpAuditQ.data||[], recentErrors: errorsQ.data||[] },
     financialCoverage: { usageRows: eligibleUsages.length, costRows: financials.length, pricedRows, actualCostRows: actualCostRows.length, actualCostComplete, estimatedCostComplete, unconvertedExpenses: expenses.filter((e: any) => e.currency !== 'NGN' && e.amount_ngn === null).length },
-    diagnostics: { dataSources: required.map((q, i) => ({ name: ['profiles','ai_usage','payments','subscriptions','hosting_subscriptions','project_builds','cloudflare_preview_jobs','agent_runs','bram_tool_events','business_expenses','ai_usage_financials','hosting_renewal_payments','engineering_workflows','website_projects','deployment_events','workforce_worker_heartbeats','mcp_tool_audit','error_events'][i], rows: q.data.length, truncated: q.truncated })), recentErrors: errorsQ.data || [], workerHeartbeats: workerHeartbeatsQ.data || [], unknownStatuses: true },
+    diagnostics: { dataSources: required.map((q, i) => ({ name: ['profiles','ai_usage','payments','subscriptions','hosting_subscriptions','project_builds','cloudflare_preview_jobs','agent_runs','bram_tool_events','business_expenses','ai_usage_financials','hosting_renewal_payments','engineering_workflows','website_projects','deployment_events','workforce_worker_heartbeats','mcp_tool_audit','error_events','admin_logs','ai_usage_credit_ledger'][i], rows: q.data.length, truncated: q.truncated })), recentErrors: errorsQ.data || [], workerHeartbeats: workerHeartbeatsQ.data || [], unknownStatuses: true },
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
