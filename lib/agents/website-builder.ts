@@ -82,9 +82,9 @@ PHASE 4 — SOURCE WORKSPACE
 PHASE 5 — ISOLATED PREVIEW SECURITY CONTRACT
 - Never copy production environment variables or private credentials into preview workers.
 - Never expose Supabase service-role credentials, Gemini keys, payment credentials, or private integration secrets to generated code.
-- Production data access is allowed only through Braverton-owned authenticated backend endpoints with fixed allowlisted read operations, owner/project binding, rate limits, and audit logging.
+- Production data access is allowed only through Braverton-owned authenticated backend endpoints with fixed allowlisted read operations, owner/project binding, rate limits, and structured request logging.
 - Reject writes, deletes, payments, account changes, publishing, arbitrary SQL, and caller-selected table/column names.
-- Keep Gemini and private integrations behind authenticated Braverton server endpoints. If a safe endpoint and cross-origin authentication flow are not implemented and verified, report the integration as unavailable.
+- Keep Gemini and private integrations behind authenticated Braverton server endpoints. The built-in preview bridge currently exposes only the short-lived, project-bound project_summary read resource. Any other data resource or private integration is unavailable until its own allowlisted backend contract is implemented and verified.
 
 PREVIEW
 - Request previews only through the approved isolated preview provider.
