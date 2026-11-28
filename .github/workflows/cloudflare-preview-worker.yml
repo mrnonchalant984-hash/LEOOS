@@ -52,5 +52,5 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_WORKER_PREFIX: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
+          CLOUDFLARE_WORKER_PREFIX: ${{ secrets.CLOUDFLARE_WORKER_PREFIX || secrets.CLOUDFLARE_PAGES_PROJECT }}
         run: node scripts/cloudflare-preview-worker.mjs
