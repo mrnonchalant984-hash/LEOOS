@@ -15,11 +15,11 @@ const MAX_FILES = 250;
 const MAX_FILE_BYTES = 256_000;
 const MAX_BINARY_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 20 * 1024 * 1024;
-const SUPPORTED_EXTENSIONS = new Set([
+const SUPPORTED_TEXT_EXTENSIONS = new Set([
   '.css', '.scss', '.sass', '.html', '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
   '.json', '.md', '.mdx', '.svg', '.txt', '.xml', '.webmanifest', '.yaml', '.yml', '.toml',
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.ico', '.woff', '.woff2', '.ttf', '.otf',
-]);
+ ]);
+const SUPPORTED_BINARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.ico', '.woff', '.woff2', '.ttf', '.otf']);
 const SECRET_PATTERNS = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
   /\bAKIA[0-9A-Z]{16}\b/,
@@ -29,6 +29,20 @@ const SECRET_PATTERNS = [
   /\bAIza[0-9A-Za-z_-]{30,}\b/,
   /\b(?:SUPABASE_SERVICE_ROLE_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|CLOUDFLARE_API_TOKEN)\s*[:=]\s*["']?[^"' \r\n]{12,}/i,
 ];
+
+function validBinaryAsset(extension, bytes) {
+  if (extension === '.png') return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+  if (extension === '.jpg' || extension === '.jpeg') return bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+  if (extension === '.gif') return /^GIF8[79]a$/.test(bytes.subarray(0, 6).toString('ascii'));
+  if (extension === '.webp') return bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP';
+  if (extension === '.avif') return bytes.length >= 12 && bytes.toString('ascii', 4, 8) === 'ftyp' && bytes.toString('ascii', 8, 12).startsWith('avi');
+  if (extension === '.ico') return bytes.length >= 4 && bytes[0] === 0 && bytes[1] === 0 && bytes[2] === 1 && bytes[3] === 0;
+  if (extension === '.woff') return bytes.toString('ascii', 0, 4) === 'wOFF';
+  if (extension === '.woff2') return bytes.toString('ascii', 0, 4) === 'wOF2';
+  if (extension === '.ttf') return bytes.length >= 4 && bytes.subarray(0, 4).equals(Buffer.from([0,1,0,0]));
+  if (extension === '.otf') return bytes.toString('ascii', 0, 4) === 'OTTO';
+  return false;
+}
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -68,23 +82,26 @@ function validateJob(value, expectedPrefix) {
       throw new Error('Preview source path is invalid.');
     }
     const extension = path.posix.extname(filePath).toLowerCase();
-    if (!SUPPORTED_EXTENSIONS.has(extension)) throw new Error('Preview bundle contains an unsupported source file type.');
+    if (!SUPPORTED_TEXT_EXTENSIONS.has(extension) && !SUPPORTED_BINARY_EXTENSIONS.has(extension)) throw new Error('Preview bundle contains an unsupported source file type.');
     const normalized = filePath.toLowerCase();
     if (seenPaths.has(normalized)) throw new Error('Preview bundle contains duplicate paths.');
     seenPaths.add(normalized);
     let bytes;
     if (typeof content === 'string') {
+      if (!SUPPORTED_TEXT_EXTENSIONS.has(extension)) throw new Error('Text content was supplied for a binary preview asset.');
       bytes = Buffer.byteLength(content, 'utf8');
       if (bytes > MAX_FILE_BYTES) throw new Error('A preview source file exceeds the per-file size limit.');
       if (SECRET_PATTERNS.some(pattern => pattern.test(content))) throw new Error('Preview source contains a recognizable credential pattern.');
-    } else if (content && typeof content === 'object' && content.encoding === 'base64' && typeof content.data === 'string') {
+    } else if (content && typeof content === 'object' && content.encoding === 'base64' && typeof content.data === 'string' && SUPPORTED_BINARY_EXTENSIONS.has(extension)) {
       if (!/\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf)$/i.test(filePath)
         || !content.data || content.data.length % 4 !== 0
         || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(content.data)) {
         throw new Error('Preview binary asset encoding or file type is invalid.');
       }
-      bytes = Buffer.from(content.data, 'base64').length;
+      const decoded = Buffer.from(content.data, 'base64');
+      bytes = decoded.length;
       if (bytes > MAX_BINARY_FILE_BYTES) throw new Error('A preview binary asset exceeds the per-file size limit.');
+      if (!validBinaryAsset(extension, decoded)) throw new Error('Preview binary asset signature does not match its extension.');
     } else {
       throw new Error('Preview source file contents have an unsupported encoding.');
     }
