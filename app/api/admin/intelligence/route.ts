@@ -98,11 +98,14 @@ export async function GET(req: NextRequest) {
   const netRevenue = grossRevenue - refundedRevenue;
 
   const financialMap = new Map((financialQ.data || []).map((f: Financial) => [f.ai_usage_id, f]));
-  const financials = usages.map(u => financialMap.get(u.id)).filter(Boolean) as Financial[];
+  const eligibleUsages = usages.filter(u => !u.feature?.startsWith('image_'));
+  const financials = eligibleUsages.map(u => financialMap.get(u.id)).filter(Boolean) as Financial[];
   const actualCostRows = financials.filter(f => f.actual_cost_status === 'provider_reported' || f.actual_cost_status === 'zero_confirmed');
   const actualAiCost = sumMoney(actualCostRows.map(f => f.actual_ngn));
+  const actualCostComplete = actualCostRows.length === financials.length && financials.length > 0 && actualCostRows.every(f => f.actual_ngn !== null);
   const estimatedRows = financials.filter(f => f.estimated_ngn !== null && f.estimated_ngn !== undefined);
   const estimatedAiValue = sumMoney(estimatedRows.map(f => f.estimated_ngn));
+  const estimatedCostComplete = estimatedRows.length === eligibleUsages.length && eligibleUsages.length > 0;
   const pricedRows = financials.filter(f => f.pricing_status === 'priced' || f.pricing_status === 'free_tier').length;
   const userUsage = new Map<string, any>();
   const featureUsage = new Map<string, any>();
@@ -113,10 +116,10 @@ export async function GET(req: NextRequest) {
     if (u.feature === 'image_generation' || u.feature?.startsWith('image_')) continue;
     const total = num(u.total_tokens), input = num(u.prompt_tokens), output = num(u.completion_tokens);
     const f = financialMap.get(u.id);
-    const user = userUsage.get(u.user_id) || { userId: u.user_id, requests: 0, inputTokens: 0, outputTokens: 0, tokens: 0, credits: 0, estimatedNgn: '0', actualNgn: '0', lastUsedAt: null };
+    const user = userUsage.get(u.user_id) || { userId: u.user_id, requests: 0, inputTokens: 0, outputTokens: 0, tokens: 0, credits: 0, estimatedNgn: null, actualNgn: null, lastUsedAt: null };
     user.requests++; user.inputTokens += input; user.outputTokens += output; user.tokens += total; user.credits += num(u.credits_used);
-    user.estimatedNgn = moneyText(moneyUnits(user.estimatedNgn) + moneyUnits(f?.estimated_ngn));
-    user.actualNgn = moneyText(moneyUnits(user.actualNgn) + moneyUnits(f?.actual_ngn));
+    if (f?.estimated_ngn !== null && f?.estimated_ngn !== undefined) user.estimatedNgn = moneyText(moneyUnits(user.estimatedNgn || '0') + moneyUnits(f.estimated_ngn));
+    if (f?.actual_ngn !== null && f?.actual_ngn !== undefined) user.actualNgn = moneyText(moneyUnits(user.actualNgn || '0') + moneyUnits(f.actual_ngn));
     if (!user.lastUsedAt || u.created_at > user.lastUsedAt) user.lastUsedAt = u.created_at;
     userUsage.set(u.user_id, user);
 
@@ -175,13 +178,13 @@ export async function GET(req: NextRequest) {
       activeSubscriptions: subscriptions.filter((s: any) => s.status === 'active' && (!s.current_period_end || new Date(s.current_period_end) > now)).length,
       aiRequests: usages.filter(u => !u.feature?.startsWith('image_')).length,
       inputTokens, outputTokens, totalTokens: allTokens, creditsUsed: totalCredits,
-      actualAiSpendNgn: actualCostRows.length ? moneyText(actualAiCost) : null, estimatedAiValueNgn: estimatedRows.length ? moneyText(estimatedAiValue) : null,
+      actualAiSpendNgn: actualCostComplete ? moneyText(actualAiCost) : null, estimatedAiValueNgn: estimatedCostComplete ? moneyText(estimatedAiValue) : null,
       grossRevenueNgn: moneyText(grossRevenue), refundsNgn: moneyText(refundedRevenue), netRevenueNgn: moneyText(netRevenue),
       mrrNgn: moneyText(mrr), hostingRevenueNgn: moneyText(hostingRevenue),
       recordedExpensesNgn: moneyText(expenseTotal),
-      netOperatingResultNgn: actualCostRows.length ? moneyText(netRevenue - expenseTotal - actualAiCost) : null,
+      netOperatingResultNgn: actualCostComplete ? moneyText(netRevenue - expenseTotal - actualAiCost) : null,
       profitUsesActualCostsOnly: true,
-      unpricedAiRequests: financials.length - pricedRows,
+      unpricedAiRequests: eligibleUsages.length - pricedRows,
       today: periodStats(startOfDay), week: periodStats(startOfWeek), month: periodStats(startOfMonth),
     },
     ai: {
@@ -231,7 +234,7 @@ export async function GET(req: NextRequest) {
       failedBuilds: builds.filter((b: any) => b.status === 'failed' || b.status === 'error').length,
     },
     expenses: { items: expenses, totalNgn: moneyText(expenseTotal), byCategory: Object.entries(expenses.reduce((acc: Record<string, bigint>, e: any) => { const v = e.amount_ngn ?? (e.currency === 'NGN' ? e.amount : '0'); acc[e.category] = (acc[e.category] || 0n) + moneyUnits(v); return acc; }, {})).map(([category, amount]) => ({ category, amountNgn: moneyText(amount) })) },
-    financialCoverage: { usageRows: usages.length, costRows: financials.length, pricedRows, actualCostRows: actualCostRows.length },
+    financialCoverage: { usageRows: usages.length, costRows: financials.length, pricedRows, actualCostRows: actualCostRows.length, actualCostComplete, estimatedCostComplete },
     diagnostics: { dataSources: required.map((q, i) => ({ name: ['profiles','ai_usage','payments','subscriptions','hosting_subscriptions','project_builds','cloudflare_preview_jobs','agent_runs','bram_tool_events','business_expenses','ai_usage_financials','hosting_renewal_payments','engineering_workflows'][i], rows: q.data.length, truncated: q.truncated })), unknownStatuses: true },
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
