@@ -36,7 +36,11 @@ test('Cloudflare Worker preview validator accepts static bundles and full Next.j
     'tsconfig.json': '{}',
   });
   assert.equal(nextResult.ok, true);
-  if (nextResult.ok) {\n    assert.equal(nextResult.framework, 'nextjs');\n    assert.match(nextResult.files['app/actions.ts'], /use server/);\n    assert.match(nextResult.files['app/page.tsx'], /action=\\{saveMessage\\}/);\n  }
+  if (nextResult.ok) {
+    assert.equal(nextResult.framework, 'nextjs');
+    assert.match(nextResult.files['app/actions.ts'], /use server/);
+    assert.match(nextResult.files['app/page.tsx'], /action=\\{saveMessage\\}/);
+  }
 });
 
 test('Cloudflare Worker preview validator rejects traversal, hidden files, secrets, and unsupported frameworks', () => {
@@ -61,6 +65,10 @@ test('Cloudflare preview runner is valid JavaScript and the API passes/verifies 
   assert.match(resultRoute, /isVerifiedCloudflareWorkerPreviewUrl/);
   assert.match(previewRoute, /validateCloudflareWorkerPreviewFiles/);
   assert.match(workerScript, /opennextjs-cloudflare/);
+  assert.ok(workerScript.includes("['opennextjs-cloudflare', 'build']"));
+  assert.ok(workerScript.includes('writeProjectFiles(directory, job.files)'));
+  assert.ok(workerScript.includes('const env = {};'));
+  assert.ok(workerScript.includes('next.config.mjs'));
   assert.match(workerScript, /workers\.dev/);
   assert.ok(workerScript.includes('wrangler.jsonc'));
   assert.ok(workerScript.includes('next.config.js'));
