@@ -80,6 +80,10 @@ select u.id,
        greatest(coalesce(u.completion_tokens,0),0),
        'unpriced'
 from public.ai_usage u
+where coalesce(u.total_tokens,0) > 0
+  and coalesce(u.feature,'') not like 'image_%'
+  and coalesce(u.metadata->>'request_status','completed') <> 'failed'
+  and coalesce(u.metadata->>'status','completed') <> 'failed'
 on conflict (ai_usage_id) do nothing;
 
 create table if not exists public.ai_credit_conversion_policy (
