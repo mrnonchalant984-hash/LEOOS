@@ -30,7 +30,7 @@ export function validateStaticPreviewFiles(value: unknown): StaticPreviewValidat
   const entries = Object.entries(value);
   if (entries.length > MAX_CLOUDFLARE_PREVIEW_FILES) return { ok: false, code: 'too_many_files' };
 
-  const files: Record<string, CloudflarePreviewFile> = {};
+  const files: Record<string, string> = {};
   let totalBytes = 0;
   const normalizedPaths = new Set<string>();
   for (const [filePath, content] of entries) {
