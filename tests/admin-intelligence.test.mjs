@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 const read = (path) => readFile(new URL('../' + path, import.meta.url), 'utf8');
 
 test('owner intelligence migration is additive, private and does not invent prices or credit rates', async () => {
- const sql=await read('supabase/migrations/20261128170000_owner_control_center_intelligence.sql');
+ const sql=await read('supabase/migrations/20261128153545_owner_control_center_intelligence.sql');
  for(const table of ['ai_model_pricing','ai_exchange_rates','ai_usage_financials','ai_credit_conversion_policy','ai_usage_credit_ledger','business_expenses']) assert.match(sql,new RegExp('create table if not exists public\\.'+table));
  assert.match(sql,/enable row level security/g);
  assert.ok(sql.includes('revoke all on public.ai_model_pricing'));
