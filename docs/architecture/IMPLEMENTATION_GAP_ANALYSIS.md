@@ -90,16 +90,18 @@ Cloudflare Worker previews. Static projects use the asset Worker; supported
 Next.js projects are built with OpenNext and run with SSR, route handlers,
 and Server Actions.
 
-This is not yet proof of complete autonomous website delivery. The Next.js runtime path and bounded image/font transfer are implemented in
-the worker pipeline, but this PR has not yet passed a live account-backed
-acceptance run with a real Server Action POST. A generic production database
-proxy is intentionally not enabled: preview code is public/untrusted, so
-production data must be exposed only through separately designed,
-authenticated, project-bound, fixed allowlist read endpoints. Production
-secrets are never copied into preview Workers. Gemini and private integrations
-remain behind authenticated Braverton backend endpoints. Automatic browser
-interaction/visual regression testing, Worker TTL/cleanup, and live provider
-acceptance tests remain outstanding.
+This is not yet proof of complete autonomous website delivery. The Next.js
+runtime path and bounded image/font transfer are implemented in the worker
+pipeline, but this PR has not yet passed a live account-backed acceptance run
+with a real Server Action POST. The authenticated preview data bridge now
+issues a five-minute, project-bound capability and exposes only the owner's
+project summary (ID, name, and type) through a fixed read-only backend route.
+It does not expose arbitrary SQL or generic table access. Other production
+data resources and private integrations remain unavailable until separately
+allowlisted and tested. Production secrets are never copied into preview
+Workers. Gemini and private integrations remain behind authenticated Braverton
+backend endpoints. Automatic browser interaction/visual regression testing,
+Worker TTL/cleanup, and live provider acceptance tests remain outstanding.
 GitHub/Vercel publish still requires verified account integrations, repository
 permissions, Vercel project linkage, and configured production environment.
 
