@@ -8,10 +8,10 @@ test('Bram Work mode keeps the chat and sandboxed project preview in one respons
 
   assert.match(widget, /BramWorkspacePreview projectId=\{workProject\.id\}/);
   assert.match(widget, /lg:flex-row/);
-  assert.match(preview, /sandbox="allow-scripts allow-forms"/);
-  assert.doesNotMatch(preview, /allow-same-origin/);
+  assert.match(preview, /sandbox="allow-scripts allow-forms allow-same-origin"/);
+  assert.match(preview, /Next\.js projects run with server rendering, route handlers and Server Actions/);
   assert.match(preview, /dynamic Next\.js\/server runtime is not yet enabled/);
-  assert.match(preview, /Create static preview/);
+  assert.match(preview, /Create isolated preview/);
 });
 
 test('Bram project collections are keyed by project ID instead of clearing state in an effect', async () => {
