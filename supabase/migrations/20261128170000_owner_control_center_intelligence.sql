@@ -32,6 +32,7 @@ create table if not exists public.ai_exchange_rates (
   rate numeric(24,10) not null check (rate > 0),
   source text not null,
   source_url text,
+  source_note text,
   observed_at timestamptz not null,
   is_manual_override boolean not null default false,
   created_by uuid references public.profiles(id),
