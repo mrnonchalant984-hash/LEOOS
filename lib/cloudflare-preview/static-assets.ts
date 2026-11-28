@@ -122,7 +122,7 @@ export function validateCloudflareWorkerPreviewFiles(value: unknown): Cloudflare
   if (entries.length === 0) return { ok: false, code: 'invalid_files' };
   if (entries.length > MAX_CLOUDFLARE_PREVIEW_FILES) return { ok: false, code: 'too_many_files' };
 
-  const files: Record<string, string> = {};
+  const files: Record<string, CloudflarePreviewFile> = {};
   let totalBytes = 0;
   const normalizedPaths = new Set<string>();
   for (const [filePath, content] of entries) {
@@ -131,7 +131,7 @@ export function validateCloudflareWorkerPreviewFiles(value: unknown): Cloudflare
       || filePath.startsWith('/') || /^[a-zA-Z]:/.test(filePath)
       || parts.some(part => !part || part === '.' || part === '..' || part.startsWith('.')
         || part === '__proto__' || part === 'constructor' || part === 'prototype')
-      || /[\u0000-\u001f]/.test(filePath) || typeof content !== 'string') {
+      || /[\u0000-\u001f]/.test(filePath)) {
       return { ok: false, code: 'invalid_files' };
     }
     const extension = filePath.slice(filePath.lastIndexOf('/') + 1).toLowerCase().match(/\.[^.]+$/)?.[0] || '';
