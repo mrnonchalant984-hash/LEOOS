@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid reporting date range.' }, { status: 400 });
   }
 
-  const [usersQ, usageQ, paymentsQ, subsQ, hostingQ, buildsQ, previewsQ, runsQ, toolEventsQ, expensesQ, financialQ, renewalsQ, workflowQ, sitesQ, deployEventsQ, workerHeartbeatsQ, mcpAuditQ, errorsQ] = await Promise.all([
+  const [usersQ, usageQ, paymentsQ, subsQ, hostingQ, buildsQ, previewsQ, runsQ, toolEventsQ, expensesQ, financialQ, renewalsQ, workflowQ, sitesQ, deployEventsQ, workerHeartbeatsQ, mcpAuditQ, errorsQ, adminLogsQ, creditLedgerQ] = await Promise.all([
     loadAll<any>(db, 'profiles', 'id,email,full_name,role,created_at'),
     loadAll<Usage>(db, 'ai_usage', 'id,user_id,feature,model,prompt_tokens,completion_tokens,total_tokens,credits_used,metadata,created_at'),
     loadAll<Payment>(db, 'payments', 'id,user_id,reference,amount,amount_kobo,currency,plan,billing_period,status,paid_at,verified_at,refunded_at,created_at'),
@@ -83,9 +83,11 @@ export async function GET(req: NextRequest) {
     loadAll<any>(db, 'workforce_worker_heartbeats', 'id,worker_id,status,job_id,error_code,started_at,finished_at,created_at'),
     loadAll<any>(db, 'mcp_tool_audit', 'id,user_id,tool_name,outcome,duration_ms,request_id,created_at'),
     loadAll<any>(db, 'error_events', 'id,user_id,route,severity,error_type,message,created_at'),
+    loadAll<any>(db, 'admin_logs', 'id,user_id,action,ip_address,device,created_at'),
+    loadAll<any>(db, 'ai_usage_credit_ledger', 'id,ai_usage_id,user_id,event_type,credits_delta,idempotency_key,note,created_at'),
   ]);
 
-  const required = [usersQ, usageQ, paymentsQ, subsQ, hostingQ, buildsQ, previewsQ, runsQ, toolEventsQ, expensesQ, financialQ, renewalsQ, workflowQ, sitesQ, deployEventsQ, workerHeartbeatsQ, mcpAuditQ, errorsQ];
+  const required = [usersQ, usageQ, paymentsQ, subsQ, hostingQ, buildsQ, previewsQ, runsQ, toolEventsQ, expensesQ, financialQ, renewalsQ, workflowQ, sitesQ, deployEventsQ, workerHeartbeatsQ, mcpAuditQ, errorsQ, adminLogsQ, creditLedgerQ];
   const failed = required.find(item => item.error);
   if (failed) return NextResponse.json({ error: 'Owner intelligence data could not be loaded.', code: failed.error?.code || 'query_failed' }, { status: 503 });
 
@@ -159,6 +161,7 @@ export async function GET(req: NextRequest) {
       return sum + paymentNgN(payment) / BigInt(months);
     }, 0n);
 
+  const revenueByPlan = [...successfulPayments.reduce((map: Map<string,bigint>, payment: Payment) => { const key=payment.plan||'one_time_or_unknown'; map.set(key,(map.get(key)||0n)+paymentNgN(payment)); return map; },new Map<string,bigint>()).entries()].map(([plan,amount])=>({plan,revenueNgn:moneyText(amount)}));
   const hosting = hostingQ.data || [];
   const builds = buildsQ.data || [];
   const previews = previewsQ.data || [];
@@ -211,6 +214,7 @@ export async function GET(req: NextRequest) {
       successfulRevenueNgn: moneyText(grossRevenue),
       netRevenueNgn: moneyText(netRevenue),
       currencies: [...new Set(payments.map((p: Payment) => p.currency || 'unknown'))],
+      revenueByPlan,
     },
     hosting: {
       records: hosting,
@@ -244,6 +248,7 @@ export async function GET(req: NextRequest) {
       failedBuilds: builds.filter((b: any) => b.status === 'failed' || b.status === 'error').length,
     },
     expenses: { items: expenses, totalNgn: moneyText(expenseTotal), byCategory: Object.entries(expenses.reduce((acc: Record<string, bigint>, e: any) => { const v = e.amount_ngn ?? (e.currency === 'NGN' ? e.amount : '0'); acc[e.category] = (acc[e.category] || 0n) + moneyUnits(v); return acc; }, {})).map(([category, amount]) => ({ category, amountNgn: moneyText(amount) })) },
+    audit: { adminLogs: (adminLogsQ.data||[]).slice(0,500), creditLedger: creditLedgerQ.data||[], mcpToolAudit: mcpAuditQ.data||[], recentErrors: errorsQ.data||[] },
     financialCoverage: { usageRows: eligibleUsages.length, costRows: financials.length, pricedRows, actualCostRows: actualCostRows.length, actualCostComplete, estimatedCostComplete, unconvertedExpenses: expenses.filter((e: any) => e.currency !== 'NGN' && e.amount_ngn === null).length },
     diagnostics: { dataSources: required.map((q, i) => ({ name: ['profiles','ai_usage','payments','subscriptions','hosting_subscriptions','project_builds','cloudflare_preview_jobs','agent_runs','bram_tool_events','business_expenses','ai_usage_financials','hosting_renewal_payments','engineering_workflows','website_projects','deployment_events','workforce_worker_heartbeats','mcp_tool_audit','error_events'][i], rows: q.data.length, truncated: q.truncated })), recentErrors: errorsQ.data || [], workerHeartbeats: workerHeartbeatsQ.data || [], unknownStatuses: true },
   }, { headers: { 'Cache-Control': 'private, no-store' } });
