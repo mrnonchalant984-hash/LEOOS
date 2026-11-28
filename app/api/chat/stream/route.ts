@@ -1,3 +1,4 @@
+import { recordAiUsageFinancials } from '@/lib/ai/usage-financials';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { getLeoSystemPrompt } from '@/lib/leo-system-prompt';
@@ -84,7 +85,10 @@ export async function POST(req: NextRequest) {
             ? await db.from('chats_v2').update({ messages: updated, updated_at: new Date().toISOString() }).eq('id', sessionId).eq('user_id', ctx.user.id)
             : await db.from('chats_v2').insert({ id: sessionId, user_id: ctx.user.id, title: message.slice(0, 60), messages: updated, updated_at: new Date().toISOString() });
           if (write.error) throw new Error('The response streamed, but chat history could not be saved.');
-          if (result.usage) await db.from('ai_usage').insert({ user_id: ctx.user.id, feature: 'chat', model: `${result.provider}/${result.model}`, prompt_tokens: result.usage.inputTokens, completion_tokens: result.usage.outputTokens, total_tokens: result.usage.totalTokens, credits_used: 0, metadata: { session_id: sessionId, streamed: true } });
+          if (result.usage) {
+            const { data: usageRow } = await db.from('ai_usage').insert({ user_id: ctx.user.id, feature: 'chat', model: `${result.provider}/${result.model}`, prompt_tokens: result.usage.inputTokens, completion_tokens: result.usage.outputTokens, total_tokens: result.usage.totalTokens, credits_used: 0, metadata: { session_id: sessionId, streamed: true, provider: result.provider, request_status: 'completed' } }).select('id').single();
+            if (usageRow) await recordAiUsageFinancials({ aiUsageId: usageRow.id, provider: result.provider, model: result.model, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens });
+          }
           event(controller, { type: 'done', usage: result.usage, model: `${result.provider}/${result.model}` });
         } catch (error) {
           if (!abortController.signal.aborted) {
