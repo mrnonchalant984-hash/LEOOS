@@ -28,7 +28,7 @@ export async function recordAiUsageFinancials(input:{aiUsageId:string;provider:s
  let actualNgn:string|null=old?.actual_ngn??null;
  if(actualUsd!==null&&fxQ.data&&!fxQ.error)actualNgn=decimal((scaled(actualUsd,12)*scaled(fxQ.data.rate,10))/100000000000000n,8);
  const payload={ai_usage_id:input.aiUsageId,provider:input.provider,model:input.model,service_tier:input.serviceTier||old?.service_tier||'unknown',input_tokens:Math.max(0,Math.trunc(input.inputTokens||0)),output_tokens:output,cached_input_tokens:cached,pricing_id:pricingId,input_usd_per_million:inputPrice,output_usd_per_million:outputPrice,cached_input_usd_per_million:cachedPrice,estimated_usd:estimatedUsd,actual_usd:actualUsd,fx_rate_id:fxId,usd_ngn_rate:fxRate,estimated_ngn:estimatedNgn,actual_ngn:actualNgn,pricing_status:estimatedUsd===null?'unpriced':'priced',actual_cost_status:actualStatus};
- const write=old?await db.from('ai_usage_financials').update(payload).eq('ai_usage_id',input.aiUsageId):await db.from('ai_usage_financials').insert(payload);
+ const write=await db.from('ai_usage_financials').upsert(payload,{onConflict:'ai_usage_id'});
  if(write.error)return {recorded:false,reason:'financial_snapshot_write_failed'};
  return {recorded:true,priced:estimatedUsd!==null,fxCaptured:fxId!==null,actualCostStatus:actualStatus};
 }
