@@ -6,6 +6,7 @@ import { getCloudflarePreviewConfig } from '@/lib/cloudflare-preview/config';
 import { getCloudflarePreviewWorkerName } from '@/lib/cloudflare-preview/static-assets';
 
 type RouteContext = { params: Promise<{ id: string }> };
+export const runtime = 'nodejs';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
 
 function corsHeaders(origin: string) {
@@ -78,9 +79,9 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
 
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
   const ipLimit = await enforceDimensionRateLimit(req, 'preview-data-ip:' + ip, 'preview-data-read-ip', 120, 60);
-  if (ipLimit) return NextResponse.json({ error: 'Preview data rate limit exceeded.' }, { status: 429, headers: corsHeaders(origin) });
+  if (ipLimit) return NextResponse.json({ error: ipLimit.status === 429 ? 'Preview data rate limit exceeded.' : 'Preview data rate limiting is temporarily unavailable.' }, { status: ipLimit.status, headers: { ...corsHeaders(origin), 'Retry-After': ipLimit.headers.get('Retry-After') || '5' } });
   const userLimit = await enforceUserRateLimit(claims.sub, 'preview-data-read', 60, 60);
-  if (userLimit) return NextResponse.json({ error: 'Preview data rate limit exceeded.' }, { status: 429, headers: corsHeaders(origin) });
+  if (userLimit) return NextResponse.json({ error: userLimit.status === 429 ? 'Preview data rate limit exceeded.' : 'Preview data rate limiting is temporarily unavailable.' }, { status: userLimit.status, headers: { ...corsHeaders(origin), 'Retry-After': userLimit.headers.get('Retry-After') || '5' } });
 
   const resource = new URL(req.url).searchParams.get('resource');
   if (resource !== 'project_summary') return NextResponse.json({ error: 'This preview data resource is not allowlisted.' }, { status: 403, headers: corsHeaders(origin) });
