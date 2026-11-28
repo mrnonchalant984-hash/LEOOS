@@ -31,6 +31,7 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
   const [shareUrl, setShareUrl] = useState('');
   const [shareBusy, setShareBusy] = useState(false);
   const autoCreateAfterRef = useRef('');
+  const previewFrameRef = useRef<HTMLIFrameElement>(null);
   const [autoCreateVersion, setAutoCreateVersion] = useState(0);
 
   const refresh = useCallback(async () => {
@@ -129,6 +130,31 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
 
   const pending = preview?.status === 'queued' || preview?.status === 'running';
   const url = preview?.status === 'deployed' ? preview.deployment_url : null;
+
+  async function authorizePreviewDataFrame() {
+    if (!url || !previewFrameRef.current?.contentWindow) return;
+    try {
+      const accessToken = await getAccessToken();
+      if (!accessToken) return;
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(projectId)}/preview/data-token`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || typeof result.token !== 'string') return;
+      const targetOrigin = new URL(url).origin;
+      previewFrameRef.current?.contentWindow?.postMessage({
+        type: 'braverton:preview-data-capability',
+        token: result.token,
+        apiBase: window.location.origin,
+        projectId,
+        expiresInSeconds: result.expiresInSeconds,
+      }, targetOrigin);
+    } catch {
+      // Preview rendering must remain available if the optional read-only data bridge is unavailable.
+    }
+  }
   useEffect(() => {
     const autoCreateAfter = autoCreateAfterRef.current;
     if (!autoCreateAfter || busy || pending) return;
@@ -159,7 +185,7 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
       <div className="flex min-h-[320px] flex-1 items-center justify-center overflow-auto p-3 sm:p-4">
         {url ? (
           <div className={'h-full min-h-[320px] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-lg ' + (viewport === 'mobile' ? 'w-[390px] max-w-full' : 'w-full')}>
-            <iframe title={projectName + ' live preview'} src={url} loading="lazy" sandbox="allow-scripts allow-forms allow-same-origin" referrerPolicy="no-referrer" className="h-full min-h-[320px] w-full bg-white"/>
+            <iframe ref={previewFrameRef} title={projectName + ' live preview'} src={url} onLoad={() => void authorizePreviewDataFrame()} loading="lazy" sandbox="allow-scripts allow-forms allow-same-origin" referrerPolicy="no-referrer" className="h-full min-h-[320px] w-full bg-white"/>
           </div>
         ) : (
           <div className="max-w-sm text-center">
