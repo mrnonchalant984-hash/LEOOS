@@ -8,9 +8,6 @@ const PAGE = 1000;
 const MAX = 20000;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 
-function rowsByPage<T>(query: any) {
-  return query;
-}
 async function loadAll<T>(db: any, table: string, columns: string, order = 'created_at') {
   const result: T[] = [];
   for (let offset = 0; offset < MAX; offset += PAGE) {
@@ -94,7 +91,7 @@ export async function GET(req: NextRequest) {
   const payments = paymentsQ.data || [];
   const successfulPayments = payments.filter((p: Payment) => p.status === 'success' && p.verified_at);
   const paymentNgN = (p: Payment) => p.currency?.toUpperCase() === 'NGN'
-    ? (p.amount_kobo !== null ? moneyUnits(String(p.amount_kobo / 100)) : moneyUnits(p.amount))
+    ? (p.amount_kobo !== null ? moneyUnits(String(p.amount_kobo)) / 100n : moneyUnits(p.amount))
     : 0n;
   const grossRevenue = sumMoney(successfulPayments.map(paymentNgN));
   const refundedRevenue = sumMoney(successfulPayments.filter(p => p.refunded_at).map(paymentNgN));
@@ -102,8 +99,10 @@ export async function GET(req: NextRequest) {
 
   const financialMap = new Map((financialQ.data || []).map((f: Financial) => [f.ai_usage_id, f]));
   const financials = usages.map(u => financialMap.get(u.id)).filter(Boolean) as Financial[];
-  const actualAiCost = sumMoney(financials.map(f => f.actual_ngn));
-  const estimatedAiValue = sumMoney(financials.map(f => f.estimated_ngn));
+  const actualCostRows = financials.filter(f => f.actual_cost_status === 'provider_reported' || f.actual_cost_status === 'zero_confirmed');
+  const actualAiCost = sumMoney(actualCostRows.map(f => f.actual_ngn));
+  const estimatedRows = financials.filter(f => f.estimated_ngn !== null && f.estimated_ngn !== undefined);
+  const estimatedAiValue = sumMoney(estimatedRows.map(f => f.estimated_ngn));
   const pricedRows = financials.filter(f => f.pricing_status === 'priced' || f.pricing_status === 'free_tier').length;
   const userUsage = new Map<string, any>();
   const featureUsage = new Map<string, any>();
@@ -143,7 +142,6 @@ export async function GET(req: NextRequest) {
   };
 
   const subscriptions = subsQ.data || [];
-  const paymentByReference = new Map(payments.map((p: Payment) => [p.id, p]));
   const mrr = subscriptions.filter((s: any) => s.status === 'active' && (!s.current_period_end || new Date(s.current_period_end) > now))
     .reduce((sum: bigint, s: any) => {
       const payment = payments.find((p: Payment) => p.reference === s.payment_reference && p.status === 'success' && p.verified_at);
@@ -177,11 +175,11 @@ export async function GET(req: NextRequest) {
       activeSubscriptions: subscriptions.filter((s: any) => s.status === 'active' && (!s.current_period_end || new Date(s.current_period_end) > now)).length,
       aiRequests: usages.filter(u => !u.feature?.startsWith('image_')).length,
       inputTokens, outputTokens, totalTokens: allTokens, creditsUsed: totalCredits,
-      actualAiSpendNgn: moneyText(actualAiCost), estimatedAiValueNgn: moneyText(estimatedAiValue),
+      actualAiSpendNgn: actualCostRows.length ? moneyText(actualAiCost) : null, estimatedAiValueNgn: estimatedRows.length ? moneyText(estimatedAiValue) : null,
       grossRevenueNgn: moneyText(grossRevenue), refundsNgn: moneyText(refundedRevenue), netRevenueNgn: moneyText(netRevenue),
       mrrNgn: moneyText(mrr), hostingRevenueNgn: moneyText(hostingRevenue),
       recordedExpensesNgn: moneyText(expenseTotal),
-      netOperatingResultNgn: moneyText(netRevenue - expenseTotal - actualAiCost),
+      netOperatingResultNgn: actualCostRows.length ? moneyText(netRevenue - expenseTotal - actualAiCost) : null,
       profitUsesActualCostsOnly: true,
       unpricedAiRequests: financials.length - pricedRows,
       today: periodStats(startOfDay), week: periodStats(startOfWeek), month: periodStats(startOfMonth),
@@ -233,7 +231,7 @@ export async function GET(req: NextRequest) {
       failedBuilds: builds.filter((b: any) => b.status === 'failed' || b.status === 'error').length,
     },
     expenses: { items: expenses, totalNgn: moneyText(expenseTotal), byCategory: Object.entries(expenses.reduce((acc: Record<string, bigint>, e: any) => { const v = e.amount_ngn ?? (e.currency === 'NGN' ? e.amount : '0'); acc[e.category] = (acc[e.category] || 0n) + moneyUnits(v); return acc; }, {})).map(([category, amount]) => ({ category, amountNgn: moneyText(amount) })) },
-    financialCoverage: { usageRows: usages.length, costRows: financials.length, pricedRows, actualCostRows: financials.filter(f => f.actual_cost_status === 'provider_reported' || f.actual_cost_status === 'zero_confirmed').length },
+    financialCoverage: { usageRows: usages.length, costRows: financials.length, pricedRows, actualCostRows: actualCostRows.length },
     diagnostics: { dataSources: required.map((q, i) => ({ name: ['profiles','ai_usage','payments','subscriptions','hosting_subscriptions','project_builds','cloudflare_preview_jobs','agent_runs','bram_tool_events','business_expenses','ai_usage_financials','hosting_renewal_payments','engineering_workflows'][i], rows: q.data.length, truncated: q.truncated })), unknownStatuses: true },
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
