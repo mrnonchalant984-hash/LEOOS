@@ -3,9 +3,9 @@ import { adminSupabase } from '@/lib/auth';
 function scaled(value:string|number,digits:number):bigint{const raw=String(value);if(!/^\d+(?:\.\d+)?$/.test(raw))return 0n;const [whole,fraction='']=raw.split('.');return BigInt(whole)*10n**BigInt(digits)+BigInt((fraction+'0'.repeat(digits)).slice(0,digits));}
 function decimal(value:bigint,digits:number){const base=10n**BigInt(digits);return (value/base).toString()+'.'+(value%base).toString().padStart(digits,'0');}
 /** Persist a per-request commercial value snapshot. Actual provider billing is never inferred from token counts. */
-export async function recordAiUsageFinancials(input:{aiUsageId:string;provider:string;model:string;inputTokens:number;outputTokens:number;cachedInputTokens?:number;serviceTier?:'free'|'paid'|'unknown';actualCostUsd?:string|null;actualCostConfirmedZero?:boolean}){
+export async function recordAiUsageFinancials(input:{aiUsageId:string;provider:string;model:string;inputTokens:number;outputTokens:number;cachedInputTokens?:number;serviceTier?:'free'|'paid'|'unknown';actualCostUsd?:string|null;actualCostConfirmedZero?:boolean;at?:string}){
  if(!input.aiUsageId||!input.provider||!input.model)return {recorded:false,reason:'missing_usage_identity'};
- const db=adminSupabase(),now=new Date().toISOString();
+ const db=adminSupabase(),now=input.at||new Date().toISOString();
  const [priceQ,fxQ,existingQ]=await Promise.all([
   db.from('ai_model_pricing').select('id,input_usd_per_million,output_usd_per_million,cached_input_usd_per_million').eq('provider',input.provider).eq('model',input.model).eq('service_tier','paid').eq('active',true).lte('effective_at',now).or('effective_until.is.null,effective_until.gt.'+now).order('effective_at',{ascending:false}).limit(1).maybeSingle(),
   db.from('ai_exchange_rates').select('id,rate').eq('base_currency','USD').eq('quote_currency','NGN').lte('observed_at',now).order('observed_at',{ascending:false}).limit(1).maybeSingle(),
