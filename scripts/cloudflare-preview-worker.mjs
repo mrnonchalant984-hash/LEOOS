@@ -130,13 +130,16 @@ async function getWorkersSubdomain(accountId, token) {
 }
 
 function buildEnvironment() {
-  const env = { ...process.env };
+  // Never pass the GitHub runner's ambient environment to generated project
+  // scripts. Build code is untrusted and receives only the minimum process
+  // environment needed to install and compile a Next.js preview.
+  const env = {};
   for (const name of [
-    'CRON_SECRET', 'LEONARDX_BASE_URL', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID',
-    'CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_WORKER_PREFIX', 'GITHUB_TOKEN', 'VERCEL_TOKEN',
-    'SUPABASE_SERVICE_ROLE_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY',
-    'ANTHROPIC_API_KEY', 'NPM_TOKEN', 'NODE_AUTH_TOKEN',
-  ]) delete env[name];
+    'PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'LC_ALL',
+    'SYSTEMROOT', 'WINDIR', 'PATHEXT',
+  ]) {
+    if (process.env[name]) env[name] = process.env[name];
+  }
   env.CI = 'true';
   env.NODE_ENV = 'production';
   env.NEXT_TELEMETRY_DISABLED = '1';
@@ -253,13 +256,22 @@ async function buildNextProject(directory, workerName, usesTypeScript) {
   await writeFile(packagePath, JSON.stringify(packageJson, null, 2), 'utf8');
   await normalizeLegacyRobotsTextRoute(directory);
 
-  const nextConfigPath = path.join(directory, 'next.config.js');
-  try {
-    await (await import('node:fs/promises')).access(nextConfigPath);
-  } catch {
+  const nextConfigPaths = ['next.config.js', 'next.config.mjs', 'next.config.ts', 'next.config.cjs'];
+  let hasNextConfig = false;
+  for (const configName of nextConfigPaths) {
+    try {
+      await (await import('node:fs/promises')).access(path.join(directory, configName));
+      hasNextConfig = true;
+      break;
+    } catch {
+      // Try the next supported Next.js config extension.
+    }
+  }
+  if (!hasNextConfig) {
     const newline = String.fromCharCode(10);
+    const configName = packageJson.type === 'module' ? 'next.config.mjs' : 'next.config.js';
     const defaultConfig = packageJson.type === 'module' ? 'export default {};' + newline : 'module.exports = {};' + newline;
-    await writeFile(nextConfigPath, defaultConfig, 'utf8');
+    await writeFile(path.join(directory, configName), defaultConfig, 'utf8');
   }
 
   const openNextConfig = path.join(directory, 'open-next.config.ts');
