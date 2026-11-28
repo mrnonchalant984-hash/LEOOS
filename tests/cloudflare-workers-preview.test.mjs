@@ -31,12 +31,12 @@ test('Cloudflare Worker preview validator accepts static bundles and full Next.j
   const nextResult = validateCloudflareWorkerPreviewFiles({
     'package.json': JSON.stringify({ dependencies: { next: '14.1.0', react: '18.2.0', 'react-dom': '18.2.0' } }),
     'app/layout.tsx': 'export default function RootLayout({ children }) { return <html><body>{children}</body></html>; }',
-    'app/actions.ts': "'use server';\\nexport async function saveMessage(formData: FormData) { return String(formData.get('message') || ''); }",
-    'app/page.tsx': "import { saveMessage } from './actions';\\nexport default function Page() { return <form action={saveMessage}><input name='message'/><button>Save</button></form>; }",
+    'app/actions.ts': "'use server';\nexport async function saveMessage(formData: FormData) { return String(formData.get('message') || ''); }",
+    'app/page.tsx': "import { saveMessage } from './actions';\nexport default function Page() { return <form action={saveMessage}><input name='message'/><button>Save</button></form>; }",
     'tsconfig.json': '{}',
   });
   assert.equal(nextResult.ok, true);
-  if (nextResult.ok) assert.equal(nextResult.framework, 'nextjs');
+  if (nextResult.ok) {\n    assert.equal(nextResult.framework, 'nextjs');\n    assert.match(nextResult.files['app/actions.ts'], /use server/);\n    assert.match(nextResult.files['app/page.tsx'], /action=\\{saveMessage\\}/);\n  }
 });
 
 test('Cloudflare Worker preview validator rejects traversal, hidden files, secrets, and unsupported frameworks', () => {
