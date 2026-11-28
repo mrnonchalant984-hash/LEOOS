@@ -73,3 +73,17 @@ test('existing admin page embeds the additive responsive intelligence panel and 
  for(const label of ['Overview','AI Intelligence','User Consumption','Credits & Billing','Revenue & Subscriptions','Hosting & Renewals','Bram Performance','Gemini Monitoring','Website Builds','Infrastructure','Expenses & Profit','Audit Logs']) assert.ok(panel.includes(label),label);
  assert.match(panel,/setInterval\(\(\)=>setTick/);
 });
+
+test('hosting renewal alerts are cron-protected, per-project, opt-out aware and delivery-confirmed', async () => {
+ const route=await read('app/api/cron/hosting-renewal-alerts/route.ts');
+ const workflow=await read('.github/workflows/hosting-renewal-alerts.yml');
+ assert.match(route,/timingSafeEqual/);
+ assert.match(route,/hosting_subscriptions/);
+ assert.match(route,/last_reminder_at/);
+ assert.match(route,/email_opt_out/);
+ assert.match(route,/sendClientEmail/);
+ assert.match(route,/if\(!result\)/);
+ assert.match(workflow,/schedule:/);
+ assert.match(workflow,/BRAVERTON_APP_URL/);
+ assert.match(workflow,/CRON_SECRET/);
+});
