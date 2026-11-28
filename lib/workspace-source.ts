@@ -120,6 +120,53 @@ export async function mergeWorkspaceTextFiles(userId: string, projectId: string,
   return await getWorkspaceManifest(userId, projectId);
 }
 
+/**
+ * Build a bounded preview snapshot from the durable workspace archive and
+ * legacy project.files. Binary image/font assets are base64 encoded for the
+ * queue JSON payload; secrets and non-web workspace files are never copied.
+ */
+export async function getCloudflarePreviewWorkspaceFiles(
+  userId: string,
+  projectId: string,
+  legacyFiles: Record<string, unknown> | null | undefined,
+) {
+  await loadProject(userId, projectId);
+  const record = await ensureRecord(userId, projectId);
+  const zip = await readArchive(record.storage_path);
+  const output: Record<string, string | { encoding: 'base64'; data: string }> = {};
+
+  const textExtensions = new Set([
+    '.css', '.scss', '.sass', '.html', '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
+    '.json', '.md', '.mdx', '.svg', '.txt', '.xml', '.webmanifest', '.yaml', '.yml', '.toml',
+  ]);
+  const binaryExtensions = new Set([
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.ico', '.woff', '.woff2', '.ttf', '.otf',
+  ]);
+
+  for (const [rawPath, rawContent] of Object.entries(legacyFiles || {})) {
+    let path: string;
+    try { path = safeSourcePath(rawPath); } catch { continue; }
+    if (typeof rawContent !== 'string') continue;
+    const extension = path.slice(path.lastIndexOf('.')).toLowerCase();
+    if (textExtensions.has(extension)) output[path] = rawContent;
+  }
+
+  for (const entry of Object.values(zip.files) as any[]) {
+    if (entry.dir) continue;
+    let path: string;
+    try { path = safeSourcePath(entry.name); } catch { continue; }
+    const extension = path.slice(path.lastIndexOf('.')).toLowerCase();
+    if (!textExtensions.has(extension) && !binaryExtensions.has(extension)) continue;
+    const bytes = await entry.async('nodebuffer');
+    if (binaryExtensions.has(extension)) {
+      output[path] = { encoding: 'base64', data: bytes.toString('base64') };
+    } else {
+      output[path] = bytes.toString('utf8');
+    }
+  }
+  return output;
+}
+
 export async function importWorkspaceZip(userId: string, projectId: string, bytes: Buffer) {
   if (bytes.length < 4 || bytes.length > WORKSPACE_SOURCE_MAX_ARCHIVE_BYTES) throw new WorkspaceSourceError('ZIP uploads must be between 4 bytes and 25 MB.', 413);
   if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new WorkspaceSourceError('Upload a valid ZIP archive.', 415);
