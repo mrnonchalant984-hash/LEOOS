@@ -96,12 +96,13 @@ export async function GET(req: NextRequest) {
   const profileMap = new Map(users.map((u: any) => [u.id, u]));
   const usages = (usageQ.data || []).filter((u: Usage) => inRange(u.created_at) && u.metadata?.request_status !== 'failed' && u.metadata?.status !== 'failed');
   const payments = paymentsQ.data || [];
-  const successfulPayments = payments.filter((p: Payment) => p.status === 'success' && p.verified_at && inRange(p.paid_at || p.created_at));
+  const verifiedRevenuePayments = payments.filter((p: Payment) => ['success','refunded'].includes(String(p.status)) && p.verified_at && inRange(p.paid_at || p.created_at));
+  const successfulPayments = payments.filter((p: Payment) => p.status === 'success' && p.verified_at && !p.refunded_at && inRange(p.paid_at || p.created_at));
   const paymentNgN = (p: Payment) => p.currency?.toUpperCase() === 'NGN'
     ? (p.amount_kobo !== null ? moneyUnits(String(p.amount_kobo)) / 100n : moneyUnits(p.amount))
     : 0n;
-  const grossRevenue = sumMoney(successfulPayments.map(paymentNgN));
-  const refundedRevenue = sumMoney(successfulPayments.filter(p => p.refunded_at && inRange(p.refunded_at)).map(paymentNgN));
+  const grossRevenue = sumMoney(verifiedRevenuePayments.map(paymentNgN));
+  const refundedRevenue = sumMoney(verifiedRevenuePayments.filter(p => (p.refunded_at && inRange(p.refunded_at)) || p.status === 'refunded').map(paymentNgN));
   const netRevenue = grossRevenue - refundedRevenue;
 
   const financialMap = new Map((financialQ.data || []).map((f: Financial) => [f.ai_usage_id, f]));
@@ -161,16 +162,16 @@ export async function GET(req: NextRequest) {
   const subscriptions = subsQ.data || [];
   const mrr = subscriptions.filter((s: any) => s.status === 'active' && (!s.current_period_end || new Date(s.current_period_end) > now))
     .reduce((sum: bigint, s: any) => {
-      const payment = payments.find((p: Payment) => p.reference === s.payment_reference && p.status === 'success' && p.verified_at);
+      const payment = payments.find((p: Payment) => p.reference === s.payment_reference && p.status === 'success' && p.verified_at && !p.refunded_at);
       if (!payment || payment.currency?.toUpperCase() !== 'NGN') return sum;
       const months = payment.billing_period === 'yearly' ? 12 : payment.billing_period === 'quarterly' ? 3 : payment.billing_period === 'monthly' ? 1 : 0;
       if (!months) return sum;
       return sum + paymentNgN(payment) / BigInt(months);
     }, 0n);
 
-  const subscriptionRevenueNgn = sumMoney(successfulPayments.filter((p: Payment) => Boolean(p.billing_period)).map(paymentNgN));
-  const oneTimeRevenueNgn = sumMoney(successfulPayments.filter((p: Payment) => !p.billing_period).map(paymentNgN));
-  const revenueByMonth = [...successfulPayments.reduce((map: Map<string,bigint>, payment: Payment) => { const month=(payment.paid_at||payment.created_at).slice(0,7); map.set(month,(map.get(month)||0n)+paymentNgN(payment)); return map; },new Map<string,bigint>()).entries()].map(([month,amount])=>({month,revenueNgn:moneyText(amount)})).sort((a,b)=>a.month.localeCompare(b.month));
+  const subscriptionRevenueNgn = sumMoney(verifiedRevenuePayments.filter((p: Payment) => Boolean(p.billing_period)).map(paymentNgN));
+  const oneTimeRevenueNgn = sumMoney(verifiedRevenuePayments.filter((p: Payment) => !p.billing_period).map(paymentNgN));
+  const revenueByMonth = [...verifiedRevenuePayments.reduce((map: Map<string,bigint>, payment: Payment) => { const month=(payment.paid_at||payment.created_at).slice(0,7); map.set(month,(map.get(month)||0n)+paymentNgN(payment)); return map; },new Map<string,bigint>()).entries()].map(([month,amount])=>({month,revenueNgn:moneyText(amount)})).sort((a,b)=>a.month.localeCompare(b.month));
   const expenseByMonth = [...expenses.reduce((map: Map<string,bigint>, expense: any) => { const month=String(expense.incurred_at).slice(0,7); const amount=expense.amount_ngn??(expense.currency==='NGN'?expense.amount:'0'); map.set(month,(map.get(month)||0n)+moneyUnits(amount)); return map; },new Map<string,bigint>()).entries()].map(([month,amount])=>({month,expensesNgn:moneyText(amount)})).sort((a,b)=>a.month.localeCompare(b.month));
   const revenueByPlan = [...successfulPayments.reduce((map: Map<string,bigint>, payment: Payment) => { const key=payment.plan||'one_time_or_unknown'; map.set(key,(map.get(key)||0n)+paymentNgN(payment)); return map; },new Map<string,bigint>()).entries()].map(([plan,amount])=>({plan,revenueNgn:moneyText(amount)}));
   const hosting = hostingQ.data || [];
@@ -223,7 +224,7 @@ export async function GET(req: NextRequest) {
       subscriptionStatuses: statusCounts(subscriptions),
       recurringRevenueNgn: moneyText(mrr),
       subscriptionRevenueNgn: moneyText(subscriptionRevenueNgn), oneTimeRevenueNgn: moneyText(oneTimeRevenueNgn),
-      revenueByMonth, successfulRevenueNgn: moneyText(grossRevenue),
+      revenueByMonth, successfulRevenueNgn: moneyText(grossRevenue), verifiedRevenuePaymentCount: verifiedRevenuePayments.filter(p=>p.status==='success').length,
       netRevenueNgn: moneyText(netRevenue),
       currencies: [...new Set(payments.map((p: Payment) => p.currency || 'unknown'))],
       revenueByPlan,
