@@ -39,7 +39,7 @@ const moneyText = (scaled: bigint) => {
 const sumMoney = (values: unknown[]) => values.reduce<bigint>((sum, value) => sum + moneyUnits(value), 0n);
 
 type Usage = { id: string; user_id: string; feature: string; model: string | null; prompt_tokens: number; completion_tokens: number; total_tokens: number; credits_used: number; metadata: Record<string, unknown> | null; created_at: string };
-type Payment = { id: string; user_id: string; reference: string | null; amount: string | number | null; amount_kobo: number | null; currency: string | null; plan: string | null; billing_period: string | null; status: string | null; paid_at: string | null; verified_at: string | null; refunded_at: string | null; created_at: string };
+type Payment = { id: string; user_id: string; reference: string | null; paystack_reference: string | null; amount: string | number | null; amount_kobo: number | null; currency: string | null; plan: string | null; billing_period: string | null; status: string | null; paid_at: string | null; verified_at: string | null; refunded_at: string | null; created_at: string };
 type Financial = { ai_usage_id: string; provider: string; model: string | null; service_tier: string; estimated_usd: string | null; actual_usd: string | null; usd_ngn_rate: string | null; estimated_ngn: string | null; actual_ngn: string | null; pricing_status: string; actual_cost_status: string };
 
 export async function GET(req: NextRequest) {
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
   const [usersQ, usageQ, paymentsQ, subsQ, hostingQ, buildsQ, previewsQ, runsQ, toolEventsQ, expensesQ, financialQ, renewalsQ, workflowQ, sitesQ, deployEventsQ, workerHeartbeatsQ, mcpAuditQ, errorsQ, adminLogsQ, creditLedgerQ] = await Promise.all([
     loadAll<any>(db, 'profiles', 'id,email,full_name,role,created_at'),
     loadAll<Usage>(db, 'ai_usage', 'id,user_id,feature,model,prompt_tokens,completion_tokens,total_tokens,credits_used,metadata,created_at'),
-    loadAll<Payment>(db, 'payments', 'id,user_id,reference,amount,amount_kobo,currency,plan,billing_period,status,paid_at,verified_at,refunded_at,created_at'),
+    loadAll<Payment>(db, 'payments', 'id,user_id,reference,paystack_reference,amount,amount_kobo,currency,plan,billing_period,status,paid_at,verified_at,refunded_at,created_at'),
     loadAll<any>(db, 'subscriptions', 'id,user_id,plan,billing_period,status,current_period_start,current_period_end,starts_at,ends_at,payment_reference,cancel_at_period_end,canceled_at,created_at'),
     loadAll<any>(db, 'hosting_subscriptions', 'id,website_project_id,client_email,plan,status,starts_at,ends_at,next_renewal_at,paystack_reference,created_at', 'ends_at'),
     loadAll<any>(db, 'project_builds', 'id,website_project_id,owner_user_id,project_type,provider,status,step,error,deployment_id,deployment_url,created_at,started_at,completed_at'),
@@ -155,14 +155,17 @@ export async function GET(req: NextRequest) {
   const startOfWeek = new Date(startOfDay); startOfWeek.setUTCDate(startOfWeek.getUTCDate() - 6);
   const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const periodStats = (start: Date) => {
-    const set = usages.filter(u => !u.feature?.startsWith('image_') && num(u.total_tokens) > 0 && new Date(u.created_at) >= start);
-    return { requests: set.length, tokens: set.reduce((n, u) => n + num(u.total_tokens), 0), inputTokens: set.reduce((n, u) => n + num(u.prompt_tokens), 0), outputTokens: set.reduce((n, u) => n + num(u.completion_tokens), 0), credits: set.reduce((n, u) => n + num(u.credits_used), 0) };
+    const set = eligibleUsages.filter(u => new Date(u.created_at) >= start);
+    const rows = set.map(u => financialMap.get(u.id)).filter(Boolean) as Financial[];
+    const estimateComplete = set.length > 0 && rows.length === set.length && rows.every(f => f.estimated_ngn !== null);
+    const actualComplete = set.length > 0 && rows.length === set.length && rows.every(f => (f.actual_cost_status === 'provider_reported' || f.actual_cost_status === 'zero_confirmed') && f.actual_ngn !== null);
+    return { requests: set.length, tokens: set.reduce((n, u) => n + num(u.total_tokens), 0), inputTokens: set.reduce((n, u) => n + num(u.prompt_tokens), 0), outputTokens: set.reduce((n, u) => n + num(u.completion_tokens), 0), estimatedAiValueNgn: estimateComplete ? moneyText(sumMoney(rows.map(f=>f.estimated_ngn))) : null, actualAiSpendNgn: actualComplete ? moneyText(sumMoney(rows.map(f=>f.actual_ngn))) : null };
   };
 
   const subscriptions = subsQ.data || [];
   const mrr = subscriptions.filter((s: any) => s.status === 'active' && (!s.current_period_end || new Date(s.current_period_end) > now))
     .reduce((sum: bigint, s: any) => {
-      const payment = payments.find((p: Payment) => p.reference === s.payment_reference && p.status === 'success' && p.verified_at && !p.refunded_at);
+      const payment = payments.find((p: Payment) => (p.reference === s.payment_reference || p.paystack_reference === s.payment_reference) && p.status === 'success' && p.verified_at && !p.refunded_at);
       if (!payment || payment.currency?.toUpperCase() !== 'NGN') return sum;
       const months = payment.billing_period === 'yearly' ? 12 : payment.billing_period === 'quarterly' ? 3 : payment.billing_period === 'monthly' ? 1 : 0;
       if (!months) return sum;
