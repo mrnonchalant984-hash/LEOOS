@@ -61,7 +61,7 @@ test('expense recording is owner protected and uses integer decimal conversion f
 test('infrastructure health reports unconfigured integrations as unknown and does not generate AI completions', async () => {
  const route=await read('app/api/admin/intelligence/health/route.ts');
  assert.match(route,/status:detail\.toLowerCase\(\)\.includes\('not configured'\)\?'unknown'/);
- assert.match(route,/generativelanguage\.googleapis\.com\\/v1beta\\/models/);
+ assert.ok(route.includes('generativelanguage.googleapis.com/v1beta/models'));
  assert.match(route,/workforce_worker_heartbeats/);
  assert.doesNotMatch(route,/generateContent|generateText|generateTextWithTools/);
 });
