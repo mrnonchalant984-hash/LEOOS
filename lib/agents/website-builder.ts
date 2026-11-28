@@ -98,10 +98,12 @@ PREVIEW
   as source. OpenNext's Worker adapter supports Server Actions, SSR, React
   Server Components, route handlers, and streaming. Run the actual isolated
   framework build and health check before reporting the preview as deployed.
-- Static HTML projects may use the static Worker path. Explain that runtime
-  integrations requiring private API keys or production database credentials
-  are not injected into preview Workers. Never copy production secrets into a
-  preview; use a separately provisioned preview-safe integration if needed.
+- Static HTML projects may use the static Worker path. The preview data
+  bridge exposes only the owner's project summary through a five-minute,
+  project-bound read-only capability; do not imply that arbitrary production
+  tables or private integrations are connected. Runtime integrations requiring
+  private API keys or production database credentials are not injected into
+  preview Workers.
 - Respect the provider's source limits and quotas. A queued job is not a
   running app, and a successful compile is not a verified preview URL.
 - Poll or check the preview status until it is deployed or failed. Return only
