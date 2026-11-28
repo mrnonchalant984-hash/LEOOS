@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
   const netRevenue = grossRevenue - refundedRevenue;
 
   const financialMap = new Map((financialQ.data || []).map((f: Financial) => [f.ai_usage_id, f]));
-  const eligibleUsages = usages.filter(u => !u.feature?.startsWith('image_'));
+  const eligibleUsages = usages.filter(u => !u.feature?.startsWith('image_') && num(u.total_tokens) > 0);
   const financials = eligibleUsages.map(u => financialMap.get(u.id)).filter(Boolean) as Financial[];
   const actualCostRows = financials.filter(f => f.actual_cost_status === 'provider_reported' || f.actual_cost_status === 'zero_confirmed');
   const actualAiCost = sumMoney(actualCostRows.map(f => f.actual_ngn));
@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
   const providerUsage = new Map<string, any>();
   const daily = new Map<string, any>();
   for (const u of usages) {
-    if (u.feature === 'image_generation' || u.feature?.startsWith('image_')) continue;
+    if (u.feature === 'image_generation' || u.feature?.startsWith('image_') || num(u.total_tokens) <= 0) continue;
     const total = num(u.total_tokens), input = num(u.prompt_tokens), output = num(u.completion_tokens);
     const f = financialMap.get(u.id);
     const user = userUsage.get(u.user_id) || { userId: u.user_id, requests: 0, inputTokens: 0, outputTokens: 0, tokens: 0, credits: 0, estimatedNgn: null, actualNgn: null, lastUsedAt: null };
@@ -154,7 +154,7 @@ export async function GET(req: NextRequest) {
   const startOfWeek = new Date(startOfDay); startOfWeek.setUTCDate(startOfWeek.getUTCDate() - 6);
   const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const periodStats = (start: Date) => {
-    const set = usages.filter(u => !u.feature?.startsWith('image_') && new Date(u.created_at) >= start);
+    const set = usages.filter(u => !u.feature?.startsWith('image_') && num(u.total_tokens) > 0 && new Date(u.created_at) >= start);
     return { requests: set.length, tokens: set.reduce((n, u) => n + num(u.total_tokens), 0), inputTokens: set.reduce((n, u) => n + num(u.prompt_tokens), 0), outputTokens: set.reduce((n, u) => n + num(u.completion_tokens), 0), credits: set.reduce((n, u) => n + num(u.credits_used), 0) };
   };
 
@@ -196,7 +196,7 @@ export async function GET(req: NextRequest) {
       registeredUsers: users.length,
       successfulPayments: successfulPayments.length,
       activeSubscriptions: subscriptions.filter((s: any) => s.status === 'active' && (!s.current_period_end || new Date(s.current_period_end) > now)).length,
-      aiRequests: usages.filter(u => !u.feature?.startsWith('image_')).length,
+      aiRequests: eligibleUsages.length,
       inputTokens, outputTokens, totalTokens: allTokens, creditsUsed: tokenCreditsUsed, legacyRecordedCredits, developerApiCreditsUsed, platformFeatureCreditsUsed,
       actualAiSpendNgn: actualCostComplete ? moneyText(actualAiCost) : null, estimatedAiValueNgn: estimatedCostComplete ? moneyText(estimatedAiValue) : null,
       grossRevenueNgn: moneyText(grossRevenue), refundsNgn: moneyText(refundedRevenue), netRevenueNgn: moneyText(netRevenue),
