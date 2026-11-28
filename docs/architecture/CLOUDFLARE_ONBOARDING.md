@@ -59,9 +59,7 @@ Project dependencies and build scripts run without the Cloudflare deployment
 token, Braverton callback secret, GitHub credentials, or production API keys.
 The Cloudflare token is introduced only for the final Wrangler deployment
 step. Preview Workers do not receive Braverton production secrets or database
-credentials. The GitHub build process also receives only a minimal
-allowlisted environment, and the Cloudflare deployment token is introduced
-only for the final deploy step. Do not copy production environment variables
+credentials. Do not copy production environment variables
 into a preview Worker or expose service-role keys, Gemini keys, payment keys,
 or private integration credentials to generated project code.
 
@@ -71,11 +69,16 @@ the Braverton user, bind access to the owning project, expose fixed allowlisted
 read operations only, enforce row-level ownership, rate limits and audit
 logging, and reject writes, deletes, payments, account changes, publishing,
 arbitrary SQL, and caller-selected table/column names. Gemini and private
-integrations remain behind authenticated Braverton server endpoints. This PR
-does not provision preview credentials or enable a generic database proxy;
-an integration is unavailable until its specific read-only contract and
-cross-origin authentication flow are implemented and tested. No staging
-database is required for this security boundary.
+integrations remain behind authenticated Braverton server endpoints. The implemented bridge issues a five-minute HMAC capability only after the
+Braverton user is authenticated in the parent app. The iframe receives it via
+an origin-targeted `postMessage`; the capability is bound to one project and
+one `project_summary:read` scope. The backend accepts requests only from that
+project's exact assigned `workers.dev` origin, rate-limits by IP and user, and
+returns only the owner's project ID, name, and type. It does not expose a
+generic database proxy or arbitrary table/query interface. All other data
+resources and private integrations remain unavailable until separately
+allowlisted and tested. No staging database is required for this security
+boundary.
 
 To enable the preview path after account setup:
 
