@@ -25,18 +25,18 @@ const num = (value: unknown) => {
 };
 const moneyUnits = (value: unknown) => {
   const raw = String(value ?? '0');
-  if (!/^-?\d+(?:\.\d+)?$/.test(raw)) return 0n;
+  if (!/^-?\d+(?:\.\d+)?$/.test(raw)) return BigInt(0);
   const negative = raw.startsWith('-');
   const [whole, fraction = ''] = raw.replace('-', '').split('.');
-  const scaled = BigInt(whole) * 100000000n + BigInt((fraction + '00000000').slice(0, 8));
+  const scaled = BigInt(whole) * BigInt(100000000) + BigInt((fraction + '00000000').slice(0, 8));
   return negative ? -scaled : scaled;
 };
 const moneyText = (scaled: bigint) => {
-  const negative = scaled < 0n;
+  const negative = scaled < BigInt(0);
   const abs = negative ? -scaled : scaled;
-  return `${negative ? '-' : ''}${abs / 100000000n}.${String(abs % 100000000n).padStart(8, '0')}`;
+  return `${negative ? '-' : ''}${abs / BigInt(100000000)}.${String(abs % BigInt(100000000)).padStart(8, '0')}`;
 };
-const sumMoney = (values: unknown[]) => values.reduce<bigint>((sum, value) => sum + moneyUnits(value), 0n);
+const sumMoney = (values: unknown[]) => values.reduce<bigint>((sum, value) => sum + moneyUnits(value), BigInt(0));
 
 type Usage = { id: string; user_id: string; feature: string; model: string | null; prompt_tokens: number; completion_tokens: number; total_tokens: number; credits_used: number; metadata: Record<string, unknown> | null; created_at: string };
 type Payment = { id: string; user_id: string; reference: string | null; paystack_reference: string | null; amount: string | number | null; amount_kobo: number | null; currency: string | null; plan: string | null; billing_period: string | null; status: string | null; paid_at: string | null; verified_at: string | null; refunded_at: string | null; created_at: string };
@@ -99,8 +99,8 @@ export async function GET(req: NextRequest) {
   const verifiedRevenuePayments = payments.filter((p: Payment) => ['success','refunded'].includes(String(p.status)) && p.verified_at && inRange(p.paid_at || p.created_at));
   const successfulPayments = payments.filter((p: Payment) => p.status === 'success' && p.verified_at && !p.refunded_at && inRange(p.paid_at || p.created_at));
   const paymentNgN = (p: Payment) => p.currency?.toUpperCase() === 'NGN'
-    ? (p.amount_kobo !== null ? moneyUnits(String(p.amount_kobo)) / 100n : moneyUnits(p.amount))
-    : 0n;
+    ? (p.amount_kobo !== null ? moneyUnits(String(p.amount_kobo)) / BigInt(100) : moneyUnits(p.amount))
+    : BigInt(0);
   const grossRevenue = sumMoney(verifiedRevenuePayments.map(paymentNgN));
   const refundedRevenue = sumMoney(verifiedRevenuePayments.filter(p => (p.refunded_at && inRange(p.refunded_at)) || p.status === 'refunded').map(paymentNgN));
   const netRevenue = grossRevenue - refundedRevenue;
@@ -142,8 +142,8 @@ export async function GET(req: NextRequest) {
   const inputTokens = usages.reduce((n, u) => n + num(u.prompt_tokens), 0);
   const outputTokens = usages.reduce((n, u) => n + num(u.completion_tokens), 0);
   const creditLedgerRows = creditLedgerQ.data || [];
-  const ledgerDelta = creditLedgerRows.reduce((sum: bigint, row: any) => sum + BigInt(row.credits_delta || 0), 0n);
-  const tokenCreditsUsed = Number(ledgerDelta < 0n ? -ledgerDelta : 0n);
+  const ledgerDelta = creditLedgerRows.reduce((sum: bigint, row: any) => sum + BigInt(row.credits_delta || 0), BigInt(0));
+  const tokenCreditsUsed = Number(ledgerDelta < BigInt(0) ? -ledgerDelta : BigInt(0));
   const legacyRecordedCredits = usages.reduce((n, u) => n + num(u.credits_used), 0);
   const developerApiCreditsUsed = usages.filter(u => u.feature === 'developer_api').reduce((n,u)=>n+num(u.credits_used),0);
   const platformFeatureCreditsUsed = usages.filter(u => num(u.total_tokens) === 0).reduce((n,u)=>n+num(u.credits_used),0);
@@ -170,23 +170,23 @@ export async function GET(req: NextRequest) {
       const months = payment.billing_period === 'yearly' ? 12 : payment.billing_period === 'quarterly' ? 3 : payment.billing_period === 'monthly' ? 1 : 0;
       if (!months) return sum;
       return sum + paymentNgN(payment) / BigInt(months);
-    }, 0n);
+    }, BigInt(0));
 
   const subscriptionRevenueNgn = sumMoney(verifiedRevenuePayments.filter((p: Payment) => Boolean(p.billing_period)).map(paymentNgN));
+  const expenses = (expensesQ.data || []).filter((e: any) => inRange(e.incurred_at));
   const oneTimeRevenueNgn = sumMoney(verifiedRevenuePayments.filter((p: Payment) => !p.billing_period).map(paymentNgN));
-  const revenueByMonth = [...verifiedRevenuePayments.reduce((map: Map<string,bigint>, payment: Payment) => { const month=(payment.paid_at||payment.created_at).slice(0,7); map.set(month,(map.get(month)||0n)+paymentNgN(payment)); return map; },new Map<string,bigint>()).entries()].map(([month,amount])=>({month,revenueNgn:moneyText(amount)})).sort((a,b)=>a.month.localeCompare(b.month));
-  const expenseByMonth = [...expenses.reduce((map: Map<string,bigint>, expense: any) => { const month=String(expense.incurred_at).slice(0,7); const amount=expense.amount_ngn??(expense.currency==='NGN'?expense.amount:'0'); map.set(month,(map.get(month)||0n)+moneyUnits(amount)); return map; },new Map<string,bigint>()).entries()].map(([month,amount])=>({month,expensesNgn:moneyText(amount)})).sort((a,b)=>a.month.localeCompare(b.month));
-  const revenueByPlan = [...successfulPayments.reduce((map: Map<string,bigint>, payment: Payment) => { const key=payment.plan||'one_time_or_unknown'; map.set(key,(map.get(key)||0n)+paymentNgN(payment)); return map; },new Map<string,bigint>()).entries()].map(([plan,amount])=>({plan,revenueNgn:moneyText(amount)}));
+  const revenueByMonth = [...verifiedRevenuePayments.reduce((map: Map<string,bigint>, payment: Payment) => { const month=(payment.paid_at||payment.created_at).slice(0,7); map.set(month,(map.get(month)||BigInt(0))+paymentNgN(payment)); return map; },new Map<string,bigint>()).entries()].map(([month,amount])=>({month,revenueNgn:moneyText(amount)})).sort((a,b)=>a.month.localeCompare(b.month));
+  const expenseByMonth = [...expenses.reduce((map: Map<string,bigint>, expense: any) => { const month=String(expense.incurred_at).slice(0,7); const amount=expense.amount_ngn??(expense.currency==='NGN'?expense.amount:'0'); map.set(month,(map.get(month)||BigInt(0))+moneyUnits(amount)); return map; },new Map<string,bigint>()).entries()].map(([month,amount])=>({month,expensesNgn:moneyText(amount)})).sort((a,b)=>a.month.localeCompare(b.month));
+  const revenueByPlan = [...successfulPayments.reduce((map: Map<string,bigint>, payment: Payment) => { const key=payment.plan||'one_time_or_unknown'; map.set(key,(map.get(key)||BigInt(0))+paymentNgN(payment)); return map; },new Map<string,bigint>()).entries()].map(([plan,amount])=>({plan,revenueNgn:moneyText(amount)}));
   const hosting = hostingQ.data || [];
   const builds = buildsQ.data || [];
   const previews = previewsQ.data || [];
   const runs = runsQ.data || [];
   const toolEvents = toolEventsQ.data || [];
-  const expenses = (expensesQ.data || []).filter((e: any) => inRange(e.incurred_at));
   const expenseCoverageComplete = expenses.every((e: any) => e.currency === 'NGN' || e.amount_ngn !== null);
   const expenseTotal = sumMoney(expenses.filter((e: any) => e.currency === 'NGN' || e.amount_ngn).map((e: any) => e.amount_ngn ?? (e.currency === 'NGN' ? e.amount : 0)));
   const successfulHostingRenewals = (renewalsQ.data || []).filter((r: any) => r.status === 'succeeded' && inRange(r.paid_at || r.created_at));
-  const hostingRevenue = sumMoney(successfulHostingRenewals.filter((r: any) => r.currency === 'NGN').map((r: any) => moneyText(moneyUnits(String(r.amount_kobo)) / 100n)));
+  const hostingRevenue = sumMoney(successfulHostingRenewals.filter((r: any) => r.currency === 'NGN').map((r: any) => moneyText(moneyUnits(String(r.amount_kobo)) / BigInt(100))));
 
   const upcoming7 = hosting.filter((h: any) => h.next_renewal_at && new Date(h.next_renewal_at) >= now && new Date(h.next_renewal_at) <= new Date(now.getTime() + 7 * 86400000));
   const upcoming30 = hosting.filter((h: any) => h.next_renewal_at && new Date(h.next_renewal_at) >= now && new Date(h.next_renewal_at) <= new Date(now.getTime() + 30 * 86400000));
@@ -265,7 +265,7 @@ export async function GET(req: NextRequest) {
       successfulBuilds: builds.filter((b: any) => ['deployed','success','succeeded','completed'].includes(b.status)).length,
       failedBuilds: builds.filter((b: any) => b.status === 'failed' || b.status === 'error').length,
     },
-    expenses: { items: expenses, totalNgn: expenseCoverageComplete ? moneyText(expenseTotal) : null, byMonth: expenseByMonth, byCategory: Object.entries(expenses.reduce((acc: Record<string, bigint>, e: any) => { const v = e.amount_ngn ?? (e.currency === 'NGN' ? e.amount : '0'); acc[e.category] = (acc[e.category] || 0n) + moneyUnits(v); return acc; }, {})).map(([category, amount]) => ({ category, amountNgn: moneyText(amount) })) },
+    expenses: { items: expenses, totalNgn: expenseCoverageComplete ? moneyText(expenseTotal) : null, byMonth: expenseByMonth, byCategory: Object.entries(expenses.reduce((acc: Record<string, bigint>, e: any) => { const v = e.amount_ngn ?? (e.currency === 'NGN' ? e.amount : '0'); acc[e.category] = (acc[e.category] || BigInt(0)) + moneyUnits(v); return acc; }, {})).map(([category, amount]) => ({ category, amountNgn: moneyText(amount) })) },
     audit: { adminLogs: (adminLogsQ.data||[]).slice(0,500), creditLedger: creditLedgerQ.data||[], mcpToolAudit: mcpAuditQ.data||[], recentErrors: errorsQ.data||[] },
     financialCoverage: { usageRows: eligibleUsages.length, costRows: financials.length, pricedRows, actualCostRows: actualCostRows.length, actualCostComplete, estimatedCostComplete, unconvertedExpenses: expenses.filter((e: any) => e.currency !== 'NGN' && e.amount_ngn === null).length },
     diagnostics: { dataSources: required.map((q, i) => ({ name: ['profiles','ai_usage','payments','subscriptions','hosting_subscriptions','project_builds','cloudflare_preview_jobs','agent_runs','bram_tool_events','business_expenses','ai_usage_financials','hosting_renewal_payments','engineering_workflows','website_projects','deployment_events','workforce_worker_heartbeats','mcp_tool_audit','error_events','admin_logs','ai_usage_credit_ledger'][i], rows: q.data.length, truncated: q.truncated })), recentErrors: errorsQ.data || [], workerHeartbeats: workerHeartbeatsQ.data || [], unknownStatuses: true },
