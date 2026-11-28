@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminSupabase, getProfile, isPlatformOwner } from '@/lib/auth';
 import { getEffectiveUserPlan, planAllows } from '@/lib/plan-access';
 import { getCloudflarePreviewConfig } from '@/lib/cloudflare-preview/config';
+import { getCloudflarePreviewWorkspaceFiles } from '@/lib/workspace-source';
 import {
   MAX_CLOUDFLARE_PREVIEW_FILE_BYTES,
   MAX_CLOUDFLARE_PREVIEW_FILES,
@@ -81,7 +82,14 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Previews are not included for this project type or plan.' }, { status: 403 });
   }
 
-  const validation = validateCloudflareWorkerPreviewFiles(project.files);
+  let previewFiles: Record<string, unknown>;
+  try {
+    previewFiles = await getCloudflarePreviewWorkspaceFiles(context.user.id, id, project.files);
+  } catch (error) {
+    console.error('Cloudflare preview source snapshot failed:', error instanceof Error ? error.message : 'unknown');
+    return NextResponse.json({ error: 'Workspace source could not be prepared for preview.' }, { status: 503 });
+  }
+  const validation = validateCloudflareWorkerPreviewFiles(previewFiles);
   if (!validation.ok) {
     const error = validation.code === 'missing_index'
       ? 'A root index.html or supported Next.js app entry is required for a preview.'
