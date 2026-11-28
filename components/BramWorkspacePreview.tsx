@@ -201,7 +201,7 @@ export function BramWorkspacePreview({ projectId, projectName }: { projectId: st
         )}
       </div>
       <footer className="border-t border-slate-200 bg-white px-3 py-2 text-[10px] text-slate-500">
-        {pending ? 'Build status: ' + preview?.status : preview?.status ? 'Build status: ' + preview.status : 'Preview runs in a sandboxed frame without same-origin access.'}
+        {pending ? 'Build status: ' + preview?.status : preview?.status ? 'Build status: ' + preview.status : 'Preview is isolated on its own origin; optional project metadata access is short-lived and read-only.'}
       </footer>
     </aside>
   );
