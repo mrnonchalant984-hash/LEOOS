@@ -66,7 +66,7 @@ or private integration credentials to generated project code.
 Production data access must go through a Braverton-owned backend endpoint, not
 a direct Supabase connection from the preview. Such endpoints must authenticate
 the Braverton user, bind access to the owning project, expose fixed allowlisted
-read operations only, enforce row-level ownership, rate limits and audit
+read operations only, enforce row-level ownership, rate limits and structured request
 logging, and reject writes, deletes, payments, account changes, publishing,
 arbitrary SQL, and caller-selected table/column names. Gemini and private
 integrations remain behind authenticated Braverton server endpoints. The implemented bridge issues a five-minute HMAC capability only after the
