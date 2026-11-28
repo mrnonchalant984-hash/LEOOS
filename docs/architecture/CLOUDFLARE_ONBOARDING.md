@@ -80,6 +80,16 @@ resources and private integrations remain unavailable until separately
 allowlisted and tested. No staging database is required for this security
 boundary.
 
+A generated app that needs this limited resource can listen for the
+`braverton:preview-data-capability` message from its parent frame. The message
+contains `apiBase`, `projectId`, a five-minute bearer capability, and its
+expiry. Keep the token in memory only; never store it in localStorage, put it
+in a URL, log it, or forward it to another service. The only supported request
+is a GET to
+`/api/workspaces/{projectId}/preview/data?resource=project_summary` with the
+capability in the Authorization header. The endpoint returns only the
+authenticated owner's project ID, project name, and project type.
+
 To enable the preview path after account setup:
 
 1. Confirm that the Cloudflare Worker account and `workers.dev` subdomain are
