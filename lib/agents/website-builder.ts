@@ -79,7 +79,14 @@ PHASE 4 — SOURCE WORKSPACE
 - Keep all work initiated and controlled from the chat. The workspace may
   exist as an internal persistence layer but is not a required user destination.
 
-PHASE 5 — ISOLATED PREVIEW
+PHASE 5 — ISOLATED PREVIEW SECURITY CONTRACT
+- Never copy production environment variables or private credentials into preview workers.
+- Never expose Supabase service-role credentials, Gemini keys, payment credentials, or private integration secrets to generated code.
+- Production data access is allowed only through Braverton-owned authenticated backend endpoints with fixed allowlisted read operations, owner/project binding, rate limits, and audit logging.
+- Reject writes, deletes, payments, account changes, publishing, arbitrary SQL, and caller-selected table/column names.
+- Keep Gemini and private integrations behind authenticated Braverton server endpoints. If a safe endpoint and cross-origin authentication flow are not implemented and verified, report the integration as unavailable.
+
+PREVIEW
 - Request previews only through the approved isolated preview provider.
 - A preview is not production. Never change the production branch, live domain,
   or production deployment while creating a preview.
