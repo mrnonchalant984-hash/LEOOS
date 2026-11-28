@@ -5,6 +5,7 @@ import { enforceUserRateLimit } from '@/lib/rate-limit';
 import { getCloudflarePreviewConfig } from '@/lib/cloudflare-preview/config';
 
 type RouteContext = { params: Promise<{ id: string }> };
+export const runtime = 'nodejs';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function POST(req: NextRequest, { params }: RouteContext) {
